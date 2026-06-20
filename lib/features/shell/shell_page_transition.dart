@@ -19,22 +19,20 @@ class ShellBranchContainer extends StatelessWidget {
       sizing: StackFit.expand,
       children: [
         for (var i = 0; i < children.length; i++)
-          TickerMode(
-            enabled: i == currentIndex,
-            child: children[i],
-          ),
+          TickerMode(enabled: i == currentIndex, child: children[i]),
       ],
     );
   }
 }
 
-ShellNavigationContainerBuilder shellBranchContainerBuilder = (
-  BuildContext context,
-  StatefulNavigationShell navigationShell,
-  List<Widget> children,
-) {
-  return ShellBranchContainer(
-    currentIndex: navigationShell.currentIndex,
-    children: children,
-  );
-};
+ShellNavigationContainerBuilder shellBranchContainerBuilder =
+    (
+      BuildContext context,
+      StatefulNavigationShell navigationShell,
+      List<Widget> children,
+    ) {
+      return ShellBranchContainer(
+        currentIndex: navigationShell.currentIndex,
+        children: children,
+      );
+    };

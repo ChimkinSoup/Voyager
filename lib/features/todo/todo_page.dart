@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
-import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/todo/todo_edit_panel.dart';
+import 'package:voyager/features/todo/todo_manage_sheet.dart';
 
 class TodoPage extends ConsumerStatefulWidget {
   const TodoPage({super.key});
@@ -18,12 +22,16 @@ class TodoPage extends ConsumerStatefulWidget {
 
 class _TodoPageState extends ConsumerState<TodoPage> {
   String? _selectedListId;
+  String? _selectedTaskId;
   final _taskController = TextEditingController();
+  final _taskFocusNode = FocusNode();
   var _completedExpanded = true;
+  static const _panelReserve = 440.0;
 
   @override
   void dispose() {
     _taskController.dispose();
+    _taskFocusNode.dispose();
     super.dispose();
   }
 
@@ -32,142 +40,85 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     final lists = await repo.listLists();
     if (lists.isEmpty) {
       final now = utcNow();
-      final list = TodoListModel(id: newId(), name: 'Inbox', createdAt: now, updatedAt: now);
+      final list = TodoListModel(
+        id: newId(),
+        name: 'Inbox',
+        createdAt: now,
+        updatedAt: now,
+      );
       await repo.upsertList(list);
+      ref.read(remoteSyncServiceProvider).pushTodoList(list);
       _selectedListId = list.id;
     } else {
       _selectedListId ??= lists.first.id;
     }
   }
 
-  Future<void> _createList() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New list'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'List name'),
-          onSubmitted: (_) => Navigator.pop(context, controller.text),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Create')),
-        ],
-      ),
-    );
-    if (name == null || name.trim().isEmpty) return;
-    final now = utcNow();
-    final list = TodoListModel(id: newId(), name: name.trim(), createdAt: now, updatedAt: now);
-    await ref.read(todoRepositoryProvider).upsertList(list);
-    ref.invalidate(todoListsProvider);
-    setState(() => _selectedListId = list.id);
-  }
-
   Future<void> _addTask() async {
     if (_taskController.text.trim().isEmpty) return;
     await _ensureDefaultList();
+    final repo = ref.read(todoRepositoryProvider);
     final now = utcNow();
+    final sortOrder = await repo.nextSortOrder(_selectedListId!);
     final task = TodoTask(
       id: newId(),
       listId: _selectedListId!,
       title: _taskController.text.trim(),
+      sortOrder: sortOrder,
       createdAt: now,
       updatedAt: now,
     );
-    await ref.read(todoRepositoryProvider).upsertTask(task);
-    await ref.read(syncRepositoryProvider).upsertDocument('todo_tasks', task.id, {
-      'id': task.id,
-      'listId': task.listId,
-      'title': task.title,
-      'completed': false,
-      'updatedAt': now.toIso8601String(),
-    });
+    await repo.upsertTask(task);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(task);
     _taskController.clear();
+    _taskFocusNode.requestFocus();
     ref.invalidate(todoListsProvider);
   }
 
   Future<void> _toggleTask(TodoTask task, bool? completed) async {
-    final now = utcNow();
-    await ref.read(todoRepositoryProvider).upsertTask(task.copyWith(completed: completed ?? false));
-    await ref.read(syncRepositoryProvider).upsertDocument('todo_tasks', task.id, {
-      'id': task.id,
-      'completed': completed ?? false,
-      'updatedAt': now.toIso8601String(),
-    });
+    final updated = task.copyWith(completed: completed ?? false);
+    await ref.read(todoRepositoryProvider).upsertTask(updated);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
   }
 
-  Future<void> _editTask(TodoTask task) async {
-    final titleController = TextEditingController(text: task.title);
-    final notesController = TextEditingController(text: task.notes ?? '');
-    DateTime? dueDate = task.dueDate;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit task'),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Task name'),
-                  onSubmitted: (_) => Navigator.pop(context, true),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: notesController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(dueDate == null ? 'No due date' : DateFormat.yMMMd().format(dueDate!)),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: dueDate ?? DateTime.now(),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (picked != null) setDialogState(() => dueDate = picked);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
-          ],
-        ),
-      ),
+  Future<void> _toggleStar(TodoTask task) async {
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    if (task.starred) {
+      final updated = task.copyWith(
+        starred: false,
+        sortOrder: task.preStarSortOrder ?? task.sortOrder,
+        clearPreStarSortOrder: true,
+      );
+      await repo.upsertTask(updated);
+      remoteSync.pushTodoTaskNow(updated);
+    } else {
+      final updated = task.copyWith(
+        starred: true,
+        preStarSortOrder: task.sortOrder,
+      );
+      await repo.upsertTask(updated);
+      remoteSync.pushTodoTaskNow(updated);
+    }
+    ref.invalidate(todoListsProvider);
+  }
+
+  Future<({int completed, int total})> _subtaskStats(String taskId) async {
+    final subtasks = await ref
+        .read(todoRepositoryProvider)
+        .listSubtasks(taskId);
+    return (
+      completed: subtasks.where((s) => s.completed).length,
+      total: subtasks.length,
     );
-    final title = titleController.text.trim();
-    final notes = notesController.text.trim();
-    titleController.dispose();
-    notesController.dispose();
-    if (saved != true || title.isEmpty) return;
-    final updated = task.copyWith(
-      title: title,
-      notes: notes.isEmpty ? null : notes,
-      dueDate: dueDate,
+  }
+
+  TodoListModel? _selectedList(List<TodoListModel> lists) {
+    if (_selectedListId == null) return lists.isNotEmpty ? lists.first : null;
+    return lists.cast<TodoListModel?>().firstWhere(
+      (l) => l!.id == _selectedListId,
+      orElse: () => lists.isNotEmpty ? lists.first : null,
     );
-    await ref.read(todoRepositoryProvider).upsertTask(updated);
-    await ref.read(syncRepositoryProvider).upsertDocument('todo_tasks', task.id, {
-      'id': task.id,
-      'title': updated.title,
-      'notes': updated.notes,
-      'dueDate': updated.dueDate?.toIso8601String(),
-      'updatedAt': utcNow().toIso8601String(),
-    });
   }
 
   @override
@@ -183,91 +134,180 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       data: (lists) {
         if (lists.isEmpty) {
           return Center(
-            child: FilledButton(onPressed: _createList, child: const Text('Create your first list')),
+            child: FilledButton(
+              onPressed: () => showTodoListManageSheet(context, ref),
+              child: const Text('Create your first list'),
+            ),
           );
         }
         _selectedListId ??= lists.first.id;
+        final currentList = _selectedList(lists);
 
         final tasksAsync = ref.watch(todoTasksProvider(_selectedListId!));
         return tasksAsync.when(
           data: (tasks) {
-            final active = tasks.where((t) => !t.completed).toList();
-            final completed = tasks.where((t) => t.completed).toList();
+            final sorted = sortTodoTasks(tasks);
+            final active = sorted.where((t) => !t.completed).toList();
+            final completed = sorted.where((t) => t.completed).toList();
+            final selectedTask = _selectedTaskId == null
+                ? null
+                : sorted.cast<TodoTask?>().firstWhere(
+                    (t) => t!.id == _selectedTaskId,
+                    orElse: () => null,
+                  );
 
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: RoundedDropdown<String>(
-                          value: _selectedListId!,
-                          items: lists.map((l) => RoundedDropdownItem(value: l.id, label: l.name)).toList(),
-                          onChanged: (v) => setState(() => _selectedListId = v),
-                        ),
-                      ),
-                      IconButton(onPressed: _createList, icon: const Icon(Icons.add), tooltip: 'New list'),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: KeepAliveScrollView(
-                      storageKey: ShellPageStorageKeys.todoTaskList,
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        ...active.map((task) => _TaskRow(
-                              task: task,
-                              onToggle: (v) => _toggleTask(task, v),
-                              onEdit: () => _editTask(task),
-                              subtitle: _taskSubtitle(task),
-                            )),
-                        if (!hideCompleted && completed.isNotEmpty) ...[
-                          const Divider(height: 32),
-                          InkWell(
-                            onTap: () => setState(() => _completedExpanded = !_completedExpanded),
-                            borderRadius: BorderRadius.circular(14),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Row(
-                                children: [
-                                  Expanded(child: Text('Completed (${completed.length})', style: Theme.of(context).textTheme.titleSmall)),
-                                  Icon(_completedExpanded ? Icons.expand_less : Icons.expand_more),
-                                ],
+                        Row(
+                          children: [
+                            if (currentList?.colorValue != null) ...[
+                              ColorCornerFlag(
+                                colorValue: currentList!.colorValue!,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: RoundedDropdown<String>(
+                                value: _selectedListId!,
+                                menuBottomSpacing: 12,
+                                items: lists
+                                    .map(
+                                      (l) => RoundedDropdownItem(
+                                        value: l.id,
+                                        label: l.name,
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) => setState(() {
+                                  _selectedListId = v;
+                                  _selectedTaskId = null;
+                                }),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () =>
+                                  showTodoListManageSheet(context, ref),
+                              icon: const Icon(PhosphorIconsRegular.slidersHorizontal),
+                              tooltip: 'Manage lists',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: KeepAliveScrollView(
+                            storageKey: ShellPageStorageKeys.todoTaskList,
+                            children: [
+                              ...active.map(
+                                (task) => _TaskRow(
+                                  key: ValueKey(task.id),
+                                  task: task,
+                                  panelOpen: selectedTask != null,
+                                  reserveWidth: selectedTask != null
+                                      ? _panelReserve
+                                      : 120,
+                                  subtaskStats: _subtaskStats(task.id),
+                                  onToggle: (v) => _toggleTask(task, v),
+                                  onStar: () => _toggleStar(task),
+                                  onEdit: () =>
+                                      setState(() => _selectedTaskId = task.id),
+                                ),
+                              ),
+                              if (!hideCompleted && completed.isNotEmpty) ...[
+                                const Divider(height: 32),
+                                InkWell(
+                                  onTap: () => setState(
+                                    () => _completedExpanded =
+                                        !_completedExpanded,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Completed (${completed.length})',
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.titleSmall,
+                                          ),
+                                        ),
+                                        Icon(
+                                          _completedExpanded
+                                              ? PhosphorIconsRegular.caretUp
+                                              : PhosphorIconsRegular.caretDown,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (_completedExpanded)
+                                  ...completed.map(
+                                    (task) => _TaskRow(
+                                      key: ValueKey(task.id),
+                                      task: task,
+                                      completedStyle: true,
+                                      panelOpen: selectedTask != null,
+                                      reserveWidth: selectedTask != null
+                                          ? _panelReserve
+                                          : 120,
+                                      subtaskStats: _subtaskStats(task.id),
+                                      onToggle: (v) => _toggleTask(task, v),
+                                      onStar: () => _toggleStar(task),
+                                      onEdit: () => setState(
+                                        () => _selectedTaskId = task.id,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ],
                           ),
-                          if (_completedExpanded)
-                            ...completed.map(
-                              (task) => _TaskRow(
-                                task: task,
-                                completedStyle: true,
-                                onToggle: (v) => _toggleTask(task, v),
-                                onEdit: () => _editTask(task),
-                                subtitle: _taskSubtitle(task),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: LabeledTextField(
+                                label: '',
+                                showLabel: false,
+                                controller: _taskController,
+                                focusNode: _taskFocusNode,
+                                onSubmitted: (_) => _addTask(),
                               ),
                             ),
-                        ],
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              height: 48,
+                              child: FilledButton(
+                                onPressed: _addTask,
+                                child: const Text('Add'),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: LabeledTextField(
-                          label: 'New task',
-                          controller: _taskController,
-                          onSubmitted: (_) => _addTask(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(onPressed: _addTask, child: const Text('Add')),
-                    ],
+                ),
+                if (selectedTask != null)
+                  TodoEditPanel(
+                    task: selectedTask,
+                    onClose: () => setState(() => _selectedTaskId = null),
+                    onChanged: () => ref.invalidate(todoListsProvider),
                   ),
-                ],
-              ),
+              ],
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -278,53 +318,192 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       error: (e, _) => Center(child: Text('$e')),
     );
   }
-
-  Widget? _taskSubtitle(TodoTask task) {
-    final parts = <String>[];
-    if (task.notes != null && task.notes!.isNotEmpty) parts.add(task.notes!);
-    if (task.dueDate != null) parts.add('Due ${DateFormat.MMMd().format(task.dueDate!)}');
-    if (parts.isEmpty) return null;
-    return Text(parts.join(' · '));
-  }
 }
 
-class _TaskRow extends StatelessWidget {
+class _TaskRow extends StatefulWidget {
   const _TaskRow({
+    super.key,
     required this.task,
     required this.onToggle,
+    required this.onStar,
     required this.onEdit,
-    this.subtitle,
+    required this.subtaskStats,
+    required this.reserveWidth,
+    required this.panelOpen,
     this.completedStyle = false,
   });
 
   final TodoTask task;
   final ValueChanged<bool?> onToggle;
+  final VoidCallback onStar;
   final VoidCallback onEdit;
-  final Widget? subtitle;
+  final Future<({int completed, int total})> subtaskStats;
+  final double reserveWidth;
+  final bool panelOpen;
   final bool completedStyle;
 
   @override
+  State<_TaskRow> createState() => _TaskRowState();
+}
+
+class _TaskRowState extends State<_TaskRow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _checkController;
+  late final Animation<double> _checkScale;
+  var _strikeVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _checkScale = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.0,
+          end: 1.25,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 45,
+      ),
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 1.25,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 55,
+      ),
+    ]).animate(_checkController);
+    _strikeVisible = widget.task.completed;
+  }
+
+  @override
+  void didUpdateWidget(covariant _TaskRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.task.completed && widget.task.completed) {
+      _checkController.forward(from: 0);
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
+        if (mounted) setState(() => _strikeVisible = true);
+      });
+    } else if (oldWidget.task.completed && !widget.task.completed) {
+      _checkController.value = 0;
+      setState(() => _strikeVisible = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _checkController.dispose();
+    super.dispose();
+  }
+
+  String? _formatDue(DateTime? dueDate) {
+    if (dueDate == null) return null;
+    final local = dueDate.toLocal();
+    return '${DateFormat.MMMd().format(local)} · ${DateFormat.jm().format(local)}';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dueLabel = _formatDue(widget.task.dueDate);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Checkbox(value: task.completed, onChanged: onToggle),
+          ScaleTransition(
+            scale: _checkScale,
+            child: Checkbox(
+              value: widget.task.completed,
+              onChanged: widget.onToggle,
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            onPressed: widget.onStar,
+            icon: Icon(
+              widget.task.starred
+                  ? PhosphorIconsFill.star
+                  : PhosphorIconsRegular.star,
+            ),
+            color: widget.task.starred
+                ? Theme.of(context).colorScheme.primary
+                : null,
+          ),
           Expanded(
             child: InkWell(
-              onTap: onEdit,
+              onTap: widget.onEdit,
               borderRadius: BorderRadius.circular(14),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 12,
+                ),
+                child: Row(
                   children: [
-                    Text(
-                      task.title,
-                      style: completedStyle ? const TextStyle(decoration: TextDecoration.lineThrough) : null,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOut,
+                            style: Theme.of(context).textTheme.bodyLarge!
+                                .copyWith(
+                                  decoration: _strikeVisible
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  color: _strikeVisible
+                                      ? Theme.of(context).colorScheme.onSurface
+                                            .withValues(alpha: 0.55)
+                                      : null,
+                                ),
+                            child: Text(
+                              widget.task.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          FutureBuilder(
+                            future: widget.subtaskStats,
+                            builder: (context, snapshot) {
+                              final stats = snapshot.data;
+                              if (stats == null || stats.total == 0) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '${stats.completed} : ${stats.total}',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        fontSize: 10,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.72),
+                                      ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                    ?subtitle,
+                    if (dueLabel != null) ...[
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: widget.panelOpen ? 108 : 120,
+                        child: Text(
+                          dueLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

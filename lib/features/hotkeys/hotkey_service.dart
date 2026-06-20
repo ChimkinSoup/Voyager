@@ -37,10 +37,7 @@ class WindowsHotkeyService implements HotkeyService {
       );
     }
     if (_todoKey != null) {
-      await hotKeyManager.register(
-        _todoKey!,
-        keyDownHandler: (_) => onTodo(),
-      );
+      await hotKeyManager.register(_todoKey!, keyDownHandler: (_) => onTodo());
     }
   }
 

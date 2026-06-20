@@ -27,6 +27,17 @@ class $JournalsTableTable extends JournalsTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _guidedJournalingMeta = const VerificationMeta(
     'guidedJournaling',
   );
@@ -91,6 +102,7 @@ class $JournalsTableTable extends JournalsTable
   List<GeneratedColumn> get $columns => [
     id,
     name,
+    colorValue,
     guidedJournaling,
     promptCycleDays,
     createdAt,
@@ -121,6 +133,12 @@ class $JournalsTableTable extends JournalsTable
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
     }
     if (data.containsKey('guided_journaling')) {
       context.handle(
@@ -179,6 +197,10 @@ class $JournalsTableTable extends JournalsTable
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      ),
       guidedJournaling: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}guided_journaling'],
@@ -212,6 +234,7 @@ class JournalsTableData extends DataClass
     implements Insertable<JournalsTableData> {
   final String id;
   final String name;
+  final int? colorValue;
   final bool guidedJournaling;
   final int promptCycleDays;
   final DateTime createdAt;
@@ -220,6 +243,7 @@ class JournalsTableData extends DataClass
   const JournalsTableData({
     required this.id,
     required this.name,
+    this.colorValue,
     required this.guidedJournaling,
     required this.promptCycleDays,
     required this.createdAt,
@@ -231,6 +255,9 @@ class JournalsTableData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
+    if (!nullToAbsent || colorValue != null) {
+      map['color_value'] = Variable<int>(colorValue);
+    }
     map['guided_journaling'] = Variable<bool>(guidedJournaling);
     map['prompt_cycle_days'] = Variable<int>(promptCycleDays);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -245,6 +272,9 @@ class JournalsTableData extends DataClass
     return JournalsTableCompanion(
       id: Value(id),
       name: Value(name),
+      colorValue: colorValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorValue),
       guidedJournaling: Value(guidedJournaling),
       promptCycleDays: Value(promptCycleDays),
       createdAt: Value(createdAt),
@@ -263,6 +293,7 @@ class JournalsTableData extends DataClass
     return JournalsTableData(
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      colorValue: serializer.fromJson<int?>(json['colorValue']),
       guidedJournaling: serializer.fromJson<bool>(json['guidedJournaling']),
       promptCycleDays: serializer.fromJson<int>(json['promptCycleDays']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -276,6 +307,7 @@ class JournalsTableData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
+      'colorValue': serializer.toJson<int?>(colorValue),
       'guidedJournaling': serializer.toJson<bool>(guidedJournaling),
       'promptCycleDays': serializer.toJson<int>(promptCycleDays),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -287,6 +319,7 @@ class JournalsTableData extends DataClass
   JournalsTableData copyWith({
     String? id,
     String? name,
+    Value<int?> colorValue = const Value.absent(),
     bool? guidedJournaling,
     int? promptCycleDays,
     DateTime? createdAt,
@@ -295,6 +328,7 @@ class JournalsTableData extends DataClass
   }) => JournalsTableData(
     id: id ?? this.id,
     name: name ?? this.name,
+    colorValue: colorValue.present ? colorValue.value : this.colorValue,
     guidedJournaling: guidedJournaling ?? this.guidedJournaling,
     promptCycleDays: promptCycleDays ?? this.promptCycleDays,
     createdAt: createdAt ?? this.createdAt,
@@ -305,6 +339,9 @@ class JournalsTableData extends DataClass
     return JournalsTableData(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
       guidedJournaling: data.guidedJournaling.present
           ? data.guidedJournaling.value
           : this.guidedJournaling,
@@ -322,6 +359,7 @@ class JournalsTableData extends DataClass
     return (StringBuffer('JournalsTableData(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
           ..write('guidedJournaling: $guidedJournaling, ')
           ..write('promptCycleDays: $promptCycleDays, ')
           ..write('createdAt: $createdAt, ')
@@ -335,6 +373,7 @@ class JournalsTableData extends DataClass
   int get hashCode => Object.hash(
     id,
     name,
+    colorValue,
     guidedJournaling,
     promptCycleDays,
     createdAt,
@@ -347,6 +386,7 @@ class JournalsTableData extends DataClass
       (other is JournalsTableData &&
           other.id == this.id &&
           other.name == this.name &&
+          other.colorValue == this.colorValue &&
           other.guidedJournaling == this.guidedJournaling &&
           other.promptCycleDays == this.promptCycleDays &&
           other.createdAt == this.createdAt &&
@@ -357,6 +397,7 @@ class JournalsTableData extends DataClass
 class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   final Value<String> id;
   final Value<String> name;
+  final Value<int?> colorValue;
   final Value<bool> guidedJournaling;
   final Value<int> promptCycleDays;
   final Value<DateTime> createdAt;
@@ -366,6 +407,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   const JournalsTableCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.colorValue = const Value.absent(),
     this.guidedJournaling = const Value.absent(),
     this.promptCycleDays = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -376,6 +418,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   JournalsTableCompanion.insert({
     required String id,
     required String name,
+    this.colorValue = const Value.absent(),
     this.guidedJournaling = const Value.absent(),
     this.promptCycleDays = const Value.absent(),
     required DateTime createdAt,
@@ -389,6 +432,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   static Insertable<JournalsTableData> custom({
     Expression<String>? id,
     Expression<String>? name,
+    Expression<int>? colorValue,
     Expression<bool>? guidedJournaling,
     Expression<int>? promptCycleDays,
     Expression<DateTime>? createdAt,
@@ -399,6 +443,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (colorValue != null) 'color_value': colorValue,
       if (guidedJournaling != null) 'guided_journaling': guidedJournaling,
       if (promptCycleDays != null) 'prompt_cycle_days': promptCycleDays,
       if (createdAt != null) 'created_at': createdAt,
@@ -411,6 +456,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   JournalsTableCompanion copyWith({
     Value<String>? id,
     Value<String>? name,
+    Value<int?>? colorValue,
     Value<bool>? guidedJournaling,
     Value<int>? promptCycleDays,
     Value<DateTime>? createdAt,
@@ -421,6 +467,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     return JournalsTableCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
       guidedJournaling: guidedJournaling ?? this.guidedJournaling,
       promptCycleDays: promptCycleDays ?? this.promptCycleDays,
       createdAt: createdAt ?? this.createdAt,
@@ -438,6 +485,9 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
     }
     if (guidedJournaling.present) {
       map['guided_journaling'] = Variable<bool>(guidedJournaling.value);
@@ -465,6 +515,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     return (StringBuffer('JournalsTableCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
           ..write('guidedJournaling: $guidedJournaling, ')
           ..write('promptCycleDays: $promptCycleDays, ')
           ..write('createdAt: $createdAt, ')
@@ -1419,6 +1470,17 @@ class $TodoListsTableTable extends TodoListsTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1456,6 +1518,7 @@ class $TodoListsTableTable extends TodoListsTable
   List<GeneratedColumn> get $columns => [
     id,
     name,
+    colorValue,
     createdAt,
     updatedAt,
     deletedAt,
@@ -1484,6 +1547,12 @@ class $TodoListsTableTable extends TodoListsTable
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -1524,6 +1593,10 @@ class $TodoListsTableTable extends TodoListsTable
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1549,12 +1622,14 @@ class TodoListsTableData extends DataClass
     implements Insertable<TodoListsTableData> {
   final String id;
   final String name;
+  final int? colorValue;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const TodoListsTableData({
     required this.id,
     required this.name,
+    this.colorValue,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -1564,6 +1639,9 @@ class TodoListsTableData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
+    if (!nullToAbsent || colorValue != null) {
+      map['color_value'] = Variable<int>(colorValue);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -1576,6 +1654,9 @@ class TodoListsTableData extends DataClass
     return TodoListsTableCompanion(
       id: Value(id),
       name: Value(name),
+      colorValue: colorValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorValue),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -1592,6 +1673,7 @@ class TodoListsTableData extends DataClass
     return TodoListsTableData(
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      colorValue: serializer.fromJson<int?>(json['colorValue']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -1603,6 +1685,7 @@ class TodoListsTableData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
+      'colorValue': serializer.toJson<int?>(colorValue),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -1612,12 +1695,14 @@ class TodoListsTableData extends DataClass
   TodoListsTableData copyWith({
     String? id,
     String? name,
+    Value<int?> colorValue = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => TodoListsTableData(
     id: id ?? this.id,
     name: name ?? this.name,
+    colorValue: colorValue.present ? colorValue.value : this.colorValue,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -1626,6 +1711,9 @@ class TodoListsTableData extends DataClass
     return TodoListsTableData(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -1637,6 +1725,7 @@ class TodoListsTableData extends DataClass
     return (StringBuffer('TodoListsTableData(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -1645,13 +1734,15 @@ class TodoListsTableData extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(id, name, createdAt, updatedAt, deletedAt);
+  int get hashCode =>
+      Object.hash(id, name, colorValue, createdAt, updatedAt, deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is TodoListsTableData &&
           other.id == this.id &&
           other.name == this.name &&
+          other.colorValue == this.colorValue &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -1660,6 +1751,7 @@ class TodoListsTableData extends DataClass
 class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
   final Value<String> id;
   final Value<String> name;
+  final Value<int?> colorValue;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -1667,6 +1759,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
   const TodoListsTableCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.colorValue = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -1675,6 +1768,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
   TodoListsTableCompanion.insert({
     required String id,
     required String name,
+    this.colorValue = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
@@ -1686,6 +1780,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
   static Insertable<TodoListsTableData> custom({
     Expression<String>? id,
     Expression<String>? name,
+    Expression<int>? colorValue,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -1694,6 +1789,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (colorValue != null) 'color_value': colorValue,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -1704,6 +1800,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
   TodoListsTableCompanion copyWith({
     Value<String>? id,
     Value<String>? name,
+    Value<int?>? colorValue,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -1712,6 +1809,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     return TodoListsTableCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -1727,6 +1825,9 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -1748,6 +1849,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     return (StringBuffer('TodoListsTableCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -1780,6 +1882,17 @@ class $TodoTasksTableTable extends TodoTasksTable
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentTaskIdMeta = const VerificationMeta(
+    'parentTaskId',
+  );
+  @override
+  late final GeneratedColumn<String> parentTaskId = GeneratedColumn<String>(
+    'parent_task_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
@@ -1825,6 +1938,44 @@ class $TodoTasksTableTable extends TodoTasksTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _starredMeta = const VerificationMeta(
+    'starred',
+  );
+  @override
+  late final GeneratedColumn<bool> starred = GeneratedColumn<bool>(
+    'starred',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("starred" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _preStarSortOrderMeta = const VerificationMeta(
+    'preStarSortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> preStarSortOrder = GeneratedColumn<int>(
+    'pre_star_sort_order',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1862,10 +2013,14 @@ class $TodoTasksTableTable extends TodoTasksTable
   List<GeneratedColumn> get $columns => [
     id,
     listId,
+    parentTaskId,
     title,
     notes,
     dueDate,
     completed,
+    starred,
+    sortOrder,
+    preStarSortOrder,
     createdAt,
     updatedAt,
     deletedAt,
@@ -1895,6 +2050,15 @@ class $TodoTasksTableTable extends TodoTasksTable
     } else if (isInserting) {
       context.missing(_listIdMeta);
     }
+    if (data.containsKey('parent_task_id')) {
+      context.handle(
+        _parentTaskIdMeta,
+        parentTaskId.isAcceptableOrUnknown(
+          data['parent_task_id']!,
+          _parentTaskIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('title')) {
       context.handle(
         _titleMeta,
@@ -1919,6 +2083,27 @@ class $TodoTasksTableTable extends TodoTasksTable
       context.handle(
         _completedMeta,
         completed.isAcceptableOrUnknown(data['completed']!, _completedMeta),
+      );
+    }
+    if (data.containsKey('starred')) {
+      context.handle(
+        _starredMeta,
+        starred.isAcceptableOrUnknown(data['starred']!, _starredMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('pre_star_sort_order')) {
+      context.handle(
+        _preStarSortOrderMeta,
+        preStarSortOrder.isAcceptableOrUnknown(
+          data['pre_star_sort_order']!,
+          _preStarSortOrderMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -1960,6 +2145,10 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.string,
         data['${effectivePrefix}list_id'],
       )!,
+      parentTaskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_task_id'],
+      ),
       title: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}title'],
@@ -1976,6 +2165,18 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.bool,
         data['${effectivePrefix}completed'],
       )!,
+      starred: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}starred'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      preStarSortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pre_star_sort_order'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2001,20 +2202,28 @@ class TodoTasksTableData extends DataClass
     implements Insertable<TodoTasksTableData> {
   final String id;
   final String listId;
+  final String? parentTaskId;
   final String title;
   final String? notes;
   final DateTime? dueDate;
   final bool completed;
+  final bool starred;
+  final int sortOrder;
+  final int? preStarSortOrder;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const TodoTasksTableData({
     required this.id,
     required this.listId,
+    this.parentTaskId,
     required this.title,
     this.notes,
     this.dueDate,
     required this.completed,
+    required this.starred,
+    required this.sortOrder,
+    this.preStarSortOrder,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -2024,6 +2233,9 @@ class TodoTasksTableData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['list_id'] = Variable<String>(listId);
+    if (!nullToAbsent || parentTaskId != null) {
+      map['parent_task_id'] = Variable<String>(parentTaskId);
+    }
     map['title'] = Variable<String>(title);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
@@ -2032,6 +2244,11 @@ class TodoTasksTableData extends DataClass
       map['due_date'] = Variable<DateTime>(dueDate);
     }
     map['completed'] = Variable<bool>(completed);
+    map['starred'] = Variable<bool>(starred);
+    map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || preStarSortOrder != null) {
+      map['pre_star_sort_order'] = Variable<int>(preStarSortOrder);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -2044,6 +2261,9 @@ class TodoTasksTableData extends DataClass
     return TodoTasksTableCompanion(
       id: Value(id),
       listId: Value(listId),
+      parentTaskId: parentTaskId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentTaskId),
       title: Value(title),
       notes: notes == null && nullToAbsent
           ? const Value.absent()
@@ -2052,6 +2272,11 @@ class TodoTasksTableData extends DataClass
           ? const Value.absent()
           : Value(dueDate),
       completed: Value(completed),
+      starred: Value(starred),
+      sortOrder: Value(sortOrder),
+      preStarSortOrder: preStarSortOrder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(preStarSortOrder),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -2068,10 +2293,14 @@ class TodoTasksTableData extends DataClass
     return TodoTasksTableData(
       id: serializer.fromJson<String>(json['id']),
       listId: serializer.fromJson<String>(json['listId']),
+      parentTaskId: serializer.fromJson<String?>(json['parentTaskId']),
       title: serializer.fromJson<String>(json['title']),
       notes: serializer.fromJson<String?>(json['notes']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
       completed: serializer.fromJson<bool>(json['completed']),
+      starred: serializer.fromJson<bool>(json['starred']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      preStarSortOrder: serializer.fromJson<int?>(json['preStarSortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -2083,10 +2312,14 @@ class TodoTasksTableData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'listId': serializer.toJson<String>(listId),
+      'parentTaskId': serializer.toJson<String?>(parentTaskId),
       'title': serializer.toJson<String>(title),
       'notes': serializer.toJson<String?>(notes),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
       'completed': serializer.toJson<bool>(completed),
+      'starred': serializer.toJson<bool>(starred),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'preStarSortOrder': serializer.toJson<int?>(preStarSortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -2096,20 +2329,30 @@ class TodoTasksTableData extends DataClass
   TodoTasksTableData copyWith({
     String? id,
     String? listId,
+    Value<String?> parentTaskId = const Value.absent(),
     String? title,
     Value<String?> notes = const Value.absent(),
     Value<DateTime?> dueDate = const Value.absent(),
     bool? completed,
+    bool? starred,
+    int? sortOrder,
+    Value<int?> preStarSortOrder = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => TodoTasksTableData(
     id: id ?? this.id,
     listId: listId ?? this.listId,
+    parentTaskId: parentTaskId.present ? parentTaskId.value : this.parentTaskId,
     title: title ?? this.title,
     notes: notes.present ? notes.value : this.notes,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
     completed: completed ?? this.completed,
+    starred: starred ?? this.starred,
+    sortOrder: sortOrder ?? this.sortOrder,
+    preStarSortOrder: preStarSortOrder.present
+        ? preStarSortOrder.value
+        : this.preStarSortOrder,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -2118,10 +2361,18 @@ class TodoTasksTableData extends DataClass
     return TodoTasksTableData(
       id: data.id.present ? data.id.value : this.id,
       listId: data.listId.present ? data.listId.value : this.listId,
+      parentTaskId: data.parentTaskId.present
+          ? data.parentTaskId.value
+          : this.parentTaskId,
       title: data.title.present ? data.title.value : this.title,
       notes: data.notes.present ? data.notes.value : this.notes,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
       completed: data.completed.present ? data.completed.value : this.completed,
+      starred: data.starred.present ? data.starred.value : this.starred,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      preStarSortOrder: data.preStarSortOrder.present
+          ? data.preStarSortOrder.value
+          : this.preStarSortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -2133,10 +2384,14 @@ class TodoTasksTableData extends DataClass
     return (StringBuffer('TodoTasksTableData(')
           ..write('id: $id, ')
           ..write('listId: $listId, ')
+          ..write('parentTaskId: $parentTaskId, ')
           ..write('title: $title, ')
           ..write('notes: $notes, ')
           ..write('dueDate: $dueDate, ')
           ..write('completed: $completed, ')
+          ..write('starred: $starred, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('preStarSortOrder: $preStarSortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -2148,10 +2403,14 @@ class TodoTasksTableData extends DataClass
   int get hashCode => Object.hash(
     id,
     listId,
+    parentTaskId,
     title,
     notes,
     dueDate,
     completed,
+    starred,
+    sortOrder,
+    preStarSortOrder,
     createdAt,
     updatedAt,
     deletedAt,
@@ -2162,10 +2421,14 @@ class TodoTasksTableData extends DataClass
       (other is TodoTasksTableData &&
           other.id == this.id &&
           other.listId == this.listId &&
+          other.parentTaskId == this.parentTaskId &&
           other.title == this.title &&
           other.notes == this.notes &&
           other.dueDate == this.dueDate &&
           other.completed == this.completed &&
+          other.starred == this.starred &&
+          other.sortOrder == this.sortOrder &&
+          other.preStarSortOrder == this.preStarSortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -2174,10 +2437,14 @@ class TodoTasksTableData extends DataClass
 class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<String> id;
   final Value<String> listId;
+  final Value<String?> parentTaskId;
   final Value<String> title;
   final Value<String?> notes;
   final Value<DateTime?> dueDate;
   final Value<bool> completed;
+  final Value<bool> starred;
+  final Value<int> sortOrder;
+  final Value<int?> preStarSortOrder;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -2185,10 +2452,14 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   const TodoTasksTableCompanion({
     this.id = const Value.absent(),
     this.listId = const Value.absent(),
+    this.parentTaskId = const Value.absent(),
     this.title = const Value.absent(),
     this.notes = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.completed = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.preStarSortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2197,10 +2468,14 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   TodoTasksTableCompanion.insert({
     required String id,
     required String listId,
+    this.parentTaskId = const Value.absent(),
     required String title,
     this.notes = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.completed = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.preStarSortOrder = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
@@ -2213,10 +2488,14 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   static Insertable<TodoTasksTableData> custom({
     Expression<String>? id,
     Expression<String>? listId,
+    Expression<String>? parentTaskId,
     Expression<String>? title,
     Expression<String>? notes,
     Expression<DateTime>? dueDate,
     Expression<bool>? completed,
+    Expression<bool>? starred,
+    Expression<int>? sortOrder,
+    Expression<int>? preStarSortOrder,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -2225,10 +2504,14 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (listId != null) 'list_id': listId,
+      if (parentTaskId != null) 'parent_task_id': parentTaskId,
       if (title != null) 'title': title,
       if (notes != null) 'notes': notes,
       if (dueDate != null) 'due_date': dueDate,
       if (completed != null) 'completed': completed,
+      if (starred != null) 'starred': starred,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (preStarSortOrder != null) 'pre_star_sort_order': preStarSortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2239,10 +2522,14 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   TodoTasksTableCompanion copyWith({
     Value<String>? id,
     Value<String>? listId,
+    Value<String?>? parentTaskId,
     Value<String>? title,
     Value<String?>? notes,
     Value<DateTime?>? dueDate,
     Value<bool>? completed,
+    Value<bool>? starred,
+    Value<int>? sortOrder,
+    Value<int?>? preStarSortOrder,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -2251,10 +2538,14 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     return TodoTasksTableCompanion(
       id: id ?? this.id,
       listId: listId ?? this.listId,
+      parentTaskId: parentTaskId ?? this.parentTaskId,
       title: title ?? this.title,
       notes: notes ?? this.notes,
       dueDate: dueDate ?? this.dueDate,
       completed: completed ?? this.completed,
+      starred: starred ?? this.starred,
+      sortOrder: sortOrder ?? this.sortOrder,
+      preStarSortOrder: preStarSortOrder ?? this.preStarSortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -2271,6 +2562,9 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     if (listId.present) {
       map['list_id'] = Variable<String>(listId.value);
     }
+    if (parentTaskId.present) {
+      map['parent_task_id'] = Variable<String>(parentTaskId.value);
+    }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
     }
@@ -2282,6 +2576,15 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     }
     if (completed.present) {
       map['completed'] = Variable<bool>(completed.value);
+    }
+    if (starred.present) {
+      map['starred'] = Variable<bool>(starred.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (preStarSortOrder.present) {
+      map['pre_star_sort_order'] = Variable<int>(preStarSortOrder.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -2303,10 +2606,14 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     return (StringBuffer('TodoTasksTableCompanion(')
           ..write('id: $id, ')
           ..write('listId: $listId, ')
+          ..write('parentTaskId: $parentTaskId, ')
           ..write('title: $title, ')
           ..write('notes: $notes, ')
           ..write('dueDate: $dueDate, ')
           ..write('completed: $completed, ')
+          ..write('starred: $starred, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('preStarSortOrder: $preStarSortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -5516,7 +5823,7 @@ class $SettingsTableTable extends SettingsTable
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('Ctrl+Shift+J'),
+    defaultValue: const Constant(defaultJournalHotkey),
   );
   static const VerificationMeta _todoHotkeyMeta = const VerificationMeta(
     'todoHotkey',
@@ -5528,7 +5835,7 @@ class $SettingsTableTable extends SettingsTable
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('Ctrl+Shift+T'),
+    defaultValue: const Constant(defaultTodoHotkey),
   );
   static const VerificationMeta _rankingColorStartMeta = const VerificationMeta(
     'rankingColorStart',
@@ -5620,6 +5927,173 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherLocationLabelMeta =
+      const VerificationMeta('weatherLocationLabel');
+  @override
+  late final GeneratedColumn<String> weatherLocationLabel =
+      GeneratedColumn<String>(
+        'weather_location_label',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _weatherLatMeta = const VerificationMeta(
+    'weatherLat',
+  );
+  @override
+  late final GeneratedColumn<double> weatherLat = GeneratedColumn<double>(
+    'weather_lat',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherLonMeta = const VerificationMeta(
+    'weatherLon',
+  );
+  @override
+  late final GeneratedColumn<double> weatherLon = GeneratedColumn<double>(
+    'weather_lon',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherIconMeta = const VerificationMeta(
+    'weatherIcon',
+  );
+  @override
+  late final GeneratedColumn<String> weatherIcon = GeneratedColumn<String>(
+    'weather_icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherFetchedAtMeta = const VerificationMeta(
+    'weatherFetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> weatherFetchedAt =
+      GeneratedColumn<DateTime>(
+        'weather_fetched_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _weatherConditionCodeMeta =
+      const VerificationMeta('weatherConditionCode');
+  @override
+  late final GeneratedColumn<int> weatherConditionCode = GeneratedColumn<int>(
+    'weather_condition_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherTempCMeta = const VerificationMeta(
+    'weatherTempC',
+  );
+  @override
+  late final GeneratedColumn<double> weatherTempC = GeneratedColumn<double>(
+    'weather_temp_c',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherLocationUpdatedAtMeta =
+      const VerificationMeta('weatherLocationUpdatedAt');
+  @override
+  late final GeneratedColumn<DateTime> weatherLocationUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'weather_location_updated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _devUseDirectOpenWeatherMeta =
+      const VerificationMeta('devUseDirectOpenWeather');
+  @override
+  late final GeneratedColumn<bool> devUseDirectOpenWeather =
+      GeneratedColumn<bool>(
+        'dev_use_direct_open_weather',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("dev_use_direct_open_weather" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _devOpenWeatherApiKeyMeta =
+      const VerificationMeta('devOpenWeatherApiKey');
+  @override
+  late final GeneratedColumn<String> devOpenWeatherApiKey =
+      GeneratedColumn<String>(
+        'dev_open_weather_api_key',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _weatherForecastJsonMeta =
+      const VerificationMeta('weatherForecastJson');
+  @override
+  late final GeneratedColumn<String> weatherForecastJson =
+      GeneratedColumn<String>(
+        'weather_forecast_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _weatherChartTempColorMeta =
+      const VerificationMeta('weatherChartTempColor');
+  @override
+  late final GeneratedColumn<int> weatherChartTempColor = GeneratedColumn<int>(
+    'weather_chart_temp_color',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _weatherChartRainColorMeta =
+      const VerificationMeta('weatherChartRainColor');
+  @override
+  late final GeneratedColumn<int> weatherChartRainColor = GeneratedColumn<int>(
+    'weather_chart_rain_color',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorPaletteJsonMeta = const VerificationMeta(
+    'colorPaletteJson',
+  );
+  @override
+  late final GeneratedColumn<String> colorPaletteJson = GeneratedColumn<String>(
+    'color_palette_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5635,6 +6109,21 @@ class $SettingsTableTable extends SettingsTable
     alertOnPeriodicPrompts,
     alertTimeHour,
     hideCompletedTasks,
+    deviceId,
+    weatherLocationLabel,
+    weatherLat,
+    weatherLon,
+    weatherIcon,
+    weatherFetchedAt,
+    weatherConditionCode,
+    weatherTempC,
+    weatherLocationUpdatedAt,
+    devUseDirectOpenWeather,
+    devOpenWeatherApiKey,
+    weatherForecastJson,
+    weatherChartTempColor,
+    weatherChartRainColor,
+    colorPaletteJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5750,6 +6239,132 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('weather_location_label')) {
+      context.handle(
+        _weatherLocationLabelMeta,
+        weatherLocationLabel.isAcceptableOrUnknown(
+          data['weather_location_label']!,
+          _weatherLocationLabelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_lat')) {
+      context.handle(
+        _weatherLatMeta,
+        weatherLat.isAcceptableOrUnknown(data['weather_lat']!, _weatherLatMeta),
+      );
+    }
+    if (data.containsKey('weather_lon')) {
+      context.handle(
+        _weatherLonMeta,
+        weatherLon.isAcceptableOrUnknown(data['weather_lon']!, _weatherLonMeta),
+      );
+    }
+    if (data.containsKey('weather_icon')) {
+      context.handle(
+        _weatherIconMeta,
+        weatherIcon.isAcceptableOrUnknown(
+          data['weather_icon']!,
+          _weatherIconMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_fetched_at')) {
+      context.handle(
+        _weatherFetchedAtMeta,
+        weatherFetchedAt.isAcceptableOrUnknown(
+          data['weather_fetched_at']!,
+          _weatherFetchedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_condition_code')) {
+      context.handle(
+        _weatherConditionCodeMeta,
+        weatherConditionCode.isAcceptableOrUnknown(
+          data['weather_condition_code']!,
+          _weatherConditionCodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_temp_c')) {
+      context.handle(
+        _weatherTempCMeta,
+        weatherTempC.isAcceptableOrUnknown(
+          data['weather_temp_c']!,
+          _weatherTempCMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_location_updated_at')) {
+      context.handle(
+        _weatherLocationUpdatedAtMeta,
+        weatherLocationUpdatedAt.isAcceptableOrUnknown(
+          data['weather_location_updated_at']!,
+          _weatherLocationUpdatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_use_direct_open_weather')) {
+      context.handle(
+        _devUseDirectOpenWeatherMeta,
+        devUseDirectOpenWeather.isAcceptableOrUnknown(
+          data['dev_use_direct_open_weather']!,
+          _devUseDirectOpenWeatherMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_open_weather_api_key')) {
+      context.handle(
+        _devOpenWeatherApiKeyMeta,
+        devOpenWeatherApiKey.isAcceptableOrUnknown(
+          data['dev_open_weather_api_key']!,
+          _devOpenWeatherApiKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_forecast_json')) {
+      context.handle(
+        _weatherForecastJsonMeta,
+        weatherForecastJson.isAcceptableOrUnknown(
+          data['weather_forecast_json']!,
+          _weatherForecastJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_chart_temp_color')) {
+      context.handle(
+        _weatherChartTempColorMeta,
+        weatherChartTempColor.isAcceptableOrUnknown(
+          data['weather_chart_temp_color']!,
+          _weatherChartTempColorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('weather_chart_rain_color')) {
+      context.handle(
+        _weatherChartRainColorMeta,
+        weatherChartRainColor.isAcceptableOrUnknown(
+          data['weather_chart_rain_color']!,
+          _weatherChartRainColorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('color_palette_json')) {
+      context.handle(
+        _colorPaletteJsonMeta,
+        colorPaletteJson.isAcceptableOrUnknown(
+          data['color_palette_json']!,
+          _colorPaletteJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5811,6 +6426,66 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}hide_completed_tasks'],
       )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      ),
+      weatherLocationLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}weather_location_label'],
+      ),
+      weatherLat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}weather_lat'],
+      ),
+      weatherLon: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}weather_lon'],
+      ),
+      weatherIcon: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}weather_icon'],
+      ),
+      weatherFetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}weather_fetched_at'],
+      ),
+      weatherConditionCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}weather_condition_code'],
+      ),
+      weatherTempC: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}weather_temp_c'],
+      ),
+      weatherLocationUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}weather_location_updated_at'],
+      ),
+      devUseDirectOpenWeather: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_use_direct_open_weather'],
+      )!,
+      devOpenWeatherApiKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dev_open_weather_api_key'],
+      ),
+      weatherForecastJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}weather_forecast_json'],
+      ),
+      weatherChartTempColor: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}weather_chart_temp_color'],
+      ),
+      weatherChartRainColor: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}weather_chart_rain_color'],
+      ),
+      colorPaletteJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}color_palette_json'],
+      ),
     );
   }
 
@@ -5835,6 +6510,21 @@ class SettingsTableData extends DataClass
   final bool alertOnPeriodicPrompts;
   final int alertTimeHour;
   final bool hideCompletedTasks;
+  final String? deviceId;
+  final String? weatherLocationLabel;
+  final double? weatherLat;
+  final double? weatherLon;
+  final String? weatherIcon;
+  final DateTime? weatherFetchedAt;
+  final int? weatherConditionCode;
+  final double? weatherTempC;
+  final DateTime? weatherLocationUpdatedAt;
+  final bool devUseDirectOpenWeather;
+  final String? devOpenWeatherApiKey;
+  final String? weatherForecastJson;
+  final int? weatherChartTempColor;
+  final int? weatherChartRainColor;
+  final String? colorPaletteJson;
   const SettingsTableData({
     required this.id,
     required this.accentColor,
@@ -5849,6 +6539,21 @@ class SettingsTableData extends DataClass
     required this.alertOnPeriodicPrompts,
     required this.alertTimeHour,
     required this.hideCompletedTasks,
+    this.deviceId,
+    this.weatherLocationLabel,
+    this.weatherLat,
+    this.weatherLon,
+    this.weatherIcon,
+    this.weatherFetchedAt,
+    this.weatherConditionCode,
+    this.weatherTempC,
+    this.weatherLocationUpdatedAt,
+    required this.devUseDirectOpenWeather,
+    this.devOpenWeatherApiKey,
+    this.weatherForecastJson,
+    this.weatherChartTempColor,
+    this.weatherChartRainColor,
+    this.colorPaletteJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5868,6 +6573,53 @@ class SettingsTableData extends DataClass
     map['alert_on_periodic_prompts'] = Variable<bool>(alertOnPeriodicPrompts);
     map['alert_time_hour'] = Variable<int>(alertTimeHour);
     map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks);
+    if (!nullToAbsent || deviceId != null) {
+      map['device_id'] = Variable<String>(deviceId);
+    }
+    if (!nullToAbsent || weatherLocationLabel != null) {
+      map['weather_location_label'] = Variable<String>(weatherLocationLabel);
+    }
+    if (!nullToAbsent || weatherLat != null) {
+      map['weather_lat'] = Variable<double>(weatherLat);
+    }
+    if (!nullToAbsent || weatherLon != null) {
+      map['weather_lon'] = Variable<double>(weatherLon);
+    }
+    if (!nullToAbsent || weatherIcon != null) {
+      map['weather_icon'] = Variable<String>(weatherIcon);
+    }
+    if (!nullToAbsent || weatherFetchedAt != null) {
+      map['weather_fetched_at'] = Variable<DateTime>(weatherFetchedAt);
+    }
+    if (!nullToAbsent || weatherConditionCode != null) {
+      map['weather_condition_code'] = Variable<int>(weatherConditionCode);
+    }
+    if (!nullToAbsent || weatherTempC != null) {
+      map['weather_temp_c'] = Variable<double>(weatherTempC);
+    }
+    if (!nullToAbsent || weatherLocationUpdatedAt != null) {
+      map['weather_location_updated_at'] = Variable<DateTime>(
+        weatherLocationUpdatedAt,
+      );
+    }
+    map['dev_use_direct_open_weather'] = Variable<bool>(
+      devUseDirectOpenWeather,
+    );
+    if (!nullToAbsent || devOpenWeatherApiKey != null) {
+      map['dev_open_weather_api_key'] = Variable<String>(devOpenWeatherApiKey);
+    }
+    if (!nullToAbsent || weatherForecastJson != null) {
+      map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
+    }
+    if (!nullToAbsent || weatherChartTempColor != null) {
+      map['weather_chart_temp_color'] = Variable<int>(weatherChartTempColor);
+    }
+    if (!nullToAbsent || weatherChartRainColor != null) {
+      map['weather_chart_rain_color'] = Variable<int>(weatherChartRainColor);
+    }
+    if (!nullToAbsent || colorPaletteJson != null) {
+      map['color_palette_json'] = Variable<String>(colorPaletteJson);
+    }
     return map;
   }
 
@@ -5888,6 +6640,49 @@ class SettingsTableData extends DataClass
       alertOnPeriodicPrompts: Value(alertOnPeriodicPrompts),
       alertTimeHour: Value(alertTimeHour),
       hideCompletedTasks: Value(hideCompletedTasks),
+      deviceId: deviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceId),
+      weatherLocationLabel: weatherLocationLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherLocationLabel),
+      weatherLat: weatherLat == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherLat),
+      weatherLon: weatherLon == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherLon),
+      weatherIcon: weatherIcon == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherIcon),
+      weatherFetchedAt: weatherFetchedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherFetchedAt),
+      weatherConditionCode: weatherConditionCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherConditionCode),
+      weatherTempC: weatherTempC == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherTempC),
+      weatherLocationUpdatedAt: weatherLocationUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherLocationUpdatedAt),
+      devUseDirectOpenWeather: Value(devUseDirectOpenWeather),
+      devOpenWeatherApiKey: devOpenWeatherApiKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(devOpenWeatherApiKey),
+      weatherForecastJson: weatherForecastJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherForecastJson),
+      weatherChartTempColor: weatherChartTempColor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherChartTempColor),
+      weatherChartRainColor: weatherChartRainColor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weatherChartRainColor),
+      colorPaletteJson: colorPaletteJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorPaletteJson),
     );
   }
 
@@ -5914,6 +6709,39 @@ class SettingsTableData extends DataClass
       ),
       alertTimeHour: serializer.fromJson<int>(json['alertTimeHour']),
       hideCompletedTasks: serializer.fromJson<bool>(json['hideCompletedTasks']),
+      deviceId: serializer.fromJson<String?>(json['deviceId']),
+      weatherLocationLabel: serializer.fromJson<String?>(
+        json['weatherLocationLabel'],
+      ),
+      weatherLat: serializer.fromJson<double?>(json['weatherLat']),
+      weatherLon: serializer.fromJson<double?>(json['weatherLon']),
+      weatherIcon: serializer.fromJson<String?>(json['weatherIcon']),
+      weatherFetchedAt: serializer.fromJson<DateTime?>(
+        json['weatherFetchedAt'],
+      ),
+      weatherConditionCode: serializer.fromJson<int?>(
+        json['weatherConditionCode'],
+      ),
+      weatherTempC: serializer.fromJson<double?>(json['weatherTempC']),
+      weatherLocationUpdatedAt: serializer.fromJson<DateTime?>(
+        json['weatherLocationUpdatedAt'],
+      ),
+      devUseDirectOpenWeather: serializer.fromJson<bool>(
+        json['devUseDirectOpenWeather'],
+      ),
+      devOpenWeatherApiKey: serializer.fromJson<String?>(
+        json['devOpenWeatherApiKey'],
+      ),
+      weatherForecastJson: serializer.fromJson<String?>(
+        json['weatherForecastJson'],
+      ),
+      weatherChartTempColor: serializer.fromJson<int?>(
+        json['weatherChartTempColor'],
+      ),
+      weatherChartRainColor: serializer.fromJson<int?>(
+        json['weatherChartRainColor'],
+      ),
+      colorPaletteJson: serializer.fromJson<String?>(json['colorPaletteJson']),
     );
   }
   @override
@@ -5933,6 +6761,25 @@ class SettingsTableData extends DataClass
       'alertOnPeriodicPrompts': serializer.toJson<bool>(alertOnPeriodicPrompts),
       'alertTimeHour': serializer.toJson<int>(alertTimeHour),
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
+      'deviceId': serializer.toJson<String?>(deviceId),
+      'weatherLocationLabel': serializer.toJson<String?>(weatherLocationLabel),
+      'weatherLat': serializer.toJson<double?>(weatherLat),
+      'weatherLon': serializer.toJson<double?>(weatherLon),
+      'weatherIcon': serializer.toJson<String?>(weatherIcon),
+      'weatherFetchedAt': serializer.toJson<DateTime?>(weatherFetchedAt),
+      'weatherConditionCode': serializer.toJson<int?>(weatherConditionCode),
+      'weatherTempC': serializer.toJson<double?>(weatherTempC),
+      'weatherLocationUpdatedAt': serializer.toJson<DateTime?>(
+        weatherLocationUpdatedAt,
+      ),
+      'devUseDirectOpenWeather': serializer.toJson<bool>(
+        devUseDirectOpenWeather,
+      ),
+      'devOpenWeatherApiKey': serializer.toJson<String?>(devOpenWeatherApiKey),
+      'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
+      'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
+      'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
+      'colorPaletteJson': serializer.toJson<String?>(colorPaletteJson),
     };
   }
 
@@ -5950,6 +6797,21 @@ class SettingsTableData extends DataClass
     bool? alertOnPeriodicPrompts,
     int? alertTimeHour,
     bool? hideCompletedTasks,
+    Value<String?> deviceId = const Value.absent(),
+    Value<String?> weatherLocationLabel = const Value.absent(),
+    Value<double?> weatherLat = const Value.absent(),
+    Value<double?> weatherLon = const Value.absent(),
+    Value<String?> weatherIcon = const Value.absent(),
+    Value<DateTime?> weatherFetchedAt = const Value.absent(),
+    Value<int?> weatherConditionCode = const Value.absent(),
+    Value<double?> weatherTempC = const Value.absent(),
+    Value<DateTime?> weatherLocationUpdatedAt = const Value.absent(),
+    bool? devUseDirectOpenWeather,
+    Value<String?> devOpenWeatherApiKey = const Value.absent(),
+    Value<String?> weatherForecastJson = const Value.absent(),
+    Value<int?> weatherChartTempColor = const Value.absent(),
+    Value<int?> weatherChartRainColor = const Value.absent(),
+    Value<String?> colorPaletteJson = const Value.absent(),
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
@@ -5965,6 +6827,40 @@ class SettingsTableData extends DataClass
         alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
     alertTimeHour: alertTimeHour ?? this.alertTimeHour,
     hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
+    deviceId: deviceId.present ? deviceId.value : this.deviceId,
+    weatherLocationLabel: weatherLocationLabel.present
+        ? weatherLocationLabel.value
+        : this.weatherLocationLabel,
+    weatherLat: weatherLat.present ? weatherLat.value : this.weatherLat,
+    weatherLon: weatherLon.present ? weatherLon.value : this.weatherLon,
+    weatherIcon: weatherIcon.present ? weatherIcon.value : this.weatherIcon,
+    weatherFetchedAt: weatherFetchedAt.present
+        ? weatherFetchedAt.value
+        : this.weatherFetchedAt,
+    weatherConditionCode: weatherConditionCode.present
+        ? weatherConditionCode.value
+        : this.weatherConditionCode,
+    weatherTempC: weatherTempC.present ? weatherTempC.value : this.weatherTempC,
+    weatherLocationUpdatedAt: weatherLocationUpdatedAt.present
+        ? weatherLocationUpdatedAt.value
+        : this.weatherLocationUpdatedAt,
+    devUseDirectOpenWeather:
+        devUseDirectOpenWeather ?? this.devUseDirectOpenWeather,
+    devOpenWeatherApiKey: devOpenWeatherApiKey.present
+        ? devOpenWeatherApiKey.value
+        : this.devOpenWeatherApiKey,
+    weatherForecastJson: weatherForecastJson.present
+        ? weatherForecastJson.value
+        : this.weatherForecastJson,
+    weatherChartTempColor: weatherChartTempColor.present
+        ? weatherChartTempColor.value
+        : this.weatherChartTempColor,
+    weatherChartRainColor: weatherChartRainColor.present
+        ? weatherChartRainColor.value
+        : this.weatherChartRainColor,
+    colorPaletteJson: colorPaletteJson.present
+        ? colorPaletteJson.value
+        : this.colorPaletteJson,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
     return SettingsTableData(
@@ -6003,6 +6899,49 @@ class SettingsTableData extends DataClass
       hideCompletedTasks: data.hideCompletedTasks.present
           ? data.hideCompletedTasks.value
           : this.hideCompletedTasks,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      weatherLocationLabel: data.weatherLocationLabel.present
+          ? data.weatherLocationLabel.value
+          : this.weatherLocationLabel,
+      weatherLat: data.weatherLat.present
+          ? data.weatherLat.value
+          : this.weatherLat,
+      weatherLon: data.weatherLon.present
+          ? data.weatherLon.value
+          : this.weatherLon,
+      weatherIcon: data.weatherIcon.present
+          ? data.weatherIcon.value
+          : this.weatherIcon,
+      weatherFetchedAt: data.weatherFetchedAt.present
+          ? data.weatherFetchedAt.value
+          : this.weatherFetchedAt,
+      weatherConditionCode: data.weatherConditionCode.present
+          ? data.weatherConditionCode.value
+          : this.weatherConditionCode,
+      weatherTempC: data.weatherTempC.present
+          ? data.weatherTempC.value
+          : this.weatherTempC,
+      weatherLocationUpdatedAt: data.weatherLocationUpdatedAt.present
+          ? data.weatherLocationUpdatedAt.value
+          : this.weatherLocationUpdatedAt,
+      devUseDirectOpenWeather: data.devUseDirectOpenWeather.present
+          ? data.devUseDirectOpenWeather.value
+          : this.devUseDirectOpenWeather,
+      devOpenWeatherApiKey: data.devOpenWeatherApiKey.present
+          ? data.devOpenWeatherApiKey.value
+          : this.devOpenWeatherApiKey,
+      weatherForecastJson: data.weatherForecastJson.present
+          ? data.weatherForecastJson.value
+          : this.weatherForecastJson,
+      weatherChartTempColor: data.weatherChartTempColor.present
+          ? data.weatherChartTempColor.value
+          : this.weatherChartTempColor,
+      weatherChartRainColor: data.weatherChartRainColor.present
+          ? data.weatherChartRainColor.value
+          : this.weatherChartRainColor,
+      colorPaletteJson: data.colorPaletteJson.present
+          ? data.colorPaletteJson.value
+          : this.colorPaletteJson,
     );
   }
 
@@ -6021,13 +6960,28 @@ class SettingsTableData extends DataClass
           ..write('birthYear: $birthYear, ')
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
           ..write('alertTimeHour: $alertTimeHour, ')
-          ..write('hideCompletedTasks: $hideCompletedTasks')
+          ..write('hideCompletedTasks: $hideCompletedTasks, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('weatherLocationLabel: $weatherLocationLabel, ')
+          ..write('weatherLat: $weatherLat, ')
+          ..write('weatherLon: $weatherLon, ')
+          ..write('weatherIcon: $weatherIcon, ')
+          ..write('weatherFetchedAt: $weatherFetchedAt, ')
+          ..write('weatherConditionCode: $weatherConditionCode, ')
+          ..write('weatherTempC: $weatherTempC, ')
+          ..write('weatherLocationUpdatedAt: $weatherLocationUpdatedAt, ')
+          ..write('devUseDirectOpenWeather: $devUseDirectOpenWeather, ')
+          ..write('devOpenWeatherApiKey: $devOpenWeatherApiKey, ')
+          ..write('weatherForecastJson: $weatherForecastJson, ')
+          ..write('weatherChartTempColor: $weatherChartTempColor, ')
+          ..write('weatherChartRainColor: $weatherChartRainColor, ')
+          ..write('colorPaletteJson: $colorPaletteJson')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     accentColor,
     weekStartsOnMonday,
@@ -6041,7 +6995,22 @@ class SettingsTableData extends DataClass
     alertOnPeriodicPrompts,
     alertTimeHour,
     hideCompletedTasks,
-  );
+    deviceId,
+    weatherLocationLabel,
+    weatherLat,
+    weatherLon,
+    weatherIcon,
+    weatherFetchedAt,
+    weatherConditionCode,
+    weatherTempC,
+    weatherLocationUpdatedAt,
+    devUseDirectOpenWeather,
+    devOpenWeatherApiKey,
+    weatherForecastJson,
+    weatherChartTempColor,
+    weatherChartRainColor,
+    colorPaletteJson,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6058,7 +7027,22 @@ class SettingsTableData extends DataClass
           other.birthYear == this.birthYear &&
           other.alertOnPeriodicPrompts == this.alertOnPeriodicPrompts &&
           other.alertTimeHour == this.alertTimeHour &&
-          other.hideCompletedTasks == this.hideCompletedTasks);
+          other.hideCompletedTasks == this.hideCompletedTasks &&
+          other.deviceId == this.deviceId &&
+          other.weatherLocationLabel == this.weatherLocationLabel &&
+          other.weatherLat == this.weatherLat &&
+          other.weatherLon == this.weatherLon &&
+          other.weatherIcon == this.weatherIcon &&
+          other.weatherFetchedAt == this.weatherFetchedAt &&
+          other.weatherConditionCode == this.weatherConditionCode &&
+          other.weatherTempC == this.weatherTempC &&
+          other.weatherLocationUpdatedAt == this.weatherLocationUpdatedAt &&
+          other.devUseDirectOpenWeather == this.devUseDirectOpenWeather &&
+          other.devOpenWeatherApiKey == this.devOpenWeatherApiKey &&
+          other.weatherForecastJson == this.weatherForecastJson &&
+          other.weatherChartTempColor == this.weatherChartTempColor &&
+          other.weatherChartRainColor == this.weatherChartRainColor &&
+          other.colorPaletteJson == this.colorPaletteJson);
 }
 
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
@@ -6075,6 +7059,21 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> alertOnPeriodicPrompts;
   final Value<int> alertTimeHour;
   final Value<bool> hideCompletedTasks;
+  final Value<String?> deviceId;
+  final Value<String?> weatherLocationLabel;
+  final Value<double?> weatherLat;
+  final Value<double?> weatherLon;
+  final Value<String?> weatherIcon;
+  final Value<DateTime?> weatherFetchedAt;
+  final Value<int?> weatherConditionCode;
+  final Value<double?> weatherTempC;
+  final Value<DateTime?> weatherLocationUpdatedAt;
+  final Value<bool> devUseDirectOpenWeather;
+  final Value<String?> devOpenWeatherApiKey;
+  final Value<String?> weatherForecastJson;
+  final Value<int?> weatherChartTempColor;
+  final Value<int?> weatherChartRainColor;
+  final Value<String?> colorPaletteJson;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
@@ -6089,6 +7088,21 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertOnPeriodicPrompts = const Value.absent(),
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.weatherLocationLabel = const Value.absent(),
+    this.weatherLat = const Value.absent(),
+    this.weatherLon = const Value.absent(),
+    this.weatherIcon = const Value.absent(),
+    this.weatherFetchedAt = const Value.absent(),
+    this.weatherConditionCode = const Value.absent(),
+    this.weatherTempC = const Value.absent(),
+    this.weatherLocationUpdatedAt = const Value.absent(),
+    this.devUseDirectOpenWeather = const Value.absent(),
+    this.devOpenWeatherApiKey = const Value.absent(),
+    this.weatherForecastJson = const Value.absent(),
+    this.weatherChartTempColor = const Value.absent(),
+    this.weatherChartRainColor = const Value.absent(),
+    this.colorPaletteJson = const Value.absent(),
   });
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
@@ -6104,6 +7118,21 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertOnPeriodicPrompts = const Value.absent(),
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.weatherLocationLabel = const Value.absent(),
+    this.weatherLat = const Value.absent(),
+    this.weatherLon = const Value.absent(),
+    this.weatherIcon = const Value.absent(),
+    this.weatherFetchedAt = const Value.absent(),
+    this.weatherConditionCode = const Value.absent(),
+    this.weatherTempC = const Value.absent(),
+    this.weatherLocationUpdatedAt = const Value.absent(),
+    this.devUseDirectOpenWeather = const Value.absent(),
+    this.devOpenWeatherApiKey = const Value.absent(),
+    this.weatherForecastJson = const Value.absent(),
+    this.weatherChartTempColor = const Value.absent(),
+    this.weatherChartRainColor = const Value.absent(),
+    this.colorPaletteJson = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
@@ -6119,6 +7148,21 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? alertOnPeriodicPrompts,
     Expression<int>? alertTimeHour,
     Expression<bool>? hideCompletedTasks,
+    Expression<String>? deviceId,
+    Expression<String>? weatherLocationLabel,
+    Expression<double>? weatherLat,
+    Expression<double>? weatherLon,
+    Expression<String>? weatherIcon,
+    Expression<DateTime>? weatherFetchedAt,
+    Expression<int>? weatherConditionCode,
+    Expression<double>? weatherTempC,
+    Expression<DateTime>? weatherLocationUpdatedAt,
+    Expression<bool>? devUseDirectOpenWeather,
+    Expression<String>? devOpenWeatherApiKey,
+    Expression<String>? weatherForecastJson,
+    Expression<int>? weatherChartTempColor,
+    Expression<int>? weatherChartRainColor,
+    Expression<String>? colorPaletteJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -6138,6 +7182,29 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (alertTimeHour != null) 'alert_time_hour': alertTimeHour,
       if (hideCompletedTasks != null)
         'hide_completed_tasks': hideCompletedTasks,
+      if (deviceId != null) 'device_id': deviceId,
+      if (weatherLocationLabel != null)
+        'weather_location_label': weatherLocationLabel,
+      if (weatherLat != null) 'weather_lat': weatherLat,
+      if (weatherLon != null) 'weather_lon': weatherLon,
+      if (weatherIcon != null) 'weather_icon': weatherIcon,
+      if (weatherFetchedAt != null) 'weather_fetched_at': weatherFetchedAt,
+      if (weatherConditionCode != null)
+        'weather_condition_code': weatherConditionCode,
+      if (weatherTempC != null) 'weather_temp_c': weatherTempC,
+      if (weatherLocationUpdatedAt != null)
+        'weather_location_updated_at': weatherLocationUpdatedAt,
+      if (devUseDirectOpenWeather != null)
+        'dev_use_direct_open_weather': devUseDirectOpenWeather,
+      if (devOpenWeatherApiKey != null)
+        'dev_open_weather_api_key': devOpenWeatherApiKey,
+      if (weatherForecastJson != null)
+        'weather_forecast_json': weatherForecastJson,
+      if (weatherChartTempColor != null)
+        'weather_chart_temp_color': weatherChartTempColor,
+      if (weatherChartRainColor != null)
+        'weather_chart_rain_color': weatherChartRainColor,
+      if (colorPaletteJson != null) 'color_palette_json': colorPaletteJson,
     });
   }
 
@@ -6155,6 +7222,21 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? alertOnPeriodicPrompts,
     Value<int>? alertTimeHour,
     Value<bool>? hideCompletedTasks,
+    Value<String?>? deviceId,
+    Value<String?>? weatherLocationLabel,
+    Value<double?>? weatherLat,
+    Value<double?>? weatherLon,
+    Value<String?>? weatherIcon,
+    Value<DateTime?>? weatherFetchedAt,
+    Value<int?>? weatherConditionCode,
+    Value<double?>? weatherTempC,
+    Value<DateTime?>? weatherLocationUpdatedAt,
+    Value<bool>? devUseDirectOpenWeather,
+    Value<String?>? devOpenWeatherApiKey,
+    Value<String?>? weatherForecastJson,
+    Value<int?>? weatherChartTempColor,
+    Value<int?>? weatherChartRainColor,
+    Value<String?>? colorPaletteJson,
   }) {
     return SettingsTableCompanion(
       id: id ?? this.id,
@@ -6171,6 +7253,25 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
+      deviceId: deviceId ?? this.deviceId,
+      weatherLocationLabel: weatherLocationLabel ?? this.weatherLocationLabel,
+      weatherLat: weatherLat ?? this.weatherLat,
+      weatherLon: weatherLon ?? this.weatherLon,
+      weatherIcon: weatherIcon ?? this.weatherIcon,
+      weatherFetchedAt: weatherFetchedAt ?? this.weatherFetchedAt,
+      weatherConditionCode: weatherConditionCode ?? this.weatherConditionCode,
+      weatherTempC: weatherTempC ?? this.weatherTempC,
+      weatherLocationUpdatedAt:
+          weatherLocationUpdatedAt ?? this.weatherLocationUpdatedAt,
+      devUseDirectOpenWeather:
+          devUseDirectOpenWeather ?? this.devUseDirectOpenWeather,
+      devOpenWeatherApiKey: devOpenWeatherApiKey ?? this.devOpenWeatherApiKey,
+      weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
+      weatherChartTempColor:
+          weatherChartTempColor ?? this.weatherChartTempColor,
+      weatherChartRainColor:
+          weatherChartRainColor ?? this.weatherChartRainColor,
+      colorPaletteJson: colorPaletteJson ?? this.colorPaletteJson,
     );
   }
 
@@ -6220,6 +7321,65 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (hideCompletedTasks.present) {
       map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks.value);
     }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (weatherLocationLabel.present) {
+      map['weather_location_label'] = Variable<String>(
+        weatherLocationLabel.value,
+      );
+    }
+    if (weatherLat.present) {
+      map['weather_lat'] = Variable<double>(weatherLat.value);
+    }
+    if (weatherLon.present) {
+      map['weather_lon'] = Variable<double>(weatherLon.value);
+    }
+    if (weatherIcon.present) {
+      map['weather_icon'] = Variable<String>(weatherIcon.value);
+    }
+    if (weatherFetchedAt.present) {
+      map['weather_fetched_at'] = Variable<DateTime>(weatherFetchedAt.value);
+    }
+    if (weatherConditionCode.present) {
+      map['weather_condition_code'] = Variable<int>(weatherConditionCode.value);
+    }
+    if (weatherTempC.present) {
+      map['weather_temp_c'] = Variable<double>(weatherTempC.value);
+    }
+    if (weatherLocationUpdatedAt.present) {
+      map['weather_location_updated_at'] = Variable<DateTime>(
+        weatherLocationUpdatedAt.value,
+      );
+    }
+    if (devUseDirectOpenWeather.present) {
+      map['dev_use_direct_open_weather'] = Variable<bool>(
+        devUseDirectOpenWeather.value,
+      );
+    }
+    if (devOpenWeatherApiKey.present) {
+      map['dev_open_weather_api_key'] = Variable<String>(
+        devOpenWeatherApiKey.value,
+      );
+    }
+    if (weatherForecastJson.present) {
+      map['weather_forecast_json'] = Variable<String>(
+        weatherForecastJson.value,
+      );
+    }
+    if (weatherChartTempColor.present) {
+      map['weather_chart_temp_color'] = Variable<int>(
+        weatherChartTempColor.value,
+      );
+    }
+    if (weatherChartRainColor.present) {
+      map['weather_chart_rain_color'] = Variable<int>(
+        weatherChartRainColor.value,
+      );
+    }
+    if (colorPaletteJson.present) {
+      map['color_palette_json'] = Variable<String>(colorPaletteJson.value);
+    }
     return map;
   }
 
@@ -6238,7 +7398,22 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('birthYear: $birthYear, ')
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
           ..write('alertTimeHour: $alertTimeHour, ')
-          ..write('hideCompletedTasks: $hideCompletedTasks')
+          ..write('hideCompletedTasks: $hideCompletedTasks, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('weatherLocationLabel: $weatherLocationLabel, ')
+          ..write('weatherLat: $weatherLat, ')
+          ..write('weatherLon: $weatherLon, ')
+          ..write('weatherIcon: $weatherIcon, ')
+          ..write('weatherFetchedAt: $weatherFetchedAt, ')
+          ..write('weatherConditionCode: $weatherConditionCode, ')
+          ..write('weatherTempC: $weatherTempC, ')
+          ..write('weatherLocationUpdatedAt: $weatherLocationUpdatedAt, ')
+          ..write('devUseDirectOpenWeather: $devUseDirectOpenWeather, ')
+          ..write('devOpenWeatherApiKey: $devOpenWeatherApiKey, ')
+          ..write('weatherForecastJson: $weatherForecastJson, ')
+          ..write('weatherChartTempColor: $weatherChartTempColor, ')
+          ..write('weatherChartRainColor: $weatherChartRainColor, ')
+          ..write('colorPaletteJson: $colorPaletteJson')
           ..write(')'))
         .toString();
   }
@@ -6505,6 +7680,7 @@ typedef $$JournalsTableTableCreateCompanionBuilder =
     JournalsTableCompanion Function({
       required String id,
       required String name,
+      Value<int?> colorValue,
       Value<bool> guidedJournaling,
       Value<int> promptCycleDays,
       required DateTime createdAt,
@@ -6516,6 +7692,7 @@ typedef $$JournalsTableTableUpdateCompanionBuilder =
     JournalsTableCompanion Function({
       Value<String> id,
       Value<String> name,
+      Value<int?> colorValue,
       Value<bool> guidedJournaling,
       Value<int> promptCycleDays,
       Value<DateTime> createdAt,
@@ -6540,6 +7717,11 @@ class $$JournalsTableTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6588,6 +7770,11 @@ class $$JournalsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get guidedJournaling => $composableBuilder(
     column: $table.guidedJournaling,
     builder: (column) => ColumnOrderings(column),
@@ -6628,6 +7815,11 @@ class $$JournalsTableTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get guidedJournaling => $composableBuilder(
     column: $table.guidedJournaling,
@@ -6686,6 +7878,7 @@ class $$JournalsTableTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 Value<bool> guidedJournaling = const Value.absent(),
                 Value<int> promptCycleDays = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -6695,6 +7888,7 @@ class $$JournalsTableTableTableManager
               }) => JournalsTableCompanion(
                 id: id,
                 name: name,
+                colorValue: colorValue,
                 guidedJournaling: guidedJournaling,
                 promptCycleDays: promptCycleDays,
                 createdAt: createdAt,
@@ -6706,6 +7900,7 @@ class $$JournalsTableTableTableManager
               ({
                 required String id,
                 required String name,
+                Value<int?> colorValue = const Value.absent(),
                 Value<bool> guidedJournaling = const Value.absent(),
                 Value<int> promptCycleDays = const Value.absent(),
                 required DateTime createdAt,
@@ -6715,6 +7910,7 @@ class $$JournalsTableTableTableManager
               }) => JournalsTableCompanion.insert(
                 id: id,
                 name: name,
+                colorValue: colorValue,
                 guidedJournaling: guidedJournaling,
                 promptCycleDays: promptCycleDays,
                 createdAt: createdAt,
@@ -7184,6 +8380,7 @@ typedef $$TodoListsTableTableCreateCompanionBuilder =
     TodoListsTableCompanion Function({
       required String id,
       required String name,
+      Value<int?> colorValue,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
@@ -7193,6 +8390,7 @@ typedef $$TodoListsTableTableUpdateCompanionBuilder =
     TodoListsTableCompanion Function({
       Value<String> id,
       Value<String> name,
+      Value<int?> colorValue,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -7215,6 +8413,11 @@ class $$TodoListsTableTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7253,6 +8456,11 @@ class $$TodoListsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -7283,6 +8491,11 @@ class $$TodoListsTableTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -7333,6 +8546,7 @@ class $$TodoListsTableTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -7340,6 +8554,7 @@ class $$TodoListsTableTableTableManager
               }) => TodoListsTableCompanion(
                 id: id,
                 name: name,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -7349,6 +8564,7 @@ class $$TodoListsTableTableTableManager
               ({
                 required String id,
                 required String name,
+                Value<int?> colorValue = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -7356,6 +8572,7 @@ class $$TodoListsTableTableTableManager
               }) => TodoListsTableCompanion.insert(
                 id: id,
                 name: name,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -7390,10 +8607,14 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
     TodoTasksTableCompanion Function({
       required String id,
       required String listId,
+      Value<String?> parentTaskId,
       required String title,
       Value<String?> notes,
       Value<DateTime?> dueDate,
       Value<bool> completed,
+      Value<bool> starred,
+      Value<int> sortOrder,
+      Value<int?> preStarSortOrder,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
@@ -7403,10 +8624,14 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
     TodoTasksTableCompanion Function({
       Value<String> id,
       Value<String> listId,
+      Value<String?> parentTaskId,
       Value<String> title,
       Value<String?> notes,
       Value<DateTime?> dueDate,
       Value<bool> completed,
+      Value<bool> starred,
+      Value<int> sortOrder,
+      Value<int?> preStarSortOrder,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -7432,6 +8657,11 @@ class $$TodoTasksTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get parentTaskId => $composableBuilder(
+    column: $table.parentTaskId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
     builder: (column) => ColumnFilters(column),
@@ -7449,6 +8679,21 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<bool> get completed => $composableBuilder(
     column: $table.completed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get preStarSortOrder => $composableBuilder(
+    column: $table.preStarSortOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7487,6 +8732,11 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get parentTaskId => $composableBuilder(
+    column: $table.parentTaskId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get title => $composableBuilder(
     column: $table.title,
     builder: (column) => ColumnOrderings(column),
@@ -7504,6 +8754,21 @@ class $$TodoTasksTableTableOrderingComposer
 
   ColumnOrderings<bool> get completed => $composableBuilder(
     column: $table.completed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get preStarSortOrder => $composableBuilder(
+    column: $table.preStarSortOrder,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -7538,6 +8803,11 @@ class $$TodoTasksTableTableAnnotationComposer
   GeneratedColumn<String> get listId =>
       $composableBuilder(column: $table.listId, builder: (column) => column);
 
+  GeneratedColumn<String> get parentTaskId => $composableBuilder(
+    column: $table.parentTaskId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
 
@@ -7549,6 +8819,17 @@ class $$TodoTasksTableTableAnnotationComposer
 
   GeneratedColumn<bool> get completed =>
       $composableBuilder(column: $table.completed, builder: (column) => column);
+
+  GeneratedColumn<bool> get starred =>
+      $composableBuilder(column: $table.starred, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<int> get preStarSortOrder => $composableBuilder(
+    column: $table.preStarSortOrder,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -7599,10 +8880,14 @@ class $$TodoTasksTableTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> listId = const Value.absent(),
+                Value<String?> parentTaskId = const Value.absent(),
                 Value<String> title = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int?> preStarSortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -7610,10 +8895,14 @@ class $$TodoTasksTableTableTableManager
               }) => TodoTasksTableCompanion(
                 id: id,
                 listId: listId,
+                parentTaskId: parentTaskId,
                 title: title,
                 notes: notes,
                 dueDate: dueDate,
                 completed: completed,
+                starred: starred,
+                sortOrder: sortOrder,
+                preStarSortOrder: preStarSortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -7623,10 +8912,14 @@ class $$TodoTasksTableTableTableManager
               ({
                 required String id,
                 required String listId,
+                Value<String?> parentTaskId = const Value.absent(),
                 required String title,
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int?> preStarSortOrder = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -7634,10 +8927,14 @@ class $$TodoTasksTableTableTableManager
               }) => TodoTasksTableCompanion.insert(
                 id: id,
                 listId: listId,
+                parentTaskId: parentTaskId,
                 title: title,
                 notes: notes,
                 dueDate: dueDate,
                 completed: completed,
+                starred: starred,
+                sortOrder: sortOrder,
+                preStarSortOrder: preStarSortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -9263,6 +10560,21 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> alertOnPeriodicPrompts,
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
+      Value<String?> deviceId,
+      Value<String?> weatherLocationLabel,
+      Value<double?> weatherLat,
+      Value<double?> weatherLon,
+      Value<String?> weatherIcon,
+      Value<DateTime?> weatherFetchedAt,
+      Value<int?> weatherConditionCode,
+      Value<double?> weatherTempC,
+      Value<DateTime?> weatherLocationUpdatedAt,
+      Value<bool> devUseDirectOpenWeather,
+      Value<String?> devOpenWeatherApiKey,
+      Value<String?> weatherForecastJson,
+      Value<int?> weatherChartTempColor,
+      Value<int?> weatherChartRainColor,
+      Value<String?> colorPaletteJson,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
@@ -9279,6 +10591,21 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> alertOnPeriodicPrompts,
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
+      Value<String?> deviceId,
+      Value<String?> weatherLocationLabel,
+      Value<double?> weatherLat,
+      Value<double?> weatherLon,
+      Value<String?> weatherIcon,
+      Value<DateTime?> weatherFetchedAt,
+      Value<int?> weatherConditionCode,
+      Value<double?> weatherTempC,
+      Value<DateTime?> weatherLocationUpdatedAt,
+      Value<bool> devUseDirectOpenWeather,
+      Value<String?> devOpenWeatherApiKey,
+      Value<String?> weatherForecastJson,
+      Value<int?> weatherChartTempColor,
+      Value<int?> weatherChartRainColor,
+      Value<String?> colorPaletteJson,
     });
 
 class $$SettingsTableTableFilterComposer
@@ -9352,6 +10679,81 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get hideCompletedTasks => $composableBuilder(
     column: $table.hideCompletedTasks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get weatherLocationLabel => $composableBuilder(
+    column: $table.weatherLocationLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get weatherLat => $composableBuilder(
+    column: $table.weatherLat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get weatherLon => $composableBuilder(
+    column: $table.weatherLon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get weatherIcon => $composableBuilder(
+    column: $table.weatherIcon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get weatherFetchedAt => $composableBuilder(
+    column: $table.weatherFetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get weatherConditionCode => $composableBuilder(
+    column: $table.weatherConditionCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get weatherTempC => $composableBuilder(
+    column: $table.weatherTempC,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get weatherLocationUpdatedAt => $composableBuilder(
+    column: $table.weatherLocationUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devUseDirectOpenWeather => $composableBuilder(
+    column: $table.devUseDirectOpenWeather,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get devOpenWeatherApiKey => $composableBuilder(
+    column: $table.devOpenWeatherApiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get weatherForecastJson => $composableBuilder(
+    column: $table.weatherForecastJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get weatherChartTempColor => $composableBuilder(
+    column: $table.weatherChartTempColor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get weatherChartRainColor => $composableBuilder(
+    column: $table.weatherChartRainColor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get colorPaletteJson => $composableBuilder(
+    column: $table.colorPaletteJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9429,6 +10831,81 @@ class $$SettingsTableTableOrderingComposer
     column: $table.hideCompletedTasks,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get weatherLocationLabel => $composableBuilder(
+    column: $table.weatherLocationLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get weatherLat => $composableBuilder(
+    column: $table.weatherLat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get weatherLon => $composableBuilder(
+    column: $table.weatherLon,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get weatherIcon => $composableBuilder(
+    column: $table.weatherIcon,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get weatherFetchedAt => $composableBuilder(
+    column: $table.weatherFetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get weatherConditionCode => $composableBuilder(
+    column: $table.weatherConditionCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get weatherTempC => $composableBuilder(
+    column: $table.weatherTempC,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get weatherLocationUpdatedAt => $composableBuilder(
+    column: $table.weatherLocationUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get devUseDirectOpenWeather => $composableBuilder(
+    column: $table.devUseDirectOpenWeather,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get devOpenWeatherApiKey => $composableBuilder(
+    column: $table.devOpenWeatherApiKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get weatherForecastJson => $composableBuilder(
+    column: $table.weatherForecastJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get weatherChartTempColor => $composableBuilder(
+    column: $table.weatherChartTempColor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get weatherChartRainColor => $composableBuilder(
+    column: $table.weatherChartRainColor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get colorPaletteJson => $composableBuilder(
+    column: $table.colorPaletteJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SettingsTableTableAnnotationComposer
@@ -9500,6 +10977,79 @@ class $$SettingsTableTableAnnotationComposer
     column: $table.hideCompletedTasks,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<String> get weatherLocationLabel => $composableBuilder(
+    column: $table.weatherLocationLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get weatherLat => $composableBuilder(
+    column: $table.weatherLat,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get weatherLon => $composableBuilder(
+    column: $table.weatherLon,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get weatherIcon => $composableBuilder(
+    column: $table.weatherIcon,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get weatherFetchedAt => $composableBuilder(
+    column: $table.weatherFetchedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get weatherConditionCode => $composableBuilder(
+    column: $table.weatherConditionCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get weatherTempC => $composableBuilder(
+    column: $table.weatherTempC,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get weatherLocationUpdatedAt => $composableBuilder(
+    column: $table.weatherLocationUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get devUseDirectOpenWeather => $composableBuilder(
+    column: $table.devUseDirectOpenWeather,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get devOpenWeatherApiKey => $composableBuilder(
+    column: $table.devOpenWeatherApiKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get weatherForecastJson => $composableBuilder(
+    column: $table.weatherForecastJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get weatherChartTempColor => $composableBuilder(
+    column: $table.weatherChartTempColor,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get weatherChartRainColor => $composableBuilder(
+    column: $table.weatherChartRainColor,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get colorPaletteJson => $composableBuilder(
+    column: $table.colorPaletteJson,
+    builder: (column) => column,
+  );
 }
 
 class $$SettingsTableTableTableManager
@@ -9550,6 +11100,22 @@ class $$SettingsTableTableTableManager
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
+                Value<String?> weatherLocationLabel = const Value.absent(),
+                Value<double?> weatherLat = const Value.absent(),
+                Value<double?> weatherLon = const Value.absent(),
+                Value<String?> weatherIcon = const Value.absent(),
+                Value<DateTime?> weatherFetchedAt = const Value.absent(),
+                Value<int?> weatherConditionCode = const Value.absent(),
+                Value<double?> weatherTempC = const Value.absent(),
+                Value<DateTime?> weatherLocationUpdatedAt =
+                    const Value.absent(),
+                Value<bool> devUseDirectOpenWeather = const Value.absent(),
+                Value<String?> devOpenWeatherApiKey = const Value.absent(),
+                Value<String?> weatherForecastJson = const Value.absent(),
+                Value<int?> weatherChartTempColor = const Value.absent(),
+                Value<int?> weatherChartRainColor = const Value.absent(),
+                Value<String?> colorPaletteJson = const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
@@ -9564,6 +11130,21 @@ class $$SettingsTableTableTableManager
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
+                deviceId: deviceId,
+                weatherLocationLabel: weatherLocationLabel,
+                weatherLat: weatherLat,
+                weatherLon: weatherLon,
+                weatherIcon: weatherIcon,
+                weatherFetchedAt: weatherFetchedAt,
+                weatherConditionCode: weatherConditionCode,
+                weatherTempC: weatherTempC,
+                weatherLocationUpdatedAt: weatherLocationUpdatedAt,
+                devUseDirectOpenWeather: devUseDirectOpenWeather,
+                devOpenWeatherApiKey: devOpenWeatherApiKey,
+                weatherForecastJson: weatherForecastJson,
+                weatherChartTempColor: weatherChartTempColor,
+                weatherChartRainColor: weatherChartRainColor,
+                colorPaletteJson: colorPaletteJson,
               ),
           createCompanionCallback:
               ({
@@ -9580,6 +11161,22 @@ class $$SettingsTableTableTableManager
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
+                Value<String?> weatherLocationLabel = const Value.absent(),
+                Value<double?> weatherLat = const Value.absent(),
+                Value<double?> weatherLon = const Value.absent(),
+                Value<String?> weatherIcon = const Value.absent(),
+                Value<DateTime?> weatherFetchedAt = const Value.absent(),
+                Value<int?> weatherConditionCode = const Value.absent(),
+                Value<double?> weatherTempC = const Value.absent(),
+                Value<DateTime?> weatherLocationUpdatedAt =
+                    const Value.absent(),
+                Value<bool> devUseDirectOpenWeather = const Value.absent(),
+                Value<String?> devOpenWeatherApiKey = const Value.absent(),
+                Value<String?> weatherForecastJson = const Value.absent(),
+                Value<int?> weatherChartTempColor = const Value.absent(),
+                Value<int?> weatherChartRainColor = const Value.absent(),
+                Value<String?> colorPaletteJson = const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
@@ -9594,6 +11191,21 @@ class $$SettingsTableTableTableManager
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
+                deviceId: deviceId,
+                weatherLocationLabel: weatherLocationLabel,
+                weatherLat: weatherLat,
+                weatherLon: weatherLon,
+                weatherIcon: weatherIcon,
+                weatherFetchedAt: weatherFetchedAt,
+                weatherConditionCode: weatherConditionCode,
+                weatherTempC: weatherTempC,
+                weatherLocationUpdatedAt: weatherLocationUpdatedAt,
+                devUseDirectOpenWeather: devUseDirectOpenWeather,
+                devOpenWeatherApiKey: devOpenWeatherApiKey,
+                weatherForecastJson: weatherForecastJson,
+                weatherChartTempColor: weatherChartTempColor,
+                weatherChartRainColor: weatherChartRainColor,
+                colorPaletteJson: colorPaletteJson,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

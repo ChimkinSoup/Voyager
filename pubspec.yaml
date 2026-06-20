@@ -21,6 +21,14 @@ dependencies:
   collection: ^1.19.1
   hotkey_manager: ^0.2.3
   intl: ^0.20.2
+  http: ^1.4.0
+  url_launcher: ^6.3.1
+  firebase_core: ^4.11.0
+  firebase_auth: ^6.5.3
+  cloud_firestore: ^6.6.0
+  cloud_functions: ^6.3.3
+  phosphoricons_flutter: ^1.0.0
+  oauth2: ^2.0.5
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -32,3 +40,21 @@ flutter:
   uses-material-design: true
   assets:
     - assets/quotes.json
+  fonts:
+    - family: IosevkaAile
+      fonts:
+        - asset: assets/Iosevka-Thin/Iosevka-Aile-Light-01.ttf
+          weight: 300
+        - asset: assets/Iosevka-Thin/Iosevka-Aile-Light-Italic-03.ttf
+          weight: 300
+          style: italic
+        - asset: assets/Iosevka-Regular/Iosevka-Aile-01.ttf
+          weight: 400
+        - asset: assets/Iosevka-Regular/Iosevka-Aile-Italic-03.ttf
+          weight: 400
+          style: italic
+        - asset: assets/Iosevka-Bold/Iosevka-Aile-Bold-01.ttf
+          weight: 700
+        - asset: assets/Iosevka-Bold/Iosevka-Aile-Bold-Italic-03.ttf
+          weight: 700
+          style: italic

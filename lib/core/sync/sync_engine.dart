@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -17,18 +18,24 @@ class SyncEngine {
     required String deviceId,
     Debouncer? debouncer,
     SequenceCrdtMerger? merger,
+    CrdtDocumentResolver? crdtResolver,
     SyncRetryPolicy retryPolicy = const SyncRetryPolicy(),
   }) : _syncRepository = syncRepository,
        _deviceId = deviceId,
        _debouncer = debouncer ?? Debouncer(),
        _merger = merger ?? SequenceCrdtMerger(),
+       _crdtResolver =
+           crdtResolver ??
+           CrdtDocumentResolver(merger: merger ?? SequenceCrdtMerger()),
        _retryPolicy = retryPolicy;
 
   final SyncRepository _syncRepository;
   final String _deviceId;
   final Debouncer _debouncer;
   final SequenceCrdtMerger _merger;
+  final CrdtDocumentResolver _crdtResolver;
   final SyncRetryPolicy _retryPolicy;
+  final _keyedDebouncers = <String, Debouncer>{};
   int _sequence = 0;
 
   void scheduleDocumentSync({
@@ -37,7 +44,7 @@ class SyncEngine {
     required Map<String, dynamic> payload,
   }) {
     _debouncer.schedule(
-      () async => _syncDocument(
+      () => _syncDocument(
         collection: collection,
         documentId: documentId,
         payload: payload,
@@ -45,24 +52,80 @@ class SyncEngine {
     );
   }
 
+  void scheduleDebouncedDocumentSync({
+    required String debounceKey,
+    required String collection,
+    required String documentId,
+    required Map<String, dynamic> payload,
+  }) {
+    _debouncerFor(debounceKey).schedule(
+      () => _syncDocument(
+        collection: collection,
+        documentId: documentId,
+        payload: payload,
+      ),
+    );
+  }
+
+  Future<void> syncDocumentImmediately({
+    required String collection,
+    required String documentId,
+    required Map<String, dynamic> payload,
+    String? cancelDebounceKey,
+  }) {
+    if (cancelDebounceKey != null) {
+      _debouncerFor(cancelDebounceKey).cancel();
+    }
+    return _syncDocument(
+      collection: collection,
+      documentId: documentId,
+      payload: payload,
+    );
+  }
+
+  Future<Map<String, dynamic>?> resolveDocumentPayload(String documentId) {
+    return _crdtResolver.resolvePayload(_syncRepository, documentId);
+  }
+
   Future<String> resolveConflicts(
     String documentId, {
     List<SyncOperation> localOperations = const [],
   }) async {
-    final remote = await _syncRepository.listOperations(documentId);
-    final merged = _merger.merge(localOperations, remote);
-    return _merger.applyMergedPayload(merged);
+    final payload = await _crdtResolver.resolvePayload(
+      _syncRepository,
+      documentId,
+      localOperations: localOperations,
+    );
+    if (payload == null) return '';
+    return jsonEncode(payload);
   }
 
   Future<void> pullOnStartup({
     required Future<void> Function() localRefresh,
     required Future<void> Function() purgeExpiredDeleted,
+    Future<void> Function()? pullFromRemote,
   }) async {
     await purgeExpiredDeleted();
+    if (pullFromRemote != null) {
+      await pullFromRemote();
+    }
     await localRefresh();
   }
 
-  void dispose() => _debouncer.dispose();
+  void dispose() {
+    _debouncer.dispose();
+    for (final debouncer in _keyedDebouncers.values) {
+      debouncer.dispose();
+    }
+    _keyedDebouncers.clear();
+  }
+
+  Debouncer _debouncerFor(String key) {
+    return _keyedDebouncers.putIfAbsent(
+      key,
+      () => Debouncer(delay: _debouncer.debounceDelay),
+    );
+  }
 
   Future<void> _syncDocument({
     required String collection,

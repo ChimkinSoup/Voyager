@@ -5,8 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
+import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
+import 'package:voyager/features/shell/weather_forecast_sheet.dart';
+
+const _railItemWidth = 68.0;
+const _railItemHeight = 56.0;
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.child});
@@ -24,20 +30,23 @@ class AppShell extends ConsumerWidget {
     final index = navigationShell.currentIndex;
     final accent = Color(settings.accentColor);
 
-    return Scaffold(
-      body: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
-            child: _VoyagerNavigationRail(
-              selectedIndex: index,
-              accent: accent,
-              onDestinationSelected: navigationShell.goBranch,
+    return ShellKeyboardShortcuts(
+      navigationShell: navigationShell,
+      child: Scaffold(
+        body: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+              child: _VoyagerNavigationRail(
+                selectedIndex: index,
+                accent: accent,
+                onDestinationSelected: navigationShell.goBranch,
+              ),
             ),
-          ),
-          const VerticalDivider(width: 12),
-          Expanded(child: child),
-        ],
+            const VerticalDivider(width: 12),
+            Expanded(child: child),
+          ],
+        ),
       ),
     );
   }
@@ -63,12 +72,14 @@ class _VoyagerNavigationRail extends StatelessWidget {
           for (var i = 0; i < shellDestinations.length; i++)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
-              child: _RailDestinationButton(
-                icon: shellDestinations[i].icon,
-                label: shellDestinations[i].label,
-                selected: i == selectedIndex,
-                accent: accent,
-                onTap: () => onDestinationSelected(i),
+              child: ExcludeFocus(
+                child: _RailDestinationButton(
+                  icon: shellDestinations[i].icon,
+                  label: shellDestinations[i].label,
+                  selected: i == selectedIndex,
+                  accent: accent,
+                  onTap: () => onDestinationSelected(i),
+                ),
               ),
             ),
           const Spacer(),
@@ -126,8 +137,8 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
             highlightColor: Colors.transparent,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 90),
-              width: 68,
-              height: 56,
+              width: _railItemWidth,
+              height: _railItemHeight,
               decoration: BoxDecoration(
                 color: active
                     ? colorScheme.onSurface.withValues(alpha: 0.10)
@@ -158,18 +169,19 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
   }
 }
 
-class _RailClockWeather extends StatefulWidget {
+class _RailClockWeather extends ConsumerStatefulWidget {
   const _RailClockWeather({required this.accent});
 
   final Color accent;
 
   @override
-  State<_RailClockWeather> createState() => _RailClockWeatherState();
+  ConsumerState<_RailClockWeather> createState() => _RailClockWeatherState();
 }
 
-class _RailClockWeatherState extends State<_RailClockWeather> {
+class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
   late String _time;
   Timer? _timer;
+  var _weatherHovered = false;
 
   @override
   void initState() {
@@ -190,6 +202,10 @@ class _RailClockWeatherState extends State<_RailClockWeather> {
 
   @override
   Widget build(BuildContext context) {
+    final weatherAsync = ref.watch(currentWeatherProvider);
+    final icon = weatherAsync.value?.icon;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(
@@ -206,7 +222,58 @@ class _RailClockWeatherState extends State<_RailClockWeather> {
             ),
           ),
           const SizedBox(height: 8),
-          Icon(Icons.wb_sunny_outlined, color: widget.accent, size: 22),
+          MouseRegion(
+            onEnter: (_) => setState(() => _weatherHovered = true),
+            onExit: (_) => setState(() => _weatherHovered = false),
+            cursor: SystemMouseCursors.click,
+            child: Semantics(
+              button: true,
+              label: 'Weather forecast',
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+                child: InkWell(
+                  onTap: () => showWeatherForecastSheet(context),
+                  borderRadius: BorderRadius.circular(18),
+                  hoverColor: Colors.transparent,
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 90),
+                    width: _railItemWidth,
+                    height: _railItemHeight,
+                    decoration: BoxDecoration(
+                      color: _weatherHovered
+                          ? colorScheme.onSurface.withValues(alpha: 0.10)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          weatherIconData(icon),
+                          color: widget.accent,
+                          size: 22,
+                        ),
+                        if (weatherAsync.value?.tempC != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${weatherAsync.value!.tempC!.round()}°',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: widget.accent,
+                                  fontSize: 10,
+                                ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

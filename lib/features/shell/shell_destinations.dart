@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/features/analytics/analytics_page.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_page.dart';
@@ -23,17 +24,54 @@ class ShellDestination {
 }
 
 const shellDestinations = <ShellDestination>[
-  ShellDestination(path: '/journal', icon: Icons.book, label: 'Journal', page: JournalPage()),
-  ShellDestination(path: '/todo', icon: Icons.check_box, label: 'To-Do', page: TodoPage()),
-  ShellDestination(path: '/calendar', icon: Icons.calendar_month, label: 'Calendar', page: CalendarPage()),
-  ShellDestination(path: '/search', icon: Icons.search, label: 'Search', page: SearchPage()),
-  ShellDestination(path: '/analytics', icon: Icons.insights, label: 'Analytics', page: AnalyticsPage()),
-  ShellDestination(path: '/dev', icon: Icons.bug_report_outlined, label: 'Dev', page: DevPage()),
-  ShellDestination(path: '/settings', icon: Icons.settings, label: 'Settings', page: SettingsPage()),
+  ShellDestination(
+    path: '/journal',
+    icon: PhosphorIconsRegular.book,
+    label: 'Journal',
+    page: JournalPage(),
+  ),
+  ShellDestination(
+    path: '/todo',
+    icon: PhosphorIconsRegular.listChecks,
+    label: 'To-Do',
+    page: TodoPage(),
+  ),
+  ShellDestination(
+    path: '/calendar',
+    icon: PhosphorIconsRegular.calendar,
+    label: 'Calendar',
+    page: CalendarPage(),
+  ),
+  ShellDestination(
+    path: '/search',
+    icon: PhosphorIconsRegular.magnifyingGlass,
+    label: 'Search',
+    page: SearchPage(),
+  ),
+  ShellDestination(
+    path: '/analytics',
+    icon: PhosphorIconsRegular.chartLine,
+    label: 'Analytics',
+    page: AnalyticsPage(),
+  ),
+  ShellDestination(
+    path: '/dev',
+    icon: PhosphorIconsRegular.bug,
+    label: 'Dev',
+    page: DevPage(),
+  ),
+  ShellDestination(
+    path: '/settings',
+    icon: PhosphorIconsRegular.gear,
+    label: 'Settings',
+    page: SettingsPage(),
+  ),
 ];
 
 int shellIndexForLocation(String location) {
-  final index = shellDestinations.indexWhere((d) => location.startsWith(d.path));
+  final index = shellDestinations.indexWhere(
+    (d) => location.startsWith(d.path),
+  );
   return index == -1 ? 0 : index;
 }
 

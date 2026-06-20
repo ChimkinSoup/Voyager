@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
@@ -23,7 +24,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => EventEditorDialog(event: event, initialDate: day ?? _focused),
+      builder: (_) =>
+          EventEditorDialog(event: event, initialDate: day ?? _focused),
     );
     if (result == null || (result['title'] as String).isEmpty) return;
 
@@ -51,7 +53,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     ref.invalidate(calendarEventsProvider);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Google Calendar sync complete (read-only)')),
+        const SnackBar(
+          content: Text('Google Calendar sync complete (read-only)'),
+        ),
       );
     }
   }
@@ -60,28 +64,38 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     setState(() {
       _focused = switch (_mode) {
         CalendarViewMode.week => _focused.add(Duration(days: 7 * delta)),
-        CalendarViewMode.month => DateTime(_focused.year, _focused.month + delta, 1),
+        CalendarViewMode.month => DateTime(
+          _focused.year,
+          _focused.month + delta,
+          1,
+        ),
         CalendarViewMode.year => DateTime(_focused.year + delta, 1, 1),
       };
     });
   }
 
   String get _headerLabel => switch (_mode) {
-        CalendarViewMode.week => 'Week of ${DateFormat.MMMd().format(_focused)}',
-        CalendarViewMode.month => DateFormat.yMMMM().format(_focused),
-        CalendarViewMode.year => '${_focused.year}',
-      };
+    CalendarViewMode.week => 'Week of ${DateFormat.MMMd().format(_focused)}',
+    CalendarViewMode.month => DateFormat.yMMMM().format(_focused),
+    CalendarViewMode.year => '${_focused.year}',
+  };
 
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(calendarEventsProvider);
-    final trackers = ref.watch(trackersProvider).value ?? const <StatisticTracker>[];
+    final trackers =
+        ref.watch(trackersProvider).value ?? const <StatisticTracker>[];
     final analytics = ref.watch(analyticsServiceProvider);
-    final weekStartsMonday = ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
-    final calendarTrackers = trackers.where((tracker) => tracker.showOnCalendar).toList();
+    final weekStartsMonday =
+        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
+    final calendarTrackers = trackers
+        .where((tracker) => tracker.showOnCalendar)
+        .toList();
     final indicators = <CalendarDayIndicator>[];
     for (final tracker in calendarTrackers) {
-      final values = ref.watch(trackerValuesProvider(tracker.id)).value ?? const <TrackerValue>[];
+      final values =
+          ref.watch(trackerValuesProvider(tracker.id)).value ??
+          const <TrackerValue>[];
       final max = values.fold<int>(0, (max, value) {
         final current = value.intValue ?? 0;
         return current > max ? current : max;
@@ -112,21 +126,42 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             children: [
               SegmentedButton<CalendarViewMode>(
                 segments: const [
-                  ButtonSegment(value: CalendarViewMode.week, label: Text('Week')),
-                  ButtonSegment(value: CalendarViewMode.month, label: Text('Month')),
-                  ButtonSegment(value: CalendarViewMode.year, label: Text('Year')),
+                  ButtonSegment(
+                    value: CalendarViewMode.week,
+                    label: Text('Week'),
+                  ),
+                  ButtonSegment(
+                    value: CalendarViewMode.month,
+                    label: Text('Month'),
+                  ),
+                  ButtonSegment(
+                    value: CalendarViewMode.year,
+                    label: Text('Year'),
+                  ),
                 ],
                 selected: {_mode},
                 onSelectionChanged: (s) => setState(() => _mode = s.first),
               ),
               const Spacer(),
-              IconButton(onPressed: () => _shiftFocus(-1), icon: const Icon(Icons.chevron_left)),
+              IconButton(
+                onPressed: () => _shiftFocus(-1),
+                icon: const Icon(PhosphorIconsRegular.caretLeft),
+              ),
               Text(_headerLabel),
-              IconButton(onPressed: () => _shiftFocus(1), icon: const Icon(Icons.chevron_right)),
+              IconButton(
+                onPressed: () => _shiftFocus(1),
+                icon: const Icon(PhosphorIconsRegular.caretRight),
+              ),
               const SizedBox(width: 8),
-              OutlinedButton(onPressed: _syncGoogle, child: const Text('Sync Google')),
+              OutlinedButton(
+                onPressed: _syncGoogle,
+                child: const Text('Sync Google'),
+              ),
               const SizedBox(width: 8),
-              FilledButton(onPressed: () => _openEditor(day: _focused), child: const Text('Add event')),
+              FilledButton(
+                onPressed: () => _openEditor(day: _focused),
+                child: const Text('Add event'),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -153,7 +188,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 String _trackerValueLabel(StatisticTracker tracker, TrackerValue value) {
   return switch (tracker.type) {
     TrackerType.integer => '${value.intValue ?? tracker.defaultInt}',
-    TrackerType.boolean => (value.boolValue ?? tracker.defaultBool) ? 'yes' : 'no',
-    TrackerType.enumType => value.enumValue ?? tracker.defaultEnumOption ?? 'empty',
+    TrackerType.boolean =>
+      (value.boolValue ?? tracker.defaultBool) ? 'yes' : 'no',
+    TrackerType.enumType =>
+      value.enumValue ?? tracker.defaultEnumOption ?? 'empty',
   };
 }

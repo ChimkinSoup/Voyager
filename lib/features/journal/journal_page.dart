@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
@@ -10,6 +12,9 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/weather_icon.dart';
+import 'package:voyager/features/journal/journal_manage_sheet.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
@@ -40,26 +45,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _ensureDefaultJournal() async {
-    final repo = ref.read(journalRepositoryProvider);
-    final journals = await repo.listJournals();
-    if (journals.isEmpty) {
-      final now = utcNow();
-      final journal = Journal(id: newId(), name: 'Personal', createdAt: now, updatedAt: now);
-      await repo.upsertJournal(journal);
-      if (_journalFilter == _allJournals) {
-        _journalFilter = journal.id;
-      }
-    }
+    // Entries can exist before any journal container is created.
   }
 
   Future<void> _createJournal() async {
-    final name = await _promptText('New journal name');
-    if (name == null || name.trim().isEmpty) return;
-    final now = utcNow();
-    final journal = Journal(id: newId(), name: name.trim(), createdAt: now, updatedAt: now);
-    await ref.read(journalRepositoryProvider).upsertJournal(journal);
-    ref.invalidate(journalsProvider);
-    setState(() => _journalFilter = journal.id);
+    await showJournalManageSheet(context, ref);
   }
 
   Future<void> _createEntry() async {
@@ -67,7 +57,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final journals = await ref.read(journalRepositoryProvider).listJournals();
     if (journals.isEmpty) return;
 
-    final journalId = _journalFilter == _allJournals ? journals.first.id : _journalFilter;
+    final journalId = _journalFilter == _allJournals
+        ? (journals.isNotEmpty ? journals.first.id : legacyJournalId)
+        : _journalFilter;
     final now = utcNow();
     final settings = await ref.read(settingsRepositoryProvider).getSettings();
     Quote? assignedQuote;
@@ -76,6 +68,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       final quoteBank = ref.read(quoteBankProvider);
       assignedQuote = quoteBank.nextQuote();
     }
+
+    final weather =
+        await ref.read(weatherServiceProvider).refreshIfNeeded() ??
+        ref.read(weatherServiceProvider).readCachedSnapshot(settings);
 
     final entry = JournalEntry(
       id: newId(),
@@ -86,11 +82,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       timestamp: now,
       quoteId: assignedQuote?.id,
       customQuote: assignedQuote?.text,
-      weatherIcon: 'sunny',
+      weatherIcon: weather?.icon,
       createdAt: now,
       updatedAt: now,
     );
     await ref.read(journalRepositoryProvider).upsertEntry(entry);
+    ref.read(remoteSyncServiceProvider).pushJournalEntry(entry);
     ref.invalidate(journalEntriesProvider);
     _loadEntry(entry);
   }
@@ -150,7 +147,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final repo = ref.read(journalRepositoryProvider);
     final existing = await repo.getEntry(entryId);
     if (existing == null) return;
-    if (existing.title == title && existing.mood == mood && existing.weatherIcon == weatherIcon) {
+    if (existing.title == title &&
+        existing.mood == mood &&
+        existing.weatherIcon == weatherIcon) {
       if (_selectedEntryId != entryId) return;
       _metadataDirty = false;
       return;
@@ -166,16 +165,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _selectedEntry = updated;
       _metadataDirty = false;
     }
-    ref.read(syncEngineProvider).scheduleDocumentSync(
-          collection: 'journal_entries',
-          documentId: updated.id,
-          payload: {
-            'id': updated.id,
-            'title': updated.title,
-            'mood': updated.mood,
-            'tags': updated.tags,
-          },
-        );
+    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
     if (refreshList) ref.invalidate(journalEntriesProvider);
   }
 
@@ -224,16 +214,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
     final updated = existing.copyWith(entryDate: nextLocal.toUtc());
     await repo.upsertEntry(updated);
-    ref.read(syncEngineProvider).scheduleDocumentSync(
-          collection: 'journal_entries',
-          documentId: updated.id,
-          payload: {
-            'id': updated.id,
-            'title': updated.title,
-            'entryDate': updated.entryDate.toIso8601String(),
-            'tags': updated.tags,
-          },
-        );
+    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
     if (!mounted) return;
     setState(() => _selectedEntry = updated);
     ref.invalidate(journalEntriesProvider);
@@ -247,31 +228,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return '$date $time';
   }
 
-  Future<String?> _promptText(String label) async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(label),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          onSubmitted: (_) => Navigator.pop(context, controller.text),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('OK')),
-        ],
-      ),
-    );
-  }
+  IconData _weatherData(String? icon) => weatherIconData(icon);
 
-  IconData _weatherData(String? icon) => switch (icon) {
-        'cloudy' => Icons.cloud_outlined,
-        'rain' => Icons.grain,
-        'snow' => Icons.ac_unit,
-        _ => Icons.wb_sunny_outlined,
-      };
+  Widget? _journalFlagForEntry(JournalEntry entry, List<Journal> journals) {
+    final journal = journals.cast<Journal?>().firstWhere(
+      (j) => j!.id == entry.journalId,
+      orElse: () => null,
+    );
+    final color = journal?.colorValue;
+    if (color == null) return null;
+    return ColorCornerFlag(colorValue: color, size: 16);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -285,7 +252,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           final filtered = _journalFilter == _allJournals
               ? entries
               : entries.where((e) => e.journalId == _journalFilter).toList();
-          final selectedVisible = filtered.any((entry) => entry.id == _selectedEntryId);
+          final selectedVisible = filtered.any(
+            (entry) => entry.id == _selectedEntryId,
+          );
           if (!selectedVisible && filtered.isNotEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && _selectedEntryId != filtered.first.id) {
@@ -296,153 +265,254 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
           return LayoutBuilder(
             builder: (context, constraints) {
-              final sidebarWidth = (constraints.maxWidth * 0.22).clamp(200.0, 320.0);
+              final sidebarWidth = (constraints.maxWidth * 0.22).clamp(
+                200.0,
+                320.0,
+              );
               return Row(
                 children: [
                   SizedBox(
                     width: sidebarWidth,
                     child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: RoundedDropdown<String>(
+                                  value:
+                                      journals.any(
+                                            (j) => j.id == _journalFilter,
+                                          ) ||
+                                          _journalFilter == _allJournals
+                                      ? _journalFilter
+                                      : (journals.isNotEmpty
+                                            ? journals.first.id
+                                            : _allJournals),
+                                  items: [
+                                    if (journals.length > 1)
+                                      const RoundedDropdownItem(
+                                        value: _allJournals,
+                                        label: 'All journals',
+                                      ),
+                                    ...journals.map(
+                                      (j) => RoundedDropdownItem(
+                                        value: j.id,
+                                        label: j.name,
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: journals.isEmpty
+                                      ? null
+                                      : (v) =>
+                                            setState(() => _journalFilter = v),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Manage journals',
+                                onPressed: _createJournal,
+                                icon: const Icon(PhosphorIconsRegular.slidersHorizontal),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: KeepAliveScrollList(
+                            storageKey: ShellPageStorageKeys.journalEntryList,
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final entry = filtered[i];
+                              final local = entry.entryDate.toLocal();
+                              final dateLabel = MaterialLocalizations.of(
+                                context,
+                              ).formatShortDate(local);
+                              final timeLabel = TimeOfDay.fromDateTime(
+                                local,
+                              ).format(context);
+                              final preview = firstSentencePreview(entry.body);
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: VoyagerSpacing.sm,
+                                  vertical: VoyagerSpacing.xxs,
+                                ),
+                                child: ListTile(
+                                  dense: true,
+                                  visualDensity: const VisualDensity(
+                                    vertical: VoyagerSpacing
+                                        .compactListVerticalDensity,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: VoyagerSpacing.md,
+                                    vertical: VoyagerSpacing.xs,
+                                  ),
+                                  selected: entry.id == _selectedEntryId,
+                                  title: Text(
+                                    entry.title.isEmpty
+                                        ? 'Untitled'
+                                        : entry.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleSmall,
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (preview.isNotEmpty)
+                                        Text(
+                                          preview,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall,
+                                        ),
+                                      Text(
+                                        '$dateLabel · $timeLabel',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurface
+                                                  .withValues(alpha: 0.65),
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () => _loadEntry(entry),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: FilledButton(
+                            onPressed: _createEntry,
+                            child: const Text('New entry'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const VerticalDivider(width: 24),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: RoundedDropdown<String>(
-                              value: journals.any((j) => j.id == _journalFilter) || _journalFilter == _allJournals
-                                  ? _journalFilter
-                                  : (journals.isNotEmpty ? journals.first.id : _allJournals),
-                              items: [
-                                if (journals.length > 1)
-                                  const RoundedDropdownItem(value: _allJournals, label: 'All journals'),
-                                ...journals.map((j) => RoundedDropdownItem(value: j.id, label: j.name)),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 12),
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                LabeledTextField(
+                                  label: 'Title',
+                                  controller: _titleController,
+                                  onChanged: (_) {
+                                    _metadataDirty = true;
+                                    _scheduleMetadataSave(refreshList: true);
+                                  },
+                                ),
+                                if (_selectedEntry != null)
+                                  Positioned(
+                                    top: 28,
+                                    right: 8,
+                                    child:
+                                        _journalFlagForEntry(
+                                          _selectedEntry!,
+                                          journals,
+                                        ) ??
+                                        const SizedBox.shrink(),
+                                  ),
                               ],
-                              onChanged: journals.isEmpty
-                                  ? null
-                                  : (v) => setState(() => _journalFilter = v),
                             ),
                           ),
-                          IconButton(
-                            tooltip: 'New journal',
-                            onPressed: _createJournal,
-                            icon: const Icon(Icons.create_new_folder_outlined),
+                          if (_selectedEntryId != null) ...[
+                            Row(
+                              children: [
+                                const Text('Mood'),
+                                const SizedBox(width: 20),
+                                Expanded(
+                                  child: _MoodGradientSlider(
+                                    value: _mood ?? 5,
+                                    accent: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _mood = value;
+                                        _metadataDirty = true;
+                                      });
+                                      _scheduleMetadataSave(refreshList: true);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 20),
+                                PopupMenuButton<String>(
+                                  icon: Icon(_weatherData(_weatherIcon)),
+                                  onSelected: (v) {
+                                    setState(() {
+                                      _weatherIcon = v;
+                                      _metadataDirty = true;
+                                    });
+                                    _saveMetadata(refreshList: true);
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                      value: 'sunny',
+                                      child: Text('Sunny'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'cloudy',
+                                      child: Text('Cloudy'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'rain',
+                                      child: Text('Rain'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'snow',
+                                      child: Text('Snow'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 12),
+                                OutlinedButton.icon(
+                                  onPressed: _changeEntryDate,
+                                  icon: const Icon(PhosphorIconsRegular.calendar),
+                                  label: Text(
+                                    _entryDateTimeLabel(
+                                      context,
+                                      _selectedEntry!.entryDate,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          Expanded(
+                            child: _PlainJournalEditor(
+                              entry: _selectedEntry,
+                              onDraftChanged: _updateBodyDraft,
+                            ),
                           ),
+                          if (settings?.showQuotes == true &&
+                              _selectedEntry != null)
+                            _EntryQuote(quote: _selectedEntry!.customQuote),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: KeepAliveScrollList(
-                        storageKey: ShellPageStorageKeys.journalEntryList,
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) {
-                          final entry = filtered[i];
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: VoyagerSpacing.sm,
-                              vertical: VoyagerSpacing.xxs,
-                            ),
-                            child: ListTile(
-                              dense: true,
-                              visualDensity: const VisualDensity(
-                                vertical: VoyagerSpacing.compactListVerticalDensity,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: VoyagerSpacing.md,
-                                vertical: VoyagerSpacing.xs,
-                              ),
-                              selected: entry.id == _selectedEntryId,
-                              title: Text(entry.title.isEmpty ? 'Untitled' : entry.title),
-                              subtitle: Text(entry.entryDate.toLocal().toString().split(' ').first),
-                              onTap: () => _loadEntry(entry),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: FilledButton(onPressed: _createEntry, child: const Text('New entry')),
-                    ),
-                  ],
-                ),
-              ),
-              const VerticalDivider(width: 24),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 12),
-                        child: LabeledTextField(
-                          label: 'Title',
-                          controller: _titleController,
-                          onChanged: (_) {
-                            _metadataDirty = true;
-                            _scheduleMetadataSave(refreshList: true);
-                          },
-                        ),
-                      ),
-                      if (_selectedEntryId != null) ...[
-                        Row(
-                          children: [
-                            const Text('Mood'),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: _MoodGradientSlider(
-                                value: _mood ?? 5,
-                                accent: Theme.of(context).colorScheme.primary,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _mood = value;
-                                    _metadataDirty = true;
-                                  });
-                                  _scheduleMetadataSave(refreshList: true);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            PopupMenuButton<String>(
-                              icon: Icon(_weatherData(_weatherIcon)),
-                              onSelected: (v) {
-                                setState(() {
-                                  _weatherIcon = v;
-                                  _metadataDirty = true;
-                                });
-                                _saveMetadata(refreshList: true);
-                              },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(value: 'sunny', child: Text('Sunny')),
-                                PopupMenuItem(value: 'cloudy', child: Text('Cloudy')),
-                                PopupMenuItem(value: 'rain', child: Text('Rain')),
-                                PopupMenuItem(value: 'snow', child: Text('Snow')),
-                              ],
-                            ),
-                            const SizedBox(width: 12),
-                            OutlinedButton.icon(
-                              onPressed: _changeEntryDate,
-                              icon: const Icon(Icons.event_outlined),
-                              label: Text(_entryDateTimeLabel(context, _selectedEntry!.entryDate)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      Expanded(
-                        child: _PlainJournalEditor(
-                          entry: _selectedEntry,
-                          onDraftChanged: _updateBodyDraft,
-                        ),
-                      ),
-                      if (settings?.showQuotes == true && _selectedEntry != null)
-                        _EntryQuote(quote: _selectedEntry!.customQuote),
-                    ],
                   ),
-                ),
-              ),
-            ],
-          );
+                ],
+              );
             },
           );
         },
@@ -465,7 +535,8 @@ class _PlainJournalEditor extends ConsumerStatefulWidget {
   final void Function(String entryId, String body) onDraftChanged;
 
   @override
-  ConsumerState<_PlainJournalEditor> createState() => _PlainJournalEditorState();
+  ConsumerState<_PlainJournalEditor> createState() =>
+      _PlainJournalEditorState();
 }
 
 class _EntryQuote extends StatelessWidget {
@@ -487,9 +558,11 @@ class _EntryQuote extends StatelessWidget {
             text,
             textAlign: TextAlign.right,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontStyle: FontStyle.italic,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+              fontStyle: FontStyle.italic,
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
         ),
       ),
@@ -552,7 +625,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     setState(() => _editorFocused = _focusNode.hasFocus);
   }
 
-  Future<void> _persistDraft(JournalEntry? entry, {required bool refreshList}) async {
+  Future<void> _persistDraft(
+    JournalEntry? entry, {
+    required bool refreshList,
+  }) async {
     if (entry == null) return;
     final plainBody = _controller.text.trimRight();
     if (!_dirty &&
@@ -582,20 +658,12 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     await repo.upsertEntry(updated);
     _lastPersistedEntryId = entry.id;
     _lastPersistedText = plainBody;
-    if (mounted && widget.entry?.id == entry.id && _controller.text.trimRight() == plainBody) {
+    if (mounted &&
+        widget.entry?.id == entry.id &&
+        _controller.text.trimRight() == plainBody) {
       _dirty = false;
     }
-    ref.read(syncEngineProvider).scheduleDocumentSync(
-          collection: 'journal_entries',
-          documentId: updated.id,
-          payload: {
-            'id': updated.id,
-            'title': updated.title,
-            'body': updated.body,
-            'mood': updated.mood,
-            'tags': updated.tags,
-          },
-        );
+    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
     if (refreshList) ref.invalidate(journalEntriesProvider);
   }
 
@@ -631,12 +699,18 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (text.length != _lastText.length + 1) return;
 
     final newlineOffset = selection.baseOffset - 1;
-    if (newlineOffset < 0 || newlineOffset >= text.length || text[newlineOffset] != '\n') return;
+    if (newlineOffset < 0 ||
+        newlineOffset >= text.length ||
+        text[newlineOffset] != '\n') {
+      return;
+    }
 
     final previousLineStart = text.lastIndexOf('\n', newlineOffset - 1) + 1;
     final previousLine = text.substring(previousLineStart, newlineOffset);
     final bulletMatch = RegExp(r'^(\s*)-\s+(.*)$').firstMatch(previousLine);
-    final numberMatch = RegExp(r'^(\s*)(\d+)\.\s+(.*)$').firstMatch(previousLine);
+    final numberMatch = RegExp(
+      r'^(\s*)(\d+)\.\s+(.*)$',
+    ).firstMatch(previousLine);
     if (bulletMatch == null && numberMatch == null) return;
 
     final indent = bulletMatch?.group(1) ?? numberMatch?.group(1) ?? '';
@@ -645,11 +719,17 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     final insert = content.isEmpty
         ? ''
         : bulletMatch != null
-            ? '$indent- '
-            : '$indent$nextNumber. ';
-    final replacementStart = content.isEmpty ? previousLineStart : selection.baseOffset;
+        ? '$indent- '
+        : '$indent$nextNumber. ';
+    final replacementStart = content.isEmpty
+        ? previousLineStart
+        : selection.baseOffset;
     final replacementEnd = selection.baseOffset;
-    final nextText = text.replaceRange(replacementStart, replacementEnd, insert);
+    final nextText = text.replaceRange(
+      replacementStart,
+      replacementEnd,
+      insert,
+    );
     final nextOffset = replacementStart + insert.length;
 
     _applyingListShortcut = true;
@@ -663,8 +743,13 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fillColor = theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
-    final focusedColor = Color.lerp(fillColor, theme.colorScheme.primary, 0.16)!;
+    final fillColor =
+        theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
+    final focusedColor = Color.lerp(
+      fillColor,
+      theme.colorScheme.primary,
+      0.16,
+    )!;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
@@ -672,7 +757,9 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         color: _editorFocused ? focusedColor : fillColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: _editorFocused ? theme.colorScheme.primary.withValues(alpha: 0.95) : theme.dividerColor,
+          color: _editorFocused
+              ? theme.colorScheme.primary.withValues(alpha: 0.95)
+              : theme.dividerColor,
           width: _editorFocused ? 1.8 : 1,
         ),
         boxShadow: [
@@ -697,7 +784,9 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
                   for (final tag in _tags)
                     Chip(
                       label: Text('#$tag'),
-                      backgroundColor: Color(colorForTag(tag)).withValues(alpha: 0.3),
+                      backgroundColor: Color(
+                        colorForTag(tag),
+                      ).withValues(alpha: 0.3),
                     ),
                 ],
               ),
@@ -757,9 +846,7 @@ class _MoodGradientSlider extends StatelessWidget {
         overlayColor: accent.withValues(alpha: 0.16),
         thumbColor: accent,
         trackShape: _GradientSliderTrackShape(
-          gradient: LinearGradient(
-            colors: [Colors.white, accent],
-          ),
+          gradient: LinearGradient(colors: [Colors.white, accent]),
           inactiveColor: Theme.of(context).colorScheme.surface,
         ),
       ),
@@ -775,7 +862,8 @@ class _MoodGradientSlider extends StatelessWidget {
   }
 }
 
-class _GradientSliderTrackShape extends SliderTrackShape with BaseSliderTrackShape {
+class _GradientSliderTrackShape extends SliderTrackShape
+    with BaseSliderTrackShape {
   const _GradientSliderTrackShape({
     required this.gradient,
     required this.inactiveColor,
@@ -821,12 +909,23 @@ class _GradientSliderTrackShape extends SliderTrackShape with BaseSliderTrackSha
     );
     final radius = Radius.circular(rect.height / 2);
     final inactivePaint = Paint()..color = inactiveColor;
-    context.canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), inactivePaint);
+    context.canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, radius),
+      inactivePaint,
+    );
 
-    final activeRect = Rect.fromLTRB(rect.left, rect.top, thumbCenter.dx.clamp(rect.left, rect.right), rect.bottom);
+    final activeRect = Rect.fromLTRB(
+      rect.left,
+      rect.top,
+      thumbCenter.dx.clamp(rect.left, rect.right),
+      rect.bottom,
+    );
     if (activeRect.width <= 0) return;
     final activePaint = Paint()..shader = gradient.createShader(rect);
-    context.canvas.drawRRect(RRect.fromRectAndRadius(activeRect, radius), activePaint);
+    context.canvas.drawRRect(
+      RRect.fromRectAndRadius(activeRect, radius),
+      activePaint,
+    );
   }
 }
 

@@ -17,7 +17,8 @@ class KeepAliveScrollView extends StatefulWidget {
   State<KeepAliveScrollView> createState() => _KeepAliveScrollViewState();
 }
 
-class _KeepAliveScrollViewState extends State<KeepAliveScrollView> with AutomaticKeepAliveClientMixin {
+class _KeepAliveScrollViewState extends State<KeepAliveScrollView>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -49,7 +50,8 @@ class KeepAliveScrollList extends StatefulWidget {
   State<KeepAliveScrollList> createState() => _KeepAliveScrollListState();
 }
 
-class _KeepAliveScrollListState extends State<KeepAliveScrollList> with AutomaticKeepAliveClientMixin {
+class _KeepAliveScrollListState extends State<KeepAliveScrollList>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -76,10 +78,12 @@ class KeepAliveSingleChildScrollView extends StatefulWidget {
   final Widget child;
 
   @override
-  State<KeepAliveSingleChildScrollView> createState() => _KeepAliveSingleChildScrollViewState();
+  State<KeepAliveSingleChildScrollView> createState() =>
+      _KeepAliveSingleChildScrollViewState();
 }
 
-class _KeepAliveSingleChildScrollViewState extends State<KeepAliveSingleChildScrollView>
+class _KeepAliveSingleChildScrollViewState
+    extends State<KeepAliveSingleChildScrollView>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -87,9 +91,6 @@ class _KeepAliveSingleChildScrollViewState extends State<KeepAliveSingleChildScr
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return SingleChildScrollView(
-      key: widget.storageKey,
-      child: widget.child,
-    );
+    return SingleChildScrollView(key: widget.storageKey, child: widget.child);
   }
 }

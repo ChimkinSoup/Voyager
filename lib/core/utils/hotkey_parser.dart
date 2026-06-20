@@ -2,7 +2,11 @@ import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 HotKey? parseHotKey(String combo) {
-  final parts = combo.split('+').map((p) => p.trim().toLowerCase()).where((p) => p.isNotEmpty).toList();
+  final parts = combo
+      .split('+')
+      .map((p) => p.trim().toLowerCase())
+      .where((p) => p.isNotEmpty)
+      .toList();
   if (parts.isEmpty) return null;
 
   final keyToken = parts.removeLast();
@@ -27,11 +31,7 @@ HotKey? parseHotKey(String combo) {
   final key = _physicalKey(keyToken);
   if (key == null) return null;
 
-  return HotKey(
-    key: key,
-    modifiers: modifiers,
-    scope: HotKeyScope.system,
-  );
+  return HotKey(key: key, modifiers: modifiers, scope: HotKeyScope.system);
 }
 
 PhysicalKeyboardKey? _physicalKey(String token) {

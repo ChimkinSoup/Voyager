@@ -1,10 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-enum VoyagerPlatform {
-  windows,
-  android,
-  other,
-}
+enum VoyagerPlatform { windows, android, other }
 
 VoyagerPlatform get currentPlatform {
   if (defaultTargetPlatform == TargetPlatform.windows) {

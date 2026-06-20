@@ -1,0 +1,116 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
+
+void main() {
+  test('remote journal entry merge prefers newer updatedAt', () {
+    final older = DateTime.utc(2024, 1, 1);
+    final newer = DateTime.utc(2024, 2, 1);
+    final local = JournalEntry(
+      id: 'entry-1',
+      journalId: 'journal-1',
+      title: 'Local title',
+      body: 'Local body',
+      entryDate: older,
+      createdAt: older,
+      updatedAt: newer,
+    );
+
+    final merged = mergeJournalEntryFromRemote(
+      {
+        'journalId': 'journal-1',
+        'title': 'Remote title',
+        'body': 'Remote body',
+        'entryDate': older.toIso8601String(),
+        'updatedAt': older.toIso8601String(),
+      },
+      'entry-1',
+      local: local,
+    );
+
+    expect(merged.title, 'Local title');
+    expect(merged.body, 'Local body');
+  });
+
+  test('remote journal entry merge applies remote delete', () {
+    final now = utcNow();
+    final deletedAt = now.add(const Duration(hours: 1));
+    final merged = mergeJournalEntryFromRemote(
+      {
+        'journalId': 'journal-1',
+        'title': 'Deleted entry',
+        'body': '',
+        'entryDate': now.toIso8601String(),
+        'updatedAt': deletedAt.toIso8601String(),
+        'deletedAt': deletedAt.toIso8601String(),
+      },
+      'entry-1',
+    );
+
+    expect(merged.deletedAt, deletedAt);
+  });
+
+  test('journal entry firestore round trip keeps rich fields', () {
+    final now = utcNow();
+    final entry = JournalEntry(
+      id: 'entry-1',
+      journalId: 'journal-1',
+      title: 'Title',
+      body: 'Body',
+      richBodyJson: '{"ops":[]}',
+      entryDate: now,
+      timestamp: now,
+      tags: const ['work'],
+      mood: 4,
+      quoteId: 'quote-1',
+      customQuote: 'Quote',
+      weatherIcon: 'cloudy',
+      guidedPrompt: 'Prompt',
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    final restored = mergeJournalEntryFromRemote(
+      journalEntryToFirestore(entry),
+      entry.id,
+    );
+
+    expect(restored.richBodyJson, entry.richBodyJson);
+    expect(restored.tags, entry.tags);
+    expect(restored.mood, entry.mood);
+    expect(restored.quoteId, entry.quoteId);
+    expect(restored.customQuote, entry.customQuote);
+    expect(restored.weatherIcon, entry.weatherIcon);
+    expect(restored.guidedPrompt, entry.guidedPrompt);
+  });
+
+  test('todo task firestore round trip keeps star and subtask fields', () {
+    final now = utcNow();
+    final task = TodoTask(
+      id: 'task-1',
+      listId: 'list-1',
+      title: 'Task',
+      notes: 'Notes',
+      dueDate: now,
+      completed: true,
+      starred: true,
+      sortOrder: 3,
+      preStarSortOrder: 1,
+      parentTaskId: 'parent-1',
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    final restored = mergeTodoTaskFromRemote(
+      todoTaskToFirestore(task),
+      task.id,
+    );
+
+    expect(restored.notes, task.notes);
+    expect(restored.starred, isTrue);
+    expect(restored.preStarSortOrder, 1);
+    expect(restored.parentTaskId, 'parent-1');
+  });
+}

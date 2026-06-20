@@ -7,16 +7,19 @@ class Journal extends SoftDeletable {
     required super.updatedAt,
     super.deletedAt,
     required this.name,
+    this.colorValue,
     this.guidedJournaling = false,
     this.promptCycleDays = 7,
   });
 
   final String name;
+  final int? colorValue;
   final bool guidedJournaling;
   final int promptCycleDays;
 
   Journal copyWith({
     String? name,
+    int? colorValue,
     bool? guidedJournaling,
     int? promptCycleDays,
     DateTime? deletedAt,
@@ -27,6 +30,7 @@ class Journal extends SoftDeletable {
       updatedAt: DateTime.now().toUtc(),
       deletedAt: deletedAt ?? this.deletedAt,
       name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
       guidedJournaling: guidedJournaling ?? this.guidedJournaling,
       promptCycleDays: promptCycleDays ?? this.promptCycleDays,
     );
@@ -67,6 +71,7 @@ class JournalEntry extends SoftDeletable {
   final String? guidedPrompt;
 
   JournalEntry copyWith({
+    String? journalId,
     String? title,
     String? body,
     String? richBodyJson,
@@ -85,7 +90,7 @@ class JournalEntry extends SoftDeletable {
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
       deletedAt: deletedAt ?? this.deletedAt,
-      journalId: journalId,
+      journalId: journalId ?? this.journalId,
       title: title ?? this.title,
       body: body ?? this.body,
       richBodyJson: richBodyJson ?? this.richBodyJson,
@@ -106,4 +111,16 @@ class TagColor {
 
   final String name;
   final int colorValue;
+}
+
+String firstSentencePreview(String body) {
+  final trimmed = body.trim();
+  if (trimmed.isEmpty) return '';
+
+  final match = RegExp(r'^(.+?[.!?])(?:\s|$)').firstMatch(trimmed);
+  if (match != null) return match.group(1)!.trim();
+
+  final line = trimmed.split('\n').first.trim();
+  if (line.length <= 120) return line;
+  return '${line.substring(0, 117)}...';
 }

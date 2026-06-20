@@ -4,11 +4,13 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 class AnalyticsService {
-  int countWords(String text) => text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
+  int countWords(String text) =>
+      text.trim().isEmpty ? 0 : text.trim().split(RegExp(r'\s+')).length;
 
   int totalJournalEntries(List<JournalEntry> entries) => entries.length;
 
-  int completedTasks(List<TodoTask> tasks) => tasks.where((t) => t.completed).length;
+  int completedTasks(List<TodoTask> tasks) =>
+      tasks.where((t) => t.completed).length;
 
   int booleanTrueCount(List<TrackerValue> values) =>
       values.where((v) => v.boolValue == true).length;

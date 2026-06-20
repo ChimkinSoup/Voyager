@@ -14,14 +14,8 @@ class PlatformAdaptiveScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isAndroid) {
-      return Scaffold(
-        body: body,
-        floatingActionButton: floatingActionButton,
-      );
+      return Scaffold(body: body, floatingActionButton: floatingActionButton);
     }
-    return Scaffold(
-      body: body,
-      floatingActionButton: floatingActionButton,
-    );
+    return Scaffold(body: body, floatingActionButton: floatingActionButton);
   }
 }

@@ -28,8 +28,22 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     _titleController = TextEditingController(text: e?.title ?? '');
     _notesController = TextEditingController(text: e?.notes ?? '');
     _isFullDay = e?.isFullDay ?? true;
-    _start = e?.start ?? DateTime(widget.initialDate.year, widget.initialDate.month, widget.initialDate.day);
-    _end = e?.end ?? DateTime(widget.initialDate.year, widget.initialDate.month, widget.initialDate.day, 23, 59);
+    _start =
+        e?.start ??
+        DateTime(
+          widget.initialDate.year,
+          widget.initialDate.month,
+          widget.initialDate.day,
+        );
+    _end =
+        e?.end ??
+        DateTime(
+          widget.initialDate.year,
+          widget.initialDate.month,
+          widget.initialDate.day,
+          23,
+          59,
+        );
     _colorValue = e?.colorValue ?? 0xFF7C9EFF;
   }
 
@@ -57,7 +71,11 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
               value: _isFullDay,
               onChanged: (v) => setState(() => _isFullDay = v),
             ),
-            LabeledTextField(label: 'Notes', controller: _notesController, maxLines: 3),
+            LabeledTextField(
+              label: 'Notes',
+              controller: _notesController,
+              maxLines: 3,
+            ),
             const SizedBox(height: 8),
             ColorPickerField(
               label: 'Event color',
@@ -68,7 +86,10 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(context, {
             'title': _titleController.text.trim(),

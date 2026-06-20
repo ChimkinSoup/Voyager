@@ -20,12 +20,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         branches: [
           for (final dest in shellDestinations)
             StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: dest.path,
-                  builder: (_, _) => dest.page,
-                ),
-              ],
+              routes: [GoRoute(path: dest.path, builder: (_, _) => dest.page)],
             ),
         ],
       ),

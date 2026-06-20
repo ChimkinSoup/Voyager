@@ -23,7 +23,10 @@ void main() {
         updatedAt: DateTime(2026, 1, 1),
       ),
     ];
-    final results = service.searchEntries(entries: entries, query: 'beach went');
+    final results = service.searchEntries(
+      entries: entries,
+      query: 'beach went',
+    );
     expect(results, hasLength(1));
   });
 

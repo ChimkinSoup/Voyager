@@ -1,0 +1,226 @@
+import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/domain/models/todo_models.dart';
+
+Future<void> showTodoListManageSheet(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (context) => const _TodoListManageDialog(),
+  );
+  ref.invalidate(todoListsProvider);
+}
+
+class _TodoListManageDialog extends ConsumerStatefulWidget {
+  const _TodoListManageDialog();
+
+  @override
+  ConsumerState<_TodoListManageDialog> createState() =>
+      _TodoListManageDialogState();
+}
+
+class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
+  var _loading = true;
+  List<TodoListModel> _lists = [];
+  Map<String, ({int active, int completed})> _stats = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    setState(() => _loading = true);
+    final repo = ref.read(todoRepositoryProvider);
+    final lists = await repo.listLists();
+    final stats = <String, ({int active, int completed})>{};
+    for (final list in lists) {
+      final tasks = await repo.listTasks(list.id);
+      stats[list.id] = (
+        active: tasks.where((t) => !t.completed).length,
+        completed: tasks.where((t) => t.completed).length,
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _lists = lists;
+      _stats = stats;
+      _loading = false;
+    });
+  }
+
+  Future<void> _createList() async {
+    final name = await _promptName('New list name');
+    if (name == null || name.trim().isEmpty) return;
+    final now = utcNow();
+    final palette = paletteFromItems(
+      _lists.map((l) => l.colorValue),
+      ref.read(colorPaletteProvider),
+    );
+    final list = TodoListModel(
+      id: newId(),
+      name: name.trim(),
+      colorValue: palette.nextColor(),
+      createdAt: now,
+      updatedAt: now,
+    );
+    await ref.read(todoRepositoryProvider).upsertList(list);
+    ref.read(remoteSyncServiceProvider).pushTodoList(list);
+    await _reload();
+  }
+
+  Future<void> _renameList(TodoListModel list) async {
+    final name = await _promptName('Rename list', initial: list.name);
+    if (name == null || name.trim().isEmpty || name.trim() == list.name) return;
+    final updated = list.copyWith(name: name.trim());
+    await ref.read(todoRepositoryProvider).upsertList(updated);
+    ref.read(remoteSyncServiceProvider).pushTodoList(updated);
+    await _reload();
+  }
+
+  Future<void> _pickColor(TodoListModel list) async {
+    final used = _lists
+        .where((l) => l.id != list.id)
+        .map((l) => l.colorValue)
+        .whereType<int>()
+        .toSet();
+    final color = await pickPaletteColorWithRef(
+      ref,
+      context,
+      current: list.colorValue,
+      usedColors: used,
+    );
+    if (color == null) return;
+    final updated = list.copyWith(colorValue: color);
+    await ref.read(todoRepositoryProvider).upsertList(updated);
+    ref.read(remoteSyncServiceProvider).pushTodoList(updated);
+    await _reload();
+  }
+
+  Future<void> _deleteList(TodoListModel list) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${list.name}"?'),
+        content: const Text('All tasks in this list will be soft-deleted.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(todoRepositoryProvider).softDeleteList(list.id);
+    final deleted = (await ref.read(todoRepositoryProvider).listLists(
+      includeDeleted: true,
+    )).firstWhere((item) => item.id == list.id);
+    ref.read(remoteSyncServiceProvider).pushTodoList(deleted);
+    await _reload();
+  }
+
+  Future<String?> _promptName(String title, {String? initial}) async {
+    final controller = TextEditingController(text: initial ?? '');
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          onSubmitted: (_) => Navigator.pop(context, controller.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Manage lists'),
+      content: SizedBox(
+        width: 480,
+        child: _loading
+            ? const SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : ListView.separated(
+                shrinkWrap: true,
+                itemCount: _lists.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final list = _lists[index];
+                  final stat = _stats[list.id];
+                  return ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    tileColor: Theme.of(context).colorScheme.surface,
+                    leading: CircleAvatar(
+                      backgroundColor: Color(list.colorValue ?? 0xFF7C9EFF),
+                    ),
+                    title: Text(list.name),
+                    subtitle: Text(
+                      '${stat?.active ?? 0} open · ${stat?.completed ?? 0} done',
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (action) async {
+                        switch (action) {
+                          case 'rename':
+                            await _renameList(list);
+                          case 'color':
+                            await _pickColor(list);
+                          case 'delete':
+                            await _deleteList(list);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'rename', child: Text('Rename')),
+                        PopupMenuItem(
+                          value: 'color',
+                          child: Text('Change color'),
+                        ),
+                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton.icon(
+          onPressed: _createList,
+          icon: const Icon(PhosphorIconsRegular.plus),
+          label: const Text('New list'),
+        ),
+      ],
+    );
+  }
+}

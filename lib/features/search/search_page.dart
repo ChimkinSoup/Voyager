@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
@@ -40,7 +41,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: () => setState(() => _tagOnly = !_tagOnly),
-              icon: Icon(_tagOnly ? Icons.tag : Icons.text_fields),
+              icon: Icon(_tagOnly ? PhosphorIconsRegular.tag : PhosphorIconsRegular.textT),
               label: Text(_tagOnly ? 'Tag mode' : 'Keyword mode'),
             ),
           ),
@@ -61,8 +62,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   itemBuilder: (_, i) {
                     final entry = results[i];
                     return ListTile(
-                      title: Text(entry.title.isEmpty ? 'Untitled' : entry.title),
-                      subtitle: Text(entry.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text(
+                        entry.title.isEmpty ? 'Untitled' : entry.title,
+                      ),
+                      subtitle: Text(
+                        entry.body,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     );
                   },
                 );

@@ -1,54 +1,8 @@
 import 'dart:async';
 
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-
-class InMemoryAuthRepository implements AuthRepository {
-  InMemoryAuthRepository() {
-    _controller.onListen = () {
-      if (!_hasEmitted) {
-        _hasEmitted = true;
-        _controller.add(_userId != null);
-      }
-    };
-  }
-
-  final _controller = StreamController<bool>.broadcast();
-  String? _userId;
-  var _hasEmitted = false;
-
-  @override
-  Stream<bool> get authStateChanges => _controller.stream;
-
-  @override
-  String? get currentUserId => _userId;
-
-  @override
-  Future<void> signInWithEmail(String email, String password) async {
-    _userId = 'email:$email';
-    _controller.add(true);
-  }
-
-  @override
-  Future<void> signUpWithEmail(String email, String password) async {
-    _userId = 'email:$email';
-    _controller.add(true);
-  }
-
-  @override
-  Future<void> signInWithGoogle() async {
-    _userId = 'google:user';
-    _controller.add(true);
-  }
-
-  @override
-  Future<void> signOut() async {
-    _userId = null;
-    _controller.add(false);
-  }
-
-  void dispose() => _controller.close();
-}
 
 class InMemorySyncRepository implements SyncRepository {
   final _documents = <String, Map<String, dynamic>>{};
@@ -56,6 +10,9 @@ class InMemorySyncRepository implements SyncRepository {
   final _collectionWatchers = <String, StreamController<void>>{};
   final _operations = <String, List<SyncOperation>>{};
   GoogleCalendarSyncLock? _calendarLock;
+  WeatherFetchLock? _weatherLock;
+  WeatherSnapshot? _currentWeather;
+  WeatherForecast? _storedForecast;
 
   String _key(String collection, String id) => '$collection/$id';
 
@@ -67,7 +24,11 @@ class InMemorySyncRepository implements SyncRepository {
   }
 
   @override
-  Future<void> upsertDocument(String collection, String id, Map<String, dynamic> data) async {
+  Future<void> upsertDocument(
+    String collection,
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     final key = _key(collection, id);
     _documents[key] = data;
     _watchers[key]?.add(data);
@@ -77,7 +38,10 @@ class InMemorySyncRepository implements SyncRepository {
   @override
   Stream<Map<String, dynamic>> watchDocument(String collection, String id) {
     final key = _key(collection, id);
-    final controller = _watchers.putIfAbsent(key, StreamController<Map<String, dynamic>>.broadcast);
+    final controller = _watchers.putIfAbsent(
+      key,
+      StreamController<Map<String, dynamic>>.broadcast,
+    );
     if (_documents.containsKey(key)) {
       controller.add(_documents[key]!);
     }
@@ -86,8 +50,37 @@ class InMemorySyncRepository implements SyncRepository {
 
   @override
   Stream<void> watchCollection(String collection) {
-    final controller = _collectionWatchers.putIfAbsent(collection, StreamController<void>.broadcast);
+    final controller = _collectionWatchers.putIfAbsent(
+      collection,
+      StreamController<void>.broadcast,
+    );
     return controller.stream;
+  }
+
+  @override
+  Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
+    String collection,
+  ) async {
+    final prefix = '$collection/';
+    return _documents.entries
+        .where((entry) => entry.key.startsWith(prefix))
+        .map(
+          (entry) => (
+            id: entry.key.substring(prefix.length),
+            data: Map<String, dynamic>.from(entry.value),
+          ),
+        )
+        .toList();
+  }
+
+  Map<String, dynamic>? _remoteSettings;
+
+  @override
+  Future<Map<String, dynamic>?> getRemoteSettings() async => _remoteSettings;
+
+  @override
+  Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {
+    _remoteSettings = {...?_remoteSettings, ...data};
   }
 
   @override
@@ -112,6 +105,45 @@ class InMemorySyncRepository implements SyncRepository {
     if (_calendarLock?.deviceId == deviceId) {
       _calendarLock = null;
     }
+  }
+
+  @override
+  Future<WeatherFetchLock?> getWeatherFetchLock() async => _weatherLock;
+
+  @override
+  Future<bool> claimWeatherFetchLock(WeatherFetchLock lock) async {
+    final now = DateTime.now().toUtc();
+    if (_weatherLock == null || now.isAfter(_weatherLock!.expiresAt)) {
+      _weatherLock = lock;
+      return true;
+    }
+    if (_weatherLock!.deviceId == lock.deviceId) {
+      _weatherLock = lock;
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  Future<void> releaseWeatherFetchLock(String deviceId) async {
+    if (_weatherLock?.deviceId == deviceId) {
+      _weatherLock = null;
+    }
+  }
+
+  @override
+  Future<WeatherSnapshot?> getCurrentWeather() async => _currentWeather;
+
+  @override
+  Future<void> upsertCurrentWeather(WeatherSnapshot weather) async {
+    _currentWeather = weather;
+  }
+
+  @override
+  Future<WeatherForecast?> getStoredForecast() async => _storedForecast;
+
+  void setStoredForecast(WeatherForecast? forecast) {
+    _storedForecast = forecast;
   }
 
   @override

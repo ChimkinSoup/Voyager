@@ -1,7 +1,10 @@
 import 'package:voyager/domain/models/settings_models.dart';
 
 class SequenceCrdtMerger {
-  List<SyncOperation> merge(List<SyncOperation> local, List<SyncOperation> remote) {
+  List<SyncOperation> merge(
+    List<SyncOperation> local,
+    List<SyncOperation> remote,
+  ) {
     final all = [...local, ...remote];
     all.sort((a, b) {
       final seq = a.sequence.compareTo(b.sequence);

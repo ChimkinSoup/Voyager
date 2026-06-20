@@ -28,13 +28,13 @@ class HeatmapCalendar extends StatelessWidget {
       children: List.generate(28, (index) {
         final day = DateTime(month.year, month.month, index + 1);
         final value = values.cast<TrackerValue?>().firstWhere(
-              (v) =>
-                  v != null &&
-                  v.periodStart.year == day.year &&
-                  v.periodStart.month == day.month &&
-                  v.periodStart.day == day.day,
-              orElse: () => null,
-            );
+          (v) =>
+              v != null &&
+              v.periodStart.year == day.year &&
+              v.periodStart.month == day.month &&
+              v.periodStart.day == day.day,
+          orElse: () => null,
+        );
         final intensity = analytics.heatmapIntensity(
           type: tracker.type,
           value: value,
@@ -45,7 +45,9 @@ class HeatmapCalendar extends StatelessWidget {
           width: 20,
           height: 20,
           decoration: BoxDecoration(
-            color: Color(tracker.colorValue).withValues(alpha: 0.2 + (0.8 * intensity)),
+            color: Color(
+              tracker.colorValue,
+            ).withValues(alpha: 0.2 + (0.8 * intensity)),
             borderRadius: BorderRadius.circular(4),
           ),
         );

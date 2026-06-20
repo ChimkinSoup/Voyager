@@ -9,6 +9,8 @@
 .buildlog/
 .history
 .svn/
+.env
+dart_defines.json
 .swiftpm/
 migrate_working_dir/
 

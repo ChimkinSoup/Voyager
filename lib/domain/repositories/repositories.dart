@@ -3,6 +3,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/models/weather_models.dart';
 
 abstract class JournalRepository {
   Future<List<Journal>> listJournals({bool includeDeleted = false});
@@ -10,6 +11,8 @@ abstract class JournalRepository {
   Future<void> upsertJournal(Journal journal);
   Future<void> softDeleteJournal(String id);
   Future<void> deleteAllJournals();
+  Future<void> deleteAllEntries();
+  Future<void> reassignEntriesJournal(String fromJournalId, String toJournalId);
 
   Future<List<JournalEntry>> listEntries({
     String? journalId,
@@ -29,7 +32,13 @@ abstract class TodoRepository {
   Future<void> upsertList(TodoListModel list);
   Future<void> softDeleteList(String id);
 
-  Future<List<TodoTask>> listTasks(String listId, {bool includeDeleted = false});
+  Future<List<TodoTask>> listTasks(
+    String listId, {
+    bool includeDeleted = false,
+    bool topLevelOnly = true,
+  });
+  Future<List<TodoTask>> listSubtasks(String parentTaskId);
+  Future<int> nextSortOrder(String listId);
   Future<void> upsertTask(TodoTask task);
   Future<void> softDeleteTask(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
@@ -73,18 +82,34 @@ abstract class AuthRepository {
   Stream<bool> get authStateChanges;
   Future<void> signInWithEmail(String email, String password);
   Future<void> signUpWithEmail(String email, String password);
+  Future<void> sendPasswordResetEmail(String email);
   Future<void> signInWithGoogle();
   Future<void> signOut();
   String? get currentUserId;
 }
 
 abstract class SyncRepository {
-  Future<void> upsertDocument(String collection, String id, Map<String, dynamic> data);
+  Future<void> upsertDocument(
+    String collection,
+    String id,
+    Map<String, dynamic> data,
+  );
   Stream<Map<String, dynamic>> watchDocument(String collection, String id);
   Stream<void> watchCollection(String collection);
+  Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
+    String collection,
+  );
+  Future<Map<String, dynamic>?> getRemoteSettings();
+  Future<void> upsertRemoteSettings(Map<String, dynamic> data);
   Future<GoogleCalendarSyncLock?> getCalendarLock();
   Future<bool> claimCalendarLock(GoogleCalendarSyncLock lock);
   Future<void> releaseCalendarLock(String deviceId);
+  Future<WeatherFetchLock?> getWeatherFetchLock();
+  Future<bool> claimWeatherFetchLock(WeatherFetchLock lock);
+  Future<void> releaseWeatherFetchLock(String deviceId);
+  Future<WeatherSnapshot?> getCurrentWeather();
+  Future<void> upsertCurrentWeather(WeatherSnapshot weather);
+  Future<WeatherForecast?> getStoredForecast();
   Future<void> appendOperation(SyncOperation operation);
   Future<List<SyncOperation>> listOperations(String documentId);
 }

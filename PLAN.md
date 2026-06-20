@@ -49,6 +49,7 @@
 			- Note that every time a user updates a journal entry (or any other entry type), that will be stored as **one document**, and each document will be for each day (So if I make a journal entry on day 1, then one on day 2, I will have two documents. On the third day, if I both update day 1's entry, and add a day 3 entry, that device will upload onto the cloud database documents 1 (from day 1, and the entire document), and document 3 (from day 3))
 				- Each document does not have to be limited to just journal entries. For example, one journal entry document will contain information such as metadata (Time and date), any tags used, etc. There will also be documents for miscellaneous data (e.g. A financial statements document every day which stores all relevant financial data, and another document that tracks the various statistics a user can choose to track, like how much sleep they got or how much studying was done)
 		- Live Portion: For items such as the to-do list, which must be updated instantaneously use a different protocol. When you open the to-do list on multiple devices, each device will open their own continuous, live connection the cloud database. They will sit and listen for any updates. Then once an update is registered, such as checking off a task or adding a new task, the device that made the update will tell the cloud, and the cloud will then instantly push to the open connections
+- **Sync status:** Journals + todos sync via Firestore (CRDT push/pull, startup pull, live listeners). **Still TODO:** settings/tag colors, calendar events, trackers/rankings, journal entry + individual task soft-delete push, historical journal pull on scroll, sync_operations cleanup, durable offline outbox.
 - The app calendar should pull any upcoming events from Google Calendar as well, but this will be a READ-ONLY design, so any events added to the app calendar should NOT be reflected on the user's Google calendar
 	- To do this, the last app that the user uses will sync into the user's Google calendar and read any new events, then it will take those events and overwrite them or update them in the central firestore database, then when other devices open up later, it will simply pull those records out of the firestore. This way there does not need to be a dedicated backend that pulls from Google calendar
 - For any feature that the user must update every X number of days (e.g. weekly or monthly or yearly), the app should show those option boxes when the user needs to update them (Like showing yearly options on January first), but also create an INTERNAL feature that allows the app to instead notify the user on the proper day, or whenever they open the app (so now the user will be notified on January 1, at whatever time they specify alerts should be at, and the next time they open the app they will be prompted with a toast notification that tells them they have to enter in whatever they need to enter), but default this flag to false for now. If the user does NOT log in at the necessary date, then still prompt the user with the option the next time they log in (e.g. if the user misses new years, and their next login is on jan 5, you should still prompt them for the entries they needed to have made from jan 1 to jan 5) 
@@ -65,9 +66,13 @@
 - Text boxes must support undoing, and any deletion of journal entries (Or other files), should be stored in the recycling bin for 30 days. 
 - Allow for easy support of future plugins
 - To prevent race conditions reading the user's google calendar, use a lock mechanism in the Firestore database, where a device must claim syncing rights, then sync with the calendar
+- Use flutter_launcher_icons to change the launcher icon
 # AGENTS
 - Break this project down into phases, and implement each phase at a time, ensuring proper testing before moving onto the next phase
 - If anything is ambiguous, always ask for clarification before proceeding
 - Ensure proper testing is done (Unit tests, integration tests, E2E tests, etc). It is better to have too many tests than not enough
 - Focus on using reusable, modular elements, to ensure consistent spacing, colors, element sizes, etc
 - Ensure as many sizing elements as possible are responsive and not hard-coded
+
+# Future Additions
+- Add account linking between Google accounts and email + password combinations

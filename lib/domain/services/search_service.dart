@@ -20,8 +20,7 @@ class SearchService {
     if (tokens.isEmpty) return entries;
 
     return entries.where((entry) {
-      final haystack =
-          '${entry.title} ${entry.body}'.toLowerCase();
+      final haystack = '${entry.title} ${entry.body}'.toLowerCase();
       return tokens.every(haystack.contains);
     }).toList();
   }

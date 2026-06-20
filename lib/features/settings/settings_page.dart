@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/platform/platform_info.dart';
-import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/services/color_palette_codec.dart';
+import 'package:voyager/features/settings/settings_color_palette_section.dart';
+import 'package:voyager/features/settings/weather_location_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -20,10 +25,16 @@ class SettingsPage extends ConsumerWidget {
         children: [
           ListTile(
             title: const Text('App accent color'),
-            subtitle: Text('#${settings.accentColor.toRadixString(16).padLeft(8, '0').toUpperCase()}'),
+            subtitle: Text(formatColorHex(settings.accentColor)),
             leading: CircleAvatar(backgroundColor: Color(settings.accentColor)),
-            onTap: () => _pickAccent(context, ref, settings),
+            onTap: () => pickAccentColor(context, ref, settings, (s) => _save(ref, s)),
           ),
+          const SizedBox(height: 8),
+          SettingsColorPaletteSection(
+            settings: settings,
+            onSave: (s) => _save(ref, s),
+          ),
+          const SizedBox(height: 16),
           SwitchListTile(
             title: const Text('Show quotes on journal entries'),
             value: settings.showQuotes,
@@ -32,22 +43,46 @@ class SettingsPage extends ConsumerWidget {
           SwitchListTile(
             title: const Text('Week starts on Monday'),
             value: settings.weekStartsOnMonday,
-            onChanged: (v) => _save(ref, settings.copyWith(weekStartsOnMonday: v)),
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(weekStartsOnMonday: v)),
           ),
           SwitchListTile(
             title: const Text('Hide completed tasks'),
-            subtitle: const Text('Removes completed tasks and the completed section from to-do'),
+            subtitle: const Text(
+              'Removes completed tasks and the completed section from to-do',
+            ),
             value: settings.hideCompletedTasks,
-            onChanged: (v) => _save(ref, settings.copyWith(hideCompletedTasks: v)),
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(hideCompletedTasks: v)),
+          ),
+          WeatherLocationTile(settings: settings),
+          const ListTile(
+            title: Text('About'),
+            subtitle: Text('Voyager — local-first journal and productivity'),
+          ),
+          ListTile(
+            title: const Text('Weather data'),
+            subtitle: const Text('Provided by OpenWeather'),
+            trailing: const Icon(PhosphorIconsRegular.arrowSquareOut, size: 18),
+            onTap: () => launchUrl(
+              Uri.parse('https://openweathermap.org/'),
+              mode: LaunchMode.externalApplication,
+            ),
           ),
           if (isWindows) ...[
             ListTile(
               title: const Text('Journal hotkey'),
-              subtitle: Text(settings.journalHotkey),
+              subtitle: Text(
+                '${settings.journalHotkey}\n'
+                'Avoid Ctrl+Shift combos that browsers use (e.g. Chrome DevTools).',
+              ),
             ),
             ListTile(
               title: const Text('To-do hotkey'),
-              subtitle: Text(settings.todoHotkey),
+              subtitle: Text(
+                '${settings.todoHotkey}\n'
+                'Default is $defaultTodoHotkey so Chrome Ctrl+Shift+T still works.',
+              ),
             ),
           ],
           if (isAndroid)
@@ -69,32 +104,5 @@ class SettingsPage extends ConsumerWidget {
   Future<void> _save(WidgetRef ref, AppSettings settings) async {
     await ref.read(settingsRepositoryProvider).saveSettings(settings);
     ref.invalidate(settingsProvider);
-  }
-
-  Future<void> _pickAccent(BuildContext context, WidgetRef ref, AppSettings settings) async {
-    var selected = settings.accentColor;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Accent color'),
-          content: SizedBox(
-            width: 360,
-            child: ColorPickerField(
-              label: 'Choose accent',
-              value: selected,
-              onChanged: (value) => setDialogState(() => selected = value),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
-          ],
-        ),
-      ),
-    );
-    if (saved == true) {
-      await _save(ref, settings.copyWith(accentColor: selected));
-    }
   }
 }

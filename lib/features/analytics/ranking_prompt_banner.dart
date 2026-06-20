@@ -50,7 +50,9 @@ class _RankingPromptBannerState extends State<RankingPromptBanner> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Rate previous ${widget.cadence.name} period (${missed.length} pending)'),
+            Text(
+              'Rate previous ${widget.cadence.name} period (${missed.length} pending)',
+            ),
             Slider(
               value: _value,
               min: 1,

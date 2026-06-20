@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/features/journal/journal_page.dart';
+import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
 import 'package:voyager/features/todo/todo_page.dart';
 
 class QuickJournalPopup extends StatelessWidget {
@@ -7,8 +8,10 @@ class QuickJournalPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Material(
-      child: SizedBox(width: 480, height: 360, child: JournalPage()),
+    return BlockShellTabShortcuts(
+      child: const Material(
+        child: SizedBox(width: 480, height: 360, child: JournalPage()),
+      ),
     );
   }
 }
@@ -18,8 +21,10 @@ class QuickTodoPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Material(
-      child: SizedBox(width: 420, height: 480, child: TodoPage()),
+    return BlockShellTabShortcuts(
+      child: const Material(
+        child: SizedBox(width: 420, height: 480, child: TodoPage()),
+      ),
     );
   }
 }
