@@ -1,5 +1,6 @@
 import 'dart:async';
 
+// ignore_for_file: prefer_initializing_formals
 import 'package:flutter/foundation.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';

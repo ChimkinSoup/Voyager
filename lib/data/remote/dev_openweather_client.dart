@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+// ignore_for_file: prefer_initializing_formals
 import 'package:http/http.dart' as http;
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/weather_models.dart';

@@ -138,20 +138,6 @@ void main() {
 
   test('fetchForecastIfNeeded uses cached forecast within interval', () async {
     final fetchedAt = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
-    final forecast = WeatherForecast(
-      fetchedAt: fetchedAt,
-      locationLabel: 'Chicago, US',
-      periods: [
-        ForecastPeriod(
-          time: DateTime.utc(2026, 6, 20, 12),
-          tempC: 14,
-          pop: 0.2,
-          icon: 'cloudy',
-          conditionCode: 803,
-          description: 'clouds',
-        ),
-      ],
-    );
     await settingsRepo.saveSettings(
       (await settingsRepo.getSettings()).copyWith(
         weatherForecastJson:

@@ -23,7 +23,6 @@ class SyncEngine {
   }) : _syncRepository = syncRepository,
        _deviceId = deviceId,
        _debouncer = debouncer ?? Debouncer(),
-       _merger = merger ?? SequenceCrdtMerger(),
        _crdtResolver =
            crdtResolver ??
            CrdtDocumentResolver(merger: merger ?? SequenceCrdtMerger()),
@@ -32,7 +31,6 @@ class SyncEngine {
   final SyncRepository _syncRepository;
   final String _deviceId;
   final Debouncer _debouncer;
-  final SequenceCrdtMerger _merger;
   final CrdtDocumentResolver _crdtResolver;
   final SyncRetryPolicy _retryPolicy;
   final _keyedDebouncers = <String, Debouncer>{};

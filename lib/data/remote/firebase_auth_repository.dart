@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:voyager/core/auth/firebase_auth_errors.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/data/remote/desktop_google_oauth.dart';

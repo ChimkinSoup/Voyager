@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+// ignore_for_file: prefer_initializing_formals
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/settings_models.dart';
