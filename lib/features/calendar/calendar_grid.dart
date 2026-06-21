@@ -21,7 +21,7 @@ class CalendarGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
-  final void Function(DateTime month) onMonthTap;
+  final void Function(DateTime month, Rect globalBounds) onMonthTap;
   final bool weekStartsMonday;
 
   @override
@@ -528,7 +528,7 @@ class _YearGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
-  final void Function(DateTime month) onMonthTap;
+  final void Function(DateTime month, Rect globalBounds) onMonthTap;
   final bool weekStartsMonday;
 
   @override
@@ -550,38 +550,51 @@ class _YearGrid extends StatelessWidget {
               (e) => e.start.year == focused.year && e.start.month == month,
             )
             .length;
-        return InkWell(
-          onTap: () => onMonthTap(monthDate),
-          borderRadius: BorderRadius.circular(18),
-          child: Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    DateFormat.MMMM().format(monthDate),
-                    style: Theme.of(context).textTheme.titleSmall,
-                    textAlign: TextAlign.center,
+        return Builder(
+          builder: (cellContext) {
+            return InkWell(
+              onTap: () {
+                final renderBox =
+                    cellContext.findRenderObject() as RenderBox?;
+                if (renderBox == null) {
+                  onMonthTap(monthDate, Rect.zero);
+                  return;
+                }
+                final origin = renderBox.localToGlobal(Offset.zero);
+                onMonthTap(monthDate, origin & renderBox.size);
+              },
+              borderRadius: BorderRadius.circular(18),
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        DateFormat.MMMM().format(monthDate),
+                        style: Theme.of(context).textTheme.titleSmall,
+                        textAlign: TextAlign.center,
+                      ),
+                      if (count > 0)
+                        Text(
+                          '$count events',
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
+                      const SizedBox(height: 4),
+                      Expanded(
+                        child: _CompactMonthGrid(
+                          month: monthDate,
+                          weekStartsMonday: weekStartsMonday,
+                        ),
+                      ),
+                    ],
                   ),
-                  if (count > 0)
-                    Text(
-                      '$count events',
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center,
-                    ),
-                  const SizedBox(height: 4),
-                  Expanded(
-                    child: _CompactMonthGrid(
-                      month: monthDate,
-                      weekStartsMonday: weekStartsMonday,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -749,6 +762,59 @@ class _IndicatorDots extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Expands from a year-view month cell to fill the calendar area.
+class YearToMonthZoomOverlay extends StatelessWidget {
+  const YearToMonthZoomOverlay({
+    super.key,
+    required this.progress,
+    required this.fromLocal,
+    required this.toLocal,
+    required this.child,
+  });
+
+  final double progress;
+  final Rect fromLocal;
+  final Rect toLocal;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = Rect.lerp(fromLocal, toLocal, progress)!;
+    final scaleX = current.width / toLocal.width;
+    final scaleY = current.height / toLocal.height;
+    final radius = BorderRadius.circular(
+      Tween<double>(begin: 18, end: 0).transform(progress),
+    );
+
+    return Positioned.fromRect(
+      rect: current,
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Material(
+          color: Theme.of(context).colorScheme.surface,
+          clipBehavior: Clip.hardEdge,
+          child: OverflowBox(
+            minWidth: toLocal.width,
+            maxWidth: toLocal.width,
+            minHeight: toLocal.height,
+            maxHeight: toLocal.height,
+            alignment: Alignment.topLeft,
+            child: Transform(
+              alignment: Alignment.topLeft,
+              transform: Matrix4.diagonal3Values(scaleX, scaleY, 1),
+              child: SizedBox(
+                width: toLocal.width,
+                height: toLocal.height,
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

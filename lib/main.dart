@@ -54,12 +54,23 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
 
     final settings = await settingsRepo.getSettings();
     if (!mounted) return;
-    await _hotkeys.register(
-      journalHotkey: settings.journalHotkey,
-      todoHotkey: settings.todoHotkey,
-      onJournal: _openQuickJournal,
-      onTodo: _openQuickTodo,
-    );
+    try {
+      await _hotkeys.register(
+        journalHotkey: settings.journalHotkey,
+        todoHotkey: settings.todoHotkey,
+        onJournal: _openQuickJournal,
+        onTodo: _openQuickTodo,
+      );
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'VoyagerBootstrap',
+          context: ErrorDescription('while registering global hotkeys'),
+        ),
+      );
+    }
 
     if (ref.read(authNotifierProvider).isAuthenticated) {
       _onAuthStateChanged(true);

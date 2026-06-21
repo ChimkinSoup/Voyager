@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,10 +19,26 @@ class CalendarPage extends ConsumerStatefulWidget {
   ConsumerState<CalendarPage> createState() => _CalendarPageState();
 }
 
-class _CalendarPageState extends ConsumerState<CalendarPage> {
+class _CalendarPageState extends ConsumerState<CalendarPage>
+    with TickerProviderStateMixin {
   CalendarViewMode _mode = CalendarViewMode.month;
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
+  final _calendarAreaKey = GlobalKey();
+  AnimationController? _monthZoomController;
+  CurvedAnimation? _monthZoomAnimation;
+  Rect? _monthZoomFromLocal;
+  Rect? _monthZoomToLocal;
+  DateTime? _monthZoomTarget;
+  final _monthGridCache = _CalendarMonthGridCache();
+  int? _prewarmingYear;
+  int _prewarmGeneration = 0;
+  ({
+    List<CalendarEvent> events,
+    List<CalendarDayIndicator> indicators,
+    bool weekStartsMonday,
+  })?
+  _gridContext;
 
   Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
     final result = await showDialog<Map<String, dynamic>>(
@@ -69,7 +87,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         _focused = DateTime(_dayViewDate!.year, _dayViewDate!.month, 1);
         return;
       }
-      _focused = switch (_mode) {
+      final nextFocused = switch (_mode) {
         CalendarViewMode.week => _focused.add(Duration(days: 7 * delta)),
         CalendarViewMode.month => DateTime(
           _focused.year,
@@ -78,10 +96,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         ),
         CalendarViewMode.year => DateTime(_focused.year + delta, 1, 1),
       };
+      if (_mode == CalendarViewMode.year && nextFocused.year != _focused.year) {
+        _monthGridCache.clearExceptYear(nextFocused.year);
+        _prewarmingYear = null;
+      }
+      _focused = nextFocused;
     });
   }
 
   void _onMiniCalendarDayTap(DateTime day) {
+    _cancelMonthZoom();
     setState(() {
       if (_dayViewDate != null &&
           _dayViewDate!.year == day.year &&
@@ -103,7 +127,282 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   };
 
   @override
+  void dispose() {
+    _monthZoomController?.dispose();
+    super.dispose();
+  }
+
+  void _cancelMonthZoom() {
+    _monthZoomAnimation?.dispose();
+    _monthZoomController?.dispose();
+    _monthZoomController = null;
+    _monthZoomAnimation = null;
+    _monthZoomFromLocal = null;
+    _monthZoomToLocal = null;
+    _monthZoomTarget = null;
+  }
+
+  void _invalidateMonthGridCache() {
+    _monthGridCache.clear();
+    _prewarmingYear = null;
+    _prewarmGeneration++;
+  }
+
+  bool get _isMonthZooming =>
+      _monthZoomController != null &&
+      _monthZoomAnimation != null &&
+      _monthZoomFromLocal != null &&
+      _monthZoomToLocal != null &&
+      _monthZoomTarget != null;
+
+  Widget _buildMonthGridLayer({
+    required DateTime month,
+    required List<CalendarEvent> events,
+    required List<CalendarDayIndicator> indicators,
+    required bool weekStartsMonday,
+  }) {
+    return RepaintBoundary(
+      child: _buildCalendarGrid(
+        events: events,
+        indicators: indicators,
+        weekStartsMonday: weekStartsMonday,
+        mode: CalendarViewMode.month,
+        focused: month,
+        ignorePointer: true,
+      ),
+    );
+  }
+
+  void _scheduleMonthGridPrewarm({
+    required int year,
+    required List<CalendarEvent> events,
+    required List<CalendarDayIndicator> indicators,
+    required bool weekStartsMonday,
+  }) {
+    if (_prewarmingYear == year) return;
+
+    _prewarmingYear = year;
+    _monthGridCache.clearExceptYear(year);
+    final generation = ++_prewarmGeneration;
+
+    final months = _prewarmMonthOrder(year);
+    void prewarmAt(int index) {
+      if (!mounted || generation != _prewarmGeneration || _prewarmingYear != year) {
+        return;
+      }
+      if (index >= months.length) return;
+
+      final month = months[index];
+      if (_monthGridCache.get(year, month) == null) {
+        _monthGridCache.put(
+          year,
+          month,
+          _buildMonthGridLayer(
+            month: DateTime(year, month),
+            events: events,
+            indicators: indicators,
+            weekStartsMonday: weekStartsMonday,
+          ),
+        );
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        prewarmAt(index + 1);
+      });
+    }
+
+    prewarmAt(0);
+  }
+
+  List<int> _prewarmMonthOrder(int year) {
+    final now = DateTime.now();
+    final prioritized = now.year == year ? now.month : _focused.month.clamp(1, 12);
+    return [
+      prioritized,
+      for (var month = 1; month <= 12; month++)
+        if (month != prioritized) month,
+    ];
+  }
+
+  void _beginMonthZoom(DateTime month, Rect fromGlobal) {
+    final stackContext = _calendarAreaKey.currentContext;
+    if (stackContext == null) return;
+    final stackBox = stackContext.findRenderObject() as RenderBox?;
+    if (stackBox == null || !stackBox.hasSize) return;
+
+    _cancelMonthZoom();
+
+    final stackOrigin = stackBox.localToGlobal(Offset.zero);
+    final fromLocal = Rect.fromPoints(
+      Offset(fromGlobal.left - stackOrigin.dx, fromGlobal.top - stackOrigin.dy),
+      Offset(fromGlobal.right - stackOrigin.dx, fromGlobal.bottom - stackOrigin.dy),
+    );
+    final toLocal = Offset.zero & stackBox.size;
+
+    final controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 480),
+    );
+    final animation = CurvedAnimation(
+      parent: controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    final context = _gridContext;
+
+    _monthZoomController = controller;
+    _monthZoomAnimation = animation;
+    _monthZoomFromLocal = fromLocal;
+    _monthZoomToLocal = toLocal;
+    _monthZoomTarget = month;
+
+    controller.forward().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _mode = CalendarViewMode.month;
+        _focused = month;
+        _dayViewDate = null;
+        _cancelMonthZoom();
+      });
+    });
+
+    setState(() {});
+
+    if (context != null && !_monthGridCache.contains(month.year, month.month)) {
+      final target = month;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _monthZoomTarget != target) return;
+        final built = _buildMonthGridLayer(
+          month: target,
+          events: context.events,
+          indicators: context.indicators,
+          weekStartsMonday: context.weekStartsMonday,
+        );
+        _monthGridCache.put(target.year, target.month, built);
+        setState(() {});
+      });
+    }
+  }
+
+  Widget _buildCalendarGrid({
+    required List<CalendarEvent> events,
+    required List<CalendarDayIndicator> indicators,
+    required bool weekStartsMonday,
+    required CalendarViewMode mode,
+    required DateTime focused,
+    bool ignorePointer = false,
+  }) {
+    final grid = CalendarGrid(
+      mode: mode,
+      focused: focused,
+      events: events,
+      indicators: indicators,
+      weekStartsMonday: weekStartsMonday,
+      onDayTap: (day) => _openEditor(day: day),
+      onMonthTap: _beginMonthZoom,
+    );
+    if (!ignorePointer) return grid;
+    return IgnorePointer(child: grid);
+  }
+
+  Widget _buildMainCalendar({
+    required List<CalendarEvent> events,
+    required List<CalendarDayIndicator> indicators,
+    required bool weekStartsMonday,
+  }) {
+    _gridContext = (
+      events: events,
+      indicators: indicators,
+      weekStartsMonday: weekStartsMonday,
+    );
+
+    if (_dayViewDate != null) {
+      return DayHourGrid(
+        day: _dayViewDate!,
+        events: events,
+        onHourTap: (hour) => _openEditor(day: hour),
+        onDayChanged: (day) => setState(() {
+          _dayViewDate = day;
+          _focused = DateTime(day.year, day.month, 1);
+        }),
+      );
+    }
+
+    if (_mode == CalendarViewMode.year || _isMonthZooming) {
+      _scheduleMonthGridPrewarm(
+        year: _focused.year,
+        events: events,
+        indicators: indicators,
+        weekStartsMonday: weekStartsMonday,
+      );
+
+      final yearGrid = IgnorePointer(
+        ignoring: _isMonthZooming,
+        child: _buildCalendarGrid(
+          events: events,
+          indicators: indicators,
+          weekStartsMonday: weekStartsMonday,
+          mode: CalendarViewMode.year,
+          focused: _focused,
+        ),
+      );
+
+      if (!_isMonthZooming) {
+        return yearGrid;
+      }
+
+      final zoomAnimation = _monthZoomAnimation!;
+      final zoomMonth = _monthZoomTarget!;
+      final cachedMonth = _monthGridCache.get(zoomMonth.year, zoomMonth.month);
+
+      return AnimatedBuilder(
+        animation: zoomAnimation,
+        child: cachedMonth,
+        builder: (context, monthLayer) {
+          final progress = zoomAnimation.value;
+          final overlayChild =
+              monthLayer ??
+              ColoredBox(color: Theme.of(context).colorScheme.surface);
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Opacity(
+                opacity: (1 - progress).clamp(0.0, 1.0),
+                child: yearGrid,
+              ),
+              YearToMonthZoomOverlay(
+                progress: progress,
+                fromLocal: _monthZoomFromLocal!,
+                toLocal: _monthZoomToLocal!,
+                child: overlayChild,
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+    return _buildCalendarGrid(
+      events: events,
+      indicators: indicators,
+      weekStartsMonday: weekStartsMonday,
+      mode: _mode,
+      focused: _focused,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<List<CalendarEvent>>>(calendarEventsProvider, (
+      previous,
+      next,
+    ) {
+      if (previous?.valueOrNull != next.valueOrNull) {
+        _invalidateMonthGridCache();
+      }
+    });
+
     final eventsAsync = ref.watch(calendarEventsProvider);
     final trackers =
         ref.watch(trackersProvider).value ?? const <StatisticTracker>[];
@@ -165,6 +464,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 ],
                 selected: {_mode},
                 onSelectionChanged: (s) => setState(() {
+                  _cancelMonthZoom();
+                  if (s.first != CalendarViewMode.year) {
+                    _prewarmingYear = null;
+                  }
                   _mode = s.first;
                   _dayViewDate = null;
                 }),
@@ -205,29 +508,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: _dayViewDate != null
-                        ? DayHourGrid(
-                            day: _dayViewDate!,
-                            events: events,
-                            onHourTap: (hour) => _openEditor(day: hour),
-                            onDayChanged: (day) => setState(() {
-                              _dayViewDate = day;
-                              _focused = DateTime(day.year, day.month, 1);
-                            }),
-                          )
-                        : CalendarGrid(
-                            mode: _mode,
-                            focused: _focused,
-                            events: events,
-                            indicators: indicators,
-                            weekStartsMonday: weekStartsMonday,
-                            onDayTap: (day) => _openEditor(day: day),
-                            onMonthTap: (month) => setState(() {
-                              _mode = CalendarViewMode.month;
-                              _focused = month;
-                              _dayViewDate = null;
-                            }),
-                          ),
+                    child: KeyedSubtree(
+                      key: _calendarAreaKey,
+                      child: _buildMainCalendar(
+                        events: events,
+                        indicators: indicators,
+                        weekStartsMonday: weekStartsMonday,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -259,4 +547,33 @@ String _trackerValueLabel(StatisticTracker tracker, TrackerValue value) {
     TrackerType.enumType =>
       value.enumValue ?? tracker.defaultEnumOption ?? 'empty',
   };
+}
+
+/// Caches up to 12 pre-built month grids (one calendar year).
+class _CalendarMonthGridCache {
+  static const maxEntries = 12;
+
+  final LinkedHashMap<String, Widget> _entries = LinkedHashMap();
+
+  String _key(int year, int month) => '$year-$month';
+
+  Widget? get(int year, int month) => _entries[_key(year, month)];
+
+  bool contains(int year, int month) => _entries.containsKey(_key(year, month));
+
+  void put(int year, int month, Widget grid) {
+    final key = _key(year, month);
+    _entries.remove(key);
+    _entries[key] = grid;
+    while (_entries.length > maxEntries) {
+      _entries.remove(_entries.keys.first);
+    }
+  }
+
+  void clearExceptYear(int year) {
+    final prefix = '$year-';
+    _entries.removeWhere((key, _) => !key.startsWith(prefix));
+  }
+
+  void clear() => _entries.clear();
 }
