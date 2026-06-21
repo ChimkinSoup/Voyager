@@ -63,6 +63,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
   void _shiftFocus(int delta) {
     setState(() {
+      final base = _dayViewDate ?? _focused;
+      if (_dayViewDate != null) {
+        _dayViewDate = base.add(Duration(days: delta));
+        _focused = DateTime(_dayViewDate!.year, _dayViewDate!.month, 1);
+        return;
+      }
       _focused = switch (_mode) {
         CalendarViewMode.week => _focused.add(Duration(days: 7 * delta)),
         CalendarViewMode.month => DateTime(
@@ -89,8 +95,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     });
   }
 
-  String get _headerLabel => switch (_mode) {
-    CalendarViewMode.week => 'Week of ${DateFormat.MMMd().format(_focused)}',
+  String _headerLabel(bool weekStartsMonday) => switch (_mode) {
+    CalendarViewMode.week =>
+      'Week of ${DateFormat.MMMd().format(_weekStart(_focused, weekStartsMonday))}',
     CalendarViewMode.month => DateFormat.yMMMM().format(_focused),
     CalendarViewMode.year => '${_focused.year}',
   };
@@ -116,17 +123,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         return current > max ? current : max;
       });
       for (final value in values) {
+        final intensity = analytics.heatmapIntensity(
+          type: tracker.type,
+          value: value,
+          tracker: tracker,
+          maxInPeriod: max == 0 ? 1 : max,
+        );
+        if (intensity <= 0) continue;
         indicators.add(
           CalendarDayIndicator(
             day: value.periodStart,
             colorValue: tracker.colorValue,
             label: '${tracker.name}: ${_trackerValueLabel(tracker, value)}',
-            intensity: analytics.heatmapIntensity(
-              type: tracker.type,
-              value: value,
-              tracker: tracker,
-              maxInPeriod: max == 0 ? 1 : max,
-            ),
+            intensity: intensity,
           ),
         );
       }
@@ -155,14 +164,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                   ),
                 ],
                 selected: {_mode},
-                onSelectionChanged: (s) => setState(() => _mode = s.first),
+                onSelectionChanged: (s) => setState(() {
+                  _mode = s.first;
+                  _dayViewDate = null;
+                }),
               ),
               const Spacer(),
               IconButton(
                 onPressed: () => _shiftFocus(-1),
                 icon: const Icon(PhosphorIconsRegular.caretLeft),
               ),
-              Text(_headerLabel),
+              Text(_headerLabel(weekStartsMonday)),
               IconButton(
                 onPressed: () => _shiftFocus(1),
                 icon: const Icon(PhosphorIconsRegular.caretRight),
@@ -198,6 +210,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                             day: _dayViewDate!,
                             events: events,
                             onHourTap: (hour) => _openEditor(day: hour),
+                            onDayChanged: (day) => setState(() {
+                              _dayViewDate = day;
+                              _focused = DateTime(day.year, day.month, 1);
+                            }),
                           )
                         : CalendarGrid(
                             mode: _mode,
@@ -206,6 +222,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                             indicators: indicators,
                             weekStartsMonday: weekStartsMonday,
                             onDayTap: (day) => _openEditor(day: day),
+                            onMonthTap: (month) => setState(() {
+                              _mode = CalendarViewMode.month;
+                              _focused = month;
+                              _dayViewDate = null;
+                            }),
                           ),
                   ),
                 ],
@@ -218,6 +239,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       ),
     );
   }
+}
+
+DateTime _weekStart(DateTime focused, bool weekStartsMonday) {
+  final weekday = focused.weekday;
+  final firstDay = weekStartsMonday ? DateTime.monday : DateTime.sunday;
+  return DateTime(
+    focused.year,
+    focused.month,
+    focused.day,
+  ).subtract(Duration(days: (weekday - firstDay) % 7));
 }
 
 String _trackerValueLabel(StatisticTracker tracker, TrackerValue value) {

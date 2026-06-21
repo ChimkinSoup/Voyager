@@ -209,6 +209,7 @@ class SettingsTable extends Table {
   IntColumn get weatherChartTempColor => integer().nullable()();
   IntColumn get weatherChartRainColor => integer().nullable()();
   TextColumn get colorPaletteJson => text().nullable()();
+  RealColumn get journalEntryListWidth => real().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -241,7 +242,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -365,6 +366,12 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           settingsTable,
           settingsTable.devShowSyncLocalSaves,
+        );
+      }
+      if (from < 16) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.journalEntryListWidth,
         );
       }
     },

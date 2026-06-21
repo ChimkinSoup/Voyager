@@ -32,6 +32,7 @@ class AppSettings {
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
+    this.journalEntryListWidth,
     List<int>? colorPalette,
   }) : colorPalette = colorPalette ?? defaultColorPalette;
 
@@ -65,6 +66,7 @@ class AppSettings {
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
+  final double? journalEntryListWidth;
   final List<int> colorPalette;
 
   bool get hasWeatherLocation => weatherLat != null && weatherLon != null;
@@ -94,6 +96,7 @@ class AppSettings {
     String? weatherForecastJson,
     int? weatherChartTempColor,
     int? weatherChartRainColor,
+    double? journalEntryListWidth,
     List<int>? colorPalette,
     bool clearWeatherLocationLabel = false,
     bool clearWeatherLat = false,
@@ -106,6 +109,7 @@ class AppSettings {
     bool clearDevOpenWeatherApiKey = false,
     bool clearWeatherForecastJson = false,
     bool clearLastViewedJournalId = false,
+    bool clearJournalEntryListWidth = false,
   }) {
     return AppSettings(
       accentColor: accentColor ?? this.accentColor,
@@ -156,6 +160,9 @@ class AppSettings {
           : (weatherForecastJson ?? this.weatherForecastJson),
       weatherChartTempColor: weatherChartTempColor ?? this.weatherChartTempColor,
       weatherChartRainColor: weatherChartRainColor ?? this.weatherChartRainColor,
+      journalEntryListWidth: clearJournalEntryListWidth
+          ? null
+          : (journalEntryListWidth ?? this.journalEntryListWidth),
       colorPalette: colorPalette ?? this.colorPalette,
     );
   }

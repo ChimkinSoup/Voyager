@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +29,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   String? _selectedTaskId;
   final _taskController = TextEditingController();
   final _taskFocusNode = FocusNode();
+  List<String>? _optimisticActiveTaskOrder;
+  final _completionOverrides = <String, bool>{};
   var _completedExpanded = true;
 
   @override
@@ -43,7 +47,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       final now = utcNow();
       final list = TodoListModel(
         id: newId(),
-        name: 'Inbox',
+        name: 'To-do',
         createdAt: now,
         updatedAt: now,
       );
@@ -78,34 +82,65 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   }
 
   Future<void> _toggleTask(TodoTask task, bool? completed) async {
-    final updated = task.copyWith(completed: completed ?? false);
+    final value = completed ?? false;
+    setState(() {
+      _completionOverrides[task.id] = value;
+      if (value) {
+        _optimisticActiveTaskOrder?.remove(task.id);
+        if (_optimisticActiveTaskOrder?.isEmpty ?? false) {
+          _optimisticActiveTaskOrder = null;
+        }
+      }
+    });
+    unawaited(_persistTaskCompletion(task.copyWith(completed: value)));
+  }
+
+  Future<void> _persistTaskCompletion(TodoTask updated) async {
     await ref.read(todoRepositoryProvider).upsertTask(updated);
-    await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+    if (!mounted) return;
     ref.invalidate(todoTasksProvider(updated.listId));
     ref.invalidate(todoListsProvider);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+  }
+
+  List<TodoTask> _tasksWithCompletionOverrides(List<TodoTask> tasks) {
+    if (_completionOverrides.isEmpty) return tasks;
+    return [
+      for (final task in tasks)
+        switch (_completionOverrides[task.id]) {
+          null => task,
+          final completed => task.copyWith(completed: completed),
+        },
+    ];
+  }
+
+  void _reconcileCompletionOverrides(List<TodoTask> tasks) {
+    if (_completionOverrides.isEmpty) return;
+    final resolvedIds = <String>[
+      for (final task in tasks)
+        if (_completionOverrides[task.id] == task.completed) task.id,
+    ];
+    if (resolvedIds.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        for (final id in resolvedIds) {
+          _completionOverrides.remove(id);
+        }
+      });
+    });
   }
 
   Future<void> _toggleStar(TodoTask task) async {
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
-    if (task.starred) {
-      final updated = task.copyWith(
-        starred: false,
-        sortOrder: task.preStarSortOrder ?? task.sortOrder,
-        clearPreStarSortOrder: true,
-      );
-      await repo.upsertTask(updated);
-      remoteSync.pushTodoTaskNow(updated);
-      ref.invalidate(todoTasksProvider(updated.listId));
-    } else {
-      final updated = task.copyWith(
-        starred: true,
-        preStarSortOrder: task.sortOrder,
-      );
-      await repo.upsertTask(updated);
-      remoteSync.pushTodoTaskNow(updated);
-      ref.invalidate(todoTasksProvider(updated.listId));
-    }
+    final updated = task.copyWith(
+      starred: !task.starred,
+      clearPreStarSortOrder: true,
+    );
+    await repo.upsertTask(updated);
+    remoteSync.pushTodoTaskNow(updated);
+    ref.invalidate(todoTasksProvider(updated.listId));
     ref.invalidate(todoListsProvider);
   }
 
@@ -135,6 +170,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     final items = List<TodoTask>.from(active);
     final moved = items.removeAt(oldIndex);
     items.insert(newIndex, moved);
+    setState(() {
+      _optimisticActiveTaskOrder = items.map((task) => task.id).toList();
+    });
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
     for (var i = 0; i < items.length; i++) {
@@ -144,6 +182,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       remoteSync.pushTodoTaskNow(updated);
     }
     ref.invalidate(todoTasksProvider(_selectedListId!));
+  }
+
+  List<TodoTask> _applyOptimisticActiveOrder(List<TodoTask> active) {
+    final order = _optimisticActiveTaskOrder;
+    if (order == null || order.length != active.length) return active;
+    final byId = {for (final task in active) task.id: task};
+    if (!order.every(byId.containsKey)) return active;
+    return [for (final id in order) byId[id]!];
   }
 
   @override
@@ -171,8 +217,11 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         final tasksAsync = ref.watch(todoTasksProvider(_selectedListId!));
         return tasksAsync.when(
           data: (tasks) {
-            final sorted = sortTodoTasks(tasks);
-            final active = sorted.where((t) => !t.completed).toList();
+            _reconcileCompletionOverrides(tasks);
+            final sorted = sortTodoTasks(_tasksWithCompletionOverrides(tasks));
+            final active = _applyOptimisticActiveOrder(
+              sorted.where((t) => !t.completed).toList(),
+            );
             final completed = sorted.where((t) => t.completed).toList();
             final selectedTask = _selectedTaskId == null
                 ? null
@@ -227,9 +276,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                   setState(() => _selectedListId = createdId);
                                 }
                               },
-                              icon: const Icon(
-                                VoyagerIcons.manage,
-                              ),
+                              icon: const Icon(VoyagerIcons.manage),
                               tooltip: 'Manage lists',
                             ),
                           ],
@@ -244,7 +291,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                 if (active.isNotEmpty)
                                   ReorderableListView(
                                     shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
                                     buildDefaultDragHandles: false,
                                     onReorderItem: (oldIndex, newIndex) =>
                                         _reorderActiveTasks(
@@ -254,11 +302,12 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                         ),
                                     children: [
                                       for (var i = 0; i < active.length; i++)
-                                        ReorderableDelayedDragStartListener(
+                                        ReorderableDragStartListener(
                                           key: ValueKey(active[i].id),
                                           index: i,
                                           child: _TaskRow(
                                             task: active[i],
+                                            listColor: currentList?.colorValue,
                                             subtaskStats: _subtaskStats(
                                               active[i].id,
                                             ),
@@ -303,7 +352,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                             _completedExpanded
                                                 ? PhosphorIconsRegular.caretUp
                                                 : PhosphorIconsRegular
-                                                    .caretDown,
+                                                      .caretDown,
                                           ),
                                         ],
                                       ),
@@ -314,6 +363,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                       (task) => _TaskRow(
                                         key: ValueKey(task.id),
                                         task: task,
+                                        listColor: currentList?.colorValue,
                                         subtaskStats: _subtaskStats(task.id),
                                         onToggle: (v) => _toggleTask(task, v),
                                         onStar: () => _toggleStar(task),
@@ -354,15 +404,40 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                     ),
                   ),
                 ),
-                if (selectedTask != null)
-                  TodoEditPanel(
-                    task: selectedTask,
-                    onClose: () => setState(() => _selectedTaskId = null),
-                    onChanged: () {
-                      ref.invalidate(todoTasksProvider(selectedTask.listId));
-                      ref.invalidate(todoListsProvider);
-                    },
-                  ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  reverseDuration: const Duration(milliseconds: 160),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final offset = Tween<Offset>(
+                      begin: const Offset(1, 0),
+                      end: Offset.zero,
+                    ).animate(animation);
+                    return SlideTransition(position: offset, child: child);
+                  },
+                  child: selectedTask == null
+                      ? const SizedBox.shrink()
+                      : TodoEditPanel(
+                          task: selectedTask,
+                          listColor: currentList?.colorValue,
+                          onClose: () => setState(() => _selectedTaskId = null),
+                          onChanged: () {
+                            ref.invalidate(
+                              todoTasksProvider(selectedTask.listId),
+                            );
+                            ref.invalidate(todoListsProvider);
+                          },
+                          onDeleted: () {
+                            setState(() => _selectedTaskId = null);
+                            ref.invalidate(
+                              todoTasksProvider(selectedTask.listId),
+                            );
+                            ref.invalidate(todoListsProvider);
+                          },
+                          onToggleStar: () => _toggleStar(selectedTask),
+                        ),
+                ),
               ],
             );
           },
@@ -384,6 +459,7 @@ class _TaskRow extends StatefulWidget {
     required this.onStar,
     required this.onEdit,
     required this.subtaskStats,
+    this.listColor,
   });
 
   final TodoTask task;
@@ -391,6 +467,7 @@ class _TaskRow extends StatefulWidget {
   final VoidCallback onStar;
   final VoidCallback onEdit;
   final Future<({int completed, int total})> subtaskStats;
+  final int? listColor;
 
   @override
   State<_TaskRow> createState() => _TaskRowState();
@@ -410,29 +487,30 @@ class _TaskRowState extends State<_TaskRow>
     _displayCompleted = widget.task.completed;
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 200),
     );
-    _checkScale = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 1.0,
-          end: 1.25,
-        ).chain(CurveTween(curve: Curves.easeOut)),
-        weight: 45,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 1.25,
-          end: 1.0,
-        ).chain(CurveTween(curve: Curves.easeOutBack)),
-        weight: 55,
-      ),
-    ]).animate(
-      CurvedAnimation(
-        parent: _animController,
-        curve: const Interval(0, 0.55, curve: Curves.linear),
-      ),
-    );
+    _checkScale =
+        TweenSequence<double>([
+          TweenSequenceItem(
+            tween: Tween(
+              begin: 1.0,
+              end: 1.25,
+            ).chain(CurveTween(curve: Curves.easeOut)),
+            weight: 45,
+          ),
+          TweenSequenceItem(
+            tween: Tween(
+              begin: 1.25,
+              end: 1.0,
+            ).chain(CurveTween(curve: Curves.easeOutBack)),
+            weight: 55,
+          ),
+        ]).animate(
+          CurvedAnimation(
+            parent: _animController,
+            curve: const Interval(0, 0.55, curve: Curves.linear),
+          ),
+        );
     _strikeProgress = CurvedAnimation(
       parent: _animController,
       curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
@@ -472,16 +550,14 @@ class _TaskRowState extends State<_TaskRow>
       });
       await _animController.forward(from: 0);
       if (!mounted) return;
-      await widget.onToggle(true);
-      if (!mounted) return;
+      unawaited(widget.onToggle(true));
       setState(() => _animatingComplete = false);
     } else if (value == false && widget.task.completed) {
       setState(() => _animatingComplete = true);
       await _animController.reverse(from: 1.0);
       if (!mounted) return;
       setState(() => _displayCompleted = false);
-      await widget.onToggle(false);
-      if (!mounted) return;
+      unawaited(widget.onToggle(false));
       setState(() => _animatingComplete = false);
     }
   }
@@ -508,9 +584,12 @@ class _TaskRowState extends State<_TaskRow>
   @override
   Widget build(BuildContext context) {
     final dueLabel = _formatDue(widget.task.dueDate);
-    final strikeColor = Theme.of(context).colorScheme.onSurface.withValues(
-      alpha: 0.55,
-    );
+    final listColor = widget.listColor == null
+        ? null
+        : Color(widget.listColor!);
+    final strikeColor = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.55);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -521,6 +600,7 @@ class _TaskRowState extends State<_TaskRow>
             child: Checkbox(
               value: _displayCompleted,
               onChanged: _handleToggle,
+              activeColor: listColor,
             ),
           ),
           Expanded(
@@ -592,9 +672,7 @@ class _TaskRowState extends State<_TaskRow>
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   fontSize: 10,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
+                                  color: Theme.of(context).colorScheme.onSurface
                                       .withValues(alpha: 0.72),
                                 ),
                           ),
@@ -615,7 +693,7 @@ class _TaskRowState extends State<_TaskRow>
                   : PhosphorIconsRegular.star,
             ),
             color: widget.task.starred
-                ? Theme.of(context).colorScheme.primary
+                ? listColor ?? Theme.of(context).colorScheme.primary
                 : null,
           ),
         ],

@@ -3,6 +3,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
@@ -62,16 +63,17 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
 
   Future<void> _createList() async {
     final palette = ref.read(colorPaletteProvider);
-    final assigner = paletteFromItems(
-      _lists.map((l) => l.colorValue),
-      palette,
-    );
+    final assigner = paletteFromItems(_lists.map((l) => l.colorValue), palette);
     final initialColor = assigner.nextColor();
     final result = await showCreateNameColorDialog(
       context,
       title: 'New list',
       palette: palette,
       initialColor: initialColor,
+      usedColors: _lists
+          .where((list) => list.colorValue != null)
+          .map((list) => list.colorValue!)
+          .toSet(),
     );
     if (result == null) return;
     final now = utcNow();
@@ -102,6 +104,10 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
       ref,
       context,
       current: list.colorValue,
+      usedColors: _lists
+          .where((item) => item.id != list.id && item.colorValue != null)
+          .map((item) => item.colorValue!)
+          .toSet(),
     );
     if (color == null) return;
     final updated = list.copyWith(colorValue: color);
@@ -111,28 +117,16 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
   }
 
   Future<void> _deleteList(TodoListModel list) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete "${list.name}"?'),
-        content: const Text('All tasks in this list will be soft-deleted.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete "${list.name}"?',
+      message: 'All tasks in this list will be soft-deleted.',
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     await ref.read(todoRepositoryProvider).softDeleteList(list.id);
-    final deleted = (await ref.read(todoRepositoryProvider).listLists(
-      includeDeleted: true,
-    )).firstWhere((item) => item.id == list.id);
+    final deleted =
+        (await ref.read(todoRepositoryProvider).listLists(includeDeleted: true))
+            .firstWhere((item) => item.id == list.id);
     ref.read(remoteSyncServiceProvider).pushTodoList(deleted);
     await _reload();
   }

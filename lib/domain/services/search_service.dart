@@ -6,8 +6,9 @@ class SearchService {
     required String query,
     List<String>? tagFilter,
   }) {
+    var candidates = entries;
     if (tagFilter != null && tagFilter.isNotEmpty) {
-      return entries
+      candidates = candidates
           .where((e) => tagFilter.every((tag) => e.tags.contains(tag)))
           .toList();
     }
@@ -17,9 +18,9 @@ class SearchService {
         .split(RegExp(r'\s+'))
         .where((t) => t.isNotEmpty)
         .toList();
-    if (tokens.isEmpty) return entries;
+    if (tokens.isEmpty) return candidates;
 
-    return entries.where((entry) {
+    return candidates.where((entry) {
       final haystack = '${entry.title} ${entry.body}'.toLowerCase();
       return tokens.every(haystack.contains);
     }).toList();

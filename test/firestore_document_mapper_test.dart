@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -112,5 +113,42 @@ void main() {
     expect(restored.starred, isTrue);
     expect(restored.preStarSortOrder, 1);
     expect(restored.parentTaskId, 'parent-1');
+  });
+
+  test('legacy journal id maps to a firestore-safe document id', () {
+    final now = utcNow();
+    final journal = Journal(
+      id: legacyJournalId,
+      name: 'Journal',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final entry = JournalEntry(
+      id: 'entry-1',
+      journalId: legacyJournalId,
+      title: 'Title',
+      body: 'Body',
+      entryDate: now,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    final journalPayload = journalToFirestore(journal);
+    final entryPayload = journalEntryToFirestore(entry);
+
+    expect(journalPayload['id'], legacyJournalFirestoreId);
+    expect(entryPayload['journalId'], legacyJournalFirestoreId);
+
+    final restoredJournal = mergeJournalFromRemote(
+      journalPayload,
+      legacyJournalId,
+    );
+    final restoredEntry = mergeJournalEntryFromRemote(
+      entryPayload,
+      entry.id,
+    );
+
+    expect(restoredJournal.id, legacyJournalId);
+    expect(restoredEntry.journalId, legacyJournalId);
   });
 }

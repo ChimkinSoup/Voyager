@@ -11,7 +11,7 @@ const _paletteSpacing = 8.0;
 
 /// Sizes a palette grid inside a 4:3 box that grows with color count.
 ({double width, double height, int columns, bool scrollable})
-    computeColorPaletteLayout({
+computeColorPaletteLayout({
   required int colorCount,
   required double maxWidth,
   required double maxHeight,
@@ -62,7 +62,9 @@ const _paletteSpacing = 8.0;
 
   var scrollable = false;
   if (boxW > cappedMaxWidth || boxH > cappedMaxHeight) {
-    boxW = math.min(cappedMaxWidth, cappedMaxHeight * _paletteAspect).toDouble();
+    boxW = math
+        .min(cappedMaxWidth, cappedMaxHeight * _paletteAspect)
+        .toDouble();
     boxH = boxW / _paletteAspect;
     scrollable = intrinsicH > boxH;
   }
@@ -111,8 +113,9 @@ class ColorPaletteGrid extends StatelessWidget {
       swatchRadius: swatchRadius,
     );
 
-    final normalizedSelected =
-        selected == null ? null : normalizeColorValue(selected!);
+    final normalizedSelected = selected == null
+        ? null
+        : normalizeColorValue(selected!);
 
     final grid = GridView.builder(
       shrinkWrap: true,
@@ -133,6 +136,7 @@ class ColorPaletteGrid extends StatelessWidget {
           child: _ColorSwatch(
             colorValue: colorValue,
             selected: normalized == normalizedSelected,
+            used: usedColors.map(normalizeColorValue).contains(normalized),
             radius: swatchRadius,
             onTap: () => onSelected(normalized),
           ),
@@ -140,11 +144,7 @@ class ColorPaletteGrid extends StatelessWidget {
       },
     );
 
-    return SizedBox(
-      width: layout.width,
-      height: layout.height,
-      child: grid,
-    );
+    return SizedBox(width: layout.width, height: layout.height, child: grid);
   }
 }
 
@@ -296,12 +296,14 @@ class _ColorSwatch extends StatelessWidget {
   const _ColorSwatch({
     required this.colorValue,
     required this.selected,
+    required this.used,
     required this.radius,
     required this.onTap,
   });
 
   final int colorValue;
   final bool selected;
+  final bool used;
   final double radius;
   final VoidCallback onTap;
 
@@ -310,16 +312,32 @@ class _ColorSwatch extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(radius),
-      child: CircleAvatar(
-        radius: radius,
-        backgroundColor: Color(colorValue),
-        child: selected
-            ? const Icon(
-                PhosphorIconsRegular.check,
-                size: 18,
-                color: Colors.white,
-              )
-            : null,
+      child: Container(
+        width: radius * 2,
+        height: radius * 2,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: used && !selected
+              ? Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.32),
+                  width: 2,
+                )
+              : null,
+        ),
+        padding: EdgeInsets.all(used && !selected ? 2 : 0),
+        child: CircleAvatar(
+          radius: radius,
+          backgroundColor: Color(colorValue),
+          child: selected
+              ? const Icon(
+                  PhosphorIconsRegular.check,
+                  size: 18,
+                  color: Colors.white,
+                )
+              : null,
+        ),
       ),
     );
   }

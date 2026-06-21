@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +11,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -20,11 +22,17 @@ class TodoEditPanel extends ConsumerStatefulWidget {
     required this.task,
     required this.onClose,
     required this.onChanged,
+    required this.onDeleted,
+    required this.onToggleStar,
+    this.listColor,
   });
 
   final TodoTask task;
   final VoidCallback onClose;
   final VoidCallback onChanged;
+  final VoidCallback onDeleted;
+  final VoidCallback onToggleStar;
+  final int? listColor;
 
   @override
   ConsumerState<TodoEditPanel> createState() => _TodoEditPanelState();
@@ -34,6 +42,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final TextEditingController _subtaskController;
+  late final FocusNode _notesFocusNode;
   late final FocusNode _subtaskFocusNode;
   DateTime? _dueDate;
   List<TodoTask> _subtasks = [];
@@ -46,6 +55,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _lastNonEmptyTitle = widget.task.title;
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
+    _notesFocusNode = FocusNode();
+    _notesFocusNode.onKeyEvent = _handleNotesKey;
     _subtaskController = TextEditingController();
     _subtaskFocusNode = FocusNode();
     _dueDate = widget.task.dueDate;
@@ -84,6 +95,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     }
     _titleController.dispose();
     _notesController.dispose();
+    _notesFocusNode.dispose();
     _subtaskController.dispose();
     _subtaskFocusNode.dispose();
     super.dispose();
@@ -121,8 +133,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   Future<void> _close() async {
-    await _save();
     if (mounted) widget.onClose();
+    unawaited(_save());
   }
 
   Future<void> _onNotesChanged(String value) async {
@@ -149,6 +161,24 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   Future<void> _onTitleSubmitted(String value) async {
     await _save(title: value.trim());
+    if (mounted) FocusScope.of(context).unfocus();
+  }
+
+  KeyEventResult _handleNotesKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey != LogicalKeyboardKey.enter) {
+      return KeyEventResult.ignored;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored;
+    }
+    _saveNotesAndUnfocus();
+    return KeyEventResult.handled;
+  }
+
+  void _saveNotesAndUnfocus() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    unawaited(_save());
   }
 
   Future<void> _pickDueDateTime() async {
@@ -158,6 +188,18 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     );
     if (picked == null || !mounted) return;
     setState(() => _dueDate = picked.toUtc());
+    await _save(dueDate: _dueDate);
+  }
+
+  Future<void> _pickDueDay() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (_dueDate ?? DateTime.now()).toLocal(),
+      firstDate: DateTime(1970),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _dueDate = DateUtils.dateOnly(picked).toUtc());
     await _save(dueDate: _dueDate);
   }
 
@@ -195,8 +237,24 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     widget.onChanged();
   }
 
+  Future<void> _deleteTask() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete task?',
+      message: 'Delete "${widget.task.title}"?',
+    );
+    if (!confirmed) return;
+    final deleted = widget.task.copyWith(deletedAt: utcNow());
+    await ref.read(todoRepositoryProvider).upsertTask(deleted);
+    await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    widget.onDeleted();
+  }
+
   String _formatDue(DateTime dateTime) {
     final local = dateTime.toLocal();
+    if (local.hour == 0 && local.minute == 0) {
+      return DateFormat.MMMd().format(local);
+    }
     return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dateTime)}';
   }
 
@@ -204,6 +262,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
     final theme = Theme.of(context);
+    final listColor = widget.listColor == null
+        ? null
+        : Color(widget.listColor!);
     return Material(
       elevation: 0,
       color: theme.colorScheme.surface,
@@ -222,6 +283,23 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   child: Text('Edit task', style: theme.textTheme.titleMedium),
                 ),
                 IconButton(
+                  onPressed: widget.onToggleStar,
+                  icon: Icon(
+                    widget.task.starred
+                        ? PhosphorIconsFill.star
+                        : PhosphorIconsRegular.star,
+                  ),
+                  color: widget.task.starred
+                      ? listColor ?? theme.colorScheme.primary
+                      : null,
+                  tooltip: widget.task.starred ? 'Unstar task' : 'Star task',
+                ),
+                IconButton(
+                  onPressed: _deleteTask,
+                  icon: const Icon(PhosphorIconsRegular.trash),
+                  tooltip: 'Delete task',
+                ),
+                IconButton(
                   onPressed: _close,
                   icon: const Icon(PhosphorIconsRegular.x),
                 ),
@@ -231,45 +309,71 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             LabeledTextField(
               label: 'Title',
               controller: _titleController,
+              textInputAction: TextInputAction.done,
               onSubmitted: _onTitleSubmitted,
               onChanged: _onTitleChanged,
             ),
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _pickDueDateTime,
-                icon: const Icon(VoyagerIcons.calendar, size: 18),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _pickDueDateTime,
+                  icon: const Icon(VoyagerIcons.calendar, size: 18),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: listColor,
+                    side: listColor == null
+                        ? null
+                        : BorderSide(color: listColor.withValues(alpha: 0.7)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  label: Text(
+                    _dueDate == null
+                        ? 'Add due date & time'
+                        : _formatDue(_dueDate!),
                   ),
                 ),
-                label: Text(
-                  _dueDate == null
-                      ? 'Add due date & time'
-                      : _formatDue(_dueDate!),
+                OutlinedButton.icon(
+                  onPressed: _pickDueDay,
+                  icon: const Icon(
+                    PhosphorIconsRegular.calendarBlank,
+                    size: 18,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: listColor,
+                    side: listColor == null
+                        ? null
+                        : BorderSide(color: listColor.withValues(alpha: 0.7)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  label: const Text('Add due day'),
                 ),
-              ),
+                if (_dueDate != null)
+                  TextButton(
+                    onPressed: _clearDueDate,
+                    child: const Text('Clear due date'),
+                  ),
+              ],
             ),
-            if (_dueDate != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: _clearDueDate,
-                  child: const Text('Clear due date'),
-                ),
-              ),
             const SizedBox(height: 8),
             SizedBox(
               height: 120,
               child: LabeledTextField(
                 label: 'Notes',
                 controller: _notesController,
+                focusNode: _notesFocusNode,
                 expands: true,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
                 onChanged: _onNotesChanged,
-                onSubmitted: (_) => _save(),
               ),
             ),
             const SizedBox(height: 12),
@@ -298,9 +402,25 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                     .map(
                       (subtask) => CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        activeColor: listColor,
                         value: subtask.completed,
                         onChanged: (v) => _toggleSubtask(subtask, v ?? false),
-                        title: Text(subtask.title),
+                        title: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                          style: theme.textTheme.bodyMedium!.copyWith(
+                            decoration: subtask.completed
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                            color: subtask.completed
+                                ? theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.55,
+                                  )
+                                : null,
+                          ),
+                          child: Text(subtask.title),
+                        ),
                       ),
                     )
                     .toList(),
@@ -314,10 +434,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               ),
             ),
             const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _close,
-              child: const Text('Save'),
-            ),
+            FilledButton(onPressed: _close, child: const Text('Save')),
           ],
         ),
       ),

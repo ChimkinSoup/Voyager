@@ -4,18 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/resizable_pane_divider.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -40,6 +45,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   String? _selectedEntryId;
   JournalEntry? _selectedEntry;
   final _titleController = TextEditingController();
+  final _titleFocusNode = FocusNode();
+  final _bodyFocusNode = FocusNode();
   final _entryBodyDrafts = <String, String>{};
   Timer? _metadataListRefreshTimer;
   var _metadataDirty = false;
@@ -47,6 +54,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   int? _mood;
   String? _weatherIcon;
   RemoteSyncService? _remoteSync;
+  double? _entryListWidth;
+  double? _entryListDragStartWidth;
 
   @override
   void initState() {
@@ -55,7 +64,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       if (!mounted) return;
       final settingsRepo = ref.read(settingsRepositoryProvider);
       final journalRepo = ref.read(journalRepositoryProvider);
-      unawaited(_restoreLastViewedJournal(settingsRepo, journalRepo));
+      unawaited(_restoreJournalPreferences(settingsRepo, journalRepo));
     });
   }
 
@@ -70,6 +79,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       );
     }
     _titleController.dispose();
+    _titleFocusNode.dispose();
+    _bodyFocusNode.dispose();
     super.dispose();
   }
 
@@ -79,7 +90,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _ensureDefaultJournal() async {
-    // Entries can exist before any journal container is created.
+    final repo = ref.read(journalRepositoryProvider);
+    final journals = await repo.listJournals();
+    if (journals.any((journal) => journal.id == legacyJournalId)) return;
+
+    final now = utcNow();
+    final settings = await ref.read(settingsRepositoryProvider).getSettings();
+    final defaultJournal = Journal(
+      id: legacyJournalId,
+      name: 'Journal',
+      colorValue: settings.accentColor,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await repo.upsertJournal(defaultJournal);
+    ref.read(remoteSyncServiceProvider).pushJournal(defaultJournal);
   }
 
   String _journalIdForNewEntry(List<Journal> journals) {
@@ -99,19 +124,67 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return journals.first.id;
   }
 
-  Future<void> _restoreLastViewedJournal(
+  Future<void> _restoreJournalPreferences(
     SettingsRepository settingsRepo,
     JournalRepository journalRepo,
   ) async {
     final settings = await settingsRepo.getSettings();
-    final savedId = settings.lastViewedJournalId;
-    if (savedId == null || !mounted) return;
-
-    final journals = await journalRepo.listJournals();
     if (!mounted) return;
-    if (journals.any((j) => j.id == savedId)) {
-      setState(() => _lastViewedJournalId = savedId);
+
+    final savedId = settings.lastViewedJournalId;
+    String? restoredJournalId;
+    if (savedId != null) {
+      final journals = await journalRepo.listJournals();
+      if (!mounted) return;
+      if (journals.any((j) => j.id == savedId)) {
+        restoredJournalId = savedId;
+      }
     }
+
+    setState(() {
+      if (restoredJournalId != null) {
+        _lastViewedJournalId = restoredJournalId;
+      }
+      _entryListWidth = settings.journalEntryListWidth;
+    });
+  }
+
+  Future<void> _persistEntryListWidth(double? width) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.journalEntryListWidth == width) return;
+    await settingsRepo.saveSettings(
+      width == null
+          ? settings.copyWith(clearJournalEntryListWidth: true)
+          : settings.copyWith(journalEntryListWidth: width),
+    );
+  }
+
+  void _resetEntryListWidth() {
+    setState(() => _entryListWidth = null);
+    unawaited(_persistEntryListWidth(null));
+  }
+
+  void _onEntryListDragStart(double totalWidth) {
+    _entryListDragStartWidth =
+        _entryListWidth ?? JournalEntryListLayout.defaultListWidth(totalWidth);
+  }
+
+  void _onEntryListDragUpdate(double totalDelta, double totalWidth) {
+    final startWidth = _entryListDragStartWidth;
+    if (startWidth == null) return;
+    setState(
+      () => _entryListWidth = JournalEntryListLayout.clampListWidth(
+        startWidth + totalDelta,
+        totalWidth,
+      ),
+    );
+  }
+
+  void _onEntryListDragEnd() {
+    final width = _entryListWidth;
+    _entryListDragStartWidth = null;
+    unawaited(_persistEntryListWidth(width));
   }
 
   Future<void> _persistLastViewedJournal(
@@ -343,24 +416,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Future<void> _deleteEntry() async {
     final entry = _selectedEntry;
     if (entry == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete entry?'),
-        content: const Text('This entry will be moved to trash.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete entry?',
+      message: 'This entry will be moved to trash.',
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
     ref
         .read(remoteSyncServiceProvider)
@@ -370,6 +431,44 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _selectedEntry = null;
       _titleController.clear();
     });
+    _invalidateJournalEntriesIfMounted();
+  }
+
+  Future<void> _editQuote() async {
+    final entry = _selectedEntry;
+    if (entry == null) return;
+    final controller = TextEditingController(text: entry.customQuote ?? '');
+    final quote = await showDialog<String?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit quote'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Quote'),
+          onSubmitted: (_) => Navigator.pop(context, controller.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (quote == null) return;
+    final updated = entry.copyWith(customQuote: quote.trim());
+    await ref.read(journalRepositoryProvider).upsertEntry(updated);
+    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
+    if (!mounted) return;
+    setState(() => _selectedEntry = updated);
     _invalidateJournalEntriesIfMounted();
   }
 
@@ -408,10 +507,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             position: VoyagerMenuTheme.positionFor(i, journals.length),
             child: Row(
               children: [
-                ColorCornerFlag(
+                JournalBookmarkFlag(
                   colorValue: _journalFlagColor(journals[i]),
                   size: 12,
-                  richColor: true,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -464,14 +562,19 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
           return LayoutBuilder(
             builder: (context, constraints) {
-              final sidebarWidth = (constraints.maxWidth * 0.22).clamp(
-                200.0,
-                320.0,
+              final totalWidth = constraints.maxWidth;
+              final storedListWidth =
+                  _entryListWidth ??
+                  JournalEntryListLayout.defaultListWidth(totalWidth);
+              final listWidth = JournalEntryListLayout.clampListWidth(
+                storedListWidth,
+                totalWidth,
               );
               return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    width: sidebarWidth,
+                    width: listWidth,
                     child: Column(
                       children: [
                         Padding(
@@ -528,12 +631,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
                               final entry = filtered[i];
+                              final displayEntry = entry.id == _selectedEntryId
+                                  ? _entryWithDraftBody(
+                                      entry.copyWith(
+                                        title: _titleController.text,
+                                      ),
+                                    )
+                                  : _entryWithDraftBody(entry);
                               final local = entry.entryDate.toLocal();
                               final dateLabel = MaterialLocalizations.of(
                                 context,
                               ).formatShortDate(local);
                               final timeLabel = formatTime12Hour(local);
-                              final preview = firstSentencePreview(entry.body);
+                              final preview = firstSentencePreview(
+                                displayEntry.body,
+                              );
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: VoyagerSpacing.sm,
@@ -551,9 +663,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   ),
                                   selected: entry.id == _selectedEntryId,
                                   title: Text(
-                                    entry.title.isEmpty
+                                    displayEntry.title.isEmpty
                                         ? 'Untitled'
-                                        : entry.title,
+                                        : displayEntry.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: Theme.of(
@@ -612,10 +724,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                       ],
                     ),
                   ),
-                  const VerticalDivider(width: 24),
+                  ResizablePaneDivider(
+                    onDragStart: () => _onEntryListDragStart(totalWidth),
+                    onDragUpdate: (totalDelta) =>
+                        _onEntryListDragUpdate(totalDelta, totalWidth),
+                    onDragEnd: _onEntryListDragEnd,
+                    onDoubleTapReset: _resetEntryListWidth,
+                  ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+                      padding: JournalEntryListLayout.editorPadding,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -627,11 +745,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               children: [
                                 LabeledTextField(
                                   label: 'Title',
+                                  showLabel: false,
                                   controller: _titleController,
+                                  focusNode: _titleFocusNode,
+                                  textInputAction: TextInputAction.next,
                                   contentPadding: const EdgeInsets.fromLTRB(
                                     16,
                                     16,
-                                    36,
+                                    56,
                                     16,
                                   ),
                                   onChanged: (_) {
@@ -639,11 +760,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     unawaited(_saveMetadata());
                                     _scheduleMetadataListRefresh();
                                   },
+                                  onSubmitted: (_) {
+                                    _metadataDirty = true;
+                                    unawaited(_saveMetadata(refreshList: true));
+                                    _bodyFocusNode.requestFocus();
+                                  },
                                 ),
                                 if (_selectedEntry != null)
                                   Positioned(
                                     top: 0,
-                                    right: 0,
+                                    right: 10,
                                     child: _journalFlagForEntry(
                                       _selectedEntry!,
                                       journals,
@@ -711,6 +837,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 IconButton(
                                   tooltip: 'Delete entry',
                                   onPressed: _deleteEntry,
@@ -724,12 +851,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                           Expanded(
                             child: _PlainJournalEditor(
                               entry: _selectedEntry,
+                              focusNode: _bodyFocusNode,
                               onDraftChanged: _updateBodyDraft,
                             ),
                           ),
                           if (settings?.showQuotes == true &&
                               _selectedEntry != null)
-                            _EntryQuote(quote: _selectedEntry!.customQuote),
+                            _EntryQuote(
+                              quote: _selectedEntry!.customQuote,
+                              onTap: _editQuote,
+                            ),
                         ],
                       ),
                     ),
@@ -751,10 +882,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 class _PlainJournalEditor extends ConsumerStatefulWidget {
   const _PlainJournalEditor({
     required this.entry,
+    required this.focusNode,
     required this.onDraftChanged,
   });
 
   final JournalEntry? entry;
+  final FocusNode focusNode;
   final void Function(String entryId, String body) onDraftChanged;
 
   @override
@@ -763,9 +896,10 @@ class _PlainJournalEditor extends ConsumerStatefulWidget {
 }
 
 class _EntryQuote extends StatelessWidget {
-  const _EntryQuote({required this.quote});
+  const _EntryQuote({required this.quote, required this.onTap});
 
   final String? quote;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -775,16 +909,23 @@ class _EntryQuote extends StatelessWidget {
       padding: const EdgeInsets.only(top: 16),
       child: Align(
         alignment: Alignment.centerRight,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
-          child: Text(
-            text,
-            textAlign: TextAlign.right,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontStyle: FontStyle.italic,
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.6),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Text(
+                text,
+                textAlign: TextAlign.right,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
             ),
           ),
         ),
@@ -795,7 +936,6 @@ class _EntryQuote extends StatelessWidget {
 
 class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   late final TextEditingController _controller;
-  late FocusNode _focusNode;
   Timer? _tagTimer;
   var _tags = const <String>[];
   var _lastText = '';
@@ -812,7 +952,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.entry?.body ?? '');
-    _focusNode = FocusNode()..addListener(_handleFocusChanged);
+    widget.focusNode.addListener(_handleFocusChanged);
     _lastText = _controller.text;
     _lastPersistedEntryId = widget.entry?.id;
     _lastPersistedText = _controller.text.trimRight();
@@ -824,7 +964,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           .setDocumentEditing(
             collection: FirestoreCollections.journalEntries,
             documentId: entry.id,
-            isEditing: _focusNode.hasFocus,
+            isEditing: widget.focusNode.hasFocus,
           );
     }
   }
@@ -853,7 +993,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _lastPersistedText = _controller.text.trimRight();
     _dirty = false;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
-    _setEditingFlag(widget.entry, _focusNode.hasFocus);
+    _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
   }
 
   @override
@@ -878,16 +1018,15 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         }
       }),
     );
-    _focusNode.removeListener(_handleFocusChanged);
+    widget.focusNode.removeListener(_handleFocusChanged);
     _controller.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 
   void _handleFocusChanged() {
     if (!mounted) return;
-    _setEditingFlag(widget.entry, _focusNode.hasFocus);
-    setState(() => _editorFocused = _focusNode.hasFocus);
+    _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
+    setState(() => _editorFocused = widget.focusNode.hasFocus);
   }
 
   void _setEditingFlag(JournalEntry? entry, bool isEditing) {
@@ -971,7 +1110,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       if (!mounted) return;
       final nextTags = extractTags(_controller.text);
       if (_sameTags(_tags, nextTags)) return;
-      setState(() => _tags = nextTags);
+      _tags = nextTags;
       unawaited(_persistTagColors(nextTags));
     });
   }
@@ -1043,7 +1182,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           color: _editorFocused
               ? theme.colorScheme.primary.withValues(alpha: 0.95)
               : theme.dividerColor,
-          width: _editorFocused ? 1.8 : 1,
+          width: 1.8,
         ),
         boxShadow: [
           if (_editorFocused)
@@ -1054,47 +1193,19 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
             ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_tags.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final tag in _tags)
-                    Chip(
-                      label: Text('#$tag'),
-                      backgroundColor: Color(
-                        colorForTag(tag),
-                      ).withValues(alpha: 0.3),
-                    ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              expands: true,
-              maxLines: null,
-              minLines: null,
-              textAlignVertical: TextAlignVertical.top,
-              keyboardType: TextInputType.multiline,
-              onChanged: _handleChanged,
-              decoration: const InputDecoration(
-                hintText: 'Start writing...',
-                filled: false,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.all(16),
-              ),
-            ),
-          ),
-        ],
+      child: TagHighlightedTextField(
+        controller: _controller,
+        focusNode: widget.focusNode,
+        expands: true,
+        keyboardType: TextInputType.multiline,
+        onChanged: _handleChanged,
+        hintText: 'Start writing...',
+        decoration: const InputDecoration(
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
       ),
     );
   }
@@ -1212,9 +1323,3 @@ class _GradientSliderTrackShape extends SliderTrackShape
   }
 }
 
-List<String> extractTags(String body) {
-  final matches = RegExp(r'#(\w+)').allMatches(body);
-  return matches.map((m) => m.group(1)!).toSet().toList();
-}
-
-int colorForTag(String tag) => 0xFF000000 | (tag.hashCode.abs() & 0xFFFFFF);

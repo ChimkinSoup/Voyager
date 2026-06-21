@@ -28,7 +28,7 @@ bool remoteUpdatedAtWins(DateTime? remote, DateTime? local) {
 }
 
 Map<String, dynamic> journalToFirestore(Journal journal) => {
-  'id': journal.id,
+  'id': journalDocumentIdForFirestore(journal.id),
   'name': journal.name,
   'colorValue': journal.colorValue,
   'guidedJournaling': journal.guidedJournaling,
@@ -70,7 +70,7 @@ Journal mergeJournalFromRemote(
 
 Map<String, dynamic> journalEntryToFirestore(JournalEntry entry) => {
   'id': entry.id,
-  'journalId': entry.journalId,
+  'journalId': journalReferenceIdForFirestore(entry.journalId),
   'title': entry.title,
   'body': entry.body,
   'richBodyJson': entry.richBodyJson,
@@ -99,9 +99,9 @@ JournalEntry mergeJournalEntryFromRemote(
 
   return JournalEntry(
     id: id,
-    journalId: data['journalId'] as String? ??
-        local?.journalId ??
-        legacyJournalId,
+    journalId: journalReferenceIdFromFirestore(
+      data['journalId'] as String? ?? local?.journalId ?? legacyJournalId,
+    ),
     title: data['title'] as String? ?? local?.title ?? '',
     body: data['body'] as String? ?? local?.body ?? '',
     richBodyJson: data.containsKey('richBodyJson')

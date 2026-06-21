@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
+import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -289,17 +290,60 @@ class RemoteSyncService {
     _syncActivity?.recordDownloadCheck(collection);
     final docs = await _syncRepository.listCollectionDocuments(collection);
     for (final doc in docs) {
-      final id = doc.data['id'] as String? ?? doc.id;
+      final firestoreDocId = doc.data['id'] as String? ?? doc.id;
+      final localDocId = _localDocumentId(collection, firestoreDocId);
       final crdtPayload = await _crdtResolver.resolvePayload(
         _syncRepository,
-        id,
+        _firestoreDocumentId(collection, localDocId),
       );
       if (crdtPayload != null) {
-        await apply(id, crdtPayload, fromCrdt: true);
+        await apply(
+          localDocId,
+          _normalizeRemoteDocument(collection, crdtPayload),
+          fromCrdt: true,
+        );
       } else {
-        await apply(id, doc.data, fromCrdt: false);
+        await apply(
+          localDocId,
+          _normalizeRemoteDocument(collection, doc.data),
+          fromCrdt: false,
+        );
       }
     }
+  }
+
+  String _firestoreDocumentId(String collection, String localId) {
+    if (collection == FirestoreCollections.journals) {
+      return journalDocumentIdForFirestore(localId);
+    }
+    return localId;
+  }
+
+  String _localDocumentId(String collection, String firestoreId) {
+    if (collection == FirestoreCollections.journals) {
+      return journalDocumentIdFromFirestore(firestoreId);
+    }
+    return firestoreId;
+  }
+
+  Map<String, dynamic> _normalizeRemoteDocument(
+    String collection,
+    Map<String, dynamic> data,
+  ) {
+    final normalized = Map<String, dynamic>.from(data);
+    if (collection == FirestoreCollections.journals &&
+        normalized['id'] is String) {
+      normalized['id'] = journalDocumentIdFromFirestore(
+        normalized['id'] as String,
+      );
+    }
+    if (collection == FirestoreCollections.journalEntries &&
+        normalized['journalId'] is String) {
+      normalized['journalId'] = journalReferenceIdFromFirestore(
+        normalized['journalId'] as String,
+      );
+    }
+    return normalized;
   }
 
   Future<Map<String, TodoTask>> _loadTaskIndex() async {
@@ -385,7 +429,7 @@ class RemoteSyncService {
   Future<void> _uploadJournalNow(Journal journal) {
     return _syncEngine.syncDocumentImmediately(
       collection: FirestoreCollections.journals,
-      documentId: journal.id,
+      documentId: journalDocumentIdForFirestore(journal.id),
       payload: journalToFirestore(journal),
     );
   }

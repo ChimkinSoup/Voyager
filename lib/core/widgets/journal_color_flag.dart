@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 /// Flag anchored to the top-right corner of a text field.
 class JournalTitleCornerFlag extends StatelessWidget {
@@ -12,8 +13,7 @@ class JournalTitleCornerFlag extends StatelessWidget {
 
   final int colorValue;
   final ValueChanged<String> onSelected;
-  final List<PopupMenuEntry<String>> Function(BuildContext context)
-  menuEntries;
+  final List<PopupMenuEntry<String>> Function(BuildContext context) menuEntries;
   final double size;
 
   @override
@@ -32,10 +32,59 @@ class JournalTitleCornerFlag extends StatelessWidget {
       ),
       itemBuilder: menuEntries,
       onSelected: onSelected,
-      child: ColorCornerFlag(
+      child: JournalBookmarkFlag(
         colorValue: colorValue,
         size: size,
-        richColor: true,
+        snapToTopEdge: true,
+      ),
+    );
+  }
+}
+
+/// Filled bookmark marker used to show the journal color.
+class JournalBookmarkFlag extends StatelessWidget {
+  const JournalBookmarkFlag({
+    super.key,
+    required this.colorValue,
+    this.size = 22,
+    this.snapToTopEdge = false,
+  });
+
+  final int colorValue;
+  final double size;
+  final bool snapToTopEdge;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(colorValue);
+    final icon = Icon(PhosphorIconsFill.bookmarkSimple, size: size);
+    final shaded = ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (rect) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [color, color.withValues(alpha: 0.5)],
+      ).createShader(rect),
+      child: icon,
+    );
+
+    if (!snapToTopEdge) {
+      return SizedBox(width: size, height: size, child: shaded);
+    }
+
+    // Phosphor glyphs sit slightly below the icon box top; nudge up to meet
+    // the input border.
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipRect(
+        child: Transform.translate(
+          offset: const Offset(0, -2.5),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: shaded,
+          ),
+        ),
       ),
     );
   }
@@ -67,10 +116,7 @@ class ColorCornerFlag extends StatelessWidget {
 }
 
 class _CornerFlagPainter extends CustomPainter {
-  const _CornerFlagPainter({
-    required this.color,
-    this.richColor = false,
-  });
+  const _CornerFlagPainter({required this.color, this.richColor = false});
 
   final Color color;
   final bool richColor;

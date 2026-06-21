@@ -782,6 +782,7 @@ class DriftSettingsRepository implements SettingsRepository {
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
+      journalEntryListWidth: row.journalEntryListWidth,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
     );
   }
@@ -823,6 +824,7 @@ class DriftSettingsRepository implements SettingsRepository {
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),
+            journalEntryListWidth: Value(settings.journalEntryListWidth),
             colorPaletteJson: Value(
               encodeColorPaletteJson(settings.colorPalette),
             ),

@@ -4,12 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
-Future<String?> showJournalManageSheet(BuildContext context, WidgetRef ref) async {
+Future<String?> showJournalManageSheet(
+  BuildContext context,
+  WidgetRef ref,
+) async {
   final createdId = await showDialog<String?>(
     context: context,
     builder: (context) => const _JournalManageDialog(),
@@ -63,6 +67,9 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
 
   Future<void> _createJournal() async {
     final palette = ref.read(colorPaletteProvider);
+    final defaultJournalColor = Theme.of(
+      context,
+    ).colorScheme.primary.toARGB32();
     final assigner = paletteFromItems(
       _journals.map((j) => j.colorValue),
       palette,
@@ -73,6 +80,10 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       title: 'New journal',
       palette: palette,
       initialColor: initialColor,
+      usedColors: _journals
+          .where((j) => j.colorValue != null)
+          .map((j) => j.colorValue!)
+          .toSet(),
     );
     if (result == null) return;
 
@@ -83,9 +94,9 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
 
     if (_journals.isEmpty) {
       final legacy = Journal(
-        id: newId(),
+        id: legacyJournalId,
         name: 'Journal',
-        colorValue: assigner.nextColor(),
+        colorValue: defaultJournalColor,
         createdAt: now,
         updatedAt: now,
       );
@@ -142,6 +153,10 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       ref,
       context,
       current: journal.colorValue,
+      usedColors: _journals
+          .where((item) => item.id != journal.id && item.colorValue != null)
+          .map((item) => item.colorValue!)
+          .toSet(),
     );
     if (color == null) return;
     final updated = journal.copyWith(colorValue: color);
@@ -151,51 +166,41 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
   }
 
   Future<void> _deleteJournal(Journal journal) async {
+    if (journal.id == legacyJournalId) return;
     final count = _entryCounts[journal.id] ?? 0;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete "${journal.name}"?'),
-        content: Text(
-          count == 0
-              ? 'This journal has no entries and will be removed.'
-              : 'This journal has $count entries. They will be kept under a journal named "Journal".',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete "${journal.name}"?',
+      message: count == 0
+          ? 'This journal has no entries and will be removed.'
+          : 'This journal has $count entries. They will be kept under the default journal.',
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     final repo = ref.read(journalRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
     if (count > 0) {
-      final now = utcNow();
-      final palette = paletteFromItems(
-        _journals.where((j) => j.id != journal.id).map((j) => j.colorValue),
-        ref.read(colorPaletteProvider),
+      final fallback = _journals.firstWhere(
+        (item) => item.id == legacyJournalId,
+        orElse: () {
+          final now = utcNow();
+          return Journal(
+            id: legacyJournalId,
+            name: 'Journal',
+            colorValue: Theme.of(context).colorScheme.primary.toARGB32(),
+            createdAt: now,
+            updatedAt: now,
+          );
+        },
       );
-      final fallback = Journal(
-        id: newId(),
-        name: 'Journal',
-        colorValue: palette.nextColor(),
-        createdAt: now,
-        updatedAt: now,
-      );
-      await repo.upsertJournal(fallback);
-      remoteSync.pushJournal(fallback);
+      if (!_journals.any((item) => item.id == legacyJournalId)) {
+        await repo.upsertJournal(fallback);
+        remoteSync.pushJournal(fallback);
+      }
       final entries = await repo.listEntries(journalId: journal.id);
-      await repo.reassignEntriesJournal(journal.id, fallback.id);
+      await repo.reassignEntriesJournal(journal.id, legacyJournalId);
       for (final entry in entries) {
-        final migrated = entry.copyWith(journalId: fallback.id);
+        final migrated = entry.copyWith(journalId: legacyJournalId);
         remoteSync.pushJournalEntry(migrated);
       }
     }
@@ -289,7 +294,13 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
                             },
                             itemBuilder: (context) => buildCatalogMenu(
                               context,
-                              from: entityManageMenuEntries,
+                              from: journal.id == legacyJournalId
+                                  ? entityManageMenuEntries.where(
+                                      (entry) =>
+                                          entry !=
+                                          VoyagerMenuCatalogEntry.delete,
+                                    )
+                                  : entityManageMenuEntries,
                             ),
                           ),
                         );

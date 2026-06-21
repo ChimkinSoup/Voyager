@@ -6,6 +6,7 @@ class LabeledTextField extends StatelessWidget {
     required this.label,
     required this.controller,
     this.showLabel = true,
+    this.hintText,
     this.expands = false,
     this.maxLines = 1,
     this.obscureText = false,
@@ -14,11 +15,14 @@ class LabeledTextField extends StatelessWidget {
     this.enabled = true,
     this.focusNode,
     this.contentPadding,
+    this.keyboardType,
+    this.textInputAction,
   });
 
   final String label;
   final TextEditingController controller;
   final bool showLabel;
+  final String? hintText;
   final bool expands;
   final int? maxLines;
   final bool obscureText;
@@ -27,6 +31,8 @@ class LabeledTextField extends StatelessWidget {
   final bool enabled;
   final FocusNode? focusNode;
   final EdgeInsetsGeometry? contentPadding;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
 
   @override
   Widget build(BuildContext context) {
@@ -37,14 +43,16 @@ class LabeledTextField extends StatelessWidget {
       maxLines: expands ? null : maxLines,
       obscureText: obscureText,
       enabled: enabled,
+      keyboardType: keyboardType,
+      textInputAction: textInputAction,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
       textAlignVertical: TextAlignVertical.top,
       decoration: InputDecoration(
         labelText: showLabel && label.isNotEmpty ? label : null,
+        hintText: hintText ?? (showLabel ? null : label),
         floatingLabelBehavior: FloatingLabelBehavior.auto,
-        contentPadding:
-            contentPadding ?? const EdgeInsets.all(16),
+        contentPadding: contentPadding ?? const EdgeInsets.all(16),
       ),
     );
 

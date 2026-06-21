@@ -88,9 +88,15 @@ class TodoTask extends SoftDeletable {
 }
 
 int compareTodoTasks(TodoTask a, TodoTask b) {
-  if (a.starred != b.starred) return a.starred ? -1 : 1;
   final order = a.sortOrder.compareTo(b.sortOrder);
   if (order != 0) return order;
+  if (a.starred != b.starred) return a.starred ? -1 : 1;
+  if (a.dueDate != null || b.dueDate != null) {
+    if (a.dueDate == null) return 1;
+    if (b.dueDate == null) return -1;
+    final dueOrder = a.dueDate!.compareTo(b.dueDate!);
+    if (dueOrder != 0) return dueOrder;
+  }
   return a.createdAt.compareTo(b.createdAt);
 }
 

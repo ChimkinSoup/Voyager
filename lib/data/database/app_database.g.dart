@@ -6148,6 +6148,17 @@ class $SettingsTableTable extends SettingsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _journalEntryListWidthMeta =
+      const VerificationMeta('journalEntryListWidth');
+  @override
+  late final GeneratedColumn<double> journalEntryListWidth =
+      GeneratedColumn<double>(
+        'journal_entry_list_width',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6182,6 +6193,7 @@ class $SettingsTableTable extends SettingsTable
     weatherChartTempColor,
     weatherChartRainColor,
     colorPaletteJson,
+    journalEntryListWidth,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6459,6 +6471,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('journal_entry_list_width')) {
+      context.handle(
+        _journalEntryListWidthMeta,
+        journalEntryListWidth.isAcceptableOrUnknown(
+          data['journal_entry_list_width']!,
+          _journalEntryListWidthMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -6596,6 +6617,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}color_palette_json'],
       ),
+      journalEntryListWidth: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}journal_entry_list_width'],
+      ),
     );
   }
 
@@ -6639,6 +6664,7 @@ class SettingsTableData extends DataClass
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
   final String? colorPaletteJson;
+  final double? journalEntryListWidth;
   const SettingsTableData({
     required this.id,
     required this.accentColor,
@@ -6672,6 +6698,7 @@ class SettingsTableData extends DataClass
     this.weatherChartTempColor,
     this.weatherChartRainColor,
     this.colorPaletteJson,
+    this.journalEntryListWidth,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6744,6 +6771,9 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || colorPaletteJson != null) {
       map['color_palette_json'] = Variable<String>(colorPaletteJson);
     }
+    if (!nullToAbsent || journalEntryListWidth != null) {
+      map['journal_entry_list_width'] = Variable<double>(journalEntryListWidth);
+    }
     return map;
   }
 
@@ -6813,6 +6843,9 @@ class SettingsTableData extends DataClass
       colorPaletteJson: colorPaletteJson == null && nullToAbsent
           ? const Value.absent()
           : Value(colorPaletteJson),
+      journalEntryListWidth: journalEntryListWidth == null && nullToAbsent
+          ? const Value.absent()
+          : Value(journalEntryListWidth),
     );
   }
 
@@ -6882,6 +6915,9 @@ class SettingsTableData extends DataClass
         json['weatherChartRainColor'],
       ),
       colorPaletteJson: serializer.fromJson<String?>(json['colorPaletteJson']),
+      journalEntryListWidth: serializer.fromJson<double?>(
+        json['journalEntryListWidth'],
+      ),
     );
   }
   @override
@@ -6924,6 +6960,9 @@ class SettingsTableData extends DataClass
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
       'colorPaletteJson': serializer.toJson<String?>(colorPaletteJson),
+      'journalEntryListWidth': serializer.toJson<double?>(
+        journalEntryListWidth,
+      ),
     };
   }
 
@@ -6960,6 +6999,7 @@ class SettingsTableData extends DataClass
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
     Value<String?> colorPaletteJson = const Value.absent(),
+    Value<double?> journalEntryListWidth = const Value.absent(),
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
@@ -7015,6 +7055,9 @@ class SettingsTableData extends DataClass
     colorPaletteJson: colorPaletteJson.present
         ? colorPaletteJson.value
         : this.colorPaletteJson,
+    journalEntryListWidth: journalEntryListWidth.present
+        ? journalEntryListWidth.value
+        : this.journalEntryListWidth,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
     return SettingsTableData(
@@ -7108,6 +7151,9 @@ class SettingsTableData extends DataClass
       colorPaletteJson: data.colorPaletteJson.present
           ? data.colorPaletteJson.value
           : this.colorPaletteJson,
+      journalEntryListWidth: data.journalEntryListWidth.present
+          ? data.journalEntryListWidth.value
+          : this.journalEntryListWidth,
     );
   }
 
@@ -7145,7 +7191,8 @@ class SettingsTableData extends DataClass
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
-          ..write('colorPaletteJson: $colorPaletteJson')
+          ..write('colorPaletteJson: $colorPaletteJson, ')
+          ..write('journalEntryListWidth: $journalEntryListWidth')
           ..write(')'))
         .toString();
   }
@@ -7184,6 +7231,7 @@ class SettingsTableData extends DataClass
     weatherChartTempColor,
     weatherChartRainColor,
     colorPaletteJson,
+    journalEntryListWidth,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -7220,7 +7268,8 @@ class SettingsTableData extends DataClass
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
-          other.colorPaletteJson == this.colorPaletteJson);
+          other.colorPaletteJson == this.colorPaletteJson &&
+          other.journalEntryListWidth == this.journalEntryListWidth);
 }
 
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
@@ -7256,6 +7305,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
   final Value<String?> colorPaletteJson;
+  final Value<double?> journalEntryListWidth;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
@@ -7289,6 +7339,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
     this.colorPaletteJson = const Value.absent(),
+    this.journalEntryListWidth = const Value.absent(),
   });
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
@@ -7323,6 +7374,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
     this.colorPaletteJson = const Value.absent(),
+    this.journalEntryListWidth = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
@@ -7357,6 +7409,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
     Expression<String>? colorPaletteJson,
+    Expression<double>? journalEntryListWidth,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -7407,6 +7460,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (weatherChartRainColor != null)
         'weather_chart_rain_color': weatherChartRainColor,
       if (colorPaletteJson != null) 'color_palette_json': colorPaletteJson,
+      if (journalEntryListWidth != null)
+        'journal_entry_list_width': journalEntryListWidth,
     });
   }
 
@@ -7443,6 +7498,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
     Value<String?>? colorPaletteJson,
+    Value<double?>? journalEntryListWidth,
   }) {
     return SettingsTableCompanion(
       id: id ?? this.id,
@@ -7483,6 +7539,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       weatherChartRainColor:
           weatherChartRainColor ?? this.weatherChartRainColor,
       colorPaletteJson: colorPaletteJson ?? this.colorPaletteJson,
+      journalEntryListWidth:
+          journalEntryListWidth ?? this.journalEntryListWidth,
     );
   }
 
@@ -7609,6 +7667,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (colorPaletteJson.present) {
       map['color_palette_json'] = Variable<String>(colorPaletteJson.value);
     }
+    if (journalEntryListWidth.present) {
+      map['journal_entry_list_width'] = Variable<double>(
+        journalEntryListWidth.value,
+      );
+    }
     return map;
   }
 
@@ -7646,7 +7709,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
-          ..write('colorPaletteJson: $colorPaletteJson')
+          ..write('colorPaletteJson: $colorPaletteJson, ')
+          ..write('journalEntryListWidth: $journalEntryListWidth')
           ..write(')'))
         .toString();
   }
@@ -10812,6 +10876,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
       Value<String?> colorPaletteJson,
+      Value<double?> journalEntryListWidth,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
@@ -10847,6 +10912,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
       Value<String?> colorPaletteJson,
+      Value<double?> journalEntryListWidth,
     });
 
 class $$SettingsTableTableFilterComposer
@@ -11015,6 +11081,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get colorPaletteJson => $composableBuilder(
     column: $table.colorPaletteJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get journalEntryListWidth => $composableBuilder(
+    column: $table.journalEntryListWidth,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -11187,6 +11258,11 @@ class $$SettingsTableTableOrderingComposer
     column: $table.colorPaletteJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<double> get journalEntryListWidth => $composableBuilder(
+    column: $table.journalEntryListWidth,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SettingsTableTableAnnotationComposer
@@ -11351,6 +11427,11 @@ class $$SettingsTableTableAnnotationComposer
     column: $table.colorPaletteJson,
     builder: (column) => column,
   );
+
+  GeneratedColumn<double> get journalEntryListWidth => $composableBuilder(
+    column: $table.journalEntryListWidth,
+    builder: (column) => column,
+  );
 }
 
 class $$SettingsTableTableTableManager
@@ -11421,6 +11502,7 @@ class $$SettingsTableTableTableManager
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
                 Value<String?> colorPaletteJson = const Value.absent(),
+                Value<double?> journalEntryListWidth = const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
@@ -11454,6 +11536,7 @@ class $$SettingsTableTableTableManager
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
                 colorPaletteJson: colorPaletteJson,
+                journalEntryListWidth: journalEntryListWidth,
               ),
           createCompanionCallback:
               ({
@@ -11490,6 +11573,7 @@ class $$SettingsTableTableTableManager
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
                 Value<String?> colorPaletteJson = const Value.absent(),
+                Value<double?> journalEntryListWidth = const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
@@ -11523,6 +11607,7 @@ class $$SettingsTableTableTableManager
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
                 colorPaletteJson: colorPaletteJson,
+                journalEntryListWidth: journalEntryListWidth,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

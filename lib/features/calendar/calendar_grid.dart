@@ -11,6 +11,7 @@ class CalendarGrid extends StatelessWidget {
     required this.focused,
     required this.events,
     required this.onDayTap,
+    required this.onMonthTap,
     this.indicators = const [],
     this.weekStartsMonday = true,
   });
@@ -20,6 +21,7 @@ class CalendarGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
+  final void Function(DateTime month) onMonthTap;
   final bool weekStartsMonday;
 
   @override
@@ -44,6 +46,7 @@ class CalendarGrid extends StatelessWidget {
         events: events,
         indicators: indicators,
         onDayTap: onDayTap,
+        onMonthTap: onMonthTap,
         weekStartsMonday: weekStartsMonday,
       ),
     };
@@ -92,7 +95,7 @@ class MiniMonthCalendar extends StatelessWidget {
         : _weekdayLabelsSunday;
 
     return SizedBox(
-      width: 220,
+      width: 180,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -129,8 +132,10 @@ class MiniMonthCalendar extends StatelessWidget {
                           month: month,
                           fontSize: 12,
                           onTap: () => onDayTap(date),
-                          selected: selectedDay != null &&
+                          selected:
+                              selectedDay != null &&
                               _sameDay(selectedDay!, date),
+                          selectedIsSoft: true,
                         ),
                       );
                     }),
@@ -152,11 +157,13 @@ class DayHourGrid extends StatelessWidget {
     required this.day,
     required this.events,
     required this.onHourTap,
+    this.onDayChanged,
   });
 
   final DateTime day;
   final List<CalendarEvent> events;
   final void Function(DateTime hour) onHourTap;
+  final ValueChanged<DateTime>? onDayChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -170,9 +177,31 @@ class DayHourGrid extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            DateFormat.yMMMMEEEEd().format(day),
-            style: Theme.of(context).textTheme.titleMedium,
+          child: Row(
+            children: [
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: onDayChanged == null
+                    ? null
+                    : () =>
+                          onDayChanged!(day.subtract(const Duration(days: 1))),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  DateFormat.yMMMMEEEEd().format(day),
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: onDayChanged == null
+                    ? null
+                    : () => onDayChanged!(day.add(const Duration(days: 1))),
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
           ),
         ),
         if (fullDayEvents.isNotEmpty) ...[
@@ -202,9 +231,7 @@ class DayHourGrid extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     border: Border(
-                      bottom: BorderSide(
-                        color: Theme.of(context).dividerColor,
-                      ),
+                      bottom: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                   ),
                   child: Row(
@@ -216,7 +243,9 @@ class DayHourGrid extends StatelessWidget {
                           DateFormat.jm().format(slotStart),
                           style: AppFonts.style(
                             fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -392,74 +421,95 @@ class _WeekGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final start = _weekStart(focused, weekStartsMonday);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: List.generate(7, (i) {
-        final date = start.add(Duration(days: i));
-        final dayEvents = events.where((e) => _sameDay(e.start, date)).toList();
-        final dayIndicators = indicators
-            .where((indicator) => _sameDay(indicator.day, date))
-            .take(4)
-            .toList();
-        return Expanded(
-          child: InkWell(
-            onTap: () => onDayTap(date),
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).dividerColor),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _DayNumberCell(
-                    date: date,
-                    month: date,
-                    fontSize: 13,
+    final labels = weekStartsMonday
+        ? MiniMonthCalendar._weekdayLabelsMonday
+        : MiniMonthCalendar._weekdayLabelsSunday;
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (final label in labels)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelSmall,
                   ),
-                  const SizedBox(height: 2),
-                  if (dayIndicators.isNotEmpty) ...[
-                    _IndicatorDots(indicators: dayIndicators),
-                    const SizedBox(height: 4),
-                  ],
-                  Expanded(
-                    child: ListView(
-                      padding: EdgeInsets.zero,
-                      children: dayEvents
-                          .map(
-                            (e) => Padding(
-                              padding: const EdgeInsets.only(bottom: 2),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 3,
-                                    backgroundColor: Color(e.colorValue),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      e.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppFonts.style(fontSize: 10),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: List.generate(7, (i) {
+              final date = start.add(Duration(days: i));
+              final dayEvents = events
+                  .where((e) => _sameDay(e.start, date))
+                  .toList();
+              final dayIndicators = indicators
+                  .where((indicator) => _sameDay(indicator.day, date))
+                  .take(4)
+                  .toList();
+              return Expanded(
+                child: InkWell(
+                  onTap: () => onDayTap(date),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _DayNumberCell(date: date, month: date, fontSize: 13),
+                        const SizedBox(height: 2),
+                        if (dayIndicators.isNotEmpty) ...[
+                          _IndicatorDots(indicators: dayIndicators),
+                          const SizedBox(height: 4),
+                        ],
+                        Expanded(
+                          child: ListView(
+                            padding: EdgeInsets.zero,
+                            children: dayEvents
+                                .map(
+                                  (e) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 3,
+                                          backgroundColor: Color(e.colorValue),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            e.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppFonts.style(fontSize: 10),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          )
-                          .toList(),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            }),
           ),
-        );
-      }),
+        ),
+      ],
     );
   }
 }
@@ -470,6 +520,7 @@ class _YearGrid extends StatelessWidget {
     required this.events,
     required this.indicators,
     required this.onDayTap,
+    required this.onMonthTap,
     required this.weekStartsMonday,
   });
 
@@ -477,6 +528,7 @@ class _YearGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
+  final void Function(DateTime month) onMonthTap;
   final bool weekStartsMonday;
 
   @override
@@ -499,7 +551,7 @@ class _YearGrid extends StatelessWidget {
             )
             .length;
         return InkWell(
-          onTap: () => onDayTap(monthDate),
+          onTap: () => onMonthTap(monthDate),
           borderRadius: BorderRadius.circular(18),
           child: Card(
             margin: EdgeInsets.zero,
@@ -578,6 +630,7 @@ class _DayNumberCell extends StatelessWidget {
     required this.fontSize,
     this.onTap,
     this.selected = false,
+    this.selectedIsSoft = false,
     this.mutedWhenAdjacent = false,
   });
 
@@ -586,6 +639,7 @@ class _DayNumberCell extends StatelessWidget {
   final double fontSize;
   final VoidCallback? onTap;
   final bool selected;
+  final bool selectedIsSoft;
   final bool mutedWhenAdjacent;
 
   @override
@@ -602,7 +656,7 @@ class _DayNumberCell extends StatelessWidget {
       color: isToday
           ? Theme.of(context).colorScheme.onPrimary
           : muted
-          ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35)
+          ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)
           : Theme.of(context).colorScheme.onSurface,
     );
 
@@ -614,7 +668,10 @@ class _DayNumberCell extends StatelessWidget {
         color: isToday ? accent : null,
         shape: BoxShape.circle,
         border: selected && !isToday
-            ? Border.all(color: accent, width: 2)
+            ? Border.all(
+                color: accent.withValues(alpha: selectedIsSoft ? 0.45 : 1),
+                width: 2,
+              )
             : null,
       ),
       child: Text('${date.day}', style: textStyle),
@@ -657,10 +714,7 @@ class _DayEventTile extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Text(
-              event.title,
-              style: AppFonts.style(fontSize: 12),
-            ),
+            child: Text(event.title, style: AppFonts.style(fontSize: 12)),
           ),
         ],
       ),
@@ -707,9 +761,7 @@ List<DateTime> monthGridDates(
   final first = DateTime(month.year, month.month, 1);
   final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
   final startWeekday = first.weekday;
-  final leading = weekStartsMonday
-      ? (startWeekday - 1) % 7
-      : startWeekday % 7;
+  final leading = weekStartsMonday ? (startWeekday - 1) % 7 : startWeekday % 7;
 
   final cells = <DateTime>[];
   final prevMonthLast = DateTime(month.year, month.month, 0).day;

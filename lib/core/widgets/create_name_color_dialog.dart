@@ -7,6 +7,7 @@ Future<({String name, int color})?> showCreateNameColorDialog(
   required String title,
   required List<int> palette,
   required int initialColor,
+  Set<int> usedColors = const {},
 }) {
   return showDialog<({String name, int color})>(
     context: context,
@@ -14,6 +15,7 @@ Future<({String name, int color})?> showCreateNameColorDialog(
       title: title,
       palette: palette,
       initialColor: initialColor,
+      usedColors: usedColors,
     ),
   );
 }
@@ -23,11 +25,13 @@ class _CreateNameColorDialog extends StatefulWidget {
     required this.title,
     required this.palette,
     required this.initialColor,
+    required this.usedColors,
   });
 
   final String title;
   final List<int> palette;
   final int initialColor;
+  final Set<int> usedColors;
 
   @override
   State<_CreateNameColorDialog> createState() => _CreateNameColorDialogState();
@@ -36,6 +40,7 @@ class _CreateNameColorDialog extends StatefulWidget {
 class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
   late final TextEditingController _nameController;
   late int _selectedColor;
+  var _showEmptyNameError = false;
 
   @override
   void initState() {
@@ -52,7 +57,10 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
 
   void _submit() {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      setState(() => _showEmptyNameError = true);
+      return;
+    }
     Navigator.pop(context, (name: name, color: _selectedColor));
   }
 
@@ -70,14 +78,29 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
               controller: _nameController,
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Name'),
+              onChanged: (_) {
+                if (_showEmptyNameError) {
+                  setState(() => _showEmptyNameError = false);
+                }
+              },
               onSubmitted: (_) => _submit(),
             ),
+            if (_showEmptyNameError) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Title cannot be empty',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Text('Color', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             ColorPaletteGrid(
               palette: widget.palette,
               selected: _selectedColor,
+              usedColors: widget.usedColors,
               onSelected: (color) => setState(() => _selectedColor = color),
             ),
           ],
@@ -88,10 +111,7 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('Create'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('Create')),
       ],
     );
   }
