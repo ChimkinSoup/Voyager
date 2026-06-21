@@ -46,11 +46,17 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 });
 
 final journalRepositoryProvider = Provider<JournalRepository>((ref) {
-  return DriftJournalRepository(ref.watch(databaseProvider));
+  return DriftJournalRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
 });
 
 final todoRepositoryProvider = Provider<TodoRepository>((ref) {
-  return DriftTodoRepository(ref.watch(databaseProvider));
+  return DriftTodoRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
 });
 
 final calendarRepositoryProvider = Provider<CalendarRepository>((ref) {
@@ -140,7 +146,7 @@ final weatherServiceProvider = Provider<WeatherService>((ref) {
 });
 
 final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
-  return RemoteSyncService(
+  final service = RemoteSyncService(
     syncRepository: ref.watch(syncRepositoryProvider),
     journalRepository: ref.watch(journalRepositoryProvider),
     todoRepository: ref.watch(todoRepositoryProvider),
@@ -148,6 +154,8 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     syncEngine: ref.watch(syncEngineProvider),
     syncActivity: ref.read(syncActivityProvider),
   );
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 final firestorePullServiceProvider = Provider<RemoteSyncService>(
@@ -189,9 +197,7 @@ final weatherForecastProvider = FutureProvider<WeatherForecast?>((ref) async {
 });
 
 /// Last daily card selected in the forecast popup (calendar date, local).
-final weatherForecastLastDayProvider = StateProvider<DateTime?>(
-  (ref) => null,
-);
+final weatherForecastLastDayProvider = StateProvider<DateTime?>((ref) => null);
 
 /// In-memory chart colors so legend updates without refetching forecast data.
 final weatherChartColorsProvider = StateProvider<({int? temp, int? rain})>(

@@ -1,15 +1,55 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
+import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/routing/app_router.dart';
 
-class VoyagerApp extends ConsumerWidget {
+class VoyagerApp extends ConsumerStatefulWidget {
   const VoyagerApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<VoyagerApp> createState() => _VoyagerAppState();
+}
+
+class _VoyagerAppState extends ConsumerState<VoyagerApp>
+    with WidgetsBindingObserver {
+  RemoteSyncService? _remoteSync;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(resyncWindowsKeyboardState());
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      final remoteSync = _remoteSync;
+      if (remoteSync != null) {
+        unawaited(remoteSync.flushAllPending());
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _remoteSync = ref.read(remoteSyncServiceProvider);
     final settings = ref.watch(settingsProvider).value;
     final router = ref.watch(routerProvider);
     final theme = VoyagerTheme.dark(

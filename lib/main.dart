@@ -6,12 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
+import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/features/hotkeys/quick_popups.dart';
 import 'package:voyager/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  installWindowsKeyboardWorkaround();
+  await configureDesktopWindow();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   try {
     await hotKeyManager.unregisterAll();
@@ -42,11 +46,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
   }
 
   Future<void> _bootstrap() async {
+    if (!mounted) return;
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final deviceId = await ensureDeviceId(settingsRepo);
+    if (!mounted) return;
     ref.read(deviceIdProvider.notifier).state = deviceId;
 
     final settings = await settingsRepo.getSettings();
+    if (!mounted) return;
     await _hotkeys.register(
       journalHotkey: settings.journalHotkey,
       todoHotkey: settings.todoHotkey,
@@ -70,15 +77,26 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
   }
 
   Future<void> _warmUpAfterFirstShellFrame() async {
-    await ref.read(quotesLoadedProvider.future);
+    if (!mounted) return;
+
     final sync = ref.read(syncEngineProvider);
     final lazy = ref.read(lazyLoadProvider);
     final backgroundSync = ref.read(backgroundSyncOrchestratorProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final liveSync = ref.read(liveSyncProvider);
+    final weatherService = ref.read(weatherServiceProvider);
+    final quotesFuture = ref.read(quotesLoadedProvider.future);
+    final shellWarmupFuture = ref.read(shellDataWarmupProvider.future);
+
+    await quotesFuture;
+    if (!mounted) return;
+
     await sync.pullOnStartup(
       purgeExpiredDeleted: backgroundSync.purgeExpiredDeleted,
       pullFromRemote: () async {
-        await ref.read(remoteSyncServiceProvider).pullAll();
-        ref.read(liveSyncProvider).start();
+        await remoteSync.pullAll();
+        if (!mounted) return;
+        liveSync.start();
         ref.invalidate(journalEntriesProvider);
         ref.invalidate(journalsProvider);
         ref.invalidate(settingsProvider);
@@ -88,9 +106,13 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
         await lazy.loadRecentEntries();
       },
     );
+    if (!mounted) return;
+
     try {
-      await ref.read(weatherServiceProvider).refreshIfNeeded();
-      await ref.read(weatherServiceProvider).fetchForecastIfNeeded();
+      await weatherService.refreshIfNeeded();
+      if (!mounted) return;
+      await weatherService.fetchForecastIfNeeded();
+      if (!mounted) return;
       ref.invalidate(currentWeatherProvider);
       ref.invalidate(weatherForecastProvider);
     } catch (error, stackTrace) {
@@ -103,7 +125,8 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
         ),
       );
     }
-    await ref.read(shellDataWarmupProvider.future);
+    if (!mounted) return;
+    await shellWarmupFuture;
   }
 
   void _startWeatherRefreshTimer() {

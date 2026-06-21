@@ -49,8 +49,20 @@ class DevPage extends ConsumerWidget {
           },
         ),
         SwitchListTile(
+          title: const Text('Show local save'),
+          subtitle: const Text(
+            'Flash a green disk icon when edits are saved to the local database',
+          ),
+          value: syncActivity.showLocalSaves,
+          onChanged: (value) {
+            unawaited(ref.read(syncActivityProvider).setShowLocalSaves(value));
+          },
+        ),
+        SwitchListTile(
           title: const Text('Show upload'),
-          subtitle: const Text('Flash a blue cloud icon when Firestore uploads'),
+          subtitle: const Text(
+            'Flash a blue cloud icon when Firestore uploads (middle slot)',
+          ),
           value: syncActivity.showUploads,
           onChanged: (value) {
             unawaited(ref.read(syncActivityProvider).setShowUploads(value));
@@ -59,7 +71,7 @@ class DevPage extends ConsumerWidget {
         SwitchListTile(
           title: const Text('Show download'),
           subtitle: const Text(
-            'Flash a red cloud icon when Firestore is checked for remote data',
+            'Flash a red cloud icon when Firestore is checked for remote data (bottom slot)',
           ),
           value: syncActivity.showDownloads,
           onChanged: (value) {

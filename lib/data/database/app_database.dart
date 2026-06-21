@@ -199,6 +199,8 @@ class SettingsTable extends Table {
   BoolColumn get devUseDirectOpenWeather =>
       boolean().withDefault(const Constant(false))();
   TextColumn get devOpenWeatherApiKey => text().nullable()();
+  BoolColumn get devShowSyncLocalSaves =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get devShowSyncUploads =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowSyncDownloads =>
@@ -239,7 +241,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -357,6 +359,12 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           settingsTable,
           settingsTable.devShowSyncDownloads,
+        );
+      }
+      if (from < 15) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devShowSyncLocalSaves,
         );
       }
     },

@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
@@ -33,10 +37,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late final FocusNode _subtaskFocusNode;
   DateTime? _dueDate;
   List<TodoTask> _subtasks = [];
+  RemoteSyncService? _remoteSync;
+  late String _lastNonEmptyTitle;
 
   @override
   void initState() {
     super.initState();
+    _lastNonEmptyTitle = widget.task.title;
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
     _subtaskController = TextEditingController();
@@ -49,6 +56,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   void didUpdateWidget(covariant TodoEditPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.id != widget.task.id) {
+      _lastNonEmptyTitle = widget.task.title;
       _titleController.text = widget.task.title;
       _notesController.text = widget.task.notes ?? '';
       _dueDate = widget.task.dueDate;
@@ -65,6 +73,15 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   @override
   void dispose() {
+    final remoteSync = _remoteSync;
+    if (remoteSync != null) {
+      unawaited(
+        remoteSync.flushDocument(
+          FirestoreCollections.todoTasks,
+          widget.task.id,
+        ),
+      );
+    }
     _titleController.dispose();
     _notesController.dispose();
     _subtaskController.dispose();
@@ -79,69 +96,59 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     bool clearDueDate = false,
   }) async {
     final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final notesText = notes ?? _notesController.text.trim();
+    var titleText = title ?? _titleController.text.trim();
+    if (titleText.isEmpty) {
+      titleText = _lastNonEmptyTitle;
+      _titleController.text = titleText;
+    }
+
     final updated = widget.task.copyWith(
-      title: title ?? _titleController.text.trim(),
-      notes: (notes ?? _notesController.text.trim()).isEmpty
-          ? null
-          : (notes ?? _notesController.text.trim()),
-      dueDate: dueDate,
+      title: titleText,
+      notes: notesText.isEmpty ? null : notesText,
+      clearNotes: notesText.isEmpty,
+      dueDate: clearDueDate ? null : (dueDate ?? _dueDate),
       clearDueDate: clearDueDate,
     );
-    if (updated.title.isEmpty) return;
     await repo.upsertTask(updated);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+    await remoteSync.flushDocument(
+      FirestoreCollections.todoTasks,
+      widget.task.id,
+    );
+    await remoteSync.pushTodoTaskNow(updated);
     widget.onChanged();
+  }
+
+  Future<void> _close() async {
+    await _save();
+    if (mounted) widget.onClose();
+  }
+
+  Future<void> _onNotesChanged(String value) async {
+    final notes = value.trim();
+    final updated = notes.isEmpty
+        ? widget.task.copyWith(clearNotes: true)
+        : widget.task.copyWith(notes: notes);
+    await ref
+        .read(remoteSyncServiceProvider)
+        .saveTodoTaskThenScheduleUpload(updated);
   }
 
   Future<void> _onTitleChanged(String value) async {
     final title = value.trim();
+    if (title.isNotEmpty) {
+      _lastNonEmptyTitle = title;
+    }
     if (title.isEmpty) return;
     final updated = widget.task.copyWith(title: title);
-    await ref.read(todoRepositoryProvider).upsertTask(updated);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskTitleDebounced(updated);
+    await ref
+        .read(remoteSyncServiceProvider)
+        .saveTodoTaskThenScheduleUpload(updated);
   }
 
   Future<void> _onTitleSubmitted(String value) async {
-    final title = value.trim();
-    if (title.isEmpty) {
-      await _promptEmptyTitle();
-      return;
-    }
-    await _save(title: title);
-  }
-
-  Future<void> _promptEmptyTitle() async {
-    final delete = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete task?'),
-        content: const Text(
-          'The title is empty. Do you want to delete this task?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes, delete'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    if (delete == true) {
-      final now = utcNow();
-      await ref.read(todoRepositoryProvider).softDeleteTask(widget.task.id);
-      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(
-        widget.task.copyWith(deletedAt: now),
-      );
-      widget.onChanged();
-      widget.onClose();
-    } else {
-      _titleController.text = widget.task.title;
-    }
+    await _save(title: value.trim());
   }
 
   Future<void> _pickDueDateTime() async {
@@ -195,6 +202,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   @override
   Widget build(BuildContext context) {
+    _remoteSync = ref.read(remoteSyncServiceProvider);
     final theme = Theme.of(context);
     return Material(
       elevation: 0,
@@ -214,7 +222,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   child: Text('Edit task', style: theme.textTheme.titleMedium),
                 ),
                 IconButton(
-                  onPressed: widget.onClose,
+                  onPressed: _close,
                   icon: const Icon(PhosphorIconsRegular.x),
                 ),
               ],
@@ -260,6 +268,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 label: 'Notes',
                 controller: _notesController,
                 expands: true,
+                onChanged: _onNotesChanged,
                 onSubmitted: (_) => _save(),
               ),
             ),
@@ -306,10 +315,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             ),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: () async {
-                await _save();
-                widget.onClose();
-              },
+              onPressed: _close,
               child: const Text('Save'),
             ),
           ],

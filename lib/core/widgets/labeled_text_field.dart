@@ -48,10 +48,6 @@ class LabeledTextField extends StatelessWidget {
       ),
     );
 
-    if (expands) {
-      return Expanded(child: field);
-    }
-
     return field;
   }
 }

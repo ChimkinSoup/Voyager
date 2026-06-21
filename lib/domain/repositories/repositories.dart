@@ -8,7 +8,7 @@ import 'package:voyager/domain/models/weather_models.dart';
 abstract class JournalRepository {
   Future<List<Journal>> listJournals({bool includeDeleted = false});
   Future<Journal?> getJournal(String id);
-  Future<void> upsertJournal(Journal journal);
+  Future<void> upsertJournal(Journal journal, {bool recordLocalActivity = true});
   Future<void> softDeleteJournal(String id);
   Future<void> deleteAllJournals();
   Future<void> deleteAllEntries();
@@ -22,14 +22,14 @@ abstract class JournalRepository {
     bool includeDeleted = false,
   });
   Future<JournalEntry?> getEntry(String id);
-  Future<void> upsertEntry(JournalEntry entry);
+  Future<void> upsertEntry(JournalEntry entry, {bool recordLocalActivity = true});
   Future<void> softDeleteEntry(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
 }
 
 abstract class TodoRepository {
   Future<List<TodoListModel>> listLists({bool includeDeleted = false});
-  Future<void> upsertList(TodoListModel list);
+  Future<void> upsertList(TodoListModel list, {bool recordLocalActivity = true});
   Future<void> softDeleteList(String id);
 
   Future<List<TodoTask>> listTasks(
@@ -39,7 +39,7 @@ abstract class TodoRepository {
   });
   Future<List<TodoTask>> listSubtasks(String parentTaskId);
   Future<int> nextSortOrder(String listId);
-  Future<void> upsertTask(TodoTask task);
+  Future<void> upsertTask(TodoTask task, {bool recordLocalActivity = true});
   Future<void> softDeleteTask(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
 }

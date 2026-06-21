@@ -6063,6 +6063,21 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _devShowSyncLocalSavesMeta =
+      const VerificationMeta('devShowSyncLocalSaves');
+  @override
+  late final GeneratedColumn<bool> devShowSyncLocalSaves =
+      GeneratedColumn<bool>(
+        'dev_show_sync_local_saves',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("dev_show_sync_local_saves" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _devShowSyncUploadsMeta =
       const VerificationMeta('devShowSyncUploads');
   @override
@@ -6160,6 +6175,7 @@ class $SettingsTableTable extends SettingsTable
     weatherLocationUpdatedAt,
     devUseDirectOpenWeather,
     devOpenWeatherApiKey,
+    devShowSyncLocalSaves,
     devShowSyncUploads,
     devShowSyncDownloads,
     weatherForecastJson,
@@ -6380,6 +6396,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('dev_show_sync_local_saves')) {
+      context.handle(
+        _devShowSyncLocalSavesMeta,
+        devShowSyncLocalSaves.isAcceptableOrUnknown(
+          data['dev_show_sync_local_saves']!,
+          _devShowSyncLocalSavesMeta,
+        ),
+      );
+    }
     if (data.containsKey('dev_show_sync_uploads')) {
       context.handle(
         _devShowSyncUploadsMeta,
@@ -6543,6 +6568,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}dev_open_weather_api_key'],
       ),
+      devShowSyncLocalSaves: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_sync_local_saves'],
+      )!,
       devShowSyncUploads: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}dev_show_sync_uploads'],
@@ -6603,6 +6632,7 @@ class SettingsTableData extends DataClass
   final DateTime? weatherLocationUpdatedAt;
   final bool devUseDirectOpenWeather;
   final String? devOpenWeatherApiKey;
+  final bool devShowSyncLocalSaves;
   final bool devShowSyncUploads;
   final bool devShowSyncDownloads;
   final String? weatherForecastJson;
@@ -6635,6 +6665,7 @@ class SettingsTableData extends DataClass
     this.weatherLocationUpdatedAt,
     required this.devUseDirectOpenWeather,
     this.devOpenWeatherApiKey,
+    required this.devShowSyncLocalSaves,
     required this.devShowSyncUploads,
     required this.devShowSyncDownloads,
     this.weatherForecastJson,
@@ -6698,6 +6729,7 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || devOpenWeatherApiKey != null) {
       map['dev_open_weather_api_key'] = Variable<String>(devOpenWeatherApiKey);
     }
+    map['dev_show_sync_local_saves'] = Variable<bool>(devShowSyncLocalSaves);
     map['dev_show_sync_uploads'] = Variable<bool>(devShowSyncUploads);
     map['dev_show_sync_downloads'] = Variable<bool>(devShowSyncDownloads);
     if (!nullToAbsent || weatherForecastJson != null) {
@@ -6766,6 +6798,7 @@ class SettingsTableData extends DataClass
       devOpenWeatherApiKey: devOpenWeatherApiKey == null && nullToAbsent
           ? const Value.absent()
           : Value(devOpenWeatherApiKey),
+      devShowSyncLocalSaves: Value(devShowSyncLocalSaves),
       devShowSyncUploads: Value(devShowSyncUploads),
       devShowSyncDownloads: Value(devShowSyncDownloads),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
@@ -6832,6 +6865,9 @@ class SettingsTableData extends DataClass
       devOpenWeatherApiKey: serializer.fromJson<String?>(
         json['devOpenWeatherApiKey'],
       ),
+      devShowSyncLocalSaves: serializer.fromJson<bool>(
+        json['devShowSyncLocalSaves'],
+      ),
       devShowSyncUploads: serializer.fromJson<bool>(json['devShowSyncUploads']),
       devShowSyncDownloads: serializer.fromJson<bool>(
         json['devShowSyncDownloads'],
@@ -6881,6 +6917,7 @@ class SettingsTableData extends DataClass
         devUseDirectOpenWeather,
       ),
       'devOpenWeatherApiKey': serializer.toJson<String?>(devOpenWeatherApiKey),
+      'devShowSyncLocalSaves': serializer.toJson<bool>(devShowSyncLocalSaves),
       'devShowSyncUploads': serializer.toJson<bool>(devShowSyncUploads),
       'devShowSyncDownloads': serializer.toJson<bool>(devShowSyncDownloads),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
@@ -6916,6 +6953,7 @@ class SettingsTableData extends DataClass
     Value<DateTime?> weatherLocationUpdatedAt = const Value.absent(),
     bool? devUseDirectOpenWeather,
     Value<String?> devOpenWeatherApiKey = const Value.absent(),
+    bool? devShowSyncLocalSaves,
     bool? devShowSyncUploads,
     bool? devShowSyncDownloads,
     Value<String?> weatherForecastJson = const Value.absent(),
@@ -6962,6 +7000,7 @@ class SettingsTableData extends DataClass
     devOpenWeatherApiKey: devOpenWeatherApiKey.present
         ? devOpenWeatherApiKey.value
         : this.devOpenWeatherApiKey,
+    devShowSyncLocalSaves: devShowSyncLocalSaves ?? this.devShowSyncLocalSaves,
     devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
     devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
     weatherForecastJson: weatherForecastJson.present
@@ -7048,6 +7087,9 @@ class SettingsTableData extends DataClass
       devOpenWeatherApiKey: data.devOpenWeatherApiKey.present
           ? data.devOpenWeatherApiKey.value
           : this.devOpenWeatherApiKey,
+      devShowSyncLocalSaves: data.devShowSyncLocalSaves.present
+          ? data.devShowSyncLocalSaves.value
+          : this.devShowSyncLocalSaves,
       devShowSyncUploads: data.devShowSyncUploads.present
           ? data.devShowSyncUploads.value
           : this.devShowSyncUploads,
@@ -7097,6 +7139,7 @@ class SettingsTableData extends DataClass
           ..write('weatherLocationUpdatedAt: $weatherLocationUpdatedAt, ')
           ..write('devUseDirectOpenWeather: $devUseDirectOpenWeather, ')
           ..write('devOpenWeatherApiKey: $devOpenWeatherApiKey, ')
+          ..write('devShowSyncLocalSaves: $devShowSyncLocalSaves, ')
           ..write('devShowSyncUploads: $devShowSyncUploads, ')
           ..write('devShowSyncDownloads: $devShowSyncDownloads, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
@@ -7134,6 +7177,7 @@ class SettingsTableData extends DataClass
     weatherLocationUpdatedAt,
     devUseDirectOpenWeather,
     devOpenWeatherApiKey,
+    devShowSyncLocalSaves,
     devShowSyncUploads,
     devShowSyncDownloads,
     weatherForecastJson,
@@ -7170,6 +7214,7 @@ class SettingsTableData extends DataClass
           other.weatherLocationUpdatedAt == this.weatherLocationUpdatedAt &&
           other.devUseDirectOpenWeather == this.devUseDirectOpenWeather &&
           other.devOpenWeatherApiKey == this.devOpenWeatherApiKey &&
+          other.devShowSyncLocalSaves == this.devShowSyncLocalSaves &&
           other.devShowSyncUploads == this.devShowSyncUploads &&
           other.devShowSyncDownloads == this.devShowSyncDownloads &&
           other.weatherForecastJson == this.weatherForecastJson &&
@@ -7204,6 +7249,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<DateTime?> weatherLocationUpdatedAt;
   final Value<bool> devUseDirectOpenWeather;
   final Value<String?> devOpenWeatherApiKey;
+  final Value<bool> devShowSyncLocalSaves;
   final Value<bool> devShowSyncUploads;
   final Value<bool> devShowSyncDownloads;
   final Value<String?> weatherForecastJson;
@@ -7236,6 +7282,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherLocationUpdatedAt = const Value.absent(),
     this.devUseDirectOpenWeather = const Value.absent(),
     this.devOpenWeatherApiKey = const Value.absent(),
+    this.devShowSyncLocalSaves = const Value.absent(),
     this.devShowSyncUploads = const Value.absent(),
     this.devShowSyncDownloads = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
@@ -7269,6 +7316,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherLocationUpdatedAt = const Value.absent(),
     this.devUseDirectOpenWeather = const Value.absent(),
     this.devOpenWeatherApiKey = const Value.absent(),
+    this.devShowSyncLocalSaves = const Value.absent(),
     this.devShowSyncUploads = const Value.absent(),
     this.devShowSyncDownloads = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
@@ -7302,6 +7350,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<DateTime>? weatherLocationUpdatedAt,
     Expression<bool>? devUseDirectOpenWeather,
     Expression<String>? devOpenWeatherApiKey,
+    Expression<bool>? devShowSyncLocalSaves,
     Expression<bool>? devShowSyncUploads,
     Expression<bool>? devShowSyncDownloads,
     Expression<String>? weatherForecastJson,
@@ -7345,6 +7394,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'dev_use_direct_open_weather': devUseDirectOpenWeather,
       if (devOpenWeatherApiKey != null)
         'dev_open_weather_api_key': devOpenWeatherApiKey,
+      if (devShowSyncLocalSaves != null)
+        'dev_show_sync_local_saves': devShowSyncLocalSaves,
       if (devShowSyncUploads != null)
         'dev_show_sync_uploads': devShowSyncUploads,
       if (devShowSyncDownloads != null)
@@ -7385,6 +7436,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<DateTime?>? weatherLocationUpdatedAt,
     Value<bool>? devUseDirectOpenWeather,
     Value<String?>? devOpenWeatherApiKey,
+    Value<bool>? devShowSyncLocalSaves,
     Value<bool>? devShowSyncUploads,
     Value<bool>? devShowSyncDownloads,
     Value<String?>? weatherForecastJson,
@@ -7421,6 +7473,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       devUseDirectOpenWeather:
           devUseDirectOpenWeather ?? this.devUseDirectOpenWeather,
       devOpenWeatherApiKey: devOpenWeatherApiKey ?? this.devOpenWeatherApiKey,
+      devShowSyncLocalSaves:
+          devShowSyncLocalSaves ?? this.devShowSyncLocalSaves,
       devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
       devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
@@ -7524,6 +7578,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         devOpenWeatherApiKey.value,
       );
     }
+    if (devShowSyncLocalSaves.present) {
+      map['dev_show_sync_local_saves'] = Variable<bool>(
+        devShowSyncLocalSaves.value,
+      );
+    }
     if (devShowSyncUploads.present) {
       map['dev_show_sync_uploads'] = Variable<bool>(devShowSyncUploads.value);
     }
@@ -7581,6 +7640,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('weatherLocationUpdatedAt: $weatherLocationUpdatedAt, ')
           ..write('devUseDirectOpenWeather: $devUseDirectOpenWeather, ')
           ..write('devOpenWeatherApiKey: $devOpenWeatherApiKey, ')
+          ..write('devShowSyncLocalSaves: $devShowSyncLocalSaves, ')
           ..write('devShowSyncUploads: $devShowSyncUploads, ')
           ..write('devShowSyncDownloads: $devShowSyncDownloads, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
@@ -10745,6 +10805,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<DateTime?> weatherLocationUpdatedAt,
       Value<bool> devUseDirectOpenWeather,
       Value<String?> devOpenWeatherApiKey,
+      Value<bool> devShowSyncLocalSaves,
       Value<bool> devShowSyncUploads,
       Value<bool> devShowSyncDownloads,
       Value<String?> weatherForecastJson,
@@ -10779,6 +10840,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<DateTime?> weatherLocationUpdatedAt,
       Value<bool> devUseDirectOpenWeather,
       Value<String?> devOpenWeatherApiKey,
+      Value<bool> devShowSyncLocalSaves,
       Value<bool> devShowSyncUploads,
       Value<bool> devShowSyncDownloads,
       Value<String?> weatherForecastJson,
@@ -10918,6 +10980,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get devOpenWeatherApiKey => $composableBuilder(
     column: $table.devOpenWeatherApiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowSyncLocalSaves => $composableBuilder(
+    column: $table.devShowSyncLocalSaves,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11086,6 +11153,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get devShowSyncLocalSaves => $composableBuilder(
+    column: $table.devShowSyncLocalSaves,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get devShowSyncUploads => $composableBuilder(
     column: $table.devShowSyncUploads,
     builder: (column) => ColumnOrderings(column),
@@ -11245,6 +11317,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get devShowSyncLocalSaves => $composableBuilder(
+    column: $table.devShowSyncLocalSaves,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get devShowSyncUploads => $composableBuilder(
     column: $table.devShowSyncUploads,
     builder: (column) => column,
@@ -11337,6 +11414,7 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<bool> devUseDirectOpenWeather = const Value.absent(),
                 Value<String?> devOpenWeatherApiKey = const Value.absent(),
+                Value<bool> devShowSyncLocalSaves = const Value.absent(),
                 Value<bool> devShowSyncUploads = const Value.absent(),
                 Value<bool> devShowSyncDownloads = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
@@ -11369,6 +11447,7 @@ class $$SettingsTableTableTableManager
                 weatherLocationUpdatedAt: weatherLocationUpdatedAt,
                 devUseDirectOpenWeather: devUseDirectOpenWeather,
                 devOpenWeatherApiKey: devOpenWeatherApiKey,
+                devShowSyncLocalSaves: devShowSyncLocalSaves,
                 devShowSyncUploads: devShowSyncUploads,
                 devShowSyncDownloads: devShowSyncDownloads,
                 weatherForecastJson: weatherForecastJson,
@@ -11404,6 +11483,7 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<bool> devUseDirectOpenWeather = const Value.absent(),
                 Value<String?> devOpenWeatherApiKey = const Value.absent(),
+                Value<bool> devShowSyncLocalSaves = const Value.absent(),
                 Value<bool> devShowSyncUploads = const Value.absent(),
                 Value<bool> devShowSyncDownloads = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
@@ -11436,6 +11516,7 @@ class $$SettingsTableTableTableManager
                 weatherLocationUpdatedAt: weatherLocationUpdatedAt,
                 devUseDirectOpenWeather: devUseDirectOpenWeather,
                 devOpenWeatherApiKey: devOpenWeatherApiKey,
+                devShowSyncLocalSaves: devShowSyncLocalSaves,
                 devShowSyncUploads: devShowSyncUploads,
                 devShowSyncDownloads: devShowSyncDownloads,
                 weatherForecastJson: weatherForecastJson,

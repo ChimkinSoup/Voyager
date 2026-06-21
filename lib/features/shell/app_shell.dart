@@ -100,28 +100,74 @@ class _SyncActivityIndicator extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activity = ref.watch(syncActivityProvider);
-    final event = activity.latest;
 
     return SizedBox(
-      height: 42,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 120),
-        child: event == null
-            ? const SizedBox.shrink()
-            : Tooltip(
-                key: ValueKey(event.sequence),
-                message:
-                    '${event.direction == SyncActivityDirection.upload ? 'Uploaded' : 'Checked'} ${event.collection}',
-                child: Icon(
-                  event.direction == SyncActivityDirection.upload
-                      ? PhosphorIconsRegular.cloudArrowUp
-                      : PhosphorIconsRegular.cloudArrowDown,
-                  color: event.direction == SyncActivityDirection.upload
-                      ? Colors.lightBlueAccent
-                      : Colors.redAccent,
-                  size: 24,
-                ),
-              ),
+      width: 28,
+      height: 72,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          _SyncActivitySlotIcon(
+            slotKey: 'local',
+            event: activity.eventFor(SyncActivityDirection.localSave),
+            tooltipPrefix: 'Saved locally',
+            icon: PhosphorIconsRegular.floppyDisk,
+            color: Colors.lightGreenAccent,
+          ),
+          const SizedBox(height: 4),
+          _SyncActivitySlotIcon(
+            slotKey: 'upload',
+            event: activity.eventFor(SyncActivityDirection.upload),
+            tooltipPrefix: 'Uploaded',
+            icon: PhosphorIconsRegular.cloudArrowUp,
+            color: Colors.lightBlueAccent,
+          ),
+          const SizedBox(height: 4),
+          _SyncActivitySlotIcon(
+            slotKey: 'download',
+            event: activity.eventFor(SyncActivityDirection.download),
+            tooltipPrefix: 'Checked',
+            icon: PhosphorIconsRegular.cloudArrowDown,
+            color: Colors.redAccent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SyncActivitySlotIcon extends StatelessWidget {
+  const _SyncActivitySlotIcon({
+    required this.slotKey,
+    required this.event,
+    required this.tooltipPrefix,
+    required this.icon,
+    required this.color,
+  });
+
+  final String slotKey;
+  final SyncActivityEvent? event;
+  final String tooltipPrefix;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = event != null;
+    return SizedBox(
+      height: 20,
+      width: 20,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: AnimatedOpacity(
+          key: visible ? ValueKey('$slotKey-${event!.sequence}') : null,
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 120),
+          child: Tooltip(
+            message: visible ? '$tooltipPrefix ${event!.collection}' : '',
+            child: Icon(icon, color: color, size: 20),
+          ),
+        ),
       ),
     );
   }

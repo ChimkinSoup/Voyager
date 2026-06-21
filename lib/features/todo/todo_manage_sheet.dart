@@ -5,7 +5,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
-import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
+import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 Future<String?> showTodoListManageSheet(
@@ -193,22 +193,23 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                     subtitle: Text(
                       '${stat?.active ?? 0} open · ${stat?.completed ?? 0} done',
                     ),
-                    trailing: PopupMenuButton<String>(
+                    trailing: PopupMenuButton<VoyagerMenuCatalogEntry>(
                       onSelected: (action) async {
                         switch (action) {
-                          case 'rename':
+                          case VoyagerMenuCatalogEntry.rename:
                             await _renameList(list);
-                          case 'color':
+                          case VoyagerMenuCatalogEntry.changeColor:
                             await _pickColor(list);
-                          case 'delete':
+                          case VoyagerMenuCatalogEntry.delete:
                             await _deleteList(list);
+                          default:
+                            break;
                         }
                       },
-                      itemBuilder: (_) => voyagerPopupMenuEntries<String>([
-                        (value: 'rename', child: Text('Rename')),
-                        (value: 'color', child: Text('Change color')),
-                        (value: 'delete', child: Text('Delete')),
-                      ]),
+                      itemBuilder: (context) => buildCatalogMenu(
+                        context,
+                        from: entityManageMenuEntries,
+                      ),
                     ),
                   );
                 },

@@ -26,6 +26,7 @@ class AppSettings {
     this.weatherLocationUpdatedAt,
     this.devUseDirectOpenWeather = false,
     this.devOpenWeatherApiKey,
+    this.devShowSyncLocalSaves = false,
     this.devShowSyncUploads = false,
     this.devShowSyncDownloads = false,
     this.weatherForecastJson,
@@ -58,6 +59,7 @@ class AppSettings {
   final DateTime? weatherLocationUpdatedAt;
   final bool devUseDirectOpenWeather;
   final String? devOpenWeatherApiKey;
+  final bool devShowSyncLocalSaves;
   final bool devShowSyncUploads;
   final bool devShowSyncDownloads;
   final String? weatherForecastJson;
@@ -86,6 +88,7 @@ class AppSettings {
     DateTime? weatherLocationUpdatedAt,
     bool? devUseDirectOpenWeather,
     String? devOpenWeatherApiKey,
+    bool? devShowSyncLocalSaves,
     bool? devShowSyncUploads,
     bool? devShowSyncDownloads,
     String? weatherForecastJson,
@@ -144,6 +147,8 @@ class AppSettings {
       devOpenWeatherApiKey: clearDevOpenWeatherApiKey
           ? null
           : (devOpenWeatherApiKey ?? this.devOpenWeatherApiKey),
+      devShowSyncLocalSaves:
+          devShowSyncLocalSaves ?? this.devShowSyncLocalSaves,
       devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
       devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
       weatherForecastJson: clearWeatherForecastJson

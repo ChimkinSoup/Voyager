@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
+import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -14,9 +16,11 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 class DriftJournalRepository implements JournalRepository {
-  DriftJournalRepository(this._db);
+  DriftJournalRepository(this._db, {SyncActivityController? syncActivity})
+    : _syncActivity = syncActivity;
 
   final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
   final _policy = const SoftDeletePolicy();
 
   @override
@@ -37,7 +41,10 @@ class DriftJournalRepository implements JournalRepository {
   }
 
   @override
-  Future<void> upsertJournal(Journal journal) async {
+  Future<void> upsertJournal(
+    Journal journal, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.journalsTable)
         .insertOnConflictUpdate(
@@ -52,6 +59,9 @@ class DriftJournalRepository implements JournalRepository {
             deletedAt: Value(journal.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.journals);
+    }
   }
 
   @override
@@ -132,7 +142,10 @@ class DriftJournalRepository implements JournalRepository {
   }
 
   @override
-  Future<void> upsertEntry(JournalEntry entry) async {
+  Future<void> upsertEntry(
+    JournalEntry entry, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.journalEntriesTable)
         .insertOnConflictUpdate(
@@ -155,6 +168,9 @@ class DriftJournalRepository implements JournalRepository {
             deletedAt: Value(entry.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.journalEntries);
+    }
   }
 
   @override
@@ -221,9 +237,11 @@ class DriftJournalRepository implements JournalRepository {
 }
 
 class DriftTodoRepository implements TodoRepository {
-  DriftTodoRepository(this._db);
+  DriftTodoRepository(this._db, {SyncActivityController? syncActivity})
+    : _syncActivity = syncActivity;
 
   final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
   final _policy = const SoftDeletePolicy();
 
   @override
@@ -245,7 +263,10 @@ class DriftTodoRepository implements TodoRepository {
   }
 
   @override
-  Future<void> upsertList(TodoListModel list) async {
+  Future<void> upsertList(
+    TodoListModel list, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.todoListsTable)
         .insertOnConflictUpdate(
@@ -258,6 +279,9 @@ class DriftTodoRepository implements TodoRepository {
             deletedAt: Value(list.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.todoLists);
+    }
   }
 
   @override
@@ -332,7 +356,10 @@ class DriftTodoRepository implements TodoRepository {
   );
 
   @override
-  Future<void> upsertTask(TodoTask task) async {
+  Future<void> upsertTask(
+    TodoTask task, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.todoTasksTable)
         .insertOnConflictUpdate(
@@ -352,6 +379,9 @@ class DriftTodoRepository implements TodoRepository {
             deletedAt: Value(task.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.todoTasks);
+    }
   }
 
   @override
@@ -746,6 +776,7 @@ class DriftSettingsRepository implements SettingsRepository {
       weatherLocationUpdatedAt: row.weatherLocationUpdatedAt,
       devUseDirectOpenWeather: row.devUseDirectOpenWeather,
       devOpenWeatherApiKey: row.devOpenWeatherApiKey,
+      devShowSyncLocalSaves: row.devShowSyncLocalSaves,
       devShowSyncUploads: row.devShowSyncUploads,
       devShowSyncDownloads: row.devShowSyncDownloads,
       weatherForecastJson: row.weatherForecastJson,
@@ -786,6 +817,7 @@ class DriftSettingsRepository implements SettingsRepository {
             weatherLocationUpdatedAt: Value(settings.weatherLocationUpdatedAt),
             devUseDirectOpenWeather: Value(settings.devUseDirectOpenWeather),
             devOpenWeatherApiKey: Value(settings.devOpenWeatherApiKey),
+            devShowSyncLocalSaves: Value(settings.devShowSyncLocalSaves),
             devShowSyncUploads: Value(settings.devShowSyncUploads),
             devShowSyncDownloads: Value(settings.devShowSyncDownloads),
             weatherForecastJson: Value(settings.weatherForecastJson),

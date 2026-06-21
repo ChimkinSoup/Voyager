@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,7 @@ void main() {
       todoRepository: todoRepo,
       weatherService: weatherService,
       syncEngine: engineA,
+      uploadDebounceDelay: Duration.zero,
     );
     deviceB = RemoteSyncService(
       syncRepository: syncRepo,
@@ -62,6 +64,7 @@ void main() {
         deviceId: 'device-b',
         debouncer: Debouncer(delay: Duration.zero),
       ),
+      uploadDebounceDelay: Duration.zero,
     );
   });
 
@@ -206,10 +209,7 @@ void main() {
     var pulled = await journalRepo.getEntry('entry-1');
     expect(pulled?.body, 'Coffee');
 
-    final deleted = entry.copyWith(
-      body: 'Updated',
-      deletedAt: utcNow(),
-    );
+    final deleted = entry.copyWith(body: 'Updated', deletedAt: utcNow());
     await journalRepo.upsertEntry(deleted);
     deviceA.pushJournalEntry(deleted);
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -281,6 +281,7 @@ void main() {
         deviceId: 'device-a',
       ),
       syncEngine: debouncedEngine,
+      uploadDebounceDelay: const Duration(milliseconds: 80),
     );
 
     debouncedSync.pushTodoTaskTitleDebounced(task.copyWith(title: 'Draft'));
@@ -297,6 +298,114 @@ void main() {
     expect(payload['title'], 'Final');
 
     debouncedEngine.dispose();
+  });
+
+  test('saveLocalThenScheduleUpload serializes local saves', () async {
+    final writes = <String>[];
+
+    unawaited(
+      deviceA.saveLocalThenScheduleUpload(
+        collection: FirestoreCollections.journalEntries,
+        documentId: 'entry-1',
+        saveLocal: () async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          writes.add('first');
+        },
+        saveRemote: () async {},
+      ),
+    );
+    await deviceA.saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.journalEntries,
+      documentId: 'entry-1',
+      saveLocal: () async {
+        writes.add('second');
+      },
+      saveRemote: () async {},
+    );
+
+    expect(writes, ['first', 'second']);
+  });
+
+  test('flushPending uploads latest scheduled remote save', () async {
+    final uploaded = <String>[];
+    const key = '${FirestoreCollections.journalEntries}_entry-1';
+
+    await deviceA.saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.journalEntries,
+      documentId: 'entry-1',
+      saveLocal: () async {},
+      saveRemote: () async => uploaded.add('draft'),
+    );
+    await deviceA.saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.journalEntries,
+      documentId: 'entry-1',
+      saveLocal: () async {},
+      saveRemote: () async => uploaded.add('final'),
+    );
+
+    await deviceA.flushPending(key);
+
+    expect(uploaded, ['final']);
+  });
+
+  test('cancelPending drops scheduled remote save', () async {
+    final uploaded = <String>[];
+    const key = '${FirestoreCollections.journalEntries}_entry-1';
+
+    await deviceA.saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.journalEntries,
+      documentId: 'entry-1',
+      saveLocal: () async {},
+      saveRemote: () async => uploaded.add('draft'),
+    );
+
+    deviceA.cancelPending(key);
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+
+    expect(uploaded, isEmpty);
+  });
+
+  test('pull preserves actively edited journal entry body', () async {
+    final now = utcNow();
+    final local = JournalEntry(
+      id: 'entry-1',
+      journalId: 'journal-1',
+      title: 'Local title',
+      body: 'Local draft',
+      tags: const ['local'],
+      entryDate: now,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final remote = JournalEntry(
+      id: local.id,
+      journalId: local.journalId,
+      title: 'Remote title',
+      body: 'Remote body',
+      tags: const ['remote'],
+      entryDate: local.entryDate,
+      createdAt: local.createdAt,
+      updatedAt: now.add(const Duration(seconds: 1)),
+    );
+
+    await journalRepo.upsertEntry(local);
+    await syncRepo.upsertDocument(
+      FirestoreCollections.journalEntries,
+      local.id,
+      journalEntryToFirestore(remote),
+    );
+
+    deviceB.setDocumentEditing(
+      collection: FirestoreCollections.journalEntries,
+      documentId: local.id,
+      isEditing: true,
+    );
+    await deviceB.pullJournalEntries();
+
+    final merged = await journalRepo.getEntry(local.id);
+    expect(merged?.title, 'Remote title');
+    expect(merged?.body, 'Local draft');
+    expect(merged?.tags, ['local']);
   });
 
   test('live collection watch merge updates local todo tasks', () async {

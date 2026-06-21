@@ -6,7 +6,7 @@ import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
-import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
+import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
 Future<String?> showJournalManageSheet(BuildContext context, WidgetRef ref) async {
@@ -274,22 +274,23 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
                           subtitle: Text(
                             '$count ${count == 1 ? 'entry' : 'entries'}',
                           ),
-                          trailing: PopupMenuButton<String>(
+                          trailing: PopupMenuButton<VoyagerMenuCatalogEntry>(
                             onSelected: (action) async {
                               switch (action) {
-                                case 'rename':
+                                case VoyagerMenuCatalogEntry.rename:
                                   await _renameJournal(journal);
-                                case 'color':
+                                case VoyagerMenuCatalogEntry.changeColor:
                                   await _pickColor(journal);
-                                case 'delete':
+                                case VoyagerMenuCatalogEntry.delete:
                                   await _deleteJournal(journal);
+                                default:
+                                  break;
                               }
                             },
-                            itemBuilder: (_) => voyagerPopupMenuEntries<String>([
-                              (value: 'rename', child: Text('Rename')),
-                              (value: 'color', child: Text('Change color')),
-                              (value: 'delete', child: Text('Delete')),
-                            ]),
+                            itemBuilder: (context) => buildCatalogMenu(
+                              context,
+                              from: entityManageMenuEntries,
+                            ),
                           ),
                         );
                       },

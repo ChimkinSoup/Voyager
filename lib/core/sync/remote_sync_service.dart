@@ -2,6 +2,7 @@ import 'dart:async';
 
 // ignore_for_file: prefer_initializing_formals
 import 'package:flutter/foundation.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -22,13 +23,15 @@ class RemoteSyncService {
     required SyncEngine syncEngine,
     SyncActivityController? syncActivity,
     CrdtDocumentResolver? crdtResolver,
+    Duration uploadDebounceDelay = const Duration(seconds: syncDebounceSeconds),
   }) : _syncRepository = syncRepository,
        _journalRepository = journalRepository,
        _todoRepository = todoRepository,
        _weatherService = weatherService,
        _syncEngine = syncEngine,
        _syncActivity = syncActivity,
-       _crdtResolver = crdtResolver ?? CrdtDocumentResolver();
+       _crdtResolver = crdtResolver ?? CrdtDocumentResolver(),
+       _uploadDebounceDelay = uploadDebounceDelay;
 
   final SyncRepository _syncRepository;
   final JournalRepository _journalRepository;
@@ -37,6 +40,128 @@ class RemoteSyncService {
   final SyncEngine _syncEngine;
   final SyncActivityController? _syncActivity;
   final CrdtDocumentResolver _crdtResolver;
+  final Duration _uploadDebounceDelay;
+  final Map<String, Timer> _activeDebouncers = {};
+  final Map<String, Future<void>> _localSaveChains = {};
+  final Map<String, Future<void> Function()> _pendingRemoteSaves = {};
+  final Map<String, int> _localSaveGenerations = {};
+  final Set<String> _activelyEditedDocuments = {};
+
+  String documentKey(String collection, String documentId) {
+    return '${collection}_$documentId';
+  }
+
+  Future<void> saveLocalThenScheduleUpload({
+    required String collection,
+    required String documentId,
+    required Future<void> Function() saveLocal,
+    required Future<void> Function() saveRemote,
+  }) {
+    final key = documentKey(collection, documentId);
+    final generation = (_localSaveGenerations[key] ?? 0) + 1;
+    _localSaveGenerations[key] = generation;
+
+    final previous = _localSaveChains[key] ?? Future<void>.value();
+    late final Future<void> next;
+    next = previous
+        .catchError((_) {
+          // Keep the queue moving after a failed save; FlutterError already
+          // reports async failures at call sites that await this future.
+        })
+        .then((_) async {
+          await saveLocal();
+          if (_localSaveGenerations[key] == generation) {
+            _scheduleRemoteUpload(key, saveRemote);
+          }
+        });
+    _localSaveChains[key] = next.whenComplete(() {
+      if (identical(_localSaveChains[key], next)) {
+        _localSaveChains.remove(key);
+      }
+    });
+    return next;
+  }
+
+  Future<void> saveJournalEntryThenScheduleUpload({
+    required String entryId,
+    required Future<void> Function() saveLocal,
+  }) {
+    return saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entryId,
+      saveLocal: saveLocal,
+      saveRemote: () async {
+        final latest = await _journalRepository.getEntry(entryId);
+        if (latest != null) {
+          await _uploadJournalEntryNow(latest);
+        }
+      },
+    );
+  }
+
+  Future<void> saveTodoTaskThenScheduleUpload(TodoTask task) {
+    return saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.todoTasks,
+      documentId: task.id,
+      saveLocal: () => _todoRepository.upsertTask(task),
+      saveRemote: () async {
+        final latest = await _findTodoTask(task.id);
+        if (latest != null) {
+          await _uploadTodoTaskNow(latest);
+        }
+      },
+    );
+  }
+
+  Future<void> flushPending(String key) async {
+    await _localSaveChains[key]?.catchError((_) {});
+    final remoteSave = _pendingRemoteSaves.remove(key);
+    _activeDebouncers.remove(key)?.cancel();
+    if (remoteSave != null) {
+      await remoteSave();
+    }
+  }
+
+  Future<void> flushDocument(String collection, String documentId) {
+    return flushPending(documentKey(collection, documentId));
+  }
+
+  Future<void> flushAllPending() async {
+    final keys = <String>{
+      ..._activeDebouncers.keys,
+      ..._pendingRemoteSaves.keys,
+      ..._localSaveChains.keys,
+    };
+    await Future.wait(keys.map(flushPending));
+  }
+
+  void cancelPending(String key) {
+    _activeDebouncers.remove(key)?.cancel();
+    _pendingRemoteSaves.remove(key);
+  }
+
+  void cancelDocument(String collection, String documentId) {
+    cancelPending(documentKey(collection, documentId));
+  }
+
+  void setDocumentEditing({
+    required String collection,
+    required String documentId,
+    required bool isEditing,
+  }) {
+    final key = documentKey(collection, documentId);
+    if (isEditing) {
+      _activelyEditedDocuments.add(key);
+    } else {
+      _activelyEditedDocuments.remove(key);
+    }
+  }
+
+  bool isDocumentEditing(String collection, String documentId) {
+    return _activelyEditedDocuments.contains(
+      documentKey(collection, documentId),
+    );
+  }
 
   Future<void> pullAll({bool skipWeather = false}) async {
     await pullJournalAndTodoData();
@@ -74,7 +199,10 @@ class RemoteSyncService {
       apply: (id, data, {required fromCrdt}) async {
         final local = fromCrdt ? null : await _journalRepository.getJournal(id);
         final merged = mergeJournalFromRemote(data, id, local: local);
-        await _journalRepository.upsertJournal(merged);
+        await _journalRepository.upsertJournal(
+          merged,
+          recordLocalActivity: false,
+        );
       },
     );
   }
@@ -83,9 +211,24 @@ class RemoteSyncService {
     await _pullCollection(
       FirestoreCollections.journalEntries,
       apply: (id, data, {required fromCrdt}) async {
-        final local = fromCrdt ? null : await _journalRepository.getEntry(id);
-        final merged = mergeJournalEntryFromRemote(data, id, local: local);
-        await _journalRepository.upsertEntry(merged);
+        final local = await _journalRepository.getEntry(id);
+        var merged = mergeJournalEntryFromRemote(
+          data,
+          id,
+          local: fromCrdt ? null : local,
+        );
+        if (local != null &&
+            isDocumentEditing(FirestoreCollections.journalEntries, id)) {
+          merged = merged.copyWith(
+            body: local.body,
+            richBodyJson: local.richBodyJson,
+            tags: local.tags,
+          );
+        }
+        await _journalRepository.upsertEntry(
+          merged,
+          recordLocalActivity: false,
+        );
       },
     );
   }
@@ -103,7 +246,10 @@ class RemoteSyncService {
           );
         }
         final merged = mergeTodoListFromRemote(data, id, local: local);
-        await _todoRepository.upsertList(merged);
+        await _todoRepository.upsertList(
+          merged,
+          recordLocalActivity: false,
+        );
       },
     );
   }
@@ -119,7 +265,10 @@ class RemoteSyncService {
             id,
             local: fromCrdt ? null : localTasks[id],
           );
-          await _todoRepository.upsertTask(merged);
+          await _todoRepository.upsertTask(
+            merged,
+            recordLocalActivity: false,
+          );
           localTasks[id] = merged;
         } on StateError {
           // Skip malformed remote documents.
@@ -170,59 +319,36 @@ class RemoteSyncService {
   }
 
   void pushJournal(Journal journal) {
-    _syncEngine.scheduleDocumentSync(
-      collection: FirestoreCollections.journals,
-      documentId: journal.id,
-      payload: journalToFirestore(journal),
-    );
+    cancelDocument(FirestoreCollections.journals, journal.id);
+    unawaited(_uploadJournalNow(journal));
   }
 
   void pushJournalEntry(JournalEntry entry) {
-    _syncEngine.scheduleDocumentSync(
-      collection: FirestoreCollections.journalEntries,
-      documentId: entry.id,
-      payload: journalEntryToFirestore(entry),
+    _scheduleRemoteUpload(
+      documentKey(FirestoreCollections.journalEntries, entry.id),
+      () => _uploadJournalEntryNow(entry),
     );
   }
 
   void pushJournalEntryNow(JournalEntry entry) {
-    _syncEngine.cancelScheduledDocumentSync();
-    unawaited(
-      _syncEngine.syncDocumentImmediately(
-        collection: FirestoreCollections.journalEntries,
-        documentId: entry.id,
-        payload: journalEntryToFirestore(entry),
-      ),
-    );
+    cancelDocument(FirestoreCollections.journalEntries, entry.id);
+    unawaited(_uploadJournalEntryNow(entry));
   }
 
   void pushTodoList(TodoListModel list) {
-    unawaited(
-      _syncEngine.syncDocumentImmediately(
-        collection: FirestoreCollections.todoLists,
-        documentId: list.id,
-        payload: todoListToFirestore(list),
-      ),
-    );
+    cancelDocument(FirestoreCollections.todoLists, list.id);
+    unawaited(_uploadTodoListNow(list));
   }
 
-  void pushTodoTaskNow(TodoTask task) {
-    unawaited(
-      _syncEngine.syncDocumentImmediately(
-        collection: FirestoreCollections.todoTasks,
-        documentId: task.id,
-        payload: todoTaskToFirestore(task),
-        cancelDebounceKey: _todoTaskDebounceKey(task.id),
-      ),
-    );
+  Future<void> pushTodoTaskNow(TodoTask task) {
+    cancelDocument(FirestoreCollections.todoTasks, task.id);
+    return _uploadTodoTaskNow(task);
   }
 
   void pushTodoTaskTitleDebounced(TodoTask task) {
-    _syncEngine.scheduleDebouncedDocumentSync(
-      debounceKey: _todoTaskDebounceKey(task.id),
-      collection: FirestoreCollections.todoTasks,
-      documentId: task.id,
-      payload: todoTaskToFirestore(task),
+    _scheduleRemoteUpload(
+      documentKey(FirestoreCollections.todoTasks, task.id),
+      () => _uploadTodoTaskNow(task),
     );
   }
 
@@ -231,7 +357,65 @@ class RemoteSyncService {
     if (journal != null) pushJournal(journal);
   }
 
-  String _todoTaskDebounceKey(String taskId) => 'todo_task_$taskId';
+  Future<TodoTask?> _findTodoTask(String taskId) async {
+    final tasks = await _loadTaskIndex();
+    return tasks[taskId];
+  }
+
+  void _scheduleRemoteUpload(String key, Future<void> Function() remoteSave) {
+    _activeDebouncers.remove(key)?.cancel();
+    _pendingRemoteSaves[key] = remoteSave;
+    _activeDebouncers[key] = Timer(_uploadDebounceDelay, () {
+      final save = _pendingRemoteSaves.remove(key);
+      _activeDebouncers.remove(key);
+      if (save != null) {
+        unawaited(save());
+      }
+    });
+  }
+
+  Future<void> _uploadJournalEntryNow(JournalEntry entry) {
+    return _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entry.id,
+      payload: journalEntryToFirestore(entry),
+    );
+  }
+
+  Future<void> _uploadJournalNow(Journal journal) {
+    return _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.journals,
+      documentId: journal.id,
+      payload: journalToFirestore(journal),
+    );
+  }
+
+  Future<void> _uploadTodoListNow(TodoListModel list) {
+    return _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.todoLists,
+      documentId: list.id,
+      payload: todoListToFirestore(list),
+    );
+  }
+
+  Future<void> _uploadTodoTaskNow(TodoTask task) {
+    return _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.todoTasks,
+      documentId: task.id,
+      payload: todoTaskToFirestore(task),
+    );
+  }
+
+  void dispose() {
+    for (final timer in _activeDebouncers.values) {
+      timer.cancel();
+    }
+    _activeDebouncers.clear();
+    _pendingRemoteSaves.clear();
+    _localSaveChains.clear();
+    _localSaveGenerations.clear();
+    _activelyEditedDocuments.clear();
+  }
 }
 
 class LiveSyncController {

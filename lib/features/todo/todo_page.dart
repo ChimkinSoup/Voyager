@@ -80,7 +80,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   Future<void> _toggleTask(TodoTask task, bool? completed) async {
     final updated = task.copyWith(completed: completed ?? false);
     await ref.read(todoRepositoryProvider).upsertTask(updated);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+    await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
     ref.invalidate(todoTasksProvider(updated.listId));
     ref.invalidate(todoListsProvider);
   }
@@ -387,7 +387,7 @@ class _TaskRow extends StatefulWidget {
   });
 
   final TodoTask task;
-  final ValueChanged<bool?> onToggle;
+  final Future<void> Function(bool?) onToggle;
   final VoidCallback onStar;
   final VoidCallback onEdit;
   final Future<({int completed, int total})> subtaskStats;
@@ -472,12 +472,17 @@ class _TaskRowState extends State<_TaskRow>
       });
       await _animController.forward(from: 0);
       if (!mounted) return;
-      widget.onToggle(true);
+      await widget.onToggle(true);
+      if (!mounted) return;
       setState(() => _animatingComplete = false);
-    } else if (value == false) {
-      _animController.reset();
+    } else if (value == false && widget.task.completed) {
+      setState(() => _animatingComplete = true);
+      await _animController.reverse(from: 1.0);
+      if (!mounted) return;
       setState(() => _displayCompleted = false);
-      widget.onToggle(false);
+      await widget.onToggle(false);
+      if (!mounted) return;
+      setState(() => _animatingComplete = false);
     }
   }
 

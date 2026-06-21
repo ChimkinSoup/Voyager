@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -39,26 +41,41 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   JournalEntry? _selectedEntry;
   final _titleController = TextEditingController();
   final _entryBodyDrafts = <String, String>{};
-  Timer? _metadataSaveTimer;
+  Timer? _metadataListRefreshTimer;
   var _metadataDirty = false;
   var _suppressAutoSelect = false;
   int? _mood;
   String? _weatherIcon;
+  RemoteSyncService? _remoteSync;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(_restoreLastViewedJournal());
+      final settingsRepo = ref.read(settingsRepositoryProvider);
+      final journalRepo = ref.read(journalRepositoryProvider);
+      unawaited(_restoreLastViewedJournal(settingsRepo, journalRepo));
     });
   }
 
   @override
   void dispose() {
-    _metadataSaveTimer?.cancel();
+    _metadataListRefreshTimer?.cancel();
+    final entryId = _selectedEntryId;
+    final remoteSync = _remoteSync;
+    if (entryId != null && remoteSync != null) {
+      unawaited(
+        remoteSync.flushDocument(FirestoreCollections.journalEntries, entryId),
+      );
+    }
     _titleController.dispose();
     super.dispose();
+  }
+
+  void _invalidateJournalEntriesIfMounted() {
+    if (!mounted) return;
+    ref.invalidate(journalEntriesProvider);
   }
 
   Future<void> _ensureDefaultJournal() async {
@@ -82,11 +99,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return journals.first.id;
   }
 
-  Future<void> _restoreLastViewedJournal() async {
-    if (!mounted) return;
-    final settingsRepo = ref.read(settingsRepositoryProvider);
-    final journalRepo = ref.read(journalRepositoryProvider);
-
+  Future<void> _restoreLastViewedJournal(
+    SettingsRepository settingsRepo,
+    JournalRepository journalRepo,
+  ) async {
     final settings = await settingsRepo.getSettings();
     final savedId = settings.lastViewedJournalId;
     if (savedId == null || !mounted) return;
@@ -131,23 +147,36 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _createEntry() async {
+    if (!mounted) return;
+    final journalRepo = ref.read(journalRepositoryProvider);
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final weatherService = ref.read(weatherServiceProvider);
+    final quotesFuture = ref.read(quotesLoadedProvider.future);
+    final quoteBank = ref.read(quoteBankProvider);
+
     await _ensureDefaultJournal();
-    final journals = await ref.read(journalRepositoryProvider).listJournals();
-    if (journals.isEmpty) return;
+    if (!mounted) return;
+
+    final journals = await journalRepo.listJournals();
+    if (!mounted || journals.isEmpty) return;
 
     final journalId = _journalIdForNewEntry(journals);
     final now = utcNow();
-    final settings = await ref.read(settingsRepositoryProvider).getSettings();
+    final settings = await settingsRepo.getSettings();
+    if (!mounted) return;
+
     Quote? assignedQuote;
     if (settings.showQuotes) {
-      await ref.read(quotesLoadedProvider.future);
-      final quoteBank = ref.read(quoteBankProvider);
+      await quotesFuture;
+      if (!mounted) return;
       assignedQuote = quoteBank.nextQuote();
     }
 
     final weather =
-        await ref.read(weatherServiceProvider).refreshIfNeeded() ??
-        ref.read(weatherServiceProvider).readCachedSnapshot(settings);
+        await weatherService.refreshIfNeeded() ??
+        weatherService.readCachedSnapshot(settings);
+    if (!mounted) return;
 
     final entry = JournalEntry(
       id: newId(),
@@ -162,18 +191,34 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       createdAt: now,
       updatedAt: now,
     );
-    await ref.read(journalRepositoryProvider).upsertEntry(entry);
-    ref.read(remoteSyncServiceProvider).pushJournalEntry(entry);
+    await journalRepo.upsertEntry(entry);
+    remoteSync.pushJournalEntryNow(entry);
     _suppressAutoSelect = true;
     _loadEntry(entry);
-    ref.invalidate(journalEntriesProvider);
+    _invalidateJournalEntriesIfMounted();
   }
 
   void _loadEntry(JournalEntry entry) {
     if (_selectedEntryId != null && _selectedEntryId != entry.id) {
-      _metadataSaveTimer?.cancel();
+      final previousEntryId = _selectedEntryId!;
+      final remoteSync = ref.read(remoteSyncServiceProvider);
+      _metadataListRefreshTimer?.cancel();
       if (_metadataDirty) {
-        unawaited(_saveMetadata(refreshList: true));
+        unawaited(
+          _saveMetadata(refreshList: true).then(
+            (_) => remoteSync.flushDocument(
+              FirestoreCollections.journalEntries,
+              previousEntryId,
+            ),
+          ),
+        );
+      } else {
+        unawaited(
+          remoteSync.flushDocument(
+            FirestoreCollections.journalEntries,
+            previousEntryId,
+          ),
+        );
       }
     }
     final displayEntry = _entryWithDraftBody(entry);
@@ -223,35 +268,40 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final weatherIcon = _weatherIcon;
 
     final repo = ref.read(journalRepositoryProvider);
-    final existing = await repo.getEntry(entryId);
-    if (existing == null) return;
-    if (existing.title == title &&
-        existing.mood == mood &&
-        existing.weatherIcon == weatherIcon) {
-      if (_selectedEntryId != entryId) return;
-      _metadataDirty = false;
-      return;
-    }
-
-    final updated = existing.copyWith(
-      title: title,
-      mood: mood,
-      weatherIcon: weatherIcon,
-    );
-    await repo.upsertEntry(updated);
-    if (_selectedEntryId == updated.id) {
-      _selectedEntry = updated;
-      _metadataDirty = false;
-    }
-    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
-    if (refreshList) ref.invalidate(journalEntriesProvider);
+    await ref
+        .read(remoteSyncServiceProvider)
+        .saveJournalEntryThenScheduleUpload(
+          entryId: entryId,
+          saveLocal: () async {
+            final existing = await repo.getEntry(entryId);
+            if (existing == null) return;
+            if (existing.title == title &&
+                existing.mood == mood &&
+                existing.weatherIcon == weatherIcon) {
+              if (_selectedEntryId == entryId) {
+                _metadataDirty = false;
+              }
+              return;
+            }
+            final updated = existing.copyWith(
+              title: title,
+              mood: mood,
+              weatherIcon: weatherIcon,
+            );
+            await repo.upsertEntry(updated);
+            if (_selectedEntryId == updated.id) {
+              _selectedEntry = updated;
+              _metadataDirty = false;
+            }
+          },
+        );
+    if (refreshList) _invalidateJournalEntriesIfMounted();
   }
 
-  void _scheduleMetadataSave({bool refreshList = false}) {
-    _metadataDirty = true;
-    _metadataSaveTimer?.cancel();
-    _metadataSaveTimer = Timer(const Duration(milliseconds: 500), () {
-      unawaited(_saveMetadata(refreshList: refreshList));
+  void _scheduleMetadataListRefresh() {
+    _metadataListRefreshTimer?.cancel();
+    _metadataListRefreshTimer = Timer(const Duration(milliseconds: 500), () {
+      _invalidateJournalEntriesIfMounted();
     });
   }
 
@@ -259,7 +309,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final entry = _selectedEntry;
     if (entry == null) return;
 
-    _metadataSaveTimer?.cancel();
+    _metadataListRefreshTimer?.cancel();
     await _saveMetadata();
     if (!mounted) return;
 
@@ -276,10 +326,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
     final updated = existing.copyWith(entryDate: nextLocal.toUtc());
     await repo.upsertEntry(updated);
-    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
+    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
     if (!mounted) return;
     setState(() => _selectedEntry = updated);
-    ref.invalidate(journalEntriesProvider);
+    _invalidateJournalEntriesIfMounted();
   }
 
   String _entryDateTimeLabel(BuildContext context, DateTime dateTime) {
@@ -312,15 +362,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
     if (confirmed != true || !mounted) return;
     await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
-    ref.read(remoteSyncServiceProvider).pushJournalEntry(
-      entry.copyWith(deletedAt: utcNow()),
-    );
+    ref
+        .read(remoteSyncServiceProvider)
+        .pushJournalEntryNow(entry.copyWith(deletedAt: utcNow()));
     setState(() {
       _selectedEntryId = null;
       _selectedEntry = null;
       _titleController.clear();
     });
-    ref.invalidate(journalEntriesProvider);
+    _invalidateJournalEntriesIfMounted();
   }
 
   Future<void> _moveEntryToJournal(String journalId) async {
@@ -331,15 +381,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (existing == null) return;
     final updated = existing.copyWith(journalId: journalId);
     await repo.upsertEntry(updated);
-    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
+    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
     if (!mounted) return;
     setState(() => _selectedEntry = updated);
-    ref.invalidate(journalEntriesProvider);
+    _invalidateJournalEntriesIfMounted();
   }
 
   int _journalFlagColor(Journal journal) =>
-      journal.colorValue ??
-      Theme.of(context).colorScheme.primary.toARGB32();
+      journal.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32();
 
   Widget? _journalFlagForEntry(JournalEntry entry, List<Journal> journals) {
     final journal = journals.cast<Journal?>().firstWhere(
@@ -388,6 +437,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   @override
   Widget build(BuildContext context) {
+    _remoteSync = ref.read(remoteSyncServiceProvider);
     final journalsAsync = ref.watch(journalsProvider);
     final entriesAsync = ref.watch(journalEntriesProvider);
     final settings = ref.watch(settingsProvider).value;
@@ -457,7 +507,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       : (v) => setState(() {
                                           _journalFilter = v;
                                           if (v != _allJournals) {
-                                            unawaited(_rememberViewedJournal(v));
+                                            unawaited(
+                                              _rememberViewedJournal(v),
+                                            );
                                           }
                                         }),
                                 ),
@@ -465,9 +517,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               IconButton(
                                 tooltip: 'Manage journals',
                                 onPressed: _createJournal,
-                                icon: const Icon(
-                                  VoyagerIcons.manage,
-                                ),
+                                icon: const Icon(VoyagerIcons.manage),
                               ),
                             ],
                           ),
@@ -519,14 +569,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                           preview,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodySmall?.copyWith(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface
-                                                .withValues(alpha: 0.78),
-                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.78),
+                                              ),
                                         ),
                                       Text(
                                         '$dateLabel · $timeLabel',
@@ -585,7 +636,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   ),
                                   onChanged: (_) {
                                     _metadataDirty = true;
-                                    _scheduleMetadataSave(refreshList: true);
+                                    unawaited(_saveMetadata());
+                                    _scheduleMetadataListRefresh();
                                   },
                                 ),
                                 if (_selectedEntry != null)
@@ -616,44 +668,30 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                         _mood = value;
                                         _metadataDirty = true;
                                       });
-                                      _scheduleMetadataSave(refreshList: true);
+                                      unawaited(_saveMetadata());
+                                      _scheduleMetadataListRefresh();
                                     },
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                PopupMenuButton<String>(
+                                PopupMenuButton<VoyagerMenuCatalogEntry>(
                                   icon: Icon(_weatherData(_weatherIcon)),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(
                                     minWidth: 40,
                                     minHeight: 40,
                                   ),
-                                  onSelected: (v) {
+                                  onSelected: (entry) {
                                     setState(() {
-                                      _weatherIcon = v;
+                                      _weatherIcon = entry.weatherIconValue;
                                       _metadataDirty = true;
                                     });
                                     _saveMetadata(refreshList: true);
                                   },
-                                  itemBuilder: (_) =>
-                                      voyagerPopupMenuEntries<String>([
-                                        (
-                                          value: 'sunny',
-                                          child: Text('Sunny'),
-                                        ),
-                                        (
-                                          value: 'cloudy',
-                                          child: Text('Cloudy'),
-                                        ),
-                                        (
-                                          value: 'rain',
-                                          child: Text('Rain'),
-                                        ),
-                                        (
-                                          value: 'snow',
-                                          child: Text('Snow'),
-                                        ),
-                                      ]),
+                                  itemBuilder: (context) => buildCatalogMenu(
+                                    context,
+                                    from: weatherMenuEntries,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Flexible(
@@ -758,7 +796,6 @@ class _EntryQuote extends StatelessWidget {
 class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   late final TextEditingController _controller;
   late FocusNode _focusNode;
-  Timer? _saveTimer;
   Timer? _tagTimer;
   var _tags = const <String>[];
   var _lastText = '';
@@ -767,6 +804,9 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   var _dirty = false;
   var _applyingListShortcut = false;
   var _editorFocused = false;
+  RemoteSyncService? _remoteSync;
+  JournalRepository? _journalRepo;
+  SettingsRepository? _settingsRepo;
 
   @override
   void initState() {
@@ -777,14 +817,35 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _lastPersistedEntryId = widget.entry?.id;
     _lastPersistedText = _controller.text.trimRight();
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
+    final entry = widget.entry;
+    if (entry != null) {
+      ref
+          .read(remoteSyncServiceProvider)
+          .setDocumentEditing(
+            collection: FirestoreCollections.journalEntries,
+            documentId: entry.id,
+            isEditing: _focusNode.hasFocus,
+          );
+    }
   }
 
   @override
   void didUpdateWidget(covariant _PlainJournalEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.entry?.id == widget.entry?.id) return;
-    unawaited(_persistDraft(oldWidget.entry, refreshList: true));
-    _saveTimer?.cancel();
+    final oldEntry = oldWidget.entry;
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    unawaited(
+      _persistDraft(oldEntry, refreshList: true).then((_) async {
+        if (oldEntry != null) {
+          await remoteSync.flushDocument(
+            FirestoreCollections.journalEntries,
+            oldEntry.id,
+          );
+        }
+      }),
+    );
+    _setEditingFlag(oldWidget.entry, false);
     _tagTimer?.cancel();
     _controller.text = widget.entry?.body ?? '';
     _lastText = _controller.text;
@@ -792,13 +853,31 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _lastPersistedText = _controller.text.trimRight();
     _dirty = false;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
+    _setEditingFlag(widget.entry, _focusNode.hasFocus);
   }
 
   @override
   void dispose() {
-    _saveTimer?.cancel();
     _tagTimer?.cancel();
-    unawaited(_persistDraft(widget.entry, refreshList: false));
+    final entry = widget.entry;
+    final remoteSync = _remoteSync;
+    if (entry != null && remoteSync != null) {
+      remoteSync.setDocumentEditing(
+        collection: FirestoreCollections.journalEntries,
+        documentId: entry.id,
+        isEditing: false,
+      );
+    }
+    unawaited(
+      _persistDraft(entry, refreshList: false).then((_) async {
+        if (entry != null && remoteSync != null) {
+          await remoteSync.flushDocument(
+            FirestoreCollections.journalEntries,
+            entry.id,
+          );
+        }
+      }),
+    );
     _focusNode.removeListener(_handleFocusChanged);
     _controller.dispose();
     _focusNode.dispose();
@@ -807,7 +886,19 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
 
   void _handleFocusChanged() {
     if (!mounted) return;
+    _setEditingFlag(widget.entry, _focusNode.hasFocus);
     setState(() => _editorFocused = _focusNode.hasFocus);
+  }
+
+  void _setEditingFlag(JournalEntry? entry, bool isEditing) {
+    if (entry == null) return;
+    final remoteSync = _remoteSync;
+    if (remoteSync == null) return;
+    remoteSync.setDocumentEditing(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entry.id,
+      isEditing: isEditing,
+    );
   }
 
   Future<void> _persistDraft(
@@ -823,33 +914,43 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     }
     final tags = extractTags(plainBody);
 
-    final repo = ref.read(journalRepositoryProvider);
-    final settingsRepo = ref.read(settingsRepositoryProvider);
-    final existing = await repo.getEntry(entry.id);
-    if (existing == null) return;
+    final repo = _journalRepo;
+    final remoteSync = _remoteSync;
+    if (repo == null || remoteSync == null) return;
+    await remoteSync.saveJournalEntryThenScheduleUpload(
+      entryId: entry.id,
+      saveLocal: () async {
+        final existing = await repo.getEntry(entry.id);
+        if (existing == null) return;
+        final updated = existing.copyWith(
+          body: plainBody,
+          richBodyJson: null,
+          tags: tags,
+        );
+        await repo.upsertEntry(updated);
+        _lastPersistedEntryId = entry.id;
+        _lastPersistedText = plainBody;
+        if (mounted &&
+            widget.entry?.id == entry.id &&
+            _controller.text.trimRight() == plainBody) {
+          _dirty = false;
+        }
+      },
+    );
+    if (refreshList && mounted) {
+      ref.invalidate(journalEntriesProvider);
+    }
+  }
 
+  Future<void> _persistTagColors(List<String> tags) async {
+    final settingsRepo = _settingsRepo;
+    if (settingsRepo == null) return;
     final colors = await settingsRepo.getTagColors();
     for (final tag in tags) {
       if (!colors.containsKey(tag)) {
         await settingsRepo.setTagColor(tag, colorForTag(tag));
       }
     }
-
-    final updated = existing.copyWith(
-      body: plainBody,
-      richBodyJson: null,
-      tags: tags,
-    );
-    await repo.upsertEntry(updated);
-    _lastPersistedEntryId = entry.id;
-    _lastPersistedText = plainBody;
-    if (mounted &&
-        widget.entry?.id == entry.id &&
-        _controller.text.trimRight() == plainBody) {
-      _dirty = false;
-    }
-    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
-    if (refreshList) ref.invalidate(journalEntriesProvider);
   }
 
   void _handleChanged(String value) {
@@ -863,11 +964,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       widget.onDraftChanged(entryId, _controller.text);
     }
     _dirty = true;
-    _saveTimer?.cancel();
-    _saveTimer = Timer(
-      Duration(seconds: syncDebounceSeconds),
-      () => unawaited(_persistDraft(widget.entry, refreshList: true)),
-    );
+    unawaited(_persistDraft(widget.entry, refreshList: false));
 
     _tagTimer?.cancel();
     _tagTimer = Timer(const Duration(milliseconds: 250), () {
@@ -875,6 +972,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       final nextTags = extractTags(_controller.text);
       if (_sameTags(_tags, nextTags)) return;
       setState(() => _tags = nextTags);
+      unawaited(_persistTagColors(nextTags));
     });
   }
 
@@ -928,6 +1026,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
 
   @override
   Widget build(BuildContext context) {
+    _remoteSync = ref.read(remoteSyncServiceProvider);
+    _journalRepo = ref.read(journalRepositoryProvider);
+    _settingsRepo = ref.read(settingsRepositoryProvider);
+
     final theme = Theme.of(context);
     final fillColor =
         theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;

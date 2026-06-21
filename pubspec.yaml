@@ -29,6 +29,7 @@ dependencies:
   cloud_functions: ^6.3.3
   phosphoricons_flutter: ^1.0.0
   oauth2: ^2.0.5
+  window_manager: ^0.4.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

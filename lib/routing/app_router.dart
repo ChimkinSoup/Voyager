@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/desktop_window_frame.dart';
 import 'package:voyager/features/auth/login_page.dart';
 import 'package:voyager/features/shell/app_shell.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
@@ -13,15 +14,22 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/login',
     refreshListenable: auth,
     routes: [
-      GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
-      StatefulShellRoute(
-        builder: (_, _, child) => AppShell(child: child),
-        navigatorContainerBuilder: shellBranchContainerBuilder,
-        branches: [
-          for (final dest in shellDestinations)
-            StatefulShellBranch(
-              routes: [GoRoute(path: dest.path, builder: (_, _) => dest.page)],
-            ),
+      ShellRoute(
+        builder: (_, _, child) => DesktopWindowFrame(child: child),
+        routes: [
+          GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
+          StatefulShellRoute(
+            builder: (_, _, child) => AppShell(child: child),
+            navigatorContainerBuilder: shellBranchContainerBuilder,
+            branches: [
+              for (final dest in shellDestinations)
+                StatefulShellBranch(
+                  routes: [
+                    GoRoute(path: dest.path, builder: (_, _) => dest.page),
+                  ],
+                ),
+            ],
+          ),
         ],
       ),
     ],
