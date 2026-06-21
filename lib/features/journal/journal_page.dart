@@ -4,14 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/constants/app_constants.dart';
+import 'package:voyager/core/icons/voyager_icons.dart';
+import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/features/journal/journal_manage_sheet.dart';
@@ -28,14 +34,25 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   static const _allJournals = '__all__';
 
   String _journalFilter = _allJournals;
+  String? _lastViewedJournalId;
   String? _selectedEntryId;
   JournalEntry? _selectedEntry;
   final _titleController = TextEditingController();
   final _entryBodyDrafts = <String, String>{};
   Timer? _metadataSaveTimer;
   var _metadataDirty = false;
+  var _suppressAutoSelect = false;
   int? _mood;
   String? _weatherIcon;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_restoreLastViewedJournal());
+    });
+  }
 
   @override
   void dispose() {
@@ -48,8 +65,69 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // Entries can exist before any journal container is created.
   }
 
+  String _journalIdForNewEntry(List<Journal> journals) {
+    if (_journalFilter != _allJournals) return _journalFilter;
+
+    if (_lastViewedJournalId != null &&
+        journals.any((j) => j.id == _lastViewedJournalId)) {
+      return _lastViewedJournalId!;
+    }
+
+    final selectedJournalId = _selectedEntry?.journalId;
+    if (selectedJournalId != null &&
+        journals.any((j) => j.id == selectedJournalId)) {
+      return selectedJournalId;
+    }
+
+    return journals.first.id;
+  }
+
+  Future<void> _restoreLastViewedJournal() async {
+    if (!mounted) return;
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final journalRepo = ref.read(journalRepositoryProvider);
+
+    final settings = await settingsRepo.getSettings();
+    final savedId = settings.lastViewedJournalId;
+    if (savedId == null || !mounted) return;
+
+    final journals = await journalRepo.listJournals();
+    if (!mounted) return;
+    if (journals.any((j) => j.id == savedId)) {
+      setState(() => _lastViewedJournalId = savedId);
+    }
+  }
+
+  Future<void> _persistLastViewedJournal(
+    String journalId,
+    SettingsRepository settingsRepo,
+  ) async {
+    final settings = await settingsRepo.getSettings();
+    if (settings.lastViewedJournalId == journalId) return;
+    await settingsRepo.saveSettings(
+      settings.copyWith(lastViewedJournalId: journalId),
+    );
+  }
+
+  Future<void> _rememberViewedJournal(String journalId) async {
+    if (!mounted) return;
+    final journalRepo = ref.read(journalRepositoryProvider);
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+
+    final journals = await journalRepo.listJournals();
+    if (!journals.any((j) => j.id == journalId)) return;
+    if (_lastViewedJournalId == journalId) return;
+    if (!mounted) return;
+    setState(() => _lastViewedJournalId = journalId);
+    await _persistLastViewedJournal(journalId, settingsRepo);
+  }
+
   Future<void> _createJournal() async {
-    await showJournalManageSheet(context, ref);
+    final createdId = await showJournalManageSheet(context, ref);
+    if (createdId != null && mounted) {
+      setState(() => _journalFilter = createdId);
+      await _rememberViewedJournal(createdId);
+    }
   }
 
   Future<void> _createEntry() async {
@@ -57,9 +135,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final journals = await ref.read(journalRepositoryProvider).listJournals();
     if (journals.isEmpty) return;
 
-    final journalId = _journalFilter == _allJournals
-        ? (journals.isNotEmpty ? journals.first.id : legacyJournalId)
-        : _journalFilter;
+    final journalId = _journalIdForNewEntry(journals);
     final now = utcNow();
     final settings = await ref.read(settingsRepositoryProvider).getSettings();
     Quote? assignedQuote;
@@ -88,8 +164,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
     await ref.read(journalRepositoryProvider).upsertEntry(entry);
     ref.read(remoteSyncServiceProvider).pushJournalEntry(entry);
-    ref.invalidate(journalEntriesProvider);
+    _suppressAutoSelect = true;
     _loadEntry(entry);
+    ref.invalidate(journalEntriesProvider);
   }
 
   void _loadEntry(JournalEntry entry) {
@@ -108,6 +185,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _weatherIcon = displayEntry.weatherIcon ?? 'sunny';
       _metadataDirty = false;
     });
+    unawaited(_rememberViewedJournal(displayEntry.journalId));
   }
 
   void _updateBodyDraft(String entryId, String body) {
@@ -185,29 +263,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await _saveMetadata();
     if (!mounted) return;
 
-    final currentLocal = entry.entryDate.toLocal();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: currentLocal,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(2100),
+    final nextLocal = await showDateTimePickerDialog(
+      context,
+      initialDateTime: entry.entryDate.toLocal(),
     );
-    if (picked == null) return;
+    if (nextLocal == null) return;
     if (!mounted) return;
 
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(currentLocal),
-    );
-    if (pickedTime == null) return;
-
-    final nextLocal = DateTime(
-      picked.year,
-      picked.month,
-      picked.day,
-      pickedTime.hour,
-      pickedTime.minute,
-    );
     final repo = ref.read(journalRepositoryProvider);
     final existing = await repo.getEntry(entry.id);
     if (existing == null) return;
@@ -224,21 +286,105 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final local = dateTime.toLocal();
     final materialLocalizations = MaterialLocalizations.of(context);
     final date = materialLocalizations.formatShortDate(local);
-    final time = TimeOfDay.fromDateTime(local).format(context);
+    final time = formatTime12Hour(local);
     return '$date $time';
   }
 
-  IconData _weatherData(String? icon) => weatherIconData(icon);
+  Future<void> _deleteEntry() async {
+    final entry = _selectedEntry;
+    if (entry == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete entry?'),
+        content: const Text('This entry will be moved to trash.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
+    ref.read(remoteSyncServiceProvider).pushJournalEntry(
+      entry.copyWith(deletedAt: utcNow()),
+    );
+    setState(() {
+      _selectedEntryId = null;
+      _selectedEntry = null;
+      _titleController.clear();
+    });
+    ref.invalidate(journalEntriesProvider);
+  }
+
+  Future<void> _moveEntryToJournal(String journalId) async {
+    final entry = _selectedEntry;
+    if (entry == null || entry.journalId == journalId) return;
+    final repo = ref.read(journalRepositoryProvider);
+    final existing = await repo.getEntry(entry.id);
+    if (existing == null) return;
+    final updated = existing.copyWith(journalId: journalId);
+    await repo.upsertEntry(updated);
+    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
+    if (!mounted) return;
+    setState(() => _selectedEntry = updated);
+    ref.invalidate(journalEntriesProvider);
+  }
+
+  int _journalFlagColor(Journal journal) =>
+      journal.colorValue ??
+      Theme.of(context).colorScheme.primary.toARGB32();
 
   Widget? _journalFlagForEntry(JournalEntry entry, List<Journal> journals) {
     final journal = journals.cast<Journal?>().firstWhere(
       (j) => j!.id == entry.journalId,
       orElse: () => null,
     );
-    final color = journal?.colorValue;
-    if (color == null) return null;
-    return ColorCornerFlag(colorValue: color, size: 16);
+    final color = journal != null
+        ? _journalFlagColor(journal)
+        : Theme.of(context).colorScheme.primary.toARGB32();
+    return JournalTitleCornerFlag(
+      colorValue: color,
+      onSelected: _moveEntryToJournal,
+      menuEntries: (_) => [
+        for (var i = 0; i < journals.length; i++)
+          VoyagerPopupMenuItem<String>(
+            value: journals[i].id,
+            position: VoyagerMenuTheme.positionFor(i, journals.length),
+            child: Row(
+              children: [
+                ColorCornerFlag(
+                  colorValue: _journalFlagColor(journals[i]),
+                  size: 12,
+                  richColor: true,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    journals[i].name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (journals[i].id == entry.journalId)
+                  Icon(
+                    PhosphorIconsRegular.check,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
+
+  IconData _weatherData(String? icon) => weatherIconData(icon);
 
   @override
   Widget build(BuildContext context) {
@@ -255,12 +401,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           final selectedVisible = filtered.any(
             (entry) => entry.id == _selectedEntryId,
           );
-          if (!selectedVisible && filtered.isNotEmpty) {
+          if (!selectedVisible && filtered.isNotEmpty && !_suppressAutoSelect) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted && _selectedEntryId != filtered.first.id) {
                 _loadEntry(filtered.first);
               }
             });
+          }
+          if (selectedVisible) {
+            _suppressAutoSelect = false;
           }
 
           return LayoutBuilder(
@@ -305,14 +454,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   ],
                                   onChanged: journals.isEmpty
                                       ? null
-                                      : (v) =>
-                                            setState(() => _journalFilter = v),
+                                      : (v) => setState(() {
+                                          _journalFilter = v;
+                                          if (v != _allJournals) {
+                                            unawaited(_rememberViewedJournal(v));
+                                          }
+                                        }),
                                 ),
                               ),
                               IconButton(
                                 tooltip: 'Manage journals',
                                 onPressed: _createJournal,
-                                icon: const Icon(PhosphorIconsRegular.slidersHorizontal),
+                                icon: const Icon(
+                                  VoyagerIcons.manage,
+                                ),
                               ),
                             ],
                           ),
@@ -327,9 +482,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               final dateLabel = MaterialLocalizations.of(
                                 context,
                               ).formatShortDate(local);
-                              final timeLabel = TimeOfDay.fromDateTime(
-                                local,
-                              ).format(context);
+                              final timeLabel = formatTime12Hour(local);
                               final preview = firstSentencePreview(entry.body);
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -368,7 +521,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                           overflow: TextOverflow.ellipsis,
                                           style: Theme.of(
                                             context,
-                                          ).textTheme.bodySmall,
+                                          ).textTheme.bodySmall?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withValues(alpha: 0.78),
+                                          ),
                                         ),
                                       Text(
                                         '$dateLabel · $timeLabel',
@@ -392,9 +550,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                         ),
                         Padding(
                           padding: const EdgeInsets.all(12),
-                          child: FilledButton(
-                            onPressed: _createEntry,
-                            child: const Text('New entry'),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: FilledButton(
+                              onPressed: _createEntry,
+                              child: const Text('New entry'),
+                            ),
                           ),
                         ),
                       ],
@@ -411,10 +572,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             padding: const EdgeInsets.only(top: 8, bottom: 12),
                             child: Stack(
                               clipBehavior: Clip.none,
+                              alignment: Alignment.centerRight,
                               children: [
                                 LabeledTextField(
                                   label: 'Title',
                                   controller: _titleController,
+                                  contentPadding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    16,
+                                    36,
+                                    16,
+                                  ),
                                   onChanged: (_) {
                                     _metadataDirty = true;
                                     _scheduleMetadataSave(refreshList: true);
@@ -422,14 +590,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 ),
                                 if (_selectedEntry != null)
                                   Positioned(
-                                    top: 28,
-                                    right: 8,
-                                    child:
-                                        _journalFlagForEntry(
-                                          _selectedEntry!,
-                                          journals,
-                                        ) ??
-                                        const SizedBox.shrink(),
+                                    top: 0,
+                                    right: 0,
+                                    child: _journalFlagForEntry(
+                                      _selectedEntry!,
+                                      journals,
+                                    )!,
                                   ),
                               ],
                             ),
@@ -438,7 +604,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             Row(
                               children: [
                                 const Text('Mood'),
-                                const SizedBox(width: 20),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: _MoodGradientSlider(
                                     value: _mood ?? 5,
@@ -454,9 +620,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     },
                                   ),
                                 ),
-                                const SizedBox(width: 20),
+                                const SizedBox(width: 12),
                                 PopupMenuButton<String>(
                                   icon: Icon(_weatherData(_weatherIcon)),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 40,
+                                    minHeight: 40,
+                                  ),
                                   onSelected: (v) {
                                     setState(() {
                                       _weatherIcon = v;
@@ -464,35 +635,49 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     });
                                     _saveMetadata(refreshList: true);
                                   },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(
-                                      value: 'sunny',
-                                      child: Text('Sunny'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'cloudy',
-                                      child: Text('Cloudy'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'rain',
-                                      child: Text('Rain'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'snow',
-                                      child: Text('Snow'),
-                                    ),
-                                  ],
+                                  itemBuilder: (_) =>
+                                      voyagerPopupMenuEntries<String>([
+                                        (
+                                          value: 'sunny',
+                                          child: Text('Sunny'),
+                                        ),
+                                        (
+                                          value: 'cloudy',
+                                          child: Text('Cloudy'),
+                                        ),
+                                        (
+                                          value: 'rain',
+                                          child: Text('Rain'),
+                                        ),
+                                        (
+                                          value: 'snow',
+                                          child: Text('Snow'),
+                                        ),
+                                      ]),
                                 ),
-                                const SizedBox(width: 12),
-                                OutlinedButton.icon(
-                                  onPressed: _changeEntryDate,
-                                  icon: const Icon(PhosphorIconsRegular.calendar),
-                                  label: Text(
-                                    _entryDateTimeLabel(
-                                      context,
-                                      _selectedEntry!.entryDate,
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: OutlinedButton.icon(
+                                    onPressed: _changeEntryDate,
+                                    icon: const Icon(
+                                      VoyagerIcons.calendar,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      _entryDateTimeLabel(
+                                        context,
+                                        _selectedEntry!.entryDate,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                   ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Delete entry',
+                                  onPressed: _deleteEntry,
+                                  icon: const Icon(PhosphorIconsRegular.trash),
+                                  visualDensity: VisualDensity.compact,
                                 ),
                               ],
                             ),
@@ -663,7 +848,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         _controller.text.trimRight() == plainBody) {
       _dirty = false;
     }
-    ref.read(remoteSyncServiceProvider).pushJournalEntry(updated);
+    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
     if (refreshList) ref.invalidate(journalEntriesProvider);
   }
 
@@ -679,9 +864,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     }
     _dirty = true;
     _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 700), () {
-      unawaited(_persistDraft(widget.entry, refreshList: true));
-    });
+    _saveTimer = Timer(
+      Duration(seconds: syncDebounceSeconds),
+      () => unawaited(_persistDraft(widget.entry, refreshList: true)),
+    );
 
     _tagTimer?.cancel();
     _tagTimer = Timer(const Duration(milliseconds: 250), () {
@@ -745,16 +931,11 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     final theme = Theme.of(context);
     final fillColor =
         theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
-    final focusedColor = Color.lerp(
-      fillColor,
-      theme.colorScheme.primary,
-      0.16,
-    )!;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: _editorFocused ? focusedColor : fillColor,
+        color: fillColor,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: _editorFocused

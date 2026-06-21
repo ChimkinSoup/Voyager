@@ -1,7 +1,8 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
@@ -30,19 +31,17 @@ class PaletteAssigner {
   final Set<int> _used;
 
   int nextColor() {
-    for (final color in palette) {
-      final normalized = normalizeColorValue(color);
-      if (!_used.contains(normalized)) {
-        _used.add(normalized);
-        return normalized;
-      }
+    final available = palette
+        .map(normalizeColorValue)
+        .where((color) => !_used.contains(color))
+        .toList();
+    if (available.isEmpty) {
+      _used.clear();
+      return nextColor();
     }
-    if (palette.isEmpty) return defaultColorPalette.first;
-    final fallback =
-        palette[_used.length % palette.length];
-    final normalized = normalizeColorValue(fallback);
-    _used.add(normalized);
-    return normalized;
+    final picked = available[Random().nextInt(available.length)];
+    _used.add(picked);
+    return picked;
   }
 
   void release(int color) => _used.remove(normalizeColorValue(color));

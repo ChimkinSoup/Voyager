@@ -128,6 +128,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     onSubmitted: (_) => _submit(),
                   ),
                   if (!_isSignUp) ...[
+                    const SizedBox(height: 16),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(

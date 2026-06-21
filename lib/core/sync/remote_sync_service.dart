@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -19,12 +20,14 @@ class RemoteSyncService {
     required TodoRepository todoRepository,
     required WeatherService weatherService,
     required SyncEngine syncEngine,
+    SyncActivityController? syncActivity,
     CrdtDocumentResolver? crdtResolver,
   }) : _syncRepository = syncRepository,
        _journalRepository = journalRepository,
        _todoRepository = todoRepository,
        _weatherService = weatherService,
        _syncEngine = syncEngine,
+       _syncActivity = syncActivity,
        _crdtResolver = crdtResolver ?? CrdtDocumentResolver();
 
   final SyncRepository _syncRepository;
@@ -32,6 +35,7 @@ class RemoteSyncService {
   final TodoRepository _todoRepository;
   final WeatherService _weatherService;
   final SyncEngine _syncEngine;
+  final SyncActivityController? _syncActivity;
   final CrdtDocumentResolver _crdtResolver;
 
   Future<void> pullAll({bool skipWeather = false}) async {
@@ -49,6 +53,19 @@ class RemoteSyncService {
     await pullJournalEntries();
     await pullTodoLists();
     await pullTodoTasks();
+  }
+
+  Future<void> pullForCollection(String collection) async {
+    switch (collection) {
+      case FirestoreCollections.journals:
+        await pullJournals();
+      case FirestoreCollections.journalEntries:
+        await pullJournalEntries();
+      case FirestoreCollections.todoLists:
+        await pullTodoLists();
+      case FirestoreCollections.todoTasks:
+        await pullTodoTasks();
+    }
   }
 
   Future<void> pullJournals() async {
@@ -120,6 +137,7 @@ class RemoteSyncService {
     })
     apply,
   }) async {
+    _syncActivity?.recordDownloadCheck(collection);
     final docs = await _syncRepository.listCollectionDocuments(collection);
     for (final doc in docs) {
       final id = doc.data['id'] as String? ?? doc.id;
@@ -164,6 +182,17 @@ class RemoteSyncService {
       collection: FirestoreCollections.journalEntries,
       documentId: entry.id,
       payload: journalEntryToFirestore(entry),
+    );
+  }
+
+  void pushJournalEntryNow(JournalEntry entry) {
+    _syncEngine.cancelScheduledDocumentSync();
+    unawaited(
+      _syncEngine.syncDocumentImmediately(
+        collection: FirestoreCollections.journalEntries,
+        documentId: entry.id,
+        payload: journalEntryToFirestore(entry),
+      ),
     );
   }
 
@@ -220,51 +249,59 @@ class LiveSyncController {
   final List<StreamSubscription<void>> _subscriptions = [];
   var _started = false;
   var _pullInFlight = false;
-  var _pullQueued = false;
+  final _queuedCollections = <String>{};
+
+  static const _watchedCollections = [
+    FirestoreCollections.journals,
+    FirestoreCollections.journalEntries,
+    FirestoreCollections.todoLists,
+    FirestoreCollections.todoTasks,
+  ];
 
   void start() {
     if (_started || _syncRepository is NoOpSyncRepository) return;
     _started = true;
 
-    for (final collection in const [
-      FirestoreCollections.journals,
-      FirestoreCollections.journalEntries,
-      FirestoreCollections.todoLists,
-      FirestoreCollections.todoTasks,
-      FirestoreCollections.syncOperations,
-    ]) {
+    for (final collection in _watchedCollections) {
       _subscriptions.add(
         _syncRepository.watchCollection(collection).listen((_) {
-          unawaited(_handleRemoteChange());
+          unawaited(_handleRemoteChange(collection));
         }),
       );
     }
   }
 
-  Future<void> _handleRemoteChange() async {
+  Future<void> _handleRemoteChange(String collection) async {
     if (_pullInFlight) {
-      _pullQueued = true;
+      _queuedCollections.add(collection);
       return;
     }
 
     _pullInFlight = true;
-    do {
-      _pullQueued = false;
-      try {
-        await _remoteSync.pullJournalAndTodoData();
-        _onChanged();
-      } catch (error, stackTrace) {
-        FlutterError.reportError(
-          FlutterErrorDetails(
-            exception: error,
-            stack: stackTrace,
-            library: 'LiveSyncController',
-            context: ErrorDescription('while applying live remote sync'),
-          ),
-        );
+    try {
+      var pending = {collection};
+      while (pending.isNotEmpty) {
+        for (final next in pending) {
+          try {
+            await _remoteSync.pullForCollection(next);
+            _onChanged();
+          } catch (error, stackTrace) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'LiveSyncController',
+                context: ErrorDescription('while applying live remote sync'),
+              ),
+            );
+          }
+        }
+        pending = Set<String>.from(_queuedCollections);
+        _queuedCollections.clear();
       }
-    } while (_pullQueued);
-    _pullInFlight = false;
+    } finally {
+      _pullInFlight = false;
+    }
   }
 
   void dispose() {

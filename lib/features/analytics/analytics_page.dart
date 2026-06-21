@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -63,6 +64,8 @@ class AnalyticsPage extends ConsumerWidget {
                                 ),
                             ],
                             isCurved: true,
+                            preventCurveOverShooting: true,
+                            preventCurveOvershootingThreshold: 0,
                             color: Theme.of(context).colorScheme.primary,
                             dotData: const FlDotData(show: false),
                           ),
@@ -262,6 +265,8 @@ class _RankingCard extends ConsumerWidget {
                                 ),
                             ],
                             isCurved: true,
+                            preventCurveOverShooting: true,
+                            preventCurveOvershootingThreshold: 0,
                             color: Color(config.colorStart),
                             dotData: const FlDotData(show: false),
                           ),
@@ -357,7 +362,7 @@ class _RankingDialogState extends ConsumerState<_RankingDialog> {
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<TrackerCadence>(
+            VoyagerDropdownButtonFormField<TrackerCadence>(
               initialValue: _cadence,
               decoration: const InputDecoration(labelText: 'Cadence'),
               items: TrackerCadence.values
@@ -619,7 +624,7 @@ class _TrackerCardState extends ConsumerState<_TrackerCard> {
         final options = widget.tracker.enumOptions;
         final currentValue =
             current?.enumValue ?? widget.tracker.defaultEnumOption;
-        return DropdownButtonFormField<String>(
+        return VoyagerDropdownButtonFormField<String>(
           initialValue: options.contains(currentValue) ? currentValue : null,
           decoration: const InputDecoration(labelText: 'Current value'),
           items: options
@@ -714,6 +719,8 @@ class _TrackerHistoryChart extends StatelessWidget {
             LineChartBarData(
               spots: spots,
               isCurved: tracker.type == TrackerType.integer,
+              preventCurveOverShooting: true,
+              preventCurveOvershootingThreshold: 0,
               color: Color(tracker.colorValue),
               dotData: FlDotData(show: spots.length <= 12),
               belowBarData: BarAreaData(
@@ -794,7 +801,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<TrackerType>(
+              VoyagerDropdownButtonFormField<TrackerType>(
                 initialValue: _type,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: TrackerType.values
@@ -808,7 +815,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 onChanged: (value) => setState(() => _type = value ?? _type),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<TrackerCadence>(
+              VoyagerDropdownButtonFormField<TrackerCadence>(
                 initialValue: _cadence,
                 decoration: const InputDecoration(labelText: 'Cadence'),
                 items: TrackerCadence.values
@@ -874,7 +881,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   }),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
+                VoyagerDropdownButtonFormField<String>(
                   initialValue: enumOptions.contains(_defaultEnumOption)
                       ? _defaultEnumOption
                       : null,

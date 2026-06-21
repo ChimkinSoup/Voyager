@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/features/analytics/analytics_page.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_page.dart';
@@ -26,7 +27,7 @@ class ShellDestination {
 const shellDestinations = <ShellDestination>[
   ShellDestination(
     path: '/journal',
-    icon: PhosphorIconsRegular.book,
+    icon: VoyagerIcons.journal,
     label: 'Journal',
     page: JournalPage(),
   ),
@@ -38,13 +39,13 @@ const shellDestinations = <ShellDestination>[
   ),
   ShellDestination(
     path: '/calendar',
-    icon: PhosphorIconsRegular.calendar,
+    icon: VoyagerIcons.calendar,
     label: 'Calendar',
     page: CalendarPage(),
   ),
   ShellDestination(
     path: '/search',
-    icon: PhosphorIconsRegular.magnifyingGlass,
+    icon: VoyagerIcons.search,
     label: 'Search',
     page: SearchPage(),
   ),
@@ -56,7 +57,7 @@ const shellDestinations = <ShellDestination>[
   ),
   ShellDestination(
     path: '/dev',
-    icon: PhosphorIconsRegular.bug,
+    icon: VoyagerIcons.debug,
     label: 'Dev',
     page: DevPage(),
   ),

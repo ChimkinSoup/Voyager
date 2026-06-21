@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/sync/debouncer.dart';
+import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -19,6 +20,7 @@ class SyncEngine {
     Debouncer? debouncer,
     SequenceCrdtMerger? merger,
     CrdtDocumentResolver? crdtResolver,
+    SyncActivityController? syncActivity,
     SyncRetryPolicy retryPolicy = const SyncRetryPolicy(),
   }) : _syncRepository = syncRepository,
        _deviceId = deviceId,
@@ -26,15 +28,19 @@ class SyncEngine {
        _crdtResolver =
            crdtResolver ??
            CrdtDocumentResolver(merger: merger ?? SequenceCrdtMerger()),
+       _syncActivity = syncActivity,
        _retryPolicy = retryPolicy;
 
   final SyncRepository _syncRepository;
   final String _deviceId;
   final Debouncer _debouncer;
   final CrdtDocumentResolver _crdtResolver;
+  final SyncActivityController? _syncActivity;
   final SyncRetryPolicy _retryPolicy;
   final _keyedDebouncers = <String, Debouncer>{};
   int _sequence = 0;
+
+  void cancelScheduledDocumentSync() => _debouncer.cancel();
 
   void scheduleDocumentSync({
     required String collection,
@@ -147,6 +153,7 @@ class SyncEngine {
           timestamp: DateTime.now().toUtc(),
         ),
       );
+      _syncActivity?.recordUpload(collection);
     });
   }
 }

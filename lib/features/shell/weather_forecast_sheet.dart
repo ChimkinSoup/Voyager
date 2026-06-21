@@ -3,6 +3,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
@@ -133,9 +134,8 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dayFormat = DateFormat('EEE d MMM');
-    final updated = DateFormat('d MMM, HH:mm').format(
-      widget.forecast.fetchedAt.toLocal(),
-    );
+    final updated =
+        '${DateFormat('d MMM').format(widget.forecast.fetchedAt.toLocal())}, ${formatTime12Hour(widget.forecast.fetchedAt)}';
     final days = widget.forecast.dailySummaries;
     final selectedDay = days[_dayIndex];
     final chartSeries = _seriesForDay(_dayIndex);

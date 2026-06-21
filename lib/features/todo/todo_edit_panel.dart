@@ -3,7 +3,10 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
@@ -27,6 +30,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final TextEditingController _subtaskController;
+  late final FocusNode _subtaskFocusNode;
   DateTime? _dueDate;
   List<TodoTask> _subtasks = [];
 
@@ -36,6 +40,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
     _subtaskController = TextEditingController();
+    _subtaskFocusNode = FocusNode();
     _dueDate = widget.task.dueDate;
     _loadSubtasks();
   }
@@ -63,6 +68,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _titleController.dispose();
     _notesController.dispose();
     _subtaskController.dispose();
+    _subtaskFocusNode.dispose();
     super.dispose();
   }
 
@@ -95,29 +101,56 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     ref.read(remoteSyncServiceProvider).pushTodoTaskTitleDebounced(updated);
   }
 
+  Future<void> _onTitleSubmitted(String value) async {
+    final title = value.trim();
+    if (title.isEmpty) {
+      await _promptEmptyTitle();
+      return;
+    }
+    await _save(title: title);
+  }
+
+  Future<void> _promptEmptyTitle() async {
+    final delete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete task?'),
+        content: const Text(
+          'The title is empty. Do you want to delete this task?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes, delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (delete == true) {
+      final now = utcNow();
+      await ref.read(todoRepositoryProvider).softDeleteTask(widget.task.id);
+      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(
+        widget.task.copyWith(deletedAt: now),
+      );
+      widget.onChanged();
+      widget.onClose();
+    } else {
+      _titleController.text = widget.task.title;
+    }
+  }
+
   Future<void> _pickDueDateTime() async {
-    final initial = (_dueDate ?? DateTime.now()).toLocal();
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+    final picked = await showDateTimePickerDialog(
+      context,
+      initialDateTime: (_dueDate ?? DateTime.now()).toLocal(),
     );
-    if (pickedDate == null || !mounted) return;
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initial),
-    );
-    if (pickedTime == null) return;
-    setState(() {
-      _dueDate = DateTime(
-        pickedDate.year,
-        pickedDate.month,
-        pickedDate.day,
-        pickedTime.hour,
-        pickedTime.minute,
-      ).toUtc();
-    });
+    if (picked == null || !mounted) return;
+    setState(() => _dueDate = picked.toUtc());
     await _save(dueDate: _dueDate);
   }
 
@@ -144,6 +177,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _subtaskController.clear();
     await _loadSubtasks();
     widget.onChanged();
+    _subtaskFocusNode.requestFocus();
   }
 
   Future<void> _toggleSubtask(TodoTask subtask, bool completed) async {
@@ -156,9 +190,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   String _formatDue(DateTime dateTime) {
     final local = dateTime.toLocal();
-    final date = DateFormat.MMMd().format(local);
-    final time = DateFormat.jm().format(local);
-    return '$date · $time';
+    return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dateTime)}';
   }
 
   @override
@@ -191,7 +223,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             LabeledTextField(
               label: 'Title',
               controller: _titleController,
-              onSubmitted: (_) => _save(),
+              onSubmitted: _onTitleSubmitted,
               onChanged: _onTitleChanged,
             ),
             const SizedBox(height: 8),
@@ -199,7 +231,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
                 onPressed: _pickDueDateTime,
-                icon: const Icon(PhosphorIconsRegular.calendar, size: 18),
+                icon: const Icon(VoyagerIcons.calendar, size: 18),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -222,36 +254,48 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 ),
               ),
             const SizedBox(height: 8),
-            Expanded(
+            SizedBox(
+              height: 120,
               child: LabeledTextField(
                 label: 'Notes',
                 controller: _notesController,
                 expands: true,
-                onChanged: (_) {},
+                onSubmitted: (_) => _save(),
               ),
             ),
             const SizedBox(height: 12),
             Text('Subtasks', style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
-            ..._subtasks.map(
-              (subtask) => CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: subtask.completed,
-                onChanged: (v) => _toggleSubtask(subtask, v ?? false),
-                title: Text(subtask.title),
-              ),
-            ),
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _subtaskController,
+                    focusNode: _subtaskFocusNode,
                     decoration: const InputDecoration(hintText: 'Add subtask'),
                     onSubmitted: (_) => _addSubtask(),
                   ),
                 ),
-                IconButton(onPressed: _addSubtask, icon: const Icon(PhosphorIconsRegular.plus)),
+                IconButton(
+                  onPressed: _addSubtask,
+                  icon: const Icon(PhosphorIconsRegular.plus),
+                ),
               ],
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: ListView(
+                children: _subtasks
+                    .map(
+                      (subtask) => CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: subtask.completed,
+                        onChanged: (v) => _toggleSubtask(subtask, v ?? false),
+                        title: Text(subtask.title),
+                      ),
+                    )
+                    .toList(),
+              ),
             ),
             const Divider(height: 24),
             Text(

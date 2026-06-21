@@ -19,6 +19,7 @@ class VoyagerApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Voyager',
       theme: theme,
+      scrollBehavior: const _NoScrollbarScrollBehavior(),
       builder: (context, child) {
         return DefaultTextStyle(
           style: AppFonts.style(color: theme.colorScheme.onSurface),
@@ -27,5 +28,18 @@ class VoyagerApp extends ConsumerWidget {
       },
       routerConfig: router,
     );
+  }
+}
+
+class _NoScrollbarScrollBehavior extends MaterialScrollBehavior {
+  const _NoScrollbarScrollBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
   }
 }

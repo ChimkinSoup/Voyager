@@ -20,6 +20,7 @@ class CalendarPage extends ConsumerStatefulWidget {
 class _CalendarPageState extends ConsumerState<CalendarPage> {
   CalendarViewMode _mode = CalendarViewMode.month;
   DateTime _focused = DateTime.now();
+  DateTime? _dayViewDate;
 
   Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
     final result = await showDialog<Map<String, dynamic>>(
@@ -71,6 +72,20 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         ),
         CalendarViewMode.year => DateTime(_focused.year + delta, 1, 1),
       };
+    });
+  }
+
+  void _onMiniCalendarDayTap(DateTime day) {
+    setState(() {
+      if (_dayViewDate != null &&
+          _dayViewDate!.year == day.year &&
+          _dayViewDate!.month == day.month &&
+          _dayViewDate!.day == day.day) {
+        _dayViewDate = null;
+      } else {
+        _dayViewDate = DateTime(day.year, day.month, day.day);
+        _focused = DateTime(day.year, day.month, 1);
+      }
     });
   }
 
@@ -167,13 +182,33 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           const SizedBox(height: 16),
           Expanded(
             child: eventsAsync.when(
-              data: (events) => CalendarGrid(
-                mode: _mode,
-                focused: _focused,
-                events: events,
-                indicators: indicators,
-                weekStartsMonday: weekStartsMonday,
-                onDayTap: (day) => _openEditor(day: day),
+              data: (events) => Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  MiniMonthCalendar(
+                    month: _focused,
+                    weekStartsMonday: weekStartsMonday,
+                    selectedDay: _dayViewDate,
+                    onDayTap: _onMiniCalendarDayTap,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _dayViewDate != null
+                        ? DayHourGrid(
+                            day: _dayViewDate!,
+                            events: events,
+                            onHourTap: (hour) => _openEditor(day: hour),
+                          )
+                        : CalendarGrid(
+                            mode: _mode,
+                            focused: _focused,
+                            events: events,
+                            indicators: indicators,
+                            weekStartsMonday: weekStartsMonday,
+                            onDayTap: (day) => _openEditor(day: day),
+                          ),
+                  ),
+                ],
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('$e')),

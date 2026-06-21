@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/sync/sync_activity.dart';
+import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -69,6 +71,8 @@ class _VoyagerNavigationRail extends StatelessWidget {
       width: 72,
       child: Column(
         children: [
+          _RailClockWeather(accent: accent),
+          const SizedBox(height: 8),
           for (var i = 0; i < shellDestinations.length; i++)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
@@ -83,8 +87,41 @@ class _VoyagerNavigationRail extends StatelessWidget {
               ),
             ),
           const Spacer(),
-          _RailClockWeather(accent: accent),
+          const _SyncActivityIndicator(),
         ],
+      ),
+    );
+  }
+}
+
+class _SyncActivityIndicator extends ConsumerWidget {
+  const _SyncActivityIndicator();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activity = ref.watch(syncActivityProvider);
+    final event = activity.latest;
+
+    return SizedBox(
+      height: 42,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 120),
+        child: event == null
+            ? const SizedBox.shrink()
+            : Tooltip(
+                key: ValueKey(event.sequence),
+                message:
+                    '${event.direction == SyncActivityDirection.upload ? 'Uploaded' : 'Checked'} ${event.collection}',
+                child: Icon(
+                  event.direction == SyncActivityDirection.upload
+                      ? PhosphorIconsRegular.cloudArrowUp
+                      : PhosphorIconsRegular.cloudArrowDown,
+                  color: event.direction == SyncActivityDirection.upload
+                      ? Colors.lightBlueAccent
+                      : Colors.redAccent,
+                  size: 24,
+                ),
+              ),
       ),
     );
   }
@@ -186,10 +223,10 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
   @override
   void initState() {
     super.initState();
-    _time = DateFormat('HH:mm').format(DateTime.now());
+    _time = formatTime12Hour(DateTime.now());
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
-        setState(() => _time = DateFormat('HH:mm').format(DateTime.now()));
+        setState(() => _time = formatTime12Hour(DateTime.now()));
       }
     });
   }
@@ -207,7 +244,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

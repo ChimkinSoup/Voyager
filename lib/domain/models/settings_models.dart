@@ -15,6 +15,7 @@ class AppSettings {
     this.alertTimeHour = 9,
     this.hideCompletedTasks = false,
     this.deviceId,
+    this.lastViewedJournalId,
     this.weatherLocationLabel,
     this.weatherLat,
     this.weatherLon,
@@ -25,6 +26,8 @@ class AppSettings {
     this.weatherLocationUpdatedAt,
     this.devUseDirectOpenWeather = false,
     this.devOpenWeatherApiKey,
+    this.devShowSyncUploads = false,
+    this.devShowSyncDownloads = false,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -44,6 +47,7 @@ class AppSettings {
   final int alertTimeHour;
   final bool hideCompletedTasks;
   final String? deviceId;
+  final String? lastViewedJournalId;
   final String? weatherLocationLabel;
   final double? weatherLat;
   final double? weatherLon;
@@ -54,6 +58,8 @@ class AppSettings {
   final DateTime? weatherLocationUpdatedAt;
   final bool devUseDirectOpenWeather;
   final String? devOpenWeatherApiKey;
+  final bool devShowSyncUploads;
+  final bool devShowSyncDownloads;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -69,6 +75,7 @@ class AppSettings {
     String? todoHotkey,
     bool? hideCompletedTasks,
     String? deviceId,
+    String? lastViewedJournalId,
     String? weatherLocationLabel,
     double? weatherLat,
     double? weatherLon,
@@ -79,6 +86,8 @@ class AppSettings {
     DateTime? weatherLocationUpdatedAt,
     bool? devUseDirectOpenWeather,
     String? devOpenWeatherApiKey,
+    bool? devShowSyncUploads,
+    bool? devShowSyncDownloads,
     String? weatherForecastJson,
     int? weatherChartTempColor,
     int? weatherChartRainColor,
@@ -93,6 +102,7 @@ class AppSettings {
     bool clearWeatherLocationUpdatedAt = false,
     bool clearDevOpenWeatherApiKey = false,
     bool clearWeatherForecastJson = false,
+    bool clearLastViewedJournalId = false,
   }) {
     return AppSettings(
       accentColor: accentColor ?? this.accentColor,
@@ -108,6 +118,9 @@ class AppSettings {
       alertTimeHour: alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       deviceId: deviceId ?? this.deviceId,
+      lastViewedJournalId: clearLastViewedJournalId
+          ? null
+          : (lastViewedJournalId ?? this.lastViewedJournalId),
       weatherLocationLabel: clearWeatherLocationLabel
           ? null
           : (weatherLocationLabel ?? this.weatherLocationLabel),
@@ -131,6 +144,8 @@ class AppSettings {
       devOpenWeatherApiKey: clearDevOpenWeatherApiKey
           ? null
           : (devOpenWeatherApiKey ?? this.devOpenWeatherApiKey),
+      devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
+      devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
       weatherForecastJson: clearWeatherForecastJson
           ? null
           : (weatherForecastJson ?? this.weatherForecastJson),

@@ -5938,6 +5938,17 @@ class $SettingsTableTable extends SettingsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastViewedJournalIdMeta =
+      const VerificationMeta('lastViewedJournalId');
+  @override
+  late final GeneratedColumn<String> lastViewedJournalId =
+      GeneratedColumn<String>(
+        'last_viewed_journal_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _weatherLocationLabelMeta =
       const VerificationMeta('weatherLocationLabel');
   @override
@@ -6052,6 +6063,34 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _devShowSyncUploadsMeta =
+      const VerificationMeta('devShowSyncUploads');
+  @override
+  late final GeneratedColumn<bool> devShowSyncUploads = GeneratedColumn<bool>(
+    'dev_show_sync_uploads',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_show_sync_uploads" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _devShowSyncDownloadsMeta =
+      const VerificationMeta('devShowSyncDownloads');
+  @override
+  late final GeneratedColumn<bool> devShowSyncDownloads = GeneratedColumn<bool>(
+    'dev_show_sync_downloads',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_show_sync_downloads" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _weatherForecastJsonMeta =
       const VerificationMeta('weatherForecastJson');
   @override
@@ -6110,6 +6149,7 @@ class $SettingsTableTable extends SettingsTable
     alertTimeHour,
     hideCompletedTasks,
     deviceId,
+    lastViewedJournalId,
     weatherLocationLabel,
     weatherLat,
     weatherLon,
@@ -6120,6 +6160,8 @@ class $SettingsTableTable extends SettingsTable
     weatherLocationUpdatedAt,
     devUseDirectOpenWeather,
     devOpenWeatherApiKey,
+    devShowSyncUploads,
+    devShowSyncDownloads,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -6245,6 +6287,15 @@ class $SettingsTableTable extends SettingsTable
         deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
       );
     }
+    if (data.containsKey('last_viewed_journal_id')) {
+      context.handle(
+        _lastViewedJournalIdMeta,
+        lastViewedJournalId.isAcceptableOrUnknown(
+          data['last_viewed_journal_id']!,
+          _lastViewedJournalIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('weather_location_label')) {
       context.handle(
         _weatherLocationLabelMeta,
@@ -6326,6 +6377,24 @@ class $SettingsTableTable extends SettingsTable
         devOpenWeatherApiKey.isAcceptableOrUnknown(
           data['dev_open_weather_api_key']!,
           _devOpenWeatherApiKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_show_sync_uploads')) {
+      context.handle(
+        _devShowSyncUploadsMeta,
+        devShowSyncUploads.isAcceptableOrUnknown(
+          data['dev_show_sync_uploads']!,
+          _devShowSyncUploadsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_show_sync_downloads')) {
+      context.handle(
+        _devShowSyncDownloadsMeta,
+        devShowSyncDownloads.isAcceptableOrUnknown(
+          data['dev_show_sync_downloads']!,
+          _devShowSyncDownloadsMeta,
         ),
       );
     }
@@ -6430,6 +6499,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}device_id'],
       ),
+      lastViewedJournalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_viewed_journal_id'],
+      ),
       weatherLocationLabel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_location_label'],
@@ -6470,6 +6543,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}dev_open_weather_api_key'],
       ),
+      devShowSyncUploads: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_sync_uploads'],
+      )!,
+      devShowSyncDownloads: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_sync_downloads'],
+      )!,
       weatherForecastJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_forecast_json'],
@@ -6511,6 +6592,7 @@ class SettingsTableData extends DataClass
   final int alertTimeHour;
   final bool hideCompletedTasks;
   final String? deviceId;
+  final String? lastViewedJournalId;
   final String? weatherLocationLabel;
   final double? weatherLat;
   final double? weatherLon;
@@ -6521,6 +6603,8 @@ class SettingsTableData extends DataClass
   final DateTime? weatherLocationUpdatedAt;
   final bool devUseDirectOpenWeather;
   final String? devOpenWeatherApiKey;
+  final bool devShowSyncUploads;
+  final bool devShowSyncDownloads;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -6540,6 +6624,7 @@ class SettingsTableData extends DataClass
     required this.alertTimeHour,
     required this.hideCompletedTasks,
     this.deviceId,
+    this.lastViewedJournalId,
     this.weatherLocationLabel,
     this.weatherLat,
     this.weatherLon,
@@ -6550,6 +6635,8 @@ class SettingsTableData extends DataClass
     this.weatherLocationUpdatedAt,
     required this.devUseDirectOpenWeather,
     this.devOpenWeatherApiKey,
+    required this.devShowSyncUploads,
+    required this.devShowSyncDownloads,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -6575,6 +6662,9 @@ class SettingsTableData extends DataClass
     map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks);
     if (!nullToAbsent || deviceId != null) {
       map['device_id'] = Variable<String>(deviceId);
+    }
+    if (!nullToAbsent || lastViewedJournalId != null) {
+      map['last_viewed_journal_id'] = Variable<String>(lastViewedJournalId);
     }
     if (!nullToAbsent || weatherLocationLabel != null) {
       map['weather_location_label'] = Variable<String>(weatherLocationLabel);
@@ -6608,6 +6698,8 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || devOpenWeatherApiKey != null) {
       map['dev_open_weather_api_key'] = Variable<String>(devOpenWeatherApiKey);
     }
+    map['dev_show_sync_uploads'] = Variable<bool>(devShowSyncUploads);
+    map['dev_show_sync_downloads'] = Variable<bool>(devShowSyncDownloads);
     if (!nullToAbsent || weatherForecastJson != null) {
       map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
     }
@@ -6643,6 +6735,9 @@ class SettingsTableData extends DataClass
       deviceId: deviceId == null && nullToAbsent
           ? const Value.absent()
           : Value(deviceId),
+      lastViewedJournalId: lastViewedJournalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastViewedJournalId),
       weatherLocationLabel: weatherLocationLabel == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherLocationLabel),
@@ -6671,6 +6766,8 @@ class SettingsTableData extends DataClass
       devOpenWeatherApiKey: devOpenWeatherApiKey == null && nullToAbsent
           ? const Value.absent()
           : Value(devOpenWeatherApiKey),
+      devShowSyncUploads: Value(devShowSyncUploads),
+      devShowSyncDownloads: Value(devShowSyncDownloads),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherForecastJson),
@@ -6710,6 +6807,9 @@ class SettingsTableData extends DataClass
       alertTimeHour: serializer.fromJson<int>(json['alertTimeHour']),
       hideCompletedTasks: serializer.fromJson<bool>(json['hideCompletedTasks']),
       deviceId: serializer.fromJson<String?>(json['deviceId']),
+      lastViewedJournalId: serializer.fromJson<String?>(
+        json['lastViewedJournalId'],
+      ),
       weatherLocationLabel: serializer.fromJson<String?>(
         json['weatherLocationLabel'],
       ),
@@ -6731,6 +6831,10 @@ class SettingsTableData extends DataClass
       ),
       devOpenWeatherApiKey: serializer.fromJson<String?>(
         json['devOpenWeatherApiKey'],
+      ),
+      devShowSyncUploads: serializer.fromJson<bool>(json['devShowSyncUploads']),
+      devShowSyncDownloads: serializer.fromJson<bool>(
+        json['devShowSyncDownloads'],
       ),
       weatherForecastJson: serializer.fromJson<String?>(
         json['weatherForecastJson'],
@@ -6762,6 +6866,7 @@ class SettingsTableData extends DataClass
       'alertTimeHour': serializer.toJson<int>(alertTimeHour),
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
       'deviceId': serializer.toJson<String?>(deviceId),
+      'lastViewedJournalId': serializer.toJson<String?>(lastViewedJournalId),
       'weatherLocationLabel': serializer.toJson<String?>(weatherLocationLabel),
       'weatherLat': serializer.toJson<double?>(weatherLat),
       'weatherLon': serializer.toJson<double?>(weatherLon),
@@ -6776,6 +6881,8 @@ class SettingsTableData extends DataClass
         devUseDirectOpenWeather,
       ),
       'devOpenWeatherApiKey': serializer.toJson<String?>(devOpenWeatherApiKey),
+      'devShowSyncUploads': serializer.toJson<bool>(devShowSyncUploads),
+      'devShowSyncDownloads': serializer.toJson<bool>(devShowSyncDownloads),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
@@ -6798,6 +6905,7 @@ class SettingsTableData extends DataClass
     int? alertTimeHour,
     bool? hideCompletedTasks,
     Value<String?> deviceId = const Value.absent(),
+    Value<String?> lastViewedJournalId = const Value.absent(),
     Value<String?> weatherLocationLabel = const Value.absent(),
     Value<double?> weatherLat = const Value.absent(),
     Value<double?> weatherLon = const Value.absent(),
@@ -6808,6 +6916,8 @@ class SettingsTableData extends DataClass
     Value<DateTime?> weatherLocationUpdatedAt = const Value.absent(),
     bool? devUseDirectOpenWeather,
     Value<String?> devOpenWeatherApiKey = const Value.absent(),
+    bool? devShowSyncUploads,
+    bool? devShowSyncDownloads,
     Value<String?> weatherForecastJson = const Value.absent(),
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
@@ -6828,6 +6938,9 @@ class SettingsTableData extends DataClass
     alertTimeHour: alertTimeHour ?? this.alertTimeHour,
     hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
     deviceId: deviceId.present ? deviceId.value : this.deviceId,
+    lastViewedJournalId: lastViewedJournalId.present
+        ? lastViewedJournalId.value
+        : this.lastViewedJournalId,
     weatherLocationLabel: weatherLocationLabel.present
         ? weatherLocationLabel.value
         : this.weatherLocationLabel,
@@ -6849,6 +6962,8 @@ class SettingsTableData extends DataClass
     devOpenWeatherApiKey: devOpenWeatherApiKey.present
         ? devOpenWeatherApiKey.value
         : this.devOpenWeatherApiKey,
+    devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
+    devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
     weatherForecastJson: weatherForecastJson.present
         ? weatherForecastJson.value
         : this.weatherForecastJson,
@@ -6900,6 +7015,9 @@ class SettingsTableData extends DataClass
           ? data.hideCompletedTasks.value
           : this.hideCompletedTasks,
       deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      lastViewedJournalId: data.lastViewedJournalId.present
+          ? data.lastViewedJournalId.value
+          : this.lastViewedJournalId,
       weatherLocationLabel: data.weatherLocationLabel.present
           ? data.weatherLocationLabel.value
           : this.weatherLocationLabel,
@@ -6930,6 +7048,12 @@ class SettingsTableData extends DataClass
       devOpenWeatherApiKey: data.devOpenWeatherApiKey.present
           ? data.devOpenWeatherApiKey.value
           : this.devOpenWeatherApiKey,
+      devShowSyncUploads: data.devShowSyncUploads.present
+          ? data.devShowSyncUploads.value
+          : this.devShowSyncUploads,
+      devShowSyncDownloads: data.devShowSyncDownloads.present
+          ? data.devShowSyncDownloads.value
+          : this.devShowSyncDownloads,
       weatherForecastJson: data.weatherForecastJson.present
           ? data.weatherForecastJson.value
           : this.weatherForecastJson,
@@ -6962,6 +7086,7 @@ class SettingsTableData extends DataClass
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('deviceId: $deviceId, ')
+          ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
           ..write('weatherLat: $weatherLat, ')
           ..write('weatherLon: $weatherLon, ')
@@ -6972,6 +7097,8 @@ class SettingsTableData extends DataClass
           ..write('weatherLocationUpdatedAt: $weatherLocationUpdatedAt, ')
           ..write('devUseDirectOpenWeather: $devUseDirectOpenWeather, ')
           ..write('devOpenWeatherApiKey: $devOpenWeatherApiKey, ')
+          ..write('devShowSyncUploads: $devShowSyncUploads, ')
+          ..write('devShowSyncDownloads: $devShowSyncDownloads, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -6996,6 +7123,7 @@ class SettingsTableData extends DataClass
     alertTimeHour,
     hideCompletedTasks,
     deviceId,
+    lastViewedJournalId,
     weatherLocationLabel,
     weatherLat,
     weatherLon,
@@ -7006,6 +7134,8 @@ class SettingsTableData extends DataClass
     weatherLocationUpdatedAt,
     devUseDirectOpenWeather,
     devOpenWeatherApiKey,
+    devShowSyncUploads,
+    devShowSyncDownloads,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -7029,6 +7159,7 @@ class SettingsTableData extends DataClass
           other.alertTimeHour == this.alertTimeHour &&
           other.hideCompletedTasks == this.hideCompletedTasks &&
           other.deviceId == this.deviceId &&
+          other.lastViewedJournalId == this.lastViewedJournalId &&
           other.weatherLocationLabel == this.weatherLocationLabel &&
           other.weatherLat == this.weatherLat &&
           other.weatherLon == this.weatherLon &&
@@ -7039,6 +7170,8 @@ class SettingsTableData extends DataClass
           other.weatherLocationUpdatedAt == this.weatherLocationUpdatedAt &&
           other.devUseDirectOpenWeather == this.devUseDirectOpenWeather &&
           other.devOpenWeatherApiKey == this.devOpenWeatherApiKey &&
+          other.devShowSyncUploads == this.devShowSyncUploads &&
+          other.devShowSyncDownloads == this.devShowSyncDownloads &&
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
@@ -7060,6 +7193,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<int> alertTimeHour;
   final Value<bool> hideCompletedTasks;
   final Value<String?> deviceId;
+  final Value<String?> lastViewedJournalId;
   final Value<String?> weatherLocationLabel;
   final Value<double?> weatherLat;
   final Value<double?> weatherLon;
@@ -7070,6 +7204,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<DateTime?> weatherLocationUpdatedAt;
   final Value<bool> devUseDirectOpenWeather;
   final Value<String?> devOpenWeatherApiKey;
+  final Value<bool> devShowSyncUploads;
+  final Value<bool> devShowSyncDownloads;
   final Value<String?> weatherForecastJson;
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
@@ -7089,6 +7225,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
     this.deviceId = const Value.absent(),
+    this.lastViewedJournalId = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
     this.weatherLat = const Value.absent(),
     this.weatherLon = const Value.absent(),
@@ -7099,6 +7236,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherLocationUpdatedAt = const Value.absent(),
     this.devUseDirectOpenWeather = const Value.absent(),
     this.devOpenWeatherApiKey = const Value.absent(),
+    this.devShowSyncUploads = const Value.absent(),
+    this.devShowSyncDownloads = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7119,6 +7258,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
     this.deviceId = const Value.absent(),
+    this.lastViewedJournalId = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
     this.weatherLat = const Value.absent(),
     this.weatherLon = const Value.absent(),
@@ -7129,6 +7269,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherLocationUpdatedAt = const Value.absent(),
     this.devUseDirectOpenWeather = const Value.absent(),
     this.devOpenWeatherApiKey = const Value.absent(),
+    this.devShowSyncUploads = const Value.absent(),
+    this.devShowSyncDownloads = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7149,6 +7291,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<int>? alertTimeHour,
     Expression<bool>? hideCompletedTasks,
     Expression<String>? deviceId,
+    Expression<String>? lastViewedJournalId,
     Expression<String>? weatherLocationLabel,
     Expression<double>? weatherLat,
     Expression<double>? weatherLon,
@@ -7159,6 +7302,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<DateTime>? weatherLocationUpdatedAt,
     Expression<bool>? devUseDirectOpenWeather,
     Expression<String>? devOpenWeatherApiKey,
+    Expression<bool>? devShowSyncUploads,
+    Expression<bool>? devShowSyncDownloads,
     Expression<String>? weatherForecastJson,
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
@@ -7183,6 +7328,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (hideCompletedTasks != null)
         'hide_completed_tasks': hideCompletedTasks,
       if (deviceId != null) 'device_id': deviceId,
+      if (lastViewedJournalId != null)
+        'last_viewed_journal_id': lastViewedJournalId,
       if (weatherLocationLabel != null)
         'weather_location_label': weatherLocationLabel,
       if (weatherLat != null) 'weather_lat': weatherLat,
@@ -7198,6 +7345,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'dev_use_direct_open_weather': devUseDirectOpenWeather,
       if (devOpenWeatherApiKey != null)
         'dev_open_weather_api_key': devOpenWeatherApiKey,
+      if (devShowSyncUploads != null)
+        'dev_show_sync_uploads': devShowSyncUploads,
+      if (devShowSyncDownloads != null)
+        'dev_show_sync_downloads': devShowSyncDownloads,
       if (weatherForecastJson != null)
         'weather_forecast_json': weatherForecastJson,
       if (weatherChartTempColor != null)
@@ -7223,6 +7374,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<int>? alertTimeHour,
     Value<bool>? hideCompletedTasks,
     Value<String?>? deviceId,
+    Value<String?>? lastViewedJournalId,
     Value<String?>? weatherLocationLabel,
     Value<double?>? weatherLat,
     Value<double?>? weatherLon,
@@ -7233,6 +7385,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<DateTime?>? weatherLocationUpdatedAt,
     Value<bool>? devUseDirectOpenWeather,
     Value<String?>? devOpenWeatherApiKey,
+    Value<bool>? devShowSyncUploads,
+    Value<bool>? devShowSyncDownloads,
     Value<String?>? weatherForecastJson,
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
@@ -7254,6 +7408,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       deviceId: deviceId ?? this.deviceId,
+      lastViewedJournalId: lastViewedJournalId ?? this.lastViewedJournalId,
       weatherLocationLabel: weatherLocationLabel ?? this.weatherLocationLabel,
       weatherLat: weatherLat ?? this.weatherLat,
       weatherLon: weatherLon ?? this.weatherLon,
@@ -7266,6 +7421,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       devUseDirectOpenWeather:
           devUseDirectOpenWeather ?? this.devUseDirectOpenWeather,
       devOpenWeatherApiKey: devOpenWeatherApiKey ?? this.devOpenWeatherApiKey,
+      devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
+      devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
       weatherChartTempColor:
           weatherChartTempColor ?? this.weatherChartTempColor,
@@ -7324,6 +7481,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (deviceId.present) {
       map['device_id'] = Variable<String>(deviceId.value);
     }
+    if (lastViewedJournalId.present) {
+      map['last_viewed_journal_id'] = Variable<String>(
+        lastViewedJournalId.value,
+      );
+    }
     if (weatherLocationLabel.present) {
       map['weather_location_label'] = Variable<String>(
         weatherLocationLabel.value,
@@ -7360,6 +7522,14 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (devOpenWeatherApiKey.present) {
       map['dev_open_weather_api_key'] = Variable<String>(
         devOpenWeatherApiKey.value,
+      );
+    }
+    if (devShowSyncUploads.present) {
+      map['dev_show_sync_uploads'] = Variable<bool>(devShowSyncUploads.value);
+    }
+    if (devShowSyncDownloads.present) {
+      map['dev_show_sync_downloads'] = Variable<bool>(
+        devShowSyncDownloads.value,
       );
     }
     if (weatherForecastJson.present) {
@@ -7400,6 +7570,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('deviceId: $deviceId, ')
+          ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
           ..write('weatherLat: $weatherLat, ')
           ..write('weatherLon: $weatherLon, ')
@@ -7410,6 +7581,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('weatherLocationUpdatedAt: $weatherLocationUpdatedAt, ')
           ..write('devUseDirectOpenWeather: $devUseDirectOpenWeather, ')
           ..write('devOpenWeatherApiKey: $devOpenWeatherApiKey, ')
+          ..write('devShowSyncUploads: $devShowSyncUploads, ')
+          ..write('devShowSyncDownloads: $devShowSyncDownloads, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -10561,6 +10734,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
       Value<String?> deviceId,
+      Value<String?> lastViewedJournalId,
       Value<String?> weatherLocationLabel,
       Value<double?> weatherLat,
       Value<double?> weatherLon,
@@ -10571,6 +10745,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<DateTime?> weatherLocationUpdatedAt,
       Value<bool> devUseDirectOpenWeather,
       Value<String?> devOpenWeatherApiKey,
+      Value<bool> devShowSyncUploads,
+      Value<bool> devShowSyncDownloads,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -10592,6 +10768,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
       Value<String?> deviceId,
+      Value<String?> lastViewedJournalId,
       Value<String?> weatherLocationLabel,
       Value<double?> weatherLat,
       Value<double?> weatherLon,
@@ -10602,6 +10779,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<DateTime?> weatherLocationUpdatedAt,
       Value<bool> devUseDirectOpenWeather,
       Value<String?> devOpenWeatherApiKey,
+      Value<bool> devShowSyncUploads,
+      Value<bool> devShowSyncDownloads,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -10687,6 +10866,11 @@ class $$SettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get lastViewedJournalId => $composableBuilder(
+    column: $table.lastViewedJournalId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get weatherLocationLabel => $composableBuilder(
     column: $table.weatherLocationLabel,
     builder: (column) => ColumnFilters(column),
@@ -10734,6 +10918,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get devOpenWeatherApiKey => $composableBuilder(
     column: $table.devOpenWeatherApiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowSyncUploads => $composableBuilder(
+    column: $table.devShowSyncUploads,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowSyncDownloads => $composableBuilder(
+    column: $table.devShowSyncDownloads,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10837,6 +11031,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get lastViewedJournalId => $composableBuilder(
+    column: $table.lastViewedJournalId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get weatherLocationLabel => $composableBuilder(
     column: $table.weatherLocationLabel,
     builder: (column) => ColumnOrderings(column),
@@ -10884,6 +11083,16 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<String> get devOpenWeatherApiKey => $composableBuilder(
     column: $table.devOpenWeatherApiKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get devShowSyncUploads => $composableBuilder(
+    column: $table.devShowSyncUploads,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get devShowSyncDownloads => $composableBuilder(
+    column: $table.devShowSyncDownloads,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -10981,6 +11190,11 @@ class $$SettingsTableTableAnnotationComposer
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
 
+  GeneratedColumn<String> get lastViewedJournalId => $composableBuilder(
+    column: $table.lastViewedJournalId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get weatherLocationLabel => $composableBuilder(
     column: $table.weatherLocationLabel,
     builder: (column) => column,
@@ -11028,6 +11242,16 @@ class $$SettingsTableTableAnnotationComposer
 
   GeneratedColumn<String> get devOpenWeatherApiKey => $composableBuilder(
     column: $table.devOpenWeatherApiKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get devShowSyncUploads => $composableBuilder(
+    column: $table.devShowSyncUploads,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get devShowSyncDownloads => $composableBuilder(
+    column: $table.devShowSyncDownloads,
     builder: (column) => column,
   );
 
@@ -11101,6 +11325,7 @@ class $$SettingsTableTableTableManager
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
+                Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
                 Value<double?> weatherLat = const Value.absent(),
                 Value<double?> weatherLon = const Value.absent(),
@@ -11112,6 +11337,8 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<bool> devUseDirectOpenWeather = const Value.absent(),
                 Value<String?> devOpenWeatherApiKey = const Value.absent(),
+                Value<bool> devShowSyncUploads = const Value.absent(),
+                Value<bool> devShowSyncDownloads = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -11131,6 +11358,7 @@ class $$SettingsTableTableTableManager
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
                 deviceId: deviceId,
+                lastViewedJournalId: lastViewedJournalId,
                 weatherLocationLabel: weatherLocationLabel,
                 weatherLat: weatherLat,
                 weatherLon: weatherLon,
@@ -11141,6 +11369,8 @@ class $$SettingsTableTableTableManager
                 weatherLocationUpdatedAt: weatherLocationUpdatedAt,
                 devUseDirectOpenWeather: devUseDirectOpenWeather,
                 devOpenWeatherApiKey: devOpenWeatherApiKey,
+                devShowSyncUploads: devShowSyncUploads,
+                devShowSyncDownloads: devShowSyncDownloads,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -11162,6 +11392,7 @@ class $$SettingsTableTableTableManager
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
+                Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
                 Value<double?> weatherLat = const Value.absent(),
                 Value<double?> weatherLon = const Value.absent(),
@@ -11173,6 +11404,8 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<bool> devUseDirectOpenWeather = const Value.absent(),
                 Value<String?> devOpenWeatherApiKey = const Value.absent(),
+                Value<bool> devShowSyncUploads = const Value.absent(),
+                Value<bool> devShowSyncDownloads = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -11192,6 +11425,7 @@ class $$SettingsTableTableTableManager
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
                 deviceId: deviceId,
+                lastViewedJournalId: lastViewedJournalId,
                 weatherLocationLabel: weatherLocationLabel,
                 weatherLat: weatherLat,
                 weatherLon: weatherLon,
@@ -11202,6 +11436,8 @@ class $$SettingsTableTableTableManager
                 weatherLocationUpdatedAt: weatherLocationUpdatedAt,
                 devUseDirectOpenWeather: devUseDirectOpenWeather,
                 devOpenWeatherApiKey: devOpenWeatherApiKey,
+                devShowSyncUploads: devShowSyncUploads,
+                devShowSyncDownloads: devShowSyncDownloads,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,

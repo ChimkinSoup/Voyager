@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +18,7 @@ class DevPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final verboseSync = ref.watch(devVerboseSyncProvider);
+    final syncActivity = ref.watch(syncActivityProvider);
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
 
     return KeepAliveScrollView(
@@ -43,6 +46,24 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.verboseSync = v;
             ref.read(devVerboseSyncProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Show upload'),
+          subtitle: const Text('Flash a blue cloud icon when Firestore uploads'),
+          value: syncActivity.showUploads,
+          onChanged: (value) {
+            unawaited(ref.read(syncActivityProvider).setShowUploads(value));
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Show download'),
+          subtitle: const Text(
+            'Flash a red cloud icon when Firestore is checked for remote data',
+          ),
+          value: syncActivity.showDownloads,
+          onChanged: (value) {
+            unawaited(ref.read(syncActivityProvider).setShowDownloads(value));
           },
         ),
         const Divider(height: 32),

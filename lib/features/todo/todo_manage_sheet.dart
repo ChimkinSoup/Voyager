@@ -3,18 +3,21 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
-Future<void> showTodoListManageSheet(
+Future<String?> showTodoListManageSheet(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  await showDialog<void>(
+  final createdId = await showDialog<String?>(
     context: context,
     builder: (context) => const _TodoListManageDialog(),
   );
   ref.invalidate(todoListsProvider);
+  return createdId;
 }
 
 class _TodoListManageDialog extends ConsumerStatefulWidget {
@@ -29,6 +32,7 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
   var _loading = true;
   List<TodoListModel> _lists = [];
   Map<String, ({int active, int completed})> _stats = {};
+  String? _createdListId;
 
   @override
   void initState() {
@@ -57,22 +61,30 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
   }
 
   Future<void> _createList() async {
-    final name = await _promptName('New list name');
-    if (name == null || name.trim().isEmpty) return;
-    final now = utcNow();
-    final palette = paletteFromItems(
+    final palette = ref.read(colorPaletteProvider);
+    final assigner = paletteFromItems(
       _lists.map((l) => l.colorValue),
-      ref.read(colorPaletteProvider),
+      palette,
     );
+    final initialColor = assigner.nextColor();
+    final result = await showCreateNameColorDialog(
+      context,
+      title: 'New list',
+      palette: palette,
+      initialColor: initialColor,
+    );
+    if (result == null) return;
+    final now = utcNow();
     final list = TodoListModel(
       id: newId(),
-      name: name.trim(),
-      colorValue: palette.nextColor(),
+      name: result.name,
+      colorValue: result.color,
       createdAt: now,
       updatedAt: now,
     );
     await ref.read(todoRepositoryProvider).upsertList(list);
     ref.read(remoteSyncServiceProvider).pushTodoList(list);
+    _createdListId = list.id;
     await _reload();
   }
 
@@ -86,16 +98,10 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
   }
 
   Future<void> _pickColor(TodoListModel list) async {
-    final used = _lists
-        .where((l) => l.id != list.id)
-        .map((l) => l.colorValue)
-        .whereType<int>()
-        .toSet();
     final color = await pickPaletteColorWithRef(
       ref,
       context,
       current: list.colorValue,
-      usedColors: used,
     );
     if (color == null) return;
     final updated = list.copyWith(colorValue: color);
@@ -140,6 +146,7 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
         content: TextField(
           controller: controller,
           autofocus: true,
+          decoration: InputDecoration(labelText: title),
           onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [
@@ -197,14 +204,11 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                             await _deleteList(list);
                         }
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'rename', child: Text('Rename')),
-                        PopupMenuItem(
-                          value: 'color',
-                          child: Text('Change color'),
-                        ),
-                        PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      ],
+                      itemBuilder: (_) => voyagerPopupMenuEntries<String>([
+                        (value: 'rename', child: Text('Rename')),
+                        (value: 'color', child: Text('Change color')),
+                        (value: 'delete', child: Text('Delete')),
+                      ]),
                     ),
                   );
                 },
@@ -212,7 +216,7 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, _createdListId),
           child: const Text('Close'),
         ),
         FilledButton.icon(

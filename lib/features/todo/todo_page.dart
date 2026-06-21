@@ -3,7 +3,9 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -26,7 +28,6 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   final _taskController = TextEditingController();
   final _taskFocusNode = FocusNode();
   var _completedExpanded = true;
-  static const _panelReserve = 440.0;
 
   @override
   void dispose() {
@@ -72,6 +73,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(task);
     _taskController.clear();
     _taskFocusNode.requestFocus();
+    ref.invalidate(todoTasksProvider(task.listId));
     ref.invalidate(todoListsProvider);
   }
 
@@ -79,6 +81,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     final updated = task.copyWith(completed: completed ?? false);
     await ref.read(todoRepositoryProvider).upsertTask(updated);
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+    ref.invalidate(todoTasksProvider(updated.listId));
+    ref.invalidate(todoListsProvider);
   }
 
   Future<void> _toggleStar(TodoTask task) async {
@@ -92,6 +96,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       );
       await repo.upsertTask(updated);
       remoteSync.pushTodoTaskNow(updated);
+      ref.invalidate(todoTasksProvider(updated.listId));
     } else {
       final updated = task.copyWith(
         starred: true,
@@ -99,6 +104,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       );
       await repo.upsertTask(updated);
       remoteSync.pushTodoTaskNow(updated);
+      ref.invalidate(todoTasksProvider(updated.listId));
     }
     ref.invalidate(todoListsProvider);
   }
@@ -119,6 +125,25 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       (l) => l!.id == _selectedListId,
       orElse: () => lists.isNotEmpty ? lists.first : null,
     );
+  }
+
+  Future<void> _reorderActiveTasks(
+    List<TodoTask> active,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final items = List<TodoTask>.from(active);
+    final moved = items.removeAt(oldIndex);
+    items.insert(newIndex, moved);
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].sortOrder == i) continue;
+      final updated = items[i].copyWith(sortOrder: i);
+      await repo.upsertTask(updated);
+      remoteSync.pushTodoTaskNow(updated);
+    }
+    ref.invalidate(todoTasksProvider(_selectedListId!));
   }
 
   @override
@@ -177,7 +202,6 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                             Expanded(
                               child: RoundedDropdown<String>(
                                 value: _selectedListId!,
-                                menuBottomSpacing: 12,
                                 items: lists
                                     .map(
                                       (l) => RoundedDropdownItem(
@@ -194,84 +218,113 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              onPressed: () =>
-                                  showTodoListManageSheet(context, ref),
-                              icon: const Icon(PhosphorIconsRegular.slidersHorizontal),
+                              onPressed: () async {
+                                final createdId = await showTodoListManageSheet(
+                                  context,
+                                  ref,
+                                );
+                                if (createdId != null) {
+                                  setState(() => _selectedListId = createdId);
+                                }
+                              },
+                              icon: const Icon(
+                                VoyagerIcons.manage,
+                              ),
                               tooltip: 'Manage lists',
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Expanded(
-                          child: KeepAliveScrollView(
+                          child: KeepAliveSingleChildScrollView(
                             storageKey: ShellPageStorageKeys.todoTaskList,
-                            children: [
-                              ...active.map(
-                                (task) => _TaskRow(
-                                  key: ValueKey(task.id),
-                                  task: task,
-                                  panelOpen: selectedTask != null,
-                                  reserveWidth: selectedTask != null
-                                      ? _panelReserve
-                                      : 120,
-                                  subtaskStats: _subtaskStats(task.id),
-                                  onToggle: (v) => _toggleTask(task, v),
-                                  onStar: () => _toggleStar(task),
-                                  onEdit: () =>
-                                      setState(() => _selectedTaskId = task.id),
-                                ),
-                              ),
-                              if (!hideCompleted && completed.isNotEmpty) ...[
-                                const Divider(height: 32),
-                                InkWell(
-                                  onTap: () => setState(
-                                    () => _completedExpanded =
-                                        !_completedExpanded,
-                                  ),
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            'Completed (${completed.length})',
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.titleSmall,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (active.isNotEmpty)
+                                  ReorderableListView(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    buildDefaultDragHandles: false,
+                                    onReorderItem: (oldIndex, newIndex) =>
+                                        _reorderActiveTasks(
+                                          active,
+                                          oldIndex,
+                                          newIndex,
+                                        ),
+                                    children: [
+                                      for (var i = 0; i < active.length; i++)
+                                        ReorderableDelayedDragStartListener(
+                                          key: ValueKey(active[i].id),
+                                          index: i,
+                                          child: _TaskRow(
+                                            task: active[i],
+                                            subtaskStats: _subtaskStats(
+                                              active[i].id,
+                                            ),
+                                            onToggle: (v) =>
+                                                _toggleTask(active[i], v),
+                                            onStar: () =>
+                                                _toggleStar(active[i]),
+                                            onEdit: () => setState(
+                                              () => _selectedTaskId =
+                                                  active[i].id,
+                                            ),
                                           ),
                                         ),
-                                        Icon(
-                                          _completedExpanded
-                                              ? PhosphorIconsRegular.caretUp
-                                              : PhosphorIconsRegular.caretDown,
-                                        ),
-                                      ],
-                                    ),
+                                    ],
                                   ),
-                                ),
-                                if (_completedExpanded)
-                                  ...completed.map(
-                                    (task) => _TaskRow(
-                                      key: ValueKey(task.id),
-                                      task: task,
-                                      completedStyle: true,
-                                      panelOpen: selectedTask != null,
-                                      reserveWidth: selectedTask != null
-                                          ? _panelReserve
-                                          : 120,
-                                      subtaskStats: _subtaskStats(task.id),
-                                      onToggle: (v) => _toggleTask(task, v),
-                                      onStar: () => _toggleStar(task),
-                                      onEdit: () => setState(
-                                        () => _selectedTaskId = task.id,
+                                if (!hideCompleted && completed.isNotEmpty) ...[
+                                  const Divider(height: 32),
+                                  InkWell(
+                                    onTap: () => setState(
+                                      () => _completedExpanded =
+                                          !_completedExpanded,
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        8,
+                                        8,
+                                        8,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              'Completed (${completed.length})',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.titleSmall,
+                                            ),
+                                          ),
+                                          Icon(
+                                            _completedExpanded
+                                                ? PhosphorIconsRegular.caretUp
+                                                : PhosphorIconsRegular
+                                                    .caretDown,
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
+                                  if (_completedExpanded)
+                                    ...completed.map(
+                                      (task) => _TaskRow(
+                                        key: ValueKey(task.id),
+                                        task: task,
+                                        subtaskStats: _subtaskStats(task.id),
+                                        onToggle: (v) => _toggleTask(task, v),
+                                        onStar: () => _toggleStar(task),
+                                        onEdit: () => setState(
+                                          () => _selectedTaskId = task.id,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -305,7 +358,10 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                   TodoEditPanel(
                     task: selectedTask,
                     onClose: () => setState(() => _selectedTaskId = null),
-                    onChanged: () => ref.invalidate(todoListsProvider),
+                    onChanged: () {
+                      ref.invalidate(todoTasksProvider(selectedTask.listId));
+                      ref.invalidate(todoListsProvider);
+                    },
                   ),
               ],
             );
@@ -328,9 +384,6 @@ class _TaskRow extends StatefulWidget {
     required this.onStar,
     required this.onEdit,
     required this.subtaskStats,
-    required this.reserveWidth,
-    required this.panelOpen,
-    this.completedStyle = false,
   });
 
   final TodoTask task;
@@ -338,9 +391,6 @@ class _TaskRow extends StatefulWidget {
   final VoidCallback onStar;
   final VoidCallback onEdit;
   final Future<({int completed, int total})> subtaskStats;
-  final double reserveWidth;
-  final bool panelOpen;
-  final bool completedStyle;
 
   @override
   State<_TaskRow> createState() => _TaskRowState();
@@ -348,16 +398,19 @@ class _TaskRow extends StatefulWidget {
 
 class _TaskRowState extends State<_TaskRow>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _checkController;
+  late final AnimationController _animController;
   late final Animation<double> _checkScale;
-  var _strikeVisible = false;
+  late final Animation<double> _strikeProgress;
+  var _displayCompleted = false;
+  var _animatingComplete = false;
 
   @override
   void initState() {
     super.initState();
-    _checkController = AnimationController(
+    _displayCompleted = widget.task.completed;
+    _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 400),
     );
     _checkScale = TweenSequence<double>([
       TweenSequenceItem(
@@ -374,39 +427,85 @@ class _TaskRowState extends State<_TaskRow>
         ).chain(CurveTween(curve: Curves.easeOutBack)),
         weight: 55,
       ),
-    ]).animate(_checkController);
-    _strikeVisible = widget.task.completed;
+    ]).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: const Interval(0, 0.55, curve: Curves.linear),
+      ),
+    );
+    _strikeProgress = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
+    );
+    if (widget.task.completed) {
+      _animController.value = 1.0;
+    }
   }
 
   @override
   void didUpdateWidget(covariant _TaskRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!oldWidget.task.completed && widget.task.completed) {
-      _checkController.forward(from: 0);
-      Future<void>.delayed(const Duration(milliseconds: 120), () {
-        if (mounted) setState(() => _strikeVisible = true);
-      });
-    } else if (oldWidget.task.completed && !widget.task.completed) {
-      _checkController.value = 0;
-      setState(() => _strikeVisible = false);
+    if (_animatingComplete) return;
+    if (oldWidget.task.completed != widget.task.completed) {
+      if (widget.task.completed) {
+        _displayCompleted = true;
+        _animController.value = 1.0;
+      } else {
+        _displayCompleted = false;
+        _animController.reset();
+      }
     }
   }
 
   @override
   void dispose() {
-    _checkController.dispose();
+    _animController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleToggle(bool? value) async {
+    if (_animatingComplete) return;
+    if (value == true && !widget.task.completed) {
+      setState(() {
+        _animatingComplete = true;
+        _displayCompleted = true;
+      });
+      await _animController.forward(from: 0);
+      if (!mounted) return;
+      widget.onToggle(true);
+      setState(() => _animatingComplete = false);
+    } else if (value == false) {
+      _animController.reset();
+      setState(() => _displayCompleted = false);
+      widget.onToggle(false);
+    }
   }
 
   String? _formatDue(DateTime? dueDate) {
     if (dueDate == null) return null;
     final local = dueDate.toLocal();
-    return '${DateFormat.MMMd().format(local)} · ${DateFormat.jm().format(local)}';
+    return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dueDate)}';
+  }
+
+  String? _metadataLabel(
+    String? dueLabel,
+    ({int completed, int total})? stats,
+  ) {
+    final parts = <String>[];
+    if (dueLabel != null) parts.add(dueLabel);
+    if (stats != null && stats.total > 0) {
+      parts.add('${stats.completed} : ${stats.total}');
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' · ');
   }
 
   @override
   Widget build(BuildContext context) {
     final dueLabel = _formatDue(widget.task.dueDate);
+    final strikeColor = Theme.of(context).colorScheme.onSurface.withValues(
+      alpha: 0.55,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -415,8 +514,91 @@ class _TaskRowState extends State<_TaskRow>
           ScaleTransition(
             scale: _checkScale,
             child: Checkbox(
-              value: widget.task.completed,
-              onChanged: widget.onToggle,
+              value: _displayCompleted,
+              onChanged: _handleToggle,
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: widget.onEdit,
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
+                          style: Theme.of(context).textTheme.bodyLarge!
+                              .copyWith(
+                                color: _displayCompleted ? strikeColor : null,
+                              ),
+                          child: Text(
+                            widget.task.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (_displayCompleted)
+                          Positioned.fill(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: AnimatedBuilder(
+                                animation: _strikeProgress,
+                                builder: (context, _) {
+                                  return FractionallySizedBox(
+                                    widthFactor: _strikeProgress.value.clamp(
+                                      0.0,
+                                      1.0,
+                                    ),
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      height: 1.5,
+                                      color: strikeColor,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    FutureBuilder(
+                      future: widget.subtaskStats,
+                      builder: (context, snapshot) {
+                        final metadata = _metadataLabel(
+                          dueLabel,
+                          snapshot.data,
+                        );
+                        if (metadata == null) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            metadata,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  fontSize: 10,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.72),
+                                ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           IconButton(
@@ -430,84 +612,6 @@ class _TaskRowState extends State<_TaskRow>
             color: widget.task.starred
                 ? Theme.of(context).colorScheme.primary
                 : null,
-          ),
-          Expanded(
-            child: InkWell(
-              onTap: widget.onEdit,
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 12,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 180),
-                            curve: Curves.easeOut,
-                            style: Theme.of(context).textTheme.bodyLarge!
-                                .copyWith(
-                                  decoration: _strikeVisible
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  color: _strikeVisible
-                                      ? Theme.of(context).colorScheme.onSurface
-                                            .withValues(alpha: 0.55)
-                                      : null,
-                                ),
-                            child: Text(
-                              widget.task.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          FutureBuilder(
-                            future: widget.subtaskStats,
-                            builder: (context, snapshot) {
-                              final stats = snapshot.data;
-                              if (stats == null || stats.total == 0) {
-                                return const SizedBox.shrink();
-                              }
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  '${stats.completed} : ${stats.total}',
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(
-                                        fontSize: 10,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.72),
-                                      ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (dueLabel != null) ...[
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: widget.panelOpen ? 108 : 120,
-                        child: Text(
-                          dueLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
           ),
         ],
       ),

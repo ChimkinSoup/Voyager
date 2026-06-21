@@ -81,6 +81,84 @@ void main() {
     expect(entries.last.title, 'Entry 5');
   });
 
+  test('journal repository orders entries by adjusted entry date', () async {
+    final now = utcNow();
+    final journal = Journal(
+      id: newId(),
+      name: 'Test',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await journalRepo.upsertJournal(journal);
+
+    final older = JournalEntry(
+      id: newId(),
+      journalId: journal.id,
+      title: 'Older adjusted date',
+      body: '',
+      entryDate: now.subtract(const Duration(days: 2)),
+      createdAt: now,
+      updatedAt: now.add(const Duration(hours: 1)),
+    );
+    final newer = JournalEntry(
+      id: newId(),
+      journalId: journal.id,
+      title: 'Newer entry date',
+      body: '',
+      entryDate: now,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await journalRepo.upsertEntry(older);
+    await journalRepo.upsertEntry(newer);
+
+    final entries = await journalRepo.listEntries(journalId: journal.id);
+    expect(entries.map((e) => e.title), [
+      'Newer entry date',
+      'Older adjusted date',
+    ]);
+  });
+
+  test('journal repository orders same-minute entries by createdAt', () async {
+    final now = utcNow();
+    final journal = Journal(
+      id: newId(),
+      name: 'Test',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await journalRepo.upsertJournal(journal);
+
+    final first = JournalEntry(
+      id: newId(),
+      journalId: journal.id,
+      title: 'First created',
+      body: '',
+      entryDate: now,
+      createdAt: now,
+      updatedAt: now.add(const Duration(hours: 2)),
+    );
+    final second = JournalEntry(
+      id: newId(),
+      journalId: journal.id,
+      title: 'Second created',
+      body: '',
+      entryDate: now,
+      createdAt: now.add(const Duration(seconds: 1)),
+      updatedAt: now,
+    );
+
+    await journalRepo.upsertEntry(first);
+    await journalRepo.upsertEntry(second);
+
+    final entries = await journalRepo.listEntries(journalId: journal.id);
+    expect(entries.map((e) => e.title), [
+      'Second created',
+      'First created',
+    ]);
+  });
+
   test(
     'journal repository purges deleted entries after retention window',
     () async {
@@ -143,6 +221,41 @@ void main() {
 
     final tasks = await todoRepo.listTasks(list.id);
     expect(tasks, isEmpty);
+  });
+
+  test('todo repository nextSortOrder inserts below starred tasks', () async {
+    final now = utcNow();
+    final list = TodoListModel(
+      id: newId(),
+      name: 'Inbox',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await todoRepo.upsertList(list);
+
+    await todoRepo.upsertTask(
+      TodoTask(
+        id: newId(),
+        listId: list.id,
+        title: 'Starred',
+        starred: true,
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await todoRepo.upsertTask(
+      TodoTask(
+        id: newId(),
+        listId: list.id,
+        title: 'Unstarred',
+        sortOrder: 1,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    expect(await todoRepo.nextSortOrder(list.id), 0);
   });
 
   test('tracker repository persists tracker values', () async {

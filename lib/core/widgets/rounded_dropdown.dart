@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
 class RoundedDropdownItem<T> {
   const RoundedDropdownItem({required this.value, required this.label});
@@ -22,14 +23,12 @@ class RoundedDropdown<T> extends StatelessWidget {
     this.variant = useBorderedDropdowns
         ? RoundedDropdownVariant.bordered
         : RoundedDropdownVariant.flat,
-    this.menuBottomSpacing = 0,
   });
 
   final T value;
   final List<RoundedDropdownItem<T>> items;
   final ValueChanged<T>? onChanged;
   final RoundedDropdownVariant variant;
-  final double menuBottomSpacing;
 
   @override
   Widget build(BuildContext context) {
@@ -97,80 +96,22 @@ class RoundedDropdown<T> extends StatelessWidget {
       0,
     );
 
-    final picked = await showMenu<T>(
+    final picked = await showVoyagerMenu<T>(
       context: context,
       position: RelativeRect.fromRect(menuRect, Offset.zero & overlay.size),
       constraints: BoxConstraints(
         minWidth: buttonRect.width,
         maxWidth: buttonRect.width,
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      color: variant == RoundedDropdownVariant.flat
-          ? Theme.of(context).scaffoldBackgroundColor
-          : Theme.of(context).colorScheme.surface,
-      items: [
-        for (final item in items)
-          PopupMenuItem<T>(
-            enabled: false,
-            padding: EdgeInsets.fromLTRB(
-              6,
-              2,
-              6,
-              item == items.last ? menuBottomSpacing : 2,
-            ),
-            child: _RoundedDropdownMenuItem(
-              value: item.value,
-              label: item.label,
-              selected: item.value == value,
-            ),
-          ),
-      ],
-    );
-    if (picked != null) onChanged?.call(picked);
-  }
-}
-
-class _RoundedDropdownMenuItem extends StatelessWidget {
-  const _RoundedDropdownMenuItem({
-    required this.value,
-    required this.label,
-    required this.selected,
-  });
-
-  final Object? value;
-  final String label;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: selected
-          ? theme.colorScheme.primary.withValues(alpha: 0.14)
-          : Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => Navigator.pop(context, value),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
-              if (selected) ...[
-                const SizedBox(width: 8),
-                Icon(
-                  PhosphorIconsRegular.check,
-                  size: 18,
-                  color: theme.colorScheme.primary,
-                ),
-              ],
-            ],
-          ),
-        ),
+      items: voyagerSelectMenuEntries<T>(
+        context: context,
+        items: [
+          for (final item in items) (value: item.value, label: item.label),
+        ],
+        selected: value,
       ),
     );
+    if (picked != null) onChanged?.call(picked);
   }
 }
 
@@ -181,6 +122,5 @@ class BorderedRoundedDropdown<T> extends RoundedDropdown<T> {
     required super.value,
     required super.items,
     required super.onChanged,
-    super.menuBottomSpacing,
   }) : super(variant: RoundedDropdownVariant.bordered);
 }

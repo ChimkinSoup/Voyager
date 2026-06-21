@@ -107,7 +107,12 @@ class DriftJournalRepository implements JournalRepository {
     if (to != null) {
       query = query..where((t) => t.entryDate.isSmallerOrEqualValue(to));
     }
-    query = query..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
+    query = query
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.entryDate),
+        (t) => OrderingTerm.desc(t.createdAt),
+        (t) => OrderingTerm.desc(t.id),
+      ]);
     if (limit != null) {
       query = query..limit(limit);
     }
@@ -293,7 +298,21 @@ class DriftTodoRepository implements TodoRepository {
   Future<int> nextSortOrder(String listId) async {
     final tasks = await listTasks(listId);
     if (tasks.isEmpty) return 0;
-    return tasks.map((t) => t.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
+
+    final active = tasks.where((t) => !t.completed).toList();
+    if (active.isEmpty) {
+      return tasks.map((t) => t.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
+    }
+
+    final unstarred = active.where((t) => !t.starred).toList();
+    if (unstarred.isEmpty) {
+      return active.map((t) => t.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
+    }
+
+    final minUnstarred = unstarred
+        .map((t) => t.sortOrder)
+        .reduce((a, b) => a < b ? a : b);
+    return minUnstarred - 1;
   }
 
   TodoTask _mapTask(TodoTasksTableData r) => TodoTask(
@@ -716,6 +735,7 @@ class DriftSettingsRepository implements SettingsRepository {
       alertTimeHour: row.alertTimeHour,
       hideCompletedTasks: row.hideCompletedTasks,
       deviceId: row.deviceId,
+      lastViewedJournalId: row.lastViewedJournalId,
       weatherLocationLabel: row.weatherLocationLabel,
       weatherLat: row.weatherLat,
       weatherLon: row.weatherLon,
@@ -726,6 +746,8 @@ class DriftSettingsRepository implements SettingsRepository {
       weatherLocationUpdatedAt: row.weatherLocationUpdatedAt,
       devUseDirectOpenWeather: row.devUseDirectOpenWeather,
       devOpenWeatherApiKey: row.devOpenWeatherApiKey,
+      devShowSyncUploads: row.devShowSyncUploads,
+      devShowSyncDownloads: row.devShowSyncDownloads,
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
@@ -753,6 +775,7 @@ class DriftSettingsRepository implements SettingsRepository {
             alertTimeHour: Value(settings.alertTimeHour),
             hideCompletedTasks: Value(settings.hideCompletedTasks),
             deviceId: Value(settings.deviceId),
+            lastViewedJournalId: Value(settings.lastViewedJournalId),
             weatherLocationLabel: Value(settings.weatherLocationLabel),
             weatherLat: Value(settings.weatherLat),
             weatherLon: Value(settings.weatherLon),
@@ -763,10 +786,14 @@ class DriftSettingsRepository implements SettingsRepository {
             weatherLocationUpdatedAt: Value(settings.weatherLocationUpdatedAt),
             devUseDirectOpenWeather: Value(settings.devUseDirectOpenWeather),
             devOpenWeatherApiKey: Value(settings.devOpenWeatherApiKey),
+            devShowSyncUploads: Value(settings.devShowSyncUploads),
+            devShowSyncDownloads: Value(settings.devShowSyncDownloads),
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),
-            colorPaletteJson: Value(encodeColorPaletteJson(settings.colorPalette)),
+            colorPaletteJson: Value(
+              encodeColorPaletteJson(settings.colorPalette),
+            ),
           ),
         );
   }

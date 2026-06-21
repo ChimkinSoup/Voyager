@@ -187,6 +187,7 @@ class SettingsTable extends Table {
   BoolColumn get hideCompletedTasks =>
       boolean().withDefault(const Constant(false))();
   TextColumn get deviceId => text().nullable()();
+  TextColumn get lastViewedJournalId => text().nullable()();
   TextColumn get weatherLocationLabel => text().nullable()();
   RealColumn get weatherLat => real().nullable()();
   RealColumn get weatherLon => real().nullable()();
@@ -198,6 +199,10 @@ class SettingsTable extends Table {
   BoolColumn get devUseDirectOpenWeather =>
       boolean().withDefault(const Constant(false))();
   TextColumn get devOpenWeatherApiKey => text().nullable()();
+  BoolColumn get devShowSyncUploads =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get devShowSyncDownloads =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
   IntColumn get weatherChartRainColor => integer().nullable()();
@@ -234,7 +239,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -336,6 +341,22 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'UPDATE settings_table SET journal_hotkey = ? WHERE journal_hotkey = ?',
           [defaultJournalHotkey, legacyJournalHotkey],
+        );
+      }
+      if (from < 13) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.lastViewedJournalId,
+        );
+      }
+      if (from < 14) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devShowSyncUploads,
+        );
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devShowSyncDownloads,
         );
       }
     },

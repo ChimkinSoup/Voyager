@@ -13,6 +13,7 @@ class LabeledTextField extends StatelessWidget {
     this.onSubmitted,
     this.enabled = true,
     this.focusNode,
+    this.contentPadding,
   });
 
   final String label;
@@ -25,19 +26,10 @@ class LabeledTextField extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
   final bool enabled;
   final FocusNode? focusNode;
+  final EdgeInsetsGeometry? contentPadding;
 
   @override
   Widget build(BuildContext context) {
-    final labelWidget = showLabel
-        ? Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(label, style: Theme.of(context).textTheme.labelLarge),
-            ),
-          )
-        : const SizedBox.shrink();
-
     final field = TextField(
       controller: controller,
       focusNode: focusNode,
@@ -48,22 +40,18 @@ class LabeledTextField extends StatelessWidget {
       onChanged: onChanged,
       onSubmitted: onSubmitted,
       textAlignVertical: TextAlignVertical.top,
-      decoration: const InputDecoration(contentPadding: EdgeInsets.all(16)),
+      decoration: InputDecoration(
+        labelText: showLabel && label.isNotEmpty ? label : null,
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
+        contentPadding:
+            contentPadding ?? const EdgeInsets.all(16),
+      ),
     );
 
     if (expands) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (showLabel) labelWidget,
-          Expanded(child: field),
-        ],
-      );
+      return Expanded(child: field);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [if (showLabel) labelWidget, field],
-    );
+    return field;
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/voyager_menu_theme.dart';
 
 class VoyagerTheme {
   static ThemeData dark({Color accent = const Color(0xFF7C9EFF)}) {
@@ -65,6 +66,14 @@ class VoyagerTheme {
       splashFactory: NoSplash.splashFactory,
       animationDuration: const Duration(milliseconds: 90),
       textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
+    );
+    final textButtonStyle = sharedButtonStyle.copyWith(
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+      minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
     );
     final outlinedButtonStyle = sharedButtonStyle.copyWith(side: buttonSide);
 
@@ -132,7 +141,7 @@ class VoyagerTheme {
       filledButtonTheme: FilledButtonThemeData(style: sharedButtonStyle),
       elevatedButtonTheme: ElevatedButtonThemeData(style: sharedButtonStyle),
       outlinedButtonTheme: OutlinedButtonThemeData(style: outlinedButtonStyle),
-      textButtonTheme: TextButtonThemeData(style: sharedButtonStyle),
+      textButtonTheme: TextButtonThemeData(style: textButtonStyle),
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
           overlayColor: pressOverlay,
@@ -144,18 +153,34 @@ class VoyagerTheme {
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: outlinedButtonStyle,
       ),
-      popupMenuTheme: PopupMenuThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        textStyle: textTheme.bodyLarge,
-        labelTextStyle: WidgetStatePropertyAll(textTheme.bodyLarge),
+      popupMenuTheme: VoyagerMenuTheme.popupMenuTheme(
+        textTheme: textTheme,
+        onSurface: colorScheme.onSurface,
+      ),
+      menuTheme: VoyagerMenuTheme.menuTheme(),
+      menuButtonTheme: MenuButtonThemeData(
+        style: ButtonStyle(
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
       ),
       dialogTheme: DialogThemeData(
+        backgroundColor: const Color(0xFF2A2A33),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         titleTextStyle: textTheme.titleLarge,
         contentTextStyle: textTheme.bodyMedium,
       ),
       snackBarTheme: SnackBarThemeData(contentTextStyle: textTheme.bodyMedium),
-      tooltipTheme: TooltipThemeData(textStyle: textTheme.bodySmall),
-      dropdownMenuTheme: DropdownMenuThemeData(textStyle: textTheme.bodyLarge),
+      tooltipTheme: TooltipThemeData(
+        textStyle: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface),
+        decoration: BoxDecoration(
+          color: const Color(0xFF30303A),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: outlineColor),
+        ),
+      ),
+      dropdownMenuTheme: VoyagerMenuTheme.dropdownMenuTheme(textTheme),
       navigationRailTheme: NavigationRailThemeData(
         selectedLabelTextStyle: textTheme.labelSmall,
         unselectedLabelTextStyle: textTheme.labelSmall,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,8 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
-import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -19,6 +21,7 @@ import 'package:voyager/data/remote/http_callable_client.dart';
 import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -72,6 +75,19 @@ final authNotifierProvider = ChangeNotifierProvider<AuthNotifier>((ref) {
 
 final deviceIdProvider = StateProvider<String>((ref) => _fallbackDeviceId);
 
+final syncActivityProvider = ChangeNotifierProvider<SyncActivityController>((
+  ref,
+) {
+  final controller = SyncActivityController(
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+  );
+  unawaited(controller.loadFromSettings());
+  ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+    next.whenData(controller.applySettings);
+  });
+  return controller;
+});
+
 final syncRepositoryProvider = Provider<SyncRepository>((ref) {
   final uid = ref.watch(authRepositoryProvider).currentUserId;
   if (uid == null) return NoOpSyncRepository();
@@ -82,6 +98,7 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
   final engine = SyncEngine(
     syncRepository: ref.watch(syncRepositoryProvider),
     deviceId: ref.watch(deviceIdProvider),
+    syncActivity: ref.read(syncActivityProvider),
   );
   ref.onDispose(engine.dispose);
   return engine;
@@ -129,6 +146,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     todoRepository: ref.watch(todoRepositoryProvider),
     weatherService: ref.watch(weatherServiceProvider),
     syncEngine: ref.watch(syncEngineProvider),
+    syncActivity: ref.read(syncActivityProvider),
   );
 });
 
@@ -144,6 +162,7 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
       ref.invalidate(journalEntriesProvider);
       ref.invalidate(journalsProvider);
       ref.invalidate(todoListsProvider);
+      ref.invalidate(todoTasksProvider);
     },
   );
   ref.onDispose(controller.dispose);
@@ -256,20 +275,12 @@ final todoListsProvider = FutureProvider((ref) {
   return ref.watch(todoRepositoryProvider).listLists();
 });
 
-final todoTasksProvider = StreamProvider.family<List<TodoTask>, String>((
+final todoTasksProvider = FutureProvider.family<List<TodoTask>, String>((
   ref,
   listId,
-) async* {
+) {
   ref.keepAlive();
-  final repo = ref.watch(todoRepositoryProvider);
-  final sync = ref.watch(syncRepositoryProvider);
-  final remoteSync = ref.watch(remoteSyncServiceProvider);
-
-  yield await repo.listTasks(listId);
-  await for (final _ in sync.watchCollection(FirestoreCollections.todoTasks)) {
-    await remoteSync.pullTodoTasks();
-    yield await repo.listTasks(listId);
-  }
+  return ref.watch(todoRepositoryProvider).listTasks(listId);
 });
 
 final calendarEventsProvider = FutureProvider((ref) {

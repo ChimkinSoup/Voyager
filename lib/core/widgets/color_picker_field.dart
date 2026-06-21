@@ -133,8 +133,6 @@ class ColorPaletteGrid extends StatelessWidget {
           child: _ColorSwatch(
             colorValue: colorValue,
             selected: normalized == normalizedSelected,
-            used: usedColors.contains(normalized) &&
-                normalized != normalizedSelected,
             radius: swatchRadius,
             onTap: () => onSelected(normalized),
           ),
@@ -298,14 +296,12 @@ class _ColorSwatch extends StatelessWidget {
   const _ColorSwatch({
     required this.colorValue,
     required this.selected,
-    required this.used,
     required this.radius,
     required this.onTap,
   });
 
   final int colorValue;
   final bool selected;
-  final bool used;
   final double radius;
   final VoidCallback onTap;
 
@@ -318,14 +314,12 @@ class _ColorSwatch extends StatelessWidget {
         radius: radius,
         backgroundColor: Color(colorValue),
         child: selected
-            ? const Icon(PhosphorIconsRegular.check, size: 18, color: Colors.white)
-            : used
-                ? Icon(
-                    PhosphorIconsRegular.prohibit,
-                    size: radius,
-                    color: Colors.black.withValues(alpha: 0.45),
-                  )
-                : null,
+            ? const Icon(
+                PhosphorIconsRegular.check,
+                size: 18,
+                color: Colors.white,
+              )
+            : null,
       ),
     );
   }

@@ -4,16 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
-Future<void> showJournalManageSheet(BuildContext context, WidgetRef ref) async {
-  await showDialog<void>(
+Future<String?> showJournalManageSheet(BuildContext context, WidgetRef ref) async {
+  final createdId = await showDialog<String?>(
     context: context,
     builder: (context) => const _JournalManageDialog(),
   );
   ref.invalidate(journalsProvider);
   ref.invalidate(journalEntriesProvider);
+  return createdId;
 }
 
 class _JournalManageDialog extends ConsumerStatefulWidget {
@@ -28,6 +31,7 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
   var _loading = true;
   List<Journal> _journals = [];
   Map<String, int> _entryCounts = {};
+  String? _createdJournalId;
 
   @override
   void initState() {
@@ -58,30 +62,37 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
   }
 
   Future<void> _createJournal() async {
-    final name = await _promptName('New journal name');
-    if (name == null || name.trim().isEmpty) return;
+    final palette = ref.read(colorPaletteProvider);
+    final assigner = paletteFromItems(
+      _journals.map((j) => j.colorValue),
+      palette,
+    );
+    final initialColor = assigner.nextColor();
+    final result = await showCreateNameColorDialog(
+      context,
+      title: 'New journal',
+      palette: palette,
+      initialColor: initialColor,
+    );
+    if (result == null) return;
 
     final repo = ref.read(journalRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
     final now = utcNow();
-    final palette = paletteFromItems(
-      _journals.map((j) => j.colorValue),
-      ref.read(colorPaletteProvider),
-    );
-    final trimmed = name.trim();
+    final trimmed = result.name;
 
     if (_journals.isEmpty) {
       final legacy = Journal(
         id: newId(),
         name: 'Journal',
-        colorValue: palette.nextColor(),
+        colorValue: assigner.nextColor(),
         createdAt: now,
         updatedAt: now,
       );
       final named = Journal(
         id: newId(),
         name: trimmed,
-        colorValue: palette.nextColor(),
+        colorValue: result.color,
         createdAt: now,
         updatedAt: now,
       );
@@ -99,16 +110,18 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       }
       await repo.upsertJournal(named);
       remoteSync.pushJournal(named);
+      _createdJournalId = named.id;
     } else {
       final journal = Journal(
         id: newId(),
         name: trimmed,
-        colorValue: palette.nextColor(),
+        colorValue: result.color,
         createdAt: now,
         updatedAt: now,
       );
       await repo.upsertJournal(journal);
       remoteSync.pushJournal(journal);
+      _createdJournalId = journal.id;
     }
     await _reload();
   }
@@ -125,16 +138,10 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
   }
 
   Future<void> _pickColor(Journal journal) async {
-    final used = _journals
-        .where((j) => j.id != journal.id)
-        .map((j) => j.colorValue)
-        .whereType<int>()
-        .toSet();
     final color = await pickPaletteColorWithRef(
       ref,
       context,
       current: journal.colorValue,
-      usedColors: used,
     );
     if (color == null) return;
     final updated = journal.copyWith(colorValue: color);
@@ -206,6 +213,7 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
         content: TextField(
           controller: controller,
           autofocus: true,
+          decoration: InputDecoration(labelText: title),
           onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [
@@ -277,20 +285,11 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
                                   await _deleteJournal(journal);
                               }
                             },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'rename',
-                                child: Text('Rename'),
-                              ),
-                              PopupMenuItem(
-                                value: 'color',
-                                child: Text('Change color'),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Delete'),
-                              ),
-                            ],
+                            itemBuilder: (_) => voyagerPopupMenuEntries<String>([
+                              (value: 'rename', child: Text('Rename')),
+                              (value: 'color', child: Text('Change color')),
+                              (value: 'delete', child: Text('Delete')),
+                            ]),
                           ),
                         );
                       },
@@ -301,7 +300,7 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, _createdJournalId),
           child: const Text('Close'),
         ),
         FilledButton.icon(
