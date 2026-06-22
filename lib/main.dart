@@ -102,23 +102,32 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
     await quotesFuture;
     if (!mounted) return;
 
-    await sync.pullOnStartup(
-      purgeExpiredDeleted: backgroundSync.purgeExpiredDeleted,
-      pullFromRemote: () async {
-        await remoteSync.pullAll();
-        if (!mounted) return;
-        liveSync.start();
-        ref.invalidate(journalEntriesProvider);
-        ref.invalidate(journalsProvider);
-        ref.invalidate(settingsProvider);
-        ref.invalidate(todoListsProvider);
-      },
-      localRefresh: () async {
-        await lazy.loadRecentEntries();
-      },
-    );
+    final warmupTracker = ref.read(warmupTrackerProvider);
+    warmupTracker.begin('Startup sync');
+    try {
+      await sync.pullOnStartup(
+        purgeExpiredDeleted: backgroundSync.purgeExpiredDeleted,
+        pullFromRemote: () async {
+          await remoteSync.pullAll();
+          if (!mounted) return;
+          liveSync.start();
+          ref.invalidate(journalEntriesProvider);
+          ref.invalidate(journalsProvider);
+          ref.invalidate(settingsProvider);
+          ref.invalidate(todoListsProvider);
+        },
+        localRefresh: () async {
+          await lazy.loadRecentEntries();
+        },
+      );
+      warmupTracker.complete('Startup sync');
+    } catch (_) {
+      warmupTracker.fail('Startup sync');
+      rethrow;
+    }
     if (!mounted) return;
 
+    warmupTracker.begin('Weather warmup');
     try {
       await weatherService.refreshIfNeeded();
       if (!mounted) return;
@@ -126,7 +135,9 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
       if (!mounted) return;
       ref.invalidate(currentWeatherProvider);
       ref.invalidate(weatherForecastProvider);
+      warmupTracker.complete('Weather warmup');
     } catch (error, stackTrace) {
+      warmupTracker.fail('Weather warmup');
       FlutterError.reportError(
         FlutterErrorDetails(
           exception: error,

@@ -9,6 +9,8 @@ import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/features/dev/dev_calendar_zoom_prewarm_tile.dart';
+import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
 import 'package:voyager/features/shell/weather_forecast_sheet.dart';
@@ -34,21 +36,28 @@ class AppShell extends ConsumerWidget {
 
     return ShellKeyboardShortcuts(
       navigationShell: navigationShell,
-      child: Scaffold(
-        body: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
-              child: _VoyagerNavigationRail(
-                selectedIndex: index,
-                accent: accent,
-                onDestinationSelected: navigationShell.goBranch,
-              ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Scaffold(
+            body: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+                  child: _VoyagerNavigationRail(
+                    selectedIndex: index,
+                    accent: accent,
+                    onDestinationSelected: navigationShell.goBranch,
+                  ),
+                ),
+                const VerticalDivider(width: 12),
+                Expanded(child: child),
+              ],
             ),
-            const VerticalDivider(width: 12),
-            Expanded(child: child),
-          ],
-        ),
+          ),
+          const CacheStatusOverlay(),
+          const CalendarZoomPrewarmOverlay(),
+        ],
       ),
     );
   }

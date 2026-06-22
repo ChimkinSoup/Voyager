@@ -7,6 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
+import 'package:voyager/core/dev/cache_status.dart';
+import 'package:voyager/core/dev/dev_settings_controller.dart';
+import 'package:voyager/core/dev/warmup_tracker.dart';
+import 'package:voyager/features/calendar/month_zoom_prewarm_tracker.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
@@ -334,4 +338,64 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
       );
     }),
   ]);
+});
+
+final devSettingsProvider = ChangeNotifierProvider<DevSettingsController>((
+  ref,
+) {
+  final controller = DevSettingsController(
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+  );
+  unawaited(controller.loadFromSettings());
+  ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+    next.whenData(controller.applySettings);
+  });
+  return controller;
+});
+
+final warmupTrackerProvider = ChangeNotifierProvider<WarmupTracker>((ref) {
+  return WarmupTracker();
+});
+
+final monthZoomPrewarmTrackerProvider =
+    ChangeNotifierProvider<MonthZoomPrewarmTracker>((ref) {
+      return MonthZoomPrewarmTracker();
+    });
+
+final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
+  final warmup = ref.watch(warmupTrackerProvider);
+  final monthZoomPrewarm = ref.watch(monthZoomPrewarmTrackerProvider);
+
+  final items = <CacheItemStatus>[
+    cacheStatusFromWarmup('Startup sync', warmup.stateFor('Startup sync')),
+    cacheStatusFromWarmup('Weather warmup', warmup.stateFor('Weather warmup')),
+    monthZoomPrewarm.layoutCacheStatus,
+    cacheStatusFromAsync('Quotes', ref.watch(quotesLoadedProvider)),
+    cacheStatusFromAsync('Settings', ref.watch(settingsProvider)),
+    cacheStatusFromAsync('Journals', ref.watch(journalsProvider)),
+    cacheStatusFromAsync('Journal entries', ref.watch(journalEntriesProvider)),
+    cacheStatusFromAsync('Calendar events', ref.watch(calendarEventsProvider)),
+    cacheStatusFromAsync('Trackers', ref.watch(trackersProvider)),
+    cacheStatusFromAsync('Ranking configs', ref.watch(rankingConfigsProvider)),
+    cacheStatusFromAsync('Current weather', ref.watch(currentWeatherProvider)),
+    cacheStatusFromAsync('Weather forecast', ref.watch(weatherForecastProvider)),
+    cacheStatusFromAsync('Shell warmup', ref.watch(shellDataWarmupProvider)),
+  ];
+
+  final listsAsync = ref.watch(todoListsProvider);
+  items.add(cacheStatusFromAsync('Todo lists', listsAsync));
+
+  final lists = listsAsync.valueOrNull;
+  if (lists != null) {
+    for (final list in lists) {
+      items.add(
+        cacheStatusFromAsync(
+          'Tasks: ${list.name}',
+          ref.watch(todoTasksProvider(list.id)),
+        ),
+      );
+    }
+  }
+
+  return CacheStatusSnapshot(items: items);
 });

@@ -205,6 +205,10 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowSyncDownloads =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get devShowCacheStatus =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get devShowCalendarZoomPrewarm =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
   IntColumn get weatherChartRainColor => integer().nullable()();
@@ -242,7 +246,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -372,6 +376,18 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           settingsTable,
           settingsTable.journalEntryListWidth,
+        );
+      }
+      if (from < 17) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devShowCacheStatus,
+        );
+      }
+      if (from < 18) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devShowCalendarZoomPrewarm,
         );
       }
     },

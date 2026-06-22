@@ -3,6 +3,16 @@ import 'package:intl/intl.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/features/calendar/calendar_day_grid.dart';
+
+export 'calendar_day_grid.dart'
+    show
+        CalendarDayIndicator,
+        MonthDayCellStyle,
+        MonthDayGrid,
+        MonthDayGridLayout,
+        MonthZoomMorphOverlay,
+        monthGridDates;
 
 class CalendarGrid extends StatelessWidget {
   const CalendarGrid({
@@ -14,6 +24,11 @@ class CalendarGrid extends StatelessWidget {
     required this.onMonthTap,
     this.indicators = const [],
     this.weekStartsMonday = true,
+    this.dayCellKeyBuilder,
+    this.zoomSourceMonth,
+    this.nonTransitionOpacity = 1,
+    this.hideZoomSourceDayCells = false,
+    this.fadeNonSourceMonthsOnly = false,
   });
 
   final CalendarViewMode mode;
@@ -21,8 +36,15 @@ class CalendarGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
-  final void Function(DateTime month, Rect globalBounds) onMonthTap;
+  final void Function(DateTime month, Map<DateTime, Rect> dayGlobalRects)
+  onMonthTap;
   final bool weekStartsMonday;
+  final GlobalKey Function(DateTime ownerMonth, DateTime cellDate)?
+  dayCellKeyBuilder;
+  final DateTime? zoomSourceMonth;
+  final double nonTransitionOpacity;
+  final bool hideZoomSourceDayCells;
+  final bool fadeNonSourceMonthsOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +62,9 @@ class CalendarGrid extends StatelessWidget {
         indicators: indicators,
         onDayTap: onDayTap,
         weekStartsMonday: weekStartsMonday,
+        dayCellKeyBuilder: dayCellKeyBuilder == null
+            ? null
+            : (date) => dayCellKeyBuilder!(focused, date),
       ),
       CalendarViewMode.year => _YearGrid(
         focused: focused,
@@ -48,6 +73,11 @@ class CalendarGrid extends StatelessWidget {
         onDayTap: onDayTap,
         onMonthTap: onMonthTap,
         weekStartsMonday: weekStartsMonday,
+        dayCellKeyBuilder: dayCellKeyBuilder,
+        zoomSourceMonth: zoomSourceMonth,
+        nonTransitionOpacity: nonTransitionOpacity,
+        hideZoomSourceDayCells: hideZoomSourceDayCells,
+        fadeNonSourceMonthsOnly: fadeNonSourceMonthsOnly,
       ),
     };
   }
@@ -68,31 +98,12 @@ class MiniMonthCalendar extends StatelessWidget {
   final void Function(DateTime day) onDayTap;
   final DateTime? selectedDay;
 
-  static const _weekdayLabelsMonday = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ];
-  static const _weekdayLabelsSunday = [
-    'Sun',
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final cells = monthGridDates(month, weekStartsMonday: weekStartsMonday);
     final labels = weekStartsMonday
-        ? _weekdayLabelsMonday
-        : _weekdayLabelsSunday;
+        ? calendarWeekdayLabelsMonday
+        : calendarWeekdayLabelsSunday;
 
     return SizedBox(
       width: 180,
@@ -127,15 +138,11 @@ class MiniMonthCalendar extends StatelessWidget {
                     children: List.generate(7, (col) {
                       final date = cells[row * 7 + col];
                       return Expanded(
-                        child: _DayNumberCell(
+                        child: CalendarDayNumber(
                           date: date,
                           month: month,
                           fontSize: 12,
-                          onTap: () => onDayTap(date),
-                          selected:
-                              selectedDay != null &&
-                              _sameDay(selectedDay!, date),
-                          selectedIsSoft: true,
+                          mutedWhenAdjacent: date.month != month.month,
                         ),
                       );
                     }),
@@ -167,7 +174,7 @@ class DayHourGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dayEvents = events.where((e) => _sameDay(e.start, day)).toList()
+    final dayEvents = events.where((e) => calendarSameDay(e.start, day)).toList()
       ..sort((a, b) => a.start.compareTo(b.start));
     final fullDayEvents = dayEvents.where((e) => e.isFullDay).toList();
     final timedEvents = dayEvents.where((e) => !e.isFullDay).toList();
@@ -270,20 +277,6 @@ class DayHourGrid extends StatelessWidget {
   }
 }
 
-class CalendarDayIndicator {
-  const CalendarDayIndicator({
-    required this.day,
-    required this.colorValue,
-    required this.label,
-    this.intensity = 1,
-  });
-
-  final DateTime day;
-  final int colorValue;
-  final String label;
-  final double intensity;
-}
-
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.focused,
@@ -291,6 +284,7 @@ class _MonthGrid extends StatelessWidget {
     required this.indicators,
     required this.onDayTap,
     required this.weekStartsMonday,
+    this.dayCellKeyBuilder,
   });
 
   final DateTime focused;
@@ -298,107 +292,19 @@ class _MonthGrid extends StatelessWidget {
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
   final bool weekStartsMonday;
+  final GlobalKey Function(DateTime date)? dayCellKeyBuilder;
 
   @override
   Widget build(BuildContext context) {
-    final cells = monthGridDates(focused, weekStartsMonday: weekStartsMonday);
-    final labels = weekStartsMonday
-        ? MiniMonthCalendar._weekdayLabelsMonday
-        : MiniMonthCalendar._weekdayLabelsSunday;
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            for (final label in labels)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    label,
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Expanded(
-          child: Column(
-            children: List.generate(6, (row) {
-              return Expanded(
-                child: Row(
-                  children: List.generate(7, (col) {
-                    final date = cells[row * 7 + col];
-                    final inMonth = date.month == focused.month;
-                    final dayEvents = events
-                        .where((e) => _sameDay(e.start, date))
-                        .toList();
-                    final dayIndicators = indicators
-                        .where((i) => _sameDay(i.day, date))
-                        .take(3)
-                        .toList();
-                    return Expanded(
-                      child: InkWell(
-                        onTap: () => onDayTap(date),
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          margin: const EdgeInsets.all(1),
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Theme.of(context).dividerColor,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _DayNumberCell(
-                                date: date,
-                                month: focused,
-                                fontSize: 15,
-                                mutedWhenAdjacent: !inMonth,
-                              ),
-                              if (dayIndicators.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                _IndicatorDots(indicators: dayIndicators),
-                              ],
-                              if (dayEvents.isNotEmpty)
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: dayEvents.take(2).map((e) {
-                                      return Container(
-                                        margin: const EdgeInsets.only(top: 1),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 2,
-                                        ),
-                                        color: Color(
-                                          e.colorValue,
-                                        ).withValues(alpha: 0.45),
-                                        child: Text(
-                                          e.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: AppFonts.style(fontSize: 9),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              );
-            }),
-          ),
-        ),
-      ],
+    return MonthDayGrid(
+      month: focused,
+      events: events,
+      indicators: indicators,
+      weekStartsMonday: weekStartsMonday,
+      style: MonthDayCellStyle.full,
+      onDayTap: onDayTap,
+      showWeekdayHeader: true,
+      dayCellKeyBuilder: dayCellKeyBuilder,
     );
   }
 }
@@ -422,8 +328,8 @@ class _WeekGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final start = _weekStart(focused, weekStartsMonday);
     final labels = weekStartsMonday
-        ? MiniMonthCalendar._weekdayLabelsMonday
-        : MiniMonthCalendar._weekdayLabelsSunday;
+        ? calendarWeekdayLabelsMonday
+        : calendarWeekdayLabelsSunday;
     return Column(
       children: [
         Row(
@@ -446,70 +352,106 @@ class _WeekGrid extends StatelessWidget {
             children: List.generate(7, (i) {
               final date = start.add(Duration(days: i));
               final dayEvents = events
-                  .where((e) => _sameDay(e.start, date))
+                  .where((e) => calendarSameDay(e.start, date))
                   .toList();
               final dayIndicators = indicators
-                  .where((indicator) => _sameDay(indicator.day, date))
+                  .where((indicator) => calendarSameDay(indicator.day, date))
                   .take(4)
                   .toList();
               return Expanded(
-                child: InkWell(
+                child: CalendarDayCell(
+                  date: date,
+                  month: date,
+                  events: dayEvents,
+                  indicators: dayIndicators,
+                  style: _weekDayStyle,
                   onTap: () => onDayTap(date),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Theme.of(context).dividerColor),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _DayNumberCell(date: date, month: date, fontSize: 13),
-                        const SizedBox(height: 2),
-                        if (dayIndicators.isNotEmpty) ...[
-                          _IndicatorDots(indicators: dayIndicators),
-                          const SizedBox(height: 4),
-                        ],
-                        Expanded(
-                          child: ListView(
-                            padding: EdgeInsets.zero,
-                            children: dayEvents
-                                .map(
-                                  (e) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 2),
-                                    child: Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 3,
-                                          backgroundColor: Color(e.colorValue),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            e.title,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppFonts.style(fontSize: 10),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               );
             }),
           ),
         ),
       ],
+    );
+  }
+}
+
+const _weekDayStyle = MonthDayCellStyle(
+  fontSize: 13,
+  borderRadius: 12,
+  cellPadding: EdgeInsets.all(4),
+  cellMargin: EdgeInsets.symmetric(horizontal: 2),
+  maxEventLines: 8,
+  dotSize: 7,
+  eventFontSize: 10,
+);
+
+/// Computes year-tile day cell positions without mounting a year grid.
+class YearMonthTileLayout {
+  YearMonthTileLayout._();
+
+  static const crossAxisCount = 4;
+  static const childAspectRatio = 1.35;
+  static const mainAxisSpacing = 8.0;
+  static const crossAxisSpacing = 8.0;
+  static const tilePadding = EdgeInsets.all(8);
+  static const titleGap = 4.0;
+
+  static double measureMonthTitleHeight(BuildContext context) {
+    final style = Theme.of(context).textTheme.titleSmall;
+    if (style == null) return 20 + titleGap;
+
+    final painter = TextPainter(
+      text: TextSpan(text: 'September', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    return painter.height + titleGap;
+  }
+
+  static Map<DateTime, Rect> computeDayRects({
+    required Size areaSize,
+    required DateTime month,
+    required bool weekStartsMonday,
+    required double monthTitleHeight,
+  }) {
+    final index = month.month - 1;
+    final col = index % crossAxisCount;
+    final row = index ~/ crossAxisCount;
+
+    final childWidth =
+        (areaSize.width - crossAxisSpacing * (crossAxisCount - 1)) /
+        crossAxisCount;
+    final childHeight = childWidth / childAspectRatio;
+
+    final tileLeft = col * (childWidth + crossAxisSpacing);
+    final tileTop = row * (childHeight + mainAxisSpacing);
+
+    final gridLeft = tileLeft + tilePadding.left;
+    final gridTop = tileTop + tilePadding.top + monthTitleHeight;
+    final gridWidth =
+        childWidth - tilePadding.left - tilePadding.right;
+    final gridHeight =
+        childHeight -
+        tilePadding.top -
+        tilePadding.bottom -
+        monthTitleHeight;
+
+    if (gridWidth <= 0 || gridHeight <= 0) return const {};
+
+    final slotRects = MonthDayGridLayout.computeSlotRects(
+      areaSize: Size(gridWidth, gridHeight),
+      weekdayHeaderHeight: 0,
+    );
+
+    final localSlots = [
+      for (final rect in slotRects) rect.shift(Offset(gridLeft, gridTop)),
+    ];
+
+    return MonthDayGridLayout.mapDatesToSlotRects(
+      month: month,
+      weekStartsMonday: weekStartsMonday,
+      slotRects: localSlots,
     );
   }
 }
@@ -522,14 +464,43 @@ class _YearGrid extends StatelessWidget {
     required this.onDayTap,
     required this.onMonthTap,
     required this.weekStartsMonday,
+    this.dayCellKeyBuilder,
+    this.zoomSourceMonth,
+    this.nonTransitionOpacity = 1,
+    this.hideZoomSourceDayCells = false,
+    this.fadeNonSourceMonthsOnly = false,
   });
 
   final DateTime focused;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
-  final void Function(DateTime month, Rect globalBounds) onMonthTap;
+  final void Function(DateTime month, Map<DateTime, Rect> dayGlobalRects)
+  onMonthTap;
   final bool weekStartsMonday;
+  final GlobalKey Function(DateTime ownerMonth, DateTime cellDate)?
+  dayCellKeyBuilder;
+  final DateTime? zoomSourceMonth;
+  final double nonTransitionOpacity;
+  final bool hideZoomSourceDayCells;
+  final bool fadeNonSourceMonthsOnly;
+
+  Map<DateTime, Rect> _collectDayRects(DateTime monthDate) {
+    final rects = <DateTime, Rect>{};
+    if (dayCellKeyBuilder == null) return rects;
+
+    for (final date in monthGridDates(
+      monthDate,
+      weekStartsMonday: weekStartsMonday,
+    )) {
+      final key = dayCellKeyBuilder!(monthDate, date);
+      final box = key.currentContext?.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize && box.attached) {
+        rects[date] = box.localToGlobal(Offset.zero) & box.size;
+      }
+    }
+    return rects;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -545,159 +516,60 @@ class _YearGrid extends StatelessWidget {
       itemBuilder: (_, i) {
         final month = i + 1;
         final monthDate = DateTime(focused.year, month);
-        final count = events
-            .where(
-              (e) => e.start.year == focused.year && e.start.month == month,
-            )
-            .length;
-        return Builder(
-          builder: (cellContext) {
-            return InkWell(
-              onTap: () {
-                final renderBox =
-                    cellContext.findRenderObject() as RenderBox?;
-                if (renderBox == null) {
-                  onMonthTap(monthDate, Rect.zero);
-                  return;
-                }
-                final origin = renderBox.localToGlobal(Offset.zero);
-                onMonthTap(monthDate, origin & renderBox.size);
-              },
-              borderRadius: BorderRadius.circular(18),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        DateFormat.MMMM().format(monthDate),
-                        style: Theme.of(context).textTheme.titleSmall,
-                        textAlign: TextAlign.center,
-                      ),
-                      if (count > 0)
-                        Text(
-                          '$count events',
-                          style: Theme.of(context).textTheme.bodySmall,
-                          textAlign: TextAlign.center,
-                        ),
-                      const SizedBox(height: 4),
-                      Expanded(
-                        child: _CompactMonthGrid(
-                          month: monthDate,
-                          weekStartsMonday: weekStartsMonday,
-                        ),
-                      ),
-                    ],
+        final isZoomSource = zoomSourceMonth != null &&
+            monthDate.year == zoomSourceMonth!.year &&
+            monthDate.month == zoomSourceMonth!.month;
+
+        Widget monthTile = InkWell(
+          onTap: () => onMonthTap(monthDate, _collectDayRects(monthDate)),
+          borderRadius: BorderRadius.circular(18),
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    DateFormat.MMMM().format(monthDate),
+                    style: Theme.of(context).textTheme.titleSmall,
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Expanded(
+                    child: hideZoomSourceDayCells && isZoomSource
+                        ? const SizedBox.expand()
+                        : MonthDayGrid(
+                            month: monthDate,
+                            events: events,
+                            indicators: indicators,
+                            weekStartsMonday: weekStartsMonday,
+                            style: MonthDayCellStyle.compact,
+                            dayCellKeyBuilder: dayCellKeyBuilder == null
+                                ? null
+                                : (date) =>
+                                      dayCellKeyBuilder!(monthDate, date),
+                          ),
+                  ),
+                ],
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _CompactMonthGrid extends StatelessWidget {
-  const _CompactMonthGrid({
-    required this.month,
-    required this.weekStartsMonday,
-  });
-
-  final DateTime month;
-  final bool weekStartsMonday;
-
-  @override
-  Widget build(BuildContext context) {
-    final cells = monthGridDates(month, weekStartsMonday: weekStartsMonday);
-
-    return Column(
-      children: List.generate(6, (row) {
-        return Expanded(
-          child: Row(
-            children: List.generate(7, (col) {
-              final date = cells[row * 7 + col];
-              return Expanded(
-                child: _DayNumberCell(
-                  date: date,
-                  month: month,
-                  fontSize: 8,
-                  mutedWhenAdjacent: date.month != month.month,
-                ),
-              );
-            }),
+            ),
           ),
         );
-      }),
-    );
-  }
-}
 
-class _DayNumberCell extends StatelessWidget {
-  const _DayNumberCell({
-    required this.date,
-    required this.month,
-    required this.fontSize,
-    this.onTap,
-    this.selected = false,
-    this.selectedIsSoft = false,
-    this.mutedWhenAdjacent = false,
-  });
+        if (zoomSourceMonth != null) {
+          final applyOpacity =
+              !fadeNonSourceMonthsOnly || !isZoomSource;
+          if (applyOpacity) {
+            monthTile = Opacity(
+              opacity: nonTransitionOpacity.clamp(0.0, 1.0),
+              child: monthTile,
+            );
+          }
+        }
 
-  final DateTime date;
-  final DateTime month;
-  final double fontSize;
-  final VoidCallback? onTap;
-  final bool selected;
-  final bool selectedIsSoft;
-  final bool mutedWhenAdjacent;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
-    final isToday = _isToday(date);
-    final isAdjacent = date.month != month.month;
-    final muted = mutedWhenAdjacent && isAdjacent;
-    final diameter = fontSize + 10;
-
-    final textStyle = AppFonts.style(
-      fontSize: fontSize,
-      fontWeight: isToday ? FontWeight.w600 : FontWeight.w500,
-      color: isToday
-          ? Theme.of(context).colorScheme.onPrimary
-          : muted
-          ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)
-          : Theme.of(context).colorScheme.onSurface,
-    );
-
-    final child = Container(
-      width: diameter,
-      height: diameter,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: isToday ? accent : null,
-        shape: BoxShape.circle,
-        border: selected && !isToday
-            ? Border.all(
-                color: accent.withValues(alpha: selectedIsSoft ? 0.45 : 1),
-                width: 2,
-              )
-            : null,
-      ),
-      child: Text('${date.day}', style: textStyle),
-    );
-
-    return Center(
-      child: onTap == null
-          ? child
-          : InkWell(
-              onTap: onTap,
-              customBorder: const CircleBorder(),
-              child: child,
-            ),
+        return monthTile;
+      },
     );
   }
 }
@@ -733,123 +605,6 @@ class _DayEventTile extends StatelessWidget {
       ),
     );
   }
-}
-
-class _IndicatorDots extends StatelessWidget {
-  const _IndicatorDots({required this.indicators});
-
-  final List<CalendarDayIndicator> indicators;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 2,
-      runSpacing: 2,
-      alignment: WrapAlignment.center,
-      children: [
-        for (final indicator in indicators)
-          Tooltip(
-            message: indicator.label,
-            child: Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                color: Color(indicator.colorValue).withValues(
-                  alpha: (0.35 + 0.65 * indicator.intensity).clamp(0.35, 1),
-                ),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Expands from a year-view month cell to fill the calendar area.
-class YearToMonthZoomOverlay extends StatelessWidget {
-  const YearToMonthZoomOverlay({
-    super.key,
-    required this.progress,
-    required this.fromLocal,
-    required this.toLocal,
-    required this.child,
-  });
-
-  final double progress;
-  final Rect fromLocal;
-  final Rect toLocal;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final current = Rect.lerp(fromLocal, toLocal, progress)!;
-    final scaleX = current.width / toLocal.width;
-    final scaleY = current.height / toLocal.height;
-    final radius = BorderRadius.circular(
-      Tween<double>(begin: 18, end: 0).transform(progress),
-    );
-
-    return Positioned.fromRect(
-      rect: current,
-      child: ClipRRect(
-        borderRadius: radius,
-        child: Material(
-          color: Theme.of(context).colorScheme.surface,
-          clipBehavior: Clip.hardEdge,
-          child: OverflowBox(
-            minWidth: toLocal.width,
-            maxWidth: toLocal.width,
-            minHeight: toLocal.height,
-            maxHeight: toLocal.height,
-            alignment: Alignment.topLeft,
-            child: Transform(
-              alignment: Alignment.topLeft,
-              transform: Matrix4.diagonal3Values(scaleX, scaleY, 1),
-              child: SizedBox(
-                width: toLocal.width,
-                height: toLocal.height,
-                child: child,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Builds 42 dates (6 weeks) for a month grid, including adjacent-month padding.
-List<DateTime> monthGridDates(
-  DateTime month, {
-  required bool weekStartsMonday,
-}) {
-  final first = DateTime(month.year, month.month, 1);
-  final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-  final startWeekday = first.weekday;
-  final leading = weekStartsMonday ? (startWeekday - 1) % 7 : startWeekday % 7;
-
-  final cells = <DateTime>[];
-  final prevMonthLast = DateTime(month.year, month.month, 0).day;
-  for (var i = leading - 1; i >= 0; i--) {
-    cells.add(DateTime(month.year, month.month - 1, prevMonthLast - i));
-  }
-  for (var day = 1; day <= daysInMonth; day++) {
-    cells.add(DateTime(month.year, month.month, day));
-  }
-  var nextDay = 1;
-  while (cells.length < 42) {
-    cells.add(DateTime(month.year, month.month + 1, nextDay++));
-  }
-  return cells;
-}
-
-bool _sameDay(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
-
-bool _isToday(DateTime date) {
-  final now = DateTime.now();
-  return _sameDay(date, now);
 }
 
 DateTime _weekStart(DateTime date, bool weekStartsMonday) {

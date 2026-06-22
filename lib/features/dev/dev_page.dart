@@ -7,6 +7,8 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/features/dev/dev_calendar_zoom_prewarm_tile.dart';
+import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
@@ -78,6 +80,10 @@ class DevPage extends ConsumerWidget {
             unawaited(ref.read(syncActivityProvider).setShowDownloads(value));
           },
         ),
+        const Divider(height: 32),
+        const DevCacheStatusSection(),
+        const Divider(height: 32),
+        const DevCalendarZoomPrewarmSection(),
         const Divider(height: 32),
         DevWeatherApiTile(settings: settings),
         const Divider(height: 32),

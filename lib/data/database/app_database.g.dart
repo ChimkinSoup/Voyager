@@ -6106,6 +6106,35 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _devShowCacheStatusMeta =
+      const VerificationMeta('devShowCacheStatus');
+  @override
+  late final GeneratedColumn<bool> devShowCacheStatus = GeneratedColumn<bool>(
+    'dev_show_cache_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_show_cache_status" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _devShowCalendarZoomPrewarmMeta =
+      const VerificationMeta('devShowCalendarZoomPrewarm');
+  @override
+  late final GeneratedColumn<bool> devShowCalendarZoomPrewarm =
+      GeneratedColumn<bool>(
+        'dev_show_calendar_zoom_prewarm',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("dev_show_calendar_zoom_prewarm" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _weatherForecastJsonMeta =
       const VerificationMeta('weatherForecastJson');
   @override
@@ -6189,6 +6218,8 @@ class $SettingsTableTable extends SettingsTable
     devShowSyncLocalSaves,
     devShowSyncUploads,
     devShowSyncDownloads,
+    devShowCacheStatus,
+    devShowCalendarZoomPrewarm,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -6435,6 +6466,24 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('dev_show_cache_status')) {
+      context.handle(
+        _devShowCacheStatusMeta,
+        devShowCacheStatus.isAcceptableOrUnknown(
+          data['dev_show_cache_status']!,
+          _devShowCacheStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_show_calendar_zoom_prewarm')) {
+      context.handle(
+        _devShowCalendarZoomPrewarmMeta,
+        devShowCalendarZoomPrewarm.isAcceptableOrUnknown(
+          data['dev_show_calendar_zoom_prewarm']!,
+          _devShowCalendarZoomPrewarmMeta,
+        ),
+      );
+    }
     if (data.containsKey('weather_forecast_json')) {
       context.handle(
         _weatherForecastJsonMeta,
@@ -6601,6 +6650,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}dev_show_sync_downloads'],
       )!,
+      devShowCacheStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_cache_status'],
+      )!,
+      devShowCalendarZoomPrewarm: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_calendar_zoom_prewarm'],
+      )!,
       weatherForecastJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_forecast_json'],
@@ -6660,6 +6717,8 @@ class SettingsTableData extends DataClass
   final bool devShowSyncLocalSaves;
   final bool devShowSyncUploads;
   final bool devShowSyncDownloads;
+  final bool devShowCacheStatus;
+  final bool devShowCalendarZoomPrewarm;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -6694,6 +6753,8 @@ class SettingsTableData extends DataClass
     required this.devShowSyncLocalSaves,
     required this.devShowSyncUploads,
     required this.devShowSyncDownloads,
+    required this.devShowCacheStatus,
+    required this.devShowCalendarZoomPrewarm,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -6759,6 +6820,10 @@ class SettingsTableData extends DataClass
     map['dev_show_sync_local_saves'] = Variable<bool>(devShowSyncLocalSaves);
     map['dev_show_sync_uploads'] = Variable<bool>(devShowSyncUploads);
     map['dev_show_sync_downloads'] = Variable<bool>(devShowSyncDownloads);
+    map['dev_show_cache_status'] = Variable<bool>(devShowCacheStatus);
+    map['dev_show_calendar_zoom_prewarm'] = Variable<bool>(
+      devShowCalendarZoomPrewarm,
+    );
     if (!nullToAbsent || weatherForecastJson != null) {
       map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
     }
@@ -6831,6 +6896,8 @@ class SettingsTableData extends DataClass
       devShowSyncLocalSaves: Value(devShowSyncLocalSaves),
       devShowSyncUploads: Value(devShowSyncUploads),
       devShowSyncDownloads: Value(devShowSyncDownloads),
+      devShowCacheStatus: Value(devShowCacheStatus),
+      devShowCalendarZoomPrewarm: Value(devShowCalendarZoomPrewarm),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherForecastJson),
@@ -6905,6 +6972,10 @@ class SettingsTableData extends DataClass
       devShowSyncDownloads: serializer.fromJson<bool>(
         json['devShowSyncDownloads'],
       ),
+      devShowCacheStatus: serializer.fromJson<bool>(json['devShowCacheStatus']),
+      devShowCalendarZoomPrewarm: serializer.fromJson<bool>(
+        json['devShowCalendarZoomPrewarm'],
+      ),
       weatherForecastJson: serializer.fromJson<String?>(
         json['weatherForecastJson'],
       ),
@@ -6956,6 +7027,10 @@ class SettingsTableData extends DataClass
       'devShowSyncLocalSaves': serializer.toJson<bool>(devShowSyncLocalSaves),
       'devShowSyncUploads': serializer.toJson<bool>(devShowSyncUploads),
       'devShowSyncDownloads': serializer.toJson<bool>(devShowSyncDownloads),
+      'devShowCacheStatus': serializer.toJson<bool>(devShowCacheStatus),
+      'devShowCalendarZoomPrewarm': serializer.toJson<bool>(
+        devShowCalendarZoomPrewarm,
+      ),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
@@ -6995,6 +7070,8 @@ class SettingsTableData extends DataClass
     bool? devShowSyncLocalSaves,
     bool? devShowSyncUploads,
     bool? devShowSyncDownloads,
+    bool? devShowCacheStatus,
+    bool? devShowCalendarZoomPrewarm,
     Value<String?> weatherForecastJson = const Value.absent(),
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
@@ -7043,6 +7120,9 @@ class SettingsTableData extends DataClass
     devShowSyncLocalSaves: devShowSyncLocalSaves ?? this.devShowSyncLocalSaves,
     devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
     devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
+    devShowCacheStatus: devShowCacheStatus ?? this.devShowCacheStatus,
+    devShowCalendarZoomPrewarm:
+        devShowCalendarZoomPrewarm ?? this.devShowCalendarZoomPrewarm,
     weatherForecastJson: weatherForecastJson.present
         ? weatherForecastJson.value
         : this.weatherForecastJson,
@@ -7139,6 +7219,12 @@ class SettingsTableData extends DataClass
       devShowSyncDownloads: data.devShowSyncDownloads.present
           ? data.devShowSyncDownloads.value
           : this.devShowSyncDownloads,
+      devShowCacheStatus: data.devShowCacheStatus.present
+          ? data.devShowCacheStatus.value
+          : this.devShowCacheStatus,
+      devShowCalendarZoomPrewarm: data.devShowCalendarZoomPrewarm.present
+          ? data.devShowCalendarZoomPrewarm.value
+          : this.devShowCalendarZoomPrewarm,
       weatherForecastJson: data.weatherForecastJson.present
           ? data.weatherForecastJson.value
           : this.weatherForecastJson,
@@ -7188,6 +7274,8 @@ class SettingsTableData extends DataClass
           ..write('devShowSyncLocalSaves: $devShowSyncLocalSaves, ')
           ..write('devShowSyncUploads: $devShowSyncUploads, ')
           ..write('devShowSyncDownloads: $devShowSyncDownloads, ')
+          ..write('devShowCacheStatus: $devShowCacheStatus, ')
+          ..write('devShowCalendarZoomPrewarm: $devShowCalendarZoomPrewarm, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -7227,6 +7315,8 @@ class SettingsTableData extends DataClass
     devShowSyncLocalSaves,
     devShowSyncUploads,
     devShowSyncDownloads,
+    devShowCacheStatus,
+    devShowCalendarZoomPrewarm,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -7265,6 +7355,8 @@ class SettingsTableData extends DataClass
           other.devShowSyncLocalSaves == this.devShowSyncLocalSaves &&
           other.devShowSyncUploads == this.devShowSyncUploads &&
           other.devShowSyncDownloads == this.devShowSyncDownloads &&
+          other.devShowCacheStatus == this.devShowCacheStatus &&
+          other.devShowCalendarZoomPrewarm == this.devShowCalendarZoomPrewarm &&
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
@@ -7301,6 +7393,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> devShowSyncLocalSaves;
   final Value<bool> devShowSyncUploads;
   final Value<bool> devShowSyncDownloads;
+  final Value<bool> devShowCacheStatus;
+  final Value<bool> devShowCalendarZoomPrewarm;
   final Value<String?> weatherForecastJson;
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
@@ -7335,6 +7429,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowSyncLocalSaves = const Value.absent(),
     this.devShowSyncUploads = const Value.absent(),
     this.devShowSyncDownloads = const Value.absent(),
+    this.devShowCacheStatus = const Value.absent(),
+    this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7370,6 +7466,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowSyncLocalSaves = const Value.absent(),
     this.devShowSyncUploads = const Value.absent(),
     this.devShowSyncDownloads = const Value.absent(),
+    this.devShowCacheStatus = const Value.absent(),
+    this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7405,6 +7503,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? devShowSyncLocalSaves,
     Expression<bool>? devShowSyncUploads,
     Expression<bool>? devShowSyncDownloads,
+    Expression<bool>? devShowCacheStatus,
+    Expression<bool>? devShowCalendarZoomPrewarm,
     Expression<String>? weatherForecastJson,
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
@@ -7453,6 +7553,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'dev_show_sync_uploads': devShowSyncUploads,
       if (devShowSyncDownloads != null)
         'dev_show_sync_downloads': devShowSyncDownloads,
+      if (devShowCacheStatus != null)
+        'dev_show_cache_status': devShowCacheStatus,
+      if (devShowCalendarZoomPrewarm != null)
+        'dev_show_calendar_zoom_prewarm': devShowCalendarZoomPrewarm,
       if (weatherForecastJson != null)
         'weather_forecast_json': weatherForecastJson,
       if (weatherChartTempColor != null)
@@ -7494,6 +7598,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? devShowSyncLocalSaves,
     Value<bool>? devShowSyncUploads,
     Value<bool>? devShowSyncDownloads,
+    Value<bool>? devShowCacheStatus,
+    Value<bool>? devShowCalendarZoomPrewarm,
     Value<String?>? weatherForecastJson,
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
@@ -7533,6 +7639,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           devShowSyncLocalSaves ?? this.devShowSyncLocalSaves,
       devShowSyncUploads: devShowSyncUploads ?? this.devShowSyncUploads,
       devShowSyncDownloads: devShowSyncDownloads ?? this.devShowSyncDownloads,
+      devShowCacheStatus: devShowCacheStatus ?? this.devShowCacheStatus,
+      devShowCalendarZoomPrewarm:
+          devShowCalendarZoomPrewarm ?? this.devShowCalendarZoomPrewarm,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
       weatherChartTempColor:
           weatherChartTempColor ?? this.weatherChartTempColor,
@@ -7649,6 +7758,14 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         devShowSyncDownloads.value,
       );
     }
+    if (devShowCacheStatus.present) {
+      map['dev_show_cache_status'] = Variable<bool>(devShowCacheStatus.value);
+    }
+    if (devShowCalendarZoomPrewarm.present) {
+      map['dev_show_calendar_zoom_prewarm'] = Variable<bool>(
+        devShowCalendarZoomPrewarm.value,
+      );
+    }
     if (weatherForecastJson.present) {
       map['weather_forecast_json'] = Variable<String>(
         weatherForecastJson.value,
@@ -7706,6 +7823,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('devShowSyncLocalSaves: $devShowSyncLocalSaves, ')
           ..write('devShowSyncUploads: $devShowSyncUploads, ')
           ..write('devShowSyncDownloads: $devShowSyncDownloads, ')
+          ..write('devShowCacheStatus: $devShowCacheStatus, ')
+          ..write('devShowCalendarZoomPrewarm: $devShowCalendarZoomPrewarm, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -10872,6 +10991,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> devShowSyncLocalSaves,
       Value<bool> devShowSyncUploads,
       Value<bool> devShowSyncDownloads,
+      Value<bool> devShowCacheStatus,
+      Value<bool> devShowCalendarZoomPrewarm,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -10908,6 +11029,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> devShowSyncLocalSaves,
       Value<bool> devShowSyncUploads,
       Value<bool> devShowSyncDownloads,
+      Value<bool> devShowCacheStatus,
+      Value<bool> devShowCalendarZoomPrewarm,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -11061,6 +11184,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get devShowSyncDownloads => $composableBuilder(
     column: $table.devShowSyncDownloads,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowCacheStatus => $composableBuilder(
+    column: $table.devShowCacheStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowCalendarZoomPrewarm => $composableBuilder(
+    column: $table.devShowCalendarZoomPrewarm,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11239,6 +11372,16 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get devShowCacheStatus => $composableBuilder(
+    column: $table.devShowCacheStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get devShowCalendarZoomPrewarm => $composableBuilder(
+    column: $table.devShowCalendarZoomPrewarm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => ColumnOrderings(column),
@@ -11408,6 +11551,16 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get devShowCacheStatus => $composableBuilder(
+    column: $table.devShowCacheStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get devShowCalendarZoomPrewarm => $composableBuilder(
+    column: $table.devShowCalendarZoomPrewarm,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => column,
@@ -11498,6 +11651,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowSyncLocalSaves = const Value.absent(),
                 Value<bool> devShowSyncUploads = const Value.absent(),
                 Value<bool> devShowSyncDownloads = const Value.absent(),
+                Value<bool> devShowCacheStatus = const Value.absent(),
+                Value<bool> devShowCalendarZoomPrewarm = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -11532,6 +11687,8 @@ class $$SettingsTableTableTableManager
                 devShowSyncLocalSaves: devShowSyncLocalSaves,
                 devShowSyncUploads: devShowSyncUploads,
                 devShowSyncDownloads: devShowSyncDownloads,
+                devShowCacheStatus: devShowCacheStatus,
+                devShowCalendarZoomPrewarm: devShowCalendarZoomPrewarm,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -11569,6 +11726,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowSyncLocalSaves = const Value.absent(),
                 Value<bool> devShowSyncUploads = const Value.absent(),
                 Value<bool> devShowSyncDownloads = const Value.absent(),
+                Value<bool> devShowCacheStatus = const Value.absent(),
+                Value<bool> devShowCalendarZoomPrewarm = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -11603,6 +11762,8 @@ class $$SettingsTableTableTableManager
                 devShowSyncLocalSaves: devShowSyncLocalSaves,
                 devShowSyncUploads: devShowSyncUploads,
                 devShowSyncDownloads: devShowSyncDownloads,
+                devShowCacheStatus: devShowCacheStatus,
+                devShowCalendarZoomPrewarm: devShowCalendarZoomPrewarm,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
