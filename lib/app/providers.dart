@@ -10,7 +10,6 @@ import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/dev/cache_status.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
-import 'package:voyager/features/calendar/month_zoom_prewarm_tracker.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
@@ -357,19 +356,12 @@ final warmupTrackerProvider = ChangeNotifierProvider<WarmupTracker>((ref) {
   return WarmupTracker();
 });
 
-final monthZoomPrewarmTrackerProvider =
-    ChangeNotifierProvider<MonthZoomPrewarmTracker>((ref) {
-      return MonthZoomPrewarmTracker();
-    });
-
 final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
   final warmup = ref.watch(warmupTrackerProvider);
-  final monthZoomPrewarm = ref.watch(monthZoomPrewarmTrackerProvider);
 
   final items = <CacheItemStatus>[
     cacheStatusFromWarmup('Startup sync', warmup.stateFor('Startup sync')),
     cacheStatusFromWarmup('Weather warmup', warmup.stateFor('Weather warmup')),
-    monthZoomPrewarm.layoutCacheStatus,
     cacheStatusFromAsync('Quotes', ref.watch(quotesLoadedProvider)),
     cacheStatusFromAsync('Settings', ref.watch(settingsProvider)),
     cacheStatusFromAsync('Journals', ref.watch(journalsProvider)),

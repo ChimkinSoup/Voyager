@@ -8,10 +8,9 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart';
 export 'calendar_day_grid.dart'
     show
         CalendarDayIndicator,
+        CalendarDayNumber,
         MonthDayCellStyle,
         MonthDayGrid,
-        MonthDayGridLayout,
-        MonthZoomMorphOverlay,
         monthGridDates;
 
 class CalendarGrid extends StatelessWidget {
@@ -24,11 +23,10 @@ class CalendarGrid extends StatelessWidget {
     required this.onMonthTap,
     this.indicators = const [],
     this.weekStartsMonday = true,
-    this.dayCellKeyBuilder,
-    this.zoomSourceMonth,
-    this.nonTransitionOpacity = 1,
-    this.hideZoomSourceDayCells = false,
-    this.fadeNonSourceMonthsOnly = false,
+    this.monthTileKeyBuilder,
+    this.yearTileDayGridKeyBuilder,
+    this.hiddenMonth,
+    this.monthDayGridKey,
   });
 
   final CalendarViewMode mode;
@@ -36,15 +34,18 @@ class CalendarGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
-  final void Function(DateTime month, Map<DateTime, Rect> dayGlobalRects)
-  onMonthTap;
+  final void Function(DateTime month) onMonthTap;
   final bool weekStartsMonday;
-  final GlobalKey Function(DateTime ownerMonth, DateTime cellDate)?
-  dayCellKeyBuilder;
-  final DateTime? zoomSourceMonth;
-  final double nonTransitionOpacity;
-  final bool hideZoomSourceDayCells;
-  final bool fadeNonSourceMonthsOnly;
+  final GlobalKey Function(DateTime month)? monthTileKeyBuilder;
+  /// Provides a [GlobalKey] for the inner [MonthDayGrid] of each year tile,
+  /// used to measure source cell positions for the morph animation.
+  final GlobalKey Function(DateTime month)? yearTileDayGridKeyBuilder;
+  /// Year-view month to render as an invisible placeholder (the "hole" that
+  /// the morph foreground cells fill at t=0).
+  final DateTime? hiddenMonth;
+  /// [GlobalKey] placed on the [MonthDayGrid] inside the full month view,
+  /// used to measure destination cell positions for the morph animation.
+  final GlobalKey? monthDayGridKey;
 
   @override
   Widget build(BuildContext context) {
@@ -62,9 +63,7 @@ class CalendarGrid extends StatelessWidget {
         indicators: indicators,
         onDayTap: onDayTap,
         weekStartsMonday: weekStartsMonday,
-        dayCellKeyBuilder: dayCellKeyBuilder == null
-            ? null
-            : (date) => dayCellKeyBuilder!(focused, date),
+        dayGridKey: monthDayGridKey,
       ),
       CalendarViewMode.year => _YearGrid(
         focused: focused,
@@ -73,11 +72,9 @@ class CalendarGrid extends StatelessWidget {
         onDayTap: onDayTap,
         onMonthTap: onMonthTap,
         weekStartsMonday: weekStartsMonday,
-        dayCellKeyBuilder: dayCellKeyBuilder,
-        zoomSourceMonth: zoomSourceMonth,
-        nonTransitionOpacity: nonTransitionOpacity,
-        hideZoomSourceDayCells: hideZoomSourceDayCells,
-        fadeNonSourceMonthsOnly: fadeNonSourceMonthsOnly,
+        monthTileKeyBuilder: monthTileKeyBuilder,
+        dayGridKeyBuilder: yearTileDayGridKeyBuilder,
+        hiddenMonth: hiddenMonth,
       ),
     };
   }
@@ -284,7 +281,7 @@ class _MonthGrid extends StatelessWidget {
     required this.indicators,
     required this.onDayTap,
     required this.weekStartsMonday,
-    this.dayCellKeyBuilder,
+    this.dayGridKey,
   });
 
   final DateTime focused;
@@ -292,19 +289,38 @@ class _MonthGrid extends StatelessWidget {
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
   final bool weekStartsMonday;
-  final GlobalKey Function(DateTime date)? dayCellKeyBuilder;
+  /// Optional key placed on the inner [MonthDayGrid] for measurement.
+  final GlobalKey? dayGridKey;
 
   @override
   Widget build(BuildContext context) {
-    return MonthDayGrid(
-      month: focused,
-      events: events,
-      indicators: indicators,
-      weekStartsMonday: weekStartsMonday,
-      style: MonthDayCellStyle.full,
-      onDayTap: onDayTap,
-      showWeekdayHeader: true,
-      dayCellKeyBuilder: dayCellKeyBuilder,
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              DateFormat.MMMM().format(focused),
+              style: Theme.of(context).textTheme.titleSmall!.copyWith(fontSize: 30),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: MonthDayGrid(
+                key: dayGridKey,
+                month: focused,
+                events: events,
+                indicators: indicators,
+                weekStartsMonday: weekStartsMonday,
+                style: MonthDayCellStyle.full,
+                onDayTap: onDayTap,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -386,76 +402,6 @@ const _weekDayStyle = MonthDayCellStyle(
   eventFontSize: 10,
 );
 
-/// Computes year-tile day cell positions without mounting a year grid.
-class YearMonthTileLayout {
-  YearMonthTileLayout._();
-
-  static const crossAxisCount = 4;
-  static const childAspectRatio = 1.35;
-  static const mainAxisSpacing = 8.0;
-  static const crossAxisSpacing = 8.0;
-  static const tilePadding = EdgeInsets.all(8);
-  static const titleGap = 4.0;
-
-  static double measureMonthTitleHeight(BuildContext context) {
-    final style = Theme.of(context).textTheme.titleSmall;
-    if (style == null) return 20 + titleGap;
-
-    final painter = TextPainter(
-      text: TextSpan(text: 'September', style: style),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-    )..layout();
-    return painter.height + titleGap;
-  }
-
-  static Map<DateTime, Rect> computeDayRects({
-    required Size areaSize,
-    required DateTime month,
-    required bool weekStartsMonday,
-    required double monthTitleHeight,
-  }) {
-    final index = month.month - 1;
-    final col = index % crossAxisCount;
-    final row = index ~/ crossAxisCount;
-
-    final childWidth =
-        (areaSize.width - crossAxisSpacing * (crossAxisCount - 1)) /
-        crossAxisCount;
-    final childHeight = childWidth / childAspectRatio;
-
-    final tileLeft = col * (childWidth + crossAxisSpacing);
-    final tileTop = row * (childHeight + mainAxisSpacing);
-
-    final gridLeft = tileLeft + tilePadding.left;
-    final gridTop = tileTop + tilePadding.top + monthTitleHeight;
-    final gridWidth =
-        childWidth - tilePadding.left - tilePadding.right;
-    final gridHeight =
-        childHeight -
-        tilePadding.top -
-        tilePadding.bottom -
-        monthTitleHeight;
-
-    if (gridWidth <= 0 || gridHeight <= 0) return const {};
-
-    final slotRects = MonthDayGridLayout.computeSlotRects(
-      areaSize: Size(gridWidth, gridHeight),
-      weekdayHeaderHeight: 0,
-    );
-
-    final localSlots = [
-      for (final rect in slotRects) rect.shift(Offset(gridLeft, gridTop)),
-    ];
-
-    return MonthDayGridLayout.mapDatesToSlotRects(
-      month: month,
-      weekStartsMonday: weekStartsMonday,
-      slotRects: localSlots,
-    );
-  }
-}
-
 class _YearGrid extends StatelessWidget {
   const _YearGrid({
     required this.focused,
@@ -464,43 +410,23 @@ class _YearGrid extends StatelessWidget {
     required this.onDayTap,
     required this.onMonthTap,
     required this.weekStartsMonday,
-    this.dayCellKeyBuilder,
-    this.zoomSourceMonth,
-    this.nonTransitionOpacity = 1,
-    this.hideZoomSourceDayCells = false,
-    this.fadeNonSourceMonthsOnly = false,
+    this.monthTileKeyBuilder,
+    this.dayGridKeyBuilder,
+    this.hiddenMonth,
   });
 
   final DateTime focused;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final void Function(DateTime day) onDayTap;
-  final void Function(DateTime month, Map<DateTime, Rect> dayGlobalRects)
-  onMonthTap;
+  final void Function(DateTime month) onMonthTap;
   final bool weekStartsMonday;
-  final GlobalKey Function(DateTime ownerMonth, DateTime cellDate)?
-  dayCellKeyBuilder;
-  final DateTime? zoomSourceMonth;
-  final double nonTransitionOpacity;
-  final bool hideZoomSourceDayCells;
-  final bool fadeNonSourceMonthsOnly;
-
-  Map<DateTime, Rect> _collectDayRects(DateTime monthDate) {
-    final rects = <DateTime, Rect>{};
-    if (dayCellKeyBuilder == null) return rects;
-
-    for (final date in monthGridDates(
-      monthDate,
-      weekStartsMonday: weekStartsMonday,
-    )) {
-      final key = dayCellKeyBuilder!(monthDate, date);
-      final box = key.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null && box.hasSize && box.attached) {
-        rects[date] = box.localToGlobal(Offset.zero) & box.size;
-      }
-    }
-    return rects;
-  }
+  final GlobalKey Function(DateTime month)? monthTileKeyBuilder;
+  /// Provides a key for each tile's inner [MonthDayGrid] (for measurement).
+  final GlobalKey Function(DateTime month)? dayGridKeyBuilder;
+  /// Month to replace with an invisible placeholder — the "hole" that expands
+  /// as the background zooms during the morph animation.
+  final DateTime? hiddenMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -514,61 +440,57 @@ class _YearGrid extends StatelessWidget {
       ),
       itemCount: 12,
       itemBuilder: (_, i) {
-        final month = i + 1;
-        final monthDate = DateTime(focused.year, month);
-        final isZoomSource = zoomSourceMonth != null &&
-            monthDate.year == zoomSourceMonth!.year &&
-            monthDate.month == zoomSourceMonth!.month;
+        final monthDate = DateTime(focused.year, i + 1);
+        final tileKey = monthTileKeyBuilder?.call(monthDate);
 
-        Widget monthTile = InkWell(
-          onTap: () => onMonthTap(monthDate, _collectDayRects(monthDate)),
-          borderRadius: BorderRadius.circular(18),
-          child: Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    DateFormat.MMMM().format(monthDate),
-                    style: Theme.of(context).textTheme.titleSmall,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Expanded(
-                    child: hideZoomSourceDayCells && isZoomSource
-                        ? const SizedBox.expand()
-                        : MonthDayGrid(
-                            month: monthDate,
-                            events: events,
-                            indicators: indicators,
-                            weekStartsMonday: weekStartsMonday,
-                            style: MonthDayCellStyle.compact,
-                            dayCellKeyBuilder: dayCellKeyBuilder == null
-                                ? null
-                                : (date) =>
-                                      dayCellKeyBuilder!(monthDate, date),
-                          ),
-                  ),
-                ],
+        // Render an invisible placeholder so the grid slot stays occupied
+        // but the morph foreground cells can fill the visual hole at t=0.
+        final isHidden = hiddenMonth != null &&
+            monthDate.year == hiddenMonth!.year &&
+            monthDate.month == hiddenMonth!.month;
+        if (isHidden) {
+          return KeyedSubtree(
+            key: tileKey,
+            child: const SizedBox.expand(),
+          );
+        }
+
+        final dayGridKey = dayGridKeyBuilder?.call(monthDate);
+
+        return KeyedSubtree(
+          key: tileKey,
+          child: InkWell(
+            onTap: () => onMonthTap(monthDate),
+            borderRadius: BorderRadius.circular(18),
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      DateFormat.MMMM().format(monthDate),
+                      style: Theme.of(context).textTheme.titleSmall,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: MonthDayGrid(
+                        key: dayGridKey,
+                        month: monthDate,
+                        events: events,
+                        indicators: indicators,
+                        weekStartsMonday: weekStartsMonday,
+                        style: MonthDayCellStyle.compact,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         );
-
-        if (zoomSourceMonth != null) {
-          final applyOpacity =
-              !fadeNonSourceMonthsOnly || !isZoomSource;
-          if (applyOpacity) {
-            monthTile = Opacity(
-              opacity: nonTransitionOpacity.clamp(0.0, 1.0),
-              child: monthTile,
-            );
-          }
-        }
-
-        return monthTile;
       },
     );
   }

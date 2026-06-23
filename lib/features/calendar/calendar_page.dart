@@ -1,18 +1,16 @@
+import 'dart:math' show max;
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/dev/cache_status.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/event_editor_dialog.dart';
-import 'package:voyager/features/calendar/month_zoom_prewarm_tracker.dart';
-
-enum _MonthZoomDirection { zoomIn, zoomOut }
 
 class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
@@ -22,411 +20,29 @@ class CalendarPage extends ConsumerStatefulWidget {
 }
 
 class _CalendarPageState extends ConsumerState<CalendarPage>
-    with TickerProviderStateMixin {
-  CalendarViewMode _mode = CalendarViewMode.month;
+    with SingleTickerProviderStateMixin {
+  CalendarViewMode _mode = CalendarViewMode.year;
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
+
+  // One stable key per month tile in the year grid (for Matrix4 tween setup).
+  final _monthTileKeys = List.generate(12, (_) => GlobalKey());
+  // One stable key per tile's inner MonthDayGrid (for source-rect measurement).
+  final _yearTileDayGridKeys = List.generate(12, (_) => GlobalKey());
   final _calendarAreaKey = GlobalKey();
-  final _dayCellKeys = <String, GlobalKey>{};
-  final _probeDayCellKeys = <String, GlobalKey>{};
+  // Key for the full-size MonthDayGrid rendered during the measurement phase.
+  final _fullMonthDayGridKey = GlobalKey();
 
-  AnimationController? _monthZoomController;
-  Map<DateTime, Rect>? _monthZoomFromRects;
-  Map<DateTime, Rect>? _monthZoomToRects;
-  DateTime? _monthZoomTarget;
-  _MonthZoomDirection _monthZoomDirection = _MonthZoomDirection.zoomIn;
+  AnimationController? _zoomController;
+  Matrix4Tween? _yearMatrixTween;
+  bool _isZooming = false;
 
-  static const _monthZoomPreFadeDuration = Duration(milliseconds: 100);
-  static const _monthZoomMorphDuration = Duration(milliseconds: 400);
-  static const _monthZoomYearSegmentFadeDuration = Duration(milliseconds: 100);
-  static const _monthZoomMonthSegmentFadeDuration = Duration(milliseconds: 400);
-  static const _monthZoomDuration = Duration(
-    milliseconds: 500,
-  ); // pre-fade + morph
+  // Morph state — populated just before the animation starts.
+  List<Rect>? _morphSourceRects;
+  List<Rect>? _morphDestRects;
+  DateTime? _morphMonth;
 
-  double _zoomEasedProgress(double elapsedMs, Duration duration) {
-    return Curves.easeInCubic.transform(
-      (elapsedMs / duration.inMilliseconds).clamp(0.0, 1.0),
-    );
-  }
-
-  double _headerMonthReveal(double linear) {
-    final morph = _headerMorphPhase(linear);
-    return Curves.easeOutCubic.transform(morph);
-  }
-
-  double _headerMonthOpacity(double linear) {
-    final morph = _headerMorphPhase(linear);
-    return Curves.easeOut.transform(morph);
-  }
-
-  List<Rect>? _monthZoomSlotRects;
-  Size? _monthZoomSlotAreaSize;
-  bool? _monthZoomSlotWeekStartsMonday;
-  bool? _monthZoomSlotRectsFromProbe;
-  bool _probeMeasureScheduled = false;
-  bool _prewarmReportScheduled = false;
-  bool _morphPipelineWarmed = false;
-  bool _morphWarmupMounted = false;
-  Map<DateTime, Rect>? _morphWarmupLocalRects;
-  DateTime? _morphWarmupMonth;
-  AnimationController? _yearViewMonthZoomController;
-
-  ({
-    List<CalendarEvent> events,
-    List<CalendarDayIndicator> indicators,
-    bool weekStartsMonday,
-  })?
-  _gridContext;
-
-  GlobalKey _dayCellKeyFor(DateTime ownerMonth, DateTime cellDate) {
-    final id =
-        '${ownerMonth.year}-${ownerMonth.month}-'
-        '${cellDate.year}-${cellDate.month}-${cellDate.day}';
-    return _dayCellKeys.putIfAbsent(id, GlobalKey.new);
-  }
-
-  GlobalKey _probeDayCellKeyFor(DateTime cellDate) {
-    final id =
-        'probe-${cellDate.year}-${cellDate.month}-${cellDate.day}';
-    return _probeDayCellKeys.putIfAbsent(id, GlobalKey.new);
-  }
-
-  MonthZoomPrewarmTracker get _monthZoomPrewarmTracker =>
-      ref.read(monthZoomPrewarmTrackerProvider);
-
-  void _invalidateMonthZoomSlotCache() {
-    _monthZoomSlotRects = null;
-    _monthZoomSlotAreaSize = null;
-    _monthZoomSlotWeekStartsMonday = null;
-    _monthZoomSlotRectsFromProbe = null;
-    _resetMorphPipelineWarmup();
-  }
-
-  void _resetMorphPipelineWarmup() {
-    _morphPipelineWarmed = false;
-    _morphWarmupMounted = false;
-    _morphWarmupLocalRects = null;
-    _morphWarmupMonth = null;
-  }
-
-  void _disposeYearViewMonthZoomController() {
-    _yearViewMonthZoomController?.dispose();
-    _yearViewMonthZoomController = null;
-  }
-
-  void _ensureYearViewMonthZoomController() {
-    _yearViewMonthZoomController ??= AnimationController(
-      vsync: this,
-      duration: _monthZoomDuration,
-    );
-  }
-
-  void _refreshMorphWarmupTargets({
-    required BuildContext areaContext,
-    required RenderBox areaBox,
-    required bool weekStartsMonday,
-  }) {
-    final month = DateTime(_focused.year, 6, 1);
-    final rects = _monthZoomTargetsFor(
-      areaContext,
-      areaBox,
-      month,
-      weekStartsMonday,
-    );
-    if (rects.isEmpty) return;
-
-    _morphWarmupMonth = month;
-    _morphWarmupLocalRects = rects;
-    if (!_morphPipelineWarmed && !_morphWarmupMounted) {
-      _scheduleMorphPipelineWarmup();
-    }
-  }
-
-  void _scheduleMorphPipelineWarmup() {
-    if (_morphPipelineWarmed ||
-        _morphWarmupMounted ||
-        _morphWarmupLocalRects == null) {
-      return;
-    }
-
-    setState(() => _morphWarmupMounted = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _morphWarmupMounted = false;
-        _morphPipelineWarmed = true;
-      });
-    });
-  }
-
-  Widget _buildMorphWarmupOverlay({
-    required List<CalendarEvent> events,
-    required List<CalendarDayIndicator> indicators,
-    required bool weekStartsMonday,
-  }) {
-    if (!_morphWarmupMounted ||
-        _morphWarmupLocalRects == null ||
-        _morphWarmupMonth == null) {
-      return const SizedBox.shrink();
-    }
-
-    return RepaintBoundary(
-      child: IgnorePointer(
-        child: Opacity(
-          opacity: 0,
-          child: MonthZoomMorphOverlay(
-            progress: 0,
-            month: _morphWarmupMonth!,
-            fromLocalRects: _morphWarmupLocalRects!,
-            toLocalRects: _morphWarmupLocalRects!,
-            events: events,
-            indicators: indicators,
-            weekStartsMonday: weekStartsMonday,
-          ),
-        ),
-      ),
-    );
-  }
-
-  int _countYearGridSourceCells(DateTime monthDate, bool weekStartsMonday) {
-    var count = 0;
-    for (final date in monthGridDates(
-      monthDate,
-      weekStartsMonday: weekStartsMonday,
-    )) {
-      final key = _dayCellKeyFor(monthDate, date);
-      final box = key.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null && box.hasSize && box.attached) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  void _reportPrewarmStatus({
-    required bool eventsLoaded,
-    required bool weekStartsMonday,
-  }) {
-    final areaContext = _calendarAreaKey.currentContext;
-    final areaBox = areaContext?.findRenderObject() as RenderBox?;
-    final areaReady = areaBox != null && areaBox.hasSize;
-    final areaSize = areaBox?.size;
-
-    final yearViewActive =
-        _mode == CalendarViewMode.year &&
-        _dayViewDate == null &&
-        !_isMonthZooming;
-
-    final slotsCached =
-        _monthZoomSlotRects != null &&
-        areaSize != null &&
-        _monthZoomSlotAreaSize == areaSize &&
-        _monthZoomSlotWeekStartsMonday == weekStartsMonday;
-
-    final slotsMeasured =
-        _monthZoomSlotRectsFromProbe == true &&
-        (_monthZoomSlotRects?.length ?? 0) == 42;
-
-    final probeIdle = !_probeMeasureScheduled;
-
-    final sampleMonth = DateTime(_focused.year, _focused.month, 1);
-    final sourceCellCount = yearViewActive
-        ? _countYearGridSourceCells(sampleMonth, weekStartsMonday)
-        : 0;
-    final sourceCellsReady = sourceCellCount == 42;
-
-    final CacheItemStatus layoutCacheStatus;
-    if (!yearViewActive) {
-      layoutCacheStatus = const CacheItemStatus(
-        label: 'Calendar zoom layout',
-        state: CacheItemState.notStarted,
-        detail: 'Not in year view',
-      );
-    } else if (_probeMeasureScheduled) {
-      layoutCacheStatus = const CacheItemStatus(
-        label: 'Calendar zoom layout',
-        state: CacheItemState.loading,
-        detail: 'Measuring probe grid',
-      );
-    } else if (!slotsCached) {
-      layoutCacheStatus = const CacheItemStatus(
-        label: 'Calendar zoom layout',
-        state: CacheItemState.notStarted,
-        detail: 'Waiting for slot cache',
-      );
-    } else if (slotsMeasured) {
-      layoutCacheStatus = const CacheItemStatus(
-        label: 'Calendar zoom layout',
-        state: CacheItemState.loaded,
-        detail: 'Measured (42 slots from probe)',
-      );
-    } else {
-      layoutCacheStatus = CacheItemStatus(
-        label: 'Calendar zoom layout',
-        state: CacheItemState.loaded,
-        detail: 'Computed fallback (${_monthZoomSlotRects!.length} slots)',
-      );
-    }
-
-    final checks = <MonthZoomPrewarmCheck>[
-      MonthZoomPrewarmCheck(
-        label: 'Year view active',
-        passed: yearViewActive,
-      ),
-      MonthZoomPrewarmCheck(
-        label: 'Calendar events loaded',
-        passed: eventsLoaded,
-      ),
-      MonthZoomPrewarmCheck(
-        label: 'Calendar area sized',
-        passed: areaReady,
-      ),
-      MonthZoomPrewarmCheck(
-        label: 'Probe measurement idle',
-        passed: yearViewActive && probeIdle,
-        detail: probeIdle ? null : 'Post-frame measure scheduled',
-      ),
-      MonthZoomPrewarmCheck(
-        label: 'Target slot layout cached',
-        passed: slotsCached,
-      ),
-      MonthZoomPrewarmCheck(
-        label: 'Target slots measured (42)',
-        passed: slotsMeasured,
-      ),
-      MonthZoomPrewarmCheck(
-        label: 'Year grid source cells (${sampleMonth.month})',
-        passed: yearViewActive && sourceCellsReady,
-        detail: sourceCellsReady ? null : '$sourceCellCount/42 cells laid out',
-      ),
-    ];
-
-    final passedCount = checks.where((check) => check.passed).length;
-    final isFullyPrewarmed = yearViewActive && passedCount == checks.length;
-    final summary = isFullyPrewarmed
-        ? 'Fully pre-warmed'
-        : yearViewActive
-        ? '$passedCount/${checks.length} checks passed'
-        : 'Open Calendar in year view';
-
-    _monthZoomPrewarmTracker.update(
-      MonthZoomPrewarmStatus(
-        checks: checks,
-        isFullyPrewarmed: isFullyPrewarmed,
-        summary: summary,
-        layoutCacheStatus: layoutCacheStatus,
-      ),
-    );
-  }
-
-  void _schedulePrewarmStatusReport({required bool weekStartsMonday}) {
-    if (_prewarmReportScheduled) return;
-    _prewarmReportScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _prewarmReportScheduled = false;
-      if (!mounted) return;
-      _reportPrewarmStatus(
-        eventsLoaded: ref.read(calendarEventsProvider).hasValue,
-        weekStartsMonday: weekStartsMonday,
-      );
-    });
-  }
-
-  List<Rect> _monthZoomSlotRectsFor({
-    required BuildContext areaContext,
-    required RenderBox areaBox,
-    required bool weekStartsMonday,
-  }) {
-    final areaSize = areaBox.size;
-    if (_monthZoomSlotRects != null &&
-        _monthZoomSlotAreaSize == areaSize &&
-        _monthZoomSlotWeekStartsMonday == weekStartsMonday) {
-      return _monthZoomSlotRects!;
-    }
-
-    final probeMonth = DateTime(_focused.year, 6, 1);
-    final measured = MonthDayGridLayout.readSlotRectsFromKeys(
-      month: probeMonth,
-      weekStartsMonday: weekStartsMonday,
-      dayCellKeyBuilder: _probeDayCellKeyFor,
-      areaBox: areaBox,
-    );
-    if (measured.length == 42) {
-      _monthZoomSlotRects = measured;
-      _monthZoomSlotRectsFromProbe = true;
-    } else {
-      final headerHeight = MonthDayGridLayout.measureWeekdayHeaderHeight(
-        areaContext,
-        weekStartsMonday: weekStartsMonday,
-      );
-      _monthZoomSlotRects = MonthDayGridLayout.computeSlotRects(
-        areaSize: areaSize,
-        weekdayHeaderHeight: headerHeight,
-      );
-      _monthZoomSlotRectsFromProbe = false;
-    }
-
-    _monthZoomSlotAreaSize = areaSize;
-    _monthZoomSlotWeekStartsMonday = weekStartsMonday;
-    return _monthZoomSlotRects!;
-  }
-
-  void _scheduleProbeSlotMeasure(bool weekStartsMonday) {
-    if (_probeMeasureScheduled) return;
-    _probeMeasureScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _probeMeasureScheduled = false;
-      if (!mounted || _mode != CalendarViewMode.year || _isMonthZooming) return;
-
-      final areaContext = _calendarAreaKey.currentContext;
-      final areaBox = areaContext?.findRenderObject() as RenderBox?;
-      if (areaContext == null || areaBox == null || !areaBox.hasSize) return;
-
-      _monthZoomSlotRectsFor(
-        areaContext: areaContext,
-        areaBox: areaBox,
-        weekStartsMonday: weekStartsMonday,
-      );
-      _refreshMorphWarmupTargets(
-        areaContext: areaContext,
-        areaBox: areaBox,
-        weekStartsMonday: weekStartsMonday,
-      );
-      _ensureYearViewMonthZoomController();
-      _reportPrewarmStatus(
-        eventsLoaded: ref.read(calendarEventsProvider).hasValue,
-        weekStartsMonday: weekStartsMonday,
-      );
-    });
-  }
-
-  Widget _buildMonthLayoutProbe({
-    required List<CalendarEvent> events,
-    required List<CalendarDayIndicator> indicators,
-    required bool weekStartsMonday,
-  }) {
-    return IgnorePointer(
-      child: Opacity(
-        opacity: 0,
-        child: MonthDayGrid(
-          month: DateTime(_focused.year, 6, 1),
-          events: events,
-          indicators: indicators,
-          weekStartsMonday: weekStartsMonday,
-          style: MonthDayCellStyle.full,
-          showWeekdayHeader: true,
-          dayCellKeyBuilder: _probeDayCellKeyFor,
-        ),
-      ),
-    );
-  }
-
-  void _trimDayCellKeys() {
-    while (_dayCellKeys.length > 504) {
-      _dayCellKeys.remove(_dayCellKeys.keys.first);
-    }
-  }
+  static const _zoomDuration = Duration(milliseconds: 5000);
 
   Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
     final result = await showDialog<Map<String, dynamic>>(
@@ -468,7 +84,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   void _shiftFocus(int delta) {
+    _zoomController?.stop();
     setState(() {
+      _isZooming = false;
+      _morphSourceRects = null;
+      _morphDestRects = null;
+      _morphMonth = null;
       final base = _dayViewDate ?? _focused;
       if (_dayViewDate != null) {
         _dayViewDate = base.add(Duration(days: delta));
@@ -488,8 +109,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   void _onMiniCalendarDayTap(DateTime day) {
-    _cancelMonthZoom();
     setState(() {
+      _isZooming = false;
+      _morphSourceRects = null;
+      _morphDestRects = null;
+      _morphMonth = null;
+      _zoomController?.stop();
       if (_dayViewDate != null &&
           _dayViewDate!.year == day.year &&
           _dayViewDate!.month == day.month &&
@@ -498,6 +123,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       } else {
         _dayViewDate = DateTime(day.year, day.month, day.day);
         _focused = DateTime(day.year, day.month, 1);
+        _mode = CalendarViewMode.month;
       }
     });
   }
@@ -511,149 +137,153 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   @override
   void dispose() {
-    _cancelMonthZoom();
-    _disposeYearViewMonthZoomController();
-    final tracker = _monthZoomPrewarmTracker;
-    Future<void>(() => tracker.markIdle());
+    _zoomController?.dispose();
     super.dispose();
   }
 
-  void _cancelMonthZoom() {
-    _monthZoomController?.dispose();
-    _monthZoomController = null;
-    _monthZoomFromRects = null;
-    _monthZoomToRects = null;
-    _monthZoomTarget = null;
-    _monthZoomDirection = _MonthZoomDirection.zoomIn;
+  // ---------------------------------------------------------------------------
+  // Animation helpers
+  // ---------------------------------------------------------------------------
+
+  /// Computes 42 source [Rect]s (calendar-area-local) from the year tile's
+  /// inner [MonthDayGrid].  Returns null if the render objects are not ready.
+  List<Rect>? _computeSourceRects(DateTime month) {
+    final areaBox =
+        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    final gridBox = _yearTileDayGridKeys[month.month - 1]
+        .currentContext
+        ?.findRenderObject() as RenderBox?;
+
+    if (areaBox == null || !areaBox.hasSize || !areaBox.attached) return null;
+    if (gridBox == null || !gridBox.hasSize || !gridBox.attached) return null;
+
+    final gridOrigin =
+        areaBox.globalToLocal(gridBox.localToGlobal(Offset.zero));
+    final cellW = gridBox.size.width / 7;
+    final cellH = gridBox.size.height / 6;
+
+    return List.generate(42, (i) => Rect.fromLTWH(
+      gridOrigin.dx + (i % 7) * cellW,
+      gridOrigin.dy + (i ~/ 7) * cellH,
+      cellW,
+      cellH,
+    ));
   }
 
-  bool get _isMonthZooming =>
-      _monthZoomController != null &&
-      _monthZoomFromRects != null &&
-      _monthZoomToRects != null &&
-      _monthZoomTarget != null;
+  /// Computes 42 destination [Rect]s from the [_fullMonthDayGridKey] widget
+  /// that was laid out (but not painted) during the measurement phase.
+  List<Rect>? _computeDestRects() {
+    final areaBox =
+        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    final gridBox =
+        _fullMonthDayGridKey.currentContext?.findRenderObject() as RenderBox?;
 
-  Map<DateTime, Rect> _collectDayGlobalRects({
-    required DateTime ownerMonth,
-    required bool weekStartsMonday,
-  }) {
-    final rects = <DateTime, Rect>{};
-    for (final date in monthGridDates(
-      ownerMonth,
-      weekStartsMonday: weekStartsMonday,
-    )) {
-      final key = _dayCellKeyFor(ownerMonth, date);
-      final box = key.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null && box.hasSize && box.attached) {
-        rects[date] = box.localToGlobal(Offset.zero) & box.size;
-      }
-    }
-    return rects;
+    if (areaBox == null || !areaBox.hasSize) return null;
+    if (gridBox == null || !gridBox.hasSize) return null;
+
+    final gridOrigin =
+        areaBox.globalToLocal(gridBox.localToGlobal(Offset.zero));
+    final cellW = gridBox.size.width / 7;
+    final cellH = gridBox.size.height / 6;
+
+    return List.generate(42, (i) => Rect.fromLTWH(
+      gridOrigin.dx + (i % 7) * cellW,
+      gridOrigin.dy + (i ~/ 7) * cellH,
+      cellW,
+      cellH,
+    ));
   }
 
-  Map<DateTime, Rect>? _globalRectsToLocal(
-    Map<DateTime, Rect> globalRects,
-    RenderBox areaBox,
-  ) {
-    if (!areaBox.attached || !areaBox.hasSize) return null;
-    final stackOrigin = areaBox.localToGlobal(Offset.zero);
-    return {
-      for (final entry in globalRects.entries)
-        entry.key: entry.value.shift(-stackOrigin),
-    };
-  }
+  void _onMonthTapped(DateTime month) {
+    final areaBox =
+        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (areaBox == null || !areaBox.hasSize || !areaBox.attached) return;
 
-  ({double nonTransitionOpacity, double morphProgress}) _monthZoomFrame(
-    double linear,
-  ) {
-    final elapsedMs = linear * _monthZoomDuration.inMilliseconds;
-    final preFadeMs = _monthZoomPreFadeDuration.inMilliseconds;
-    final morphMs = _monthZoomMorphDuration.inMilliseconds;
+    final tileKey = _monthTileKeys[month.month - 1];
+    final tileBox =
+        tileKey.currentContext?.findRenderObject() as RenderBox?;
+    if (tileBox == null || !tileBox.hasSize || !tileBox.attached) return;
 
-    if (_monthZoomDirection == _MonthZoomDirection.zoomOut) {
-      if (elapsedMs <= morphMs) {
-        final morphLinear = (elapsedMs / morphMs).clamp(0.0, 1.0);
-        return (
-          nonTransitionOpacity: 0.0,
-          morphProgress: Curves.easeInCubic.transform(morphLinear),
-        );
-      }
+    final tileOrigin =
+        areaBox.globalToLocal(tileBox.localToGlobal(Offset.zero));
+    final tileW = tileBox.size.width;
+    final tileH = tileBox.size.height;
+    final areaW = areaBox.size.width;
+    final areaH = areaBox.size.height;
 
-      final postFadeT = _zoomEasedProgress(
-        elapsedMs - morphMs,
-        _monthZoomPreFadeDuration,
-      );
-      return (nonTransitionOpacity: postFadeT, morphProgress: 1.0);
-    }
+    // Scale so the tapped tile fills the entire area.
+    final s = max(areaW / tileW, areaH / tileH);
 
-    if (elapsedMs <= preFadeMs) {
-      final preFadeT = _zoomEasedProgress(elapsedMs, _monthZoomPreFadeDuration);
-      return (nonTransitionOpacity: 1.0 - preFadeT, morphProgress: 0.0);
-    }
-
-    final morphLinear =
-        ((elapsedMs - preFadeMs) / morphMs).clamp(0.0, 1.0);
-    return (
-      nonTransitionOpacity: 0.0,
-      morphProgress: Curves.easeInCubic.transform(morphLinear),
+    // Background layer: identity → scale-up/translate so the tile fills screen.
+    _yearMatrixTween = Matrix4Tween(
+      begin: Matrix4.identity(),
+      end: Matrix4.identity()
+        ..translateByDouble(-tileOrigin.dx * s, -tileOrigin.dy * s, 0, 1)
+        ..scaleByDouble(s, s, 1, 1),
     );
+
+    // Source rects must be computed now, while the year grid is still rendered.
+    final sourceRects = _computeSourceRects(month);
+    if (sourceRects == null) return;
+
+    _zoomController ??=
+        AnimationController(vsync: this, duration: _zoomDuration);
+    _zoomController!.stop();
+
+    // Enter the measurement phase: show the normal year grid (visible) and
+    // an Offstage full-month grid (laid out but not painted) so we can
+    // measure the destination cell positions on the next frame.
+    setState(() {
+      _mode = CalendarViewMode.month;
+      _focused = month;
+      _dayViewDate = null;
+      _isZooming = true;
+      _morphSourceRects = sourceRects;
+      _morphDestRects = null;
+      _morphMonth = month;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final destRects = _computeDestRects();
+      if (destRects == null) {
+        // Measurement failed — abort gracefully.
+        setState(() => _isZooming = false);
+        return;
+      }
+      // Dest rects are ready; trigger the animation phase rendering.
+      setState(() { _morphDestRects = destRects; });
+
+      // Start the controller one frame later so the animation layer is built.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _zoomController!.forward(from: 0).then((_) {
+          if (mounted) setState(() => _isZooming = false);
+        });
+      });
+    });
   }
 
-  double _headerMorphPhase(double linear) {
-    final elapsedMs = linear * _monthZoomDuration.inMilliseconds;
-    if (_monthZoomDirection == _MonthZoomDirection.zoomOut) {
-      return (elapsedMs / _monthZoomMorphDuration.inMilliseconds)
-          .clamp(0.0, 1.0);
-    }
-    if (elapsedMs <= _monthZoomPreFadeDuration.inMilliseconds) return 0;
-    return ((elapsedMs - _monthZoomPreFadeDuration.inMilliseconds) /
-            _monthZoomMorphDuration.inMilliseconds)
-        .clamp(0.0, 1.0);
+  void _onViewModeSelectionChanged(Set<CalendarViewMode> selection) {
+    final next = selection.first;
+    setState(() {
+      _isZooming = false;
+      _morphSourceRects = null;
+      _morphDestRects = null;
+      _morphMonth = null;
+      _mode = next;
+      _dayViewDate = null;
+      if (next == CalendarViewMode.year) {
+        _focused = DateTime(_focused.year, 1, 1);
+      }
+    });
+    _zoomController?.stop();
+    _zoomController?.reset();
   }
 
-  double _headerMonthRevealForZoom(double linear) {
-    final morph = _headerMorphPhase(linear);
-    if (_monthZoomDirection == _MonthZoomDirection.zoomOut) {
-      return Curves.easeOutCubic.transform(1.0 - morph);
-    }
-    return _headerMonthReveal(linear);
-  }
-
-  double _headerMonthOpacityForZoom(double linear) {
-    final morph = _headerMorphPhase(linear);
-    if (_monthZoomDirection == _MonthZoomDirection.zoomOut) {
-      return Curves.easeOut.transform(1.0 - morph);
-    }
-    return _headerMonthOpacity(linear);
-  }
-
-  Widget _buildMonthYearLabel({
-    required BuildContext context,
-    required String monthName,
-    required String yearLabel,
-    required double monthReveal,
-    required double monthOpacity,
-  }) {
-    final titleStyle = Theme.of(context).textTheme.titleMedium;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (monthReveal > 0)
-          ClipRect(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              widthFactor: monthReveal.clamp(0.0, 1.0),
-              child: Opacity(
-                opacity: monthOpacity.clamp(0.0, 1.0),
-                child: Text('$monthName ', style: titleStyle),
-              ),
-            ),
-          ),
-        Text(yearLabel, style: titleStyle),
-      ],
-    );
-  }
+  // ---------------------------------------------------------------------------
+  // Header / toolbar
+  // ---------------------------------------------------------------------------
 
   Widget _buildFocusHeaderControls({
     required bool weekStartsMonday,
@@ -675,380 +305,66 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
-  void _onViewModeSelectionChanged(Set<CalendarViewMode> selection) {
-    final next = selection.first;
-    if (next == CalendarViewMode.year &&
-        _mode == CalendarViewMode.month &&
-        !_isMonthZooming) {
-      _beginMonthZoomOut();
-      return;
-    }
-
-    setState(() {
-      _cancelMonthZoom();
-      _disposeYearViewMonthZoomController();
-      _invalidateMonthZoomSlotCache();
-      _mode = next;
-      _dayViewDate = null;
-    });
-  }
-
-  ({
-    double weekSelect,
-    double monthSelect,
-    double yearSelect,
-  }) _viewModeSegmentSelect(double linear) {
-    if (_isMonthZooming) {
-      final elapsedMs = linear * _monthZoomDuration.inMilliseconds;
-      if (_monthZoomDirection == _MonthZoomDirection.zoomOut) {
-        final morphMs = _monthZoomMorphDuration.inMilliseconds;
-        return (
-          weekSelect: 0,
-          monthSelect: 1 -
-              _zoomEasedProgress(
-                elapsedMs,
-                _monthZoomMonthSegmentFadeDuration,
-              ),
-          yearSelect: elapsedMs >= morphMs
-              ? _zoomEasedProgress(
-                  elapsedMs - morphMs,
-                  _monthZoomYearSegmentFadeDuration,
-                )
-              : 0,
-        );
-      }
-
-      return (
-        weekSelect: 0,
-        monthSelect: _zoomEasedProgress(
-          elapsedMs,
-          _monthZoomMonthSegmentFadeDuration,
-        ),
-        yearSelect: 1 -
-            _zoomEasedProgress(
-              elapsedMs,
-              _monthZoomYearSegmentFadeDuration,
-            ),
-      );
-    }
-
-    return (
+  Widget _buildViewModeSelector() {
+    return _ViewModeSegmentedControl(
       weekSelect: _mode == CalendarViewMode.week ? 1 : 0,
       monthSelect: _mode == CalendarViewMode.month ? 1 : 0,
       yearSelect: _mode == CalendarViewMode.year ? 1 : 0,
-    );
-  }
-
-  Widget _buildViewModeSelector() {
-    final controller = _monthZoomController;
-    if (_isMonthZooming && controller != null) {
-      return AnimatedBuilder(
-        animation: controller,
-        builder: (context, _) {
-          final select = _viewModeSegmentSelect(controller.value);
-          return _ViewModeSegmentedControl(
-            weekSelect: select.weekSelect,
-            monthSelect: select.monthSelect,
-            yearSelect: select.yearSelect,
-            onSelectionChanged: _onViewModeSelectionChanged,
-            interactive: false,
-          );
-        },
-      );
-    }
-
-    final select = _viewModeSegmentSelect(0);
-    return _ViewModeSegmentedControl(
-      weekSelect: select.weekSelect,
-      monthSelect: select.monthSelect,
-      yearSelect: select.yearSelect,
       onSelectionChanged: _onViewModeSelectionChanged,
+      interactive: !_isZooming,
     );
   }
 
   Widget _buildFocusHeader(BuildContext context, bool weekStartsMonday) {
-    if (_mode == CalendarViewMode.week) {
-      return _buildFocusHeaderControls(
-        weekStartsMonday: weekStartsMonday,
-        label: Text(
-          _headerLabel(weekStartsMonday),
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-      );
-    }
-
-    if (_isMonthZooming && _monthZoomTarget != null) {
-      final month = _monthZoomTarget!;
-      final monthName = DateFormat.MMMM().format(month);
-      final yearLabel = '${month.year}';
-
-      final controller = _monthZoomController;
-      if (controller != null) {
-        return AnimatedBuilder(
-          animation: controller,
-          builder: (context, _) {
-            final linear = controller.value;
-            return _buildFocusHeaderControls(
-              weekStartsMonday: weekStartsMonday,
-              label: _buildMonthYearLabel(
-                context: context,
-                monthName: monthName,
-                yearLabel: yearLabel,
-                monthReveal: _headerMonthRevealForZoom(linear),
-                monthOpacity: _headerMonthOpacityForZoom(linear),
-              ),
-            );
-          },
-        );
-      }
-
-      return _buildFocusHeaderControls(
-        weekStartsMonday: weekStartsMonday,
-        label: _buildMonthYearLabel(
-          context: context,
-          monthName: monthName,
-          yearLabel: yearLabel,
-          monthReveal: 1,
-          monthOpacity: 1,
-        ),
-      );
-    }
-
+    final titleStyle = Theme.of(context).textTheme.titleMedium;
+    final Widget label;
     if (_mode == CalendarViewMode.month) {
-      return _buildFocusHeaderControls(
-        weekStartsMonday: weekStartsMonday,
-        label: _buildMonthYearLabel(
-          context: context,
-          monthName: DateFormat.MMMM().format(_focused),
-          yearLabel: '${_focused.year}',
-          monthReveal: 1,
-          monthOpacity: 1,
-        ),
+      label = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(DateFormat.MMMM().format(_focused), style: titleStyle),
+          Text(' ${_focused.year}', style: titleStyle),
+        ],
       );
+    } else {
+      label = Text(_headerLabel(weekStartsMonday), style: titleStyle);
     }
-
     return _buildFocusHeaderControls(
       weekStartsMonday: weekStartsMonday,
-      label: Text(
-        _headerLabel(weekStartsMonday),
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
+      label: label,
     );
   }
 
-  void _startMonthZoomAnimation({
-    required DateTime month,
-    required Map<DateTime, Rect> fromLocal,
-    required Map<DateTime, Rect> toLocal,
-    required _MonthZoomDirection direction,
-  }) {
-    final controller =
-        _yearViewMonthZoomController ??
-        AnimationController(
-          vsync: this,
-          duration: _monthZoomDuration,
-        );
-    _yearViewMonthZoomController = null;
-    controller
-      ..stop()
-      ..reset();
+  // ---------------------------------------------------------------------------
+  // Calendar area
+  // ---------------------------------------------------------------------------
 
-    void onZoomCompleted(AnimationStatus status) {
-      if (status != AnimationStatus.completed) return;
-      controller.removeStatusListener(onZoomCompleted);
-      if (!mounted) return;
-      if (_monthZoomDirection == _MonthZoomDirection.zoomOut) {
-        final weekStartsMonday =
-            _gridContext?.weekStartsMonday ??
-            ref.read(settingsProvider).value?.weekStartsOnMonday ??
-            true;
-        setState(() {
-          _mode = CalendarViewMode.year;
-          _focused = DateTime(month.year, 1, 1);
-          _dayViewDate = null;
-          _cancelMonthZoom();
-        });
-        _scheduleProbeSlotMeasure(weekStartsMonday);
-        return;
-      }
-      setState(_cancelMonthZoom);
-    }
-
-    controller.addStatusListener(onZoomCompleted);
-
-    _monthZoomController = controller;
-    _monthZoomFromRects = fromLocal;
-    _monthZoomToRects = toLocal;
-    _monthZoomTarget = month;
-    _monthZoomDirection = direction;
-
-    setState(() {
-      if (direction == _MonthZoomDirection.zoomIn) {
-        _mode = CalendarViewMode.month;
-        _focused = month;
-        _dayViewDate = null;
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _monthZoomController != controller) return;
-      controller.forward(from: 0);
-    });
-  }
-
-  void _beginMonthZoomOut() {
-    final areaContext = _calendarAreaKey.currentContext;
-    if (areaContext == null) return;
-    final areaBox = areaContext.findRenderObject() as RenderBox?;
-    if (areaBox == null || !areaBox.hasSize || !areaBox.attached) return;
-
-    _cancelMonthZoom();
-    _disposeYearViewMonthZoomController();
-
-    final weekStartsMonday =
-        _gridContext?.weekStartsMonday ??
-        ref.read(settingsProvider).value?.weekStartsOnMonday ??
-        true;
-
-    final globalFrom = _collectDayGlobalRects(
-      ownerMonth: _focused,
-      weekStartsMonday: weekStartsMonday,
-    );
-    if (globalFrom.isEmpty) {
-      setState(() {
-        _mode = CalendarViewMode.year;
-        _focused = DateTime(_focused.year, 1, 1);
-        _dayViewDate = null;
-      });
-      return;
-    }
-
-    final fromLocal = _globalRectsToLocal(globalFrom, areaBox);
-    if (fromLocal == null) {
-      setState(() {
-        _mode = CalendarViewMode.year;
-        _focused = DateTime(_focused.year, 1, 1);
-        _dayViewDate = null;
-      });
-      return;
-    }
-
-    final titleHeight = YearMonthTileLayout.measureMonthTitleHeight(areaContext);
-    final toLocal = YearMonthTileLayout.computeDayRects(
-      areaSize: areaBox.size,
-      month: _focused,
-      weekStartsMonday: weekStartsMonday,
-      monthTitleHeight: titleHeight,
-    );
-    if (toLocal.length < 42) {
-      setState(() {
-        _mode = CalendarViewMode.year;
-        _focused = DateTime(_focused.year, 1, 1);
-        _dayViewDate = null;
-      });
-      return;
-    }
-
-    _startMonthZoomAnimation(
-      month: _focused,
-      fromLocal: fromLocal,
-      toLocal: toLocal,
-      direction: _MonthZoomDirection.zoomOut,
-    );
-  }
-
-  Map<DateTime, Rect> _monthZoomTargetsFor(
-    BuildContext areaContext,
-    RenderBox areaBox,
-    DateTime month,
-    bool weekStartsMonday,
-  ) {
-    final slots = _monthZoomSlotRectsFor(
-      areaContext: areaContext,
-      areaBox: areaBox,
-      weekStartsMonday: weekStartsMonday,
-    );
-    return MonthDayGridLayout.mapDatesToSlotRects(
-      month: month,
-      weekStartsMonday: weekStartsMonday,
-      slotRects: slots,
-    );
-  }
-
-  void _beginMonthZoom(
-    DateTime month,
-    Map<DateTime, Rect> dayGlobalRects,
-  ) {
-    final areaContext = _calendarAreaKey.currentContext;
-    if (areaContext == null) return;
-    final areaBox = areaContext.findRenderObject() as RenderBox?;
-    if (areaBox == null || !areaBox.hasSize) return;
-
-    _cancelMonthZoom();
-
-    final stackOrigin = areaBox.localToGlobal(Offset.zero);
-    final fromLocal = <DateTime, Rect>{};
-    for (final entry in dayGlobalRects.entries) {
-      fromLocal[entry.key] = entry.value.shift(-stackOrigin);
-    }
-
-    if (fromLocal.isEmpty) {
-      setState(() {
-        _mode = CalendarViewMode.month;
-        _focused = month;
-        _dayViewDate = null;
-      });
-      return;
-    }
-
-    final weekStartsMonday =
-        _gridContext?.weekStartsMonday ??
-        ref.read(settingsProvider).value?.weekStartsOnMonday ??
-        true;
-
-    final toLocal = _monthZoomTargetsFor(
-      areaContext,
-      areaBox,
-      month,
-      weekStartsMonday,
-    );
-
-    _startMonthZoomAnimation(
-      month: month,
-      fromLocal: fromLocal,
-      toLocal: toLocal,
-      direction: _MonthZoomDirection.zoomIn,
-    );
-  }
-
-  Widget _buildCalendarGrid({
+  Widget _calendarGrid({
     required List<CalendarEvent> events,
     required List<CalendarDayIndicator> indicators,
     required bool weekStartsMonday,
     required CalendarViewMode mode,
     required DateTime focused,
-    bool ignorePointer = false,
-    DateTime? zoomSourceMonth,
-    double nonTransitionOpacity = 1,
-    bool hideZoomSourceDayCells = false,
-    bool fadeNonSourceMonthsOnly = false,
+    DateTime? hiddenMonth,
+    GlobalKey? monthDayGridKey,
   }) {
-    _trimDayCellKeys();
-    final grid = CalendarGrid(
+    return CalendarGrid(
       mode: mode,
       focused: focused,
       events: events,
       indicators: indicators,
       weekStartsMonday: weekStartsMonday,
       onDayTap: (day) => _openEditor(day: day),
-      onMonthTap: _beginMonthZoom,
-      dayCellKeyBuilder: _dayCellKeyFor,
-      zoomSourceMonth: zoomSourceMonth,
-      nonTransitionOpacity: nonTransitionOpacity,
-      hideZoomSourceDayCells: hideZoomSourceDayCells,
-      fadeNonSourceMonthsOnly: fadeNonSourceMonthsOnly,
+      onMonthTap: _onMonthTapped,
+      monthTileKeyBuilder: mode == CalendarViewMode.year
+          ? (month) => _monthTileKeys[month.month - 1]
+          : null,
+      yearTileDayGridKeyBuilder: mode == CalendarViewMode.year
+          ? (month) => _yearTileDayGridKeys[month.month - 1]
+          : null,
+      hiddenMonth: hiddenMonth,
+      monthDayGridKey: monthDayGridKey,
     );
-    if (!ignorePointer) return grid;
-    return IgnorePointer(child: grid);
   }
 
   Widget _buildMainCalendar({
@@ -1056,12 +372,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required List<CalendarDayIndicator> indicators,
     required bool weekStartsMonday,
   }) {
-    _gridContext = (
-      events: events,
-      indicators: indicators,
-      weekStartsMonday: weekStartsMonday,
-    );
-
     if (_dayViewDate != null) {
       return DayHourGrid(
         day: _dayViewDate!,
@@ -1074,123 +384,127 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
     }
 
-    if (_isMonthZooming || _mode == CalendarViewMode.year) {
-      if (_mode == CalendarViewMode.year && !_isMonthZooming) {
-        _scheduleProbeSlotMeasure(weekStartsMonday);
-      }
+    if (_isZooming &&
+        _zoomController != null &&
+        _yearMatrixTween != null &&
+        _morphSourceRects != null &&
+        _morphMonth != null) {
+      final morphMonth = _morphMonth!;
+      final sourceRects = _morphSourceRects!;
+      final yearTween = _yearMatrixTween!;
+      final controller = _zoomController!;
 
-      if (_isMonthZooming) {
-        final controller = _monthZoomController!;
-        final zoomMonth = _monthZoomTarget!;
-        final zoomOut = _monthZoomDirection == _MonthZoomDirection.zoomOut;
-
-        return AnimatedBuilder(
-          animation: controller,
-          builder: (context, _) {
-            final linear = controller.value;
-            final frame = _monthZoomFrame(linear);
-            final chromeOpacity = frame.nonTransitionOpacity.clamp(0.0, 1.0);
-            // Zoom-out: month grid OR morph — never both (avoids double image).
-            final showMonthUnderlay = zoomOut && frame.morphProgress <= 0;
-            final showMorph = !zoomOut || frame.morphProgress > 0;
-
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                if (showMonthUnderlay)
-                  IgnorePointer(
-                    child: _buildCalendarGrid(
-                      events: events,
-                      indicators: indicators,
-                      weekStartsMonday: weekStartsMonday,
-                      mode: CalendarViewMode.month,
-                      focused: zoomMonth,
-                    ),
-                  ),
-                if (chromeOpacity > 0)
-                  IgnorePointer(
-                    child: _buildCalendarGrid(
-                      events: events,
-                      indicators: indicators,
-                      weekStartsMonday: weekStartsMonday,
-                      mode: CalendarViewMode.year,
-                      focused: DateTime(zoomMonth.year, 1, 1),
-                      zoomSourceMonth: zoomMonth,
-                      nonTransitionOpacity: chromeOpacity,
-                      hideZoomSourceDayCells: true,
-                      fadeNonSourceMonthsOnly: zoomOut,
-                    ),
-                  ),
-                if (showMorph)
-                  Material(
-                    color: Colors.transparent,
-                    child: MonthZoomMorphOverlay(
-                      progress: frame.morphProgress,
-                      month: zoomMonth,
-                      fromLocalRects: _monthZoomFromRects!,
-                      toLocalRects: _monthZoomToRects!,
-                      events: events,
-                      indicators: indicators,
-                      weekStartsMonday: weekStartsMonday,
-                      zoomOut: zoomOut,
-                    ),
-                  ),
-              ],
-            );
-          },
+      // ---- Measurement phase ------------------------------------------------
+      // Dest rects have not been computed yet.  Render the normal year grid
+      // so the user sees no visual change, while the Offstage month grid is
+      // laid out silently in order to measure its cell positions.
+      if (_morphDestRects == null) {
+        return IgnorePointer(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _calendarGrid(
+                events: events,
+                indicators: indicators,
+                weekStartsMonday: weekStartsMonday,
+                mode: CalendarViewMode.year,
+                focused: DateTime(_focused.year, 1, 1),
+              ),
+              // Laid out but never painted — used only for measurement.
+              Offstage(
+                offstage: true,
+                child: _calendarGrid(
+                  events: events,
+                  indicators: indicators,
+                  weekStartsMonday: weekStartsMonday,
+                  mode: CalendarViewMode.month,
+                  focused: _focused,
+                  monthDayGridKey: _fullMonthDayGridKey,
+                ),
+              ),
+            ],
+          ),
         );
       }
 
-      final yearGrid = _buildCalendarGrid(
-        events: events,
-        indicators: indicators,
-        weekStartsMonday: weekStartsMonday,
-        mode: CalendarViewMode.year,
-        focused: DateTime(_focused.year, 1, 1),
-      );
+      // ---- Animation phase --------------------------------------------------
+      // Both source and dest rects are ready.  Run the bifurcated render:
+      //
+      //   Stack
+      //   ├── [Background] Transform → YearGrid with hole (11 months zoom away)
+      //   └── [Foreground] CustomMultiChildLayout → 42 MorphCells (Rect.lerp)
+      //
+      final destRects = _morphDestRects!;
+      final dates =
+          monthGridDates(morphMonth, weekStartsMonday: weekStartsMonday);
 
-      final probe = _buildMonthLayoutProbe(
-        events: events,
-        indicators: indicators,
-        weekStartsMonday: weekStartsMonday,
-      );
+      return ClipRect(
+        child: IgnorePointer(
+          child: AnimatedBuilder(
+            animation: controller,
+            // Cache the year grid so it is NOT rebuilt on every animation tick.
+            child: IgnorePointer(
+              child: _calendarGrid(
+                events: events,
+                indicators: indicators,
+                weekStartsMonday: weekStartsMonday,
+                mode: CalendarViewMode.year,
+                focused: DateTime(morphMonth.year, 1, 1),
+                hiddenMonth: morphMonth,
+              ),
+            ),
+            builder: (context, yearGridChild) {
+              final t =
+                  Curves.easeInOutCubic.transform(controller.value);
 
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          yearGrid,
-          probe,
-          _buildMorphWarmupOverlay(
-            events: events,
-            indicators: indicators,
-            weekStartsMonday: weekStartsMonday,
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Background: year grid minus the target month, zooming.
+                  Transform(
+                    transform: yearTween.transform(t),
+                    child: yearGridChild,
+                  ),
+                  // Foreground: 42 cells morphing from mini → full positions.
+                  CustomMultiChildLayout(
+                    delegate: _MorphLayoutDelegate(
+                      sourceRects: sourceRects,
+                      destRects: destRects,
+                      t: t,
+                    ),
+                    children: [
+                      for (var i = 0; i < 42; i++)
+                        LayoutId(
+                          id: i,
+                          child: _MorphCell(
+                            date: dates[i],
+                            month: morphMonth,
+                            t: t,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
-        ],
+        ),
       );
     }
 
-    return _buildCalendarGrid(
+    return _calendarGrid(
       events: events,
       indicators: indicators,
       weekStartsMonday: weekStartsMonday,
       mode: _mode,
-      focused: _focused,
+      focused: _mode == CalendarViewMode.year
+          ? DateTime(_focused.year, 1, 1)
+          : _focused,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<List<CalendarEvent>>>(calendarEventsProvider, (
-      previous,
-      next,
-    ) {
-      if (previous?.valueOrNull != next.valueOrNull) {
-        _dayCellKeys.clear();
-        _probeDayCellKeys.clear();
-        _invalidateMonthZoomSlotCache();
-      }
-    });
-
     final eventsAsync = ref.watch(calendarEventsProvider);
     final trackers =
         ref.watch(trackersProvider).value ?? const <StatisticTracker>[];
@@ -1205,16 +519,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       final values =
           ref.watch(trackerValuesProvider(tracker.id)).value ??
           const <TrackerValue>[];
-      final max = values.fold<int>(0, (max, value) {
+      final localMax = values.fold<int>(0, (m, value) {
         final current = value.intValue ?? 0;
-        return current > max ? current : max;
+        return current > m ? current : m;
       });
       for (final value in values) {
         final intensity = analytics.heatmapIntensity(
           type: tracker.type,
           value: value,
           tracker: tracker,
-          maxInPeriod: max == 0 ? 1 : max,
+          maxInPeriod: localMax == 0 ? 1 : localMax,
         );
         if (intensity <= 0) continue;
         indicators.add(
@@ -1227,8 +541,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         );
       }
     }
-
-    _schedulePrewarmStatusReport(weekStartsMonday: weekStartsMonday);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1286,6 +598,104 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 }
+
+// =============================================================================
+// Morph animation primitives
+// =============================================================================
+
+/// Positions 42 children by lerping their bounds from [sourceRects] →
+/// [destRects] as [t] goes from 0 → 1.
+class _MorphLayoutDelegate extends MultiChildLayoutDelegate {
+  _MorphLayoutDelegate({
+    required this.sourceRects,
+    required this.destRects,
+    required this.t,
+  });
+
+  final List<Rect> sourceRects;
+  final List<Rect> destRects;
+  final double t;
+
+  @override
+  void performLayout(Size size) {
+    for (var i = 0; i < 42; i++) {
+      final rect = Rect.lerp(sourceRects[i], destRects[i], t)!;
+      layoutChild(i, BoxConstraints.tight(rect.size));
+      positionChild(i, rect.topLeft);
+    }
+  }
+
+  @override
+  bool shouldRelayout(_MorphLayoutDelegate old) => old.t != t;
+}
+
+/// A single calendar day cell that morphs between the compact year-tile style
+/// (t = 0) and the full month-view style (t = 1).
+///
+/// Three properties are independently interpolated:
+///   1. **Position + Size** — controlled by [_MorphLayoutDelegate] via Rect.lerp.
+///   2. **Day number scale** — text is always rendered at the full font size and
+///      scaled down with [Transform.scale], so it is always crisp.
+///   3. **Border** — opacity lerped from 0 → 1 so it physically materialises.
+class _MorphCell extends StatelessWidget {
+  const _MorphCell({
+    required this.date,
+    required this.month,
+    required this.t,
+  });
+
+  final DateTime date;
+  final DateTime month;
+  final double t;
+
+  // Compact year-tile font size → full month-view font size.
+  static const _compactFontSize = 7.0;
+  static const _fullFontSize = 15.0;
+  static const _startScale = _compactFontSize / _fullFontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    // lerp(_startScale, 1.0, t)
+    final textScale = _startScale + (1.0 - _startScale) * t;
+
+    // lerp(compact.borderRadius, full.borderRadius, t)
+    final borderRadius =
+        MonthDayCellStyle.compact.borderRadius +
+        (MonthDayCellStyle.full.borderRadius -
+            MonthDayCellStyle.compact.borderRadius) *
+        t;
+
+    final dividerColor = Theme.of(context).dividerColor;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          // Border opacity lerps 0 → 1 so it physically grows from nothing.
+          color: dividerColor.withValues(alpha: t.clamp(0.0, 1.0)),
+        ),
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: Center(
+          child: Transform.scale(
+            // Render at the full native size; scaling costs only a matrix op.
+            scale: textScale,
+            child: CalendarDayNumber(
+              date: date,
+              month: month,
+              fontSize: _fullFontSize,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// View-mode segmented control
+// =============================================================================
 
 class _ViewModeSegmentedControl extends StatelessWidget {
   const _ViewModeSegmentedControl({
@@ -1415,6 +825,10 @@ class _ViewModeSegmentedControl extends StatelessWidget {
     return control;
   }
 }
+
+// =============================================================================
+// Utilities
+// =============================================================================
 
 DateTime _weekStart(DateTime focused, bool weekStartsMonday) {
   final weekday = focused.weekday;

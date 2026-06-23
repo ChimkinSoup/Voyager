@@ -1,7 +1,3 @@
-import 'dart:math' as math;
-
-import 'dart:ui' show lerpDouble;
-
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
@@ -87,19 +83,6 @@ class MonthDayCellStyle {
     dotSize: 7,
     eventFontSize: 9,
   );
-
-  MonthDayCellStyle lerp(MonthDayCellStyle other, double t) {
-    return MonthDayCellStyle(
-      fontSize: lerpDouble(fontSize, other.fontSize, t)!,
-      borderRadius: lerpDouble(borderRadius, other.borderRadius, t)!,
-      cellPadding: EdgeInsets.lerp(cellPadding, other.cellPadding, t)!,
-      cellMargin: EdgeInsets.lerp(cellMargin, other.cellMargin, t)!,
-      maxEventLines: t < 0.5 ? maxEventLines : other.maxEventLines,
-      dotSize: lerpDouble(dotSize, other.dotSize, t)!,
-      eventFontSize: lerpDouble(eventFontSize, other.eventFontSize, t)!,
-      borderOpacity: lerpDouble(borderOpacity, other.borderOpacity, t)!,
-    );
-  }
 
   /// Year mini-month tiles use adaptive shrink-to-fit; month/week fill their slot.
   bool get isCompactLayout => maxEventLines == 1 && eventFontSize < 8;
@@ -390,7 +373,6 @@ class MonthDayGrid extends StatelessWidget {
     required this.weekStartsMonday,
     required this.style,
     this.onDayTap,
-    this.dayCellKeyBuilder,
     this.showWeekdayHeader = false,
     this.weekdayHeaderOpacity = 1,
   });
@@ -401,7 +383,6 @@ class MonthDayGrid extends StatelessWidget {
   final bool weekStartsMonday;
   final MonthDayCellStyle style;
   final void Function(DateTime day)? onDayTap;
-  final GlobalKey Function(DateTime date)? dayCellKeyBuilder;
   final bool showWeekdayHeader;
   final double weekdayHeaderOpacity;
 
@@ -417,7 +398,7 @@ class MonthDayGrid extends StatelessWidget {
             weekStartsMonday: weekStartsMonday,
             opacity: weekdayHeaderOpacity,
           ),
-          const SizedBox(height: MonthDayGridLayout.weekdayHeaderGap),
+          const SizedBox(height: _weekdayHeaderGap),
         ],
         Expanded(
           child: Column(
@@ -433,19 +414,15 @@ class MonthDayGrid extends StatelessWidget {
                         .where((i) => calendarSameDay(i.day, date))
                         .take(3)
                         .toList();
-                    final cellKey = dayCellKeyBuilder?.call(date);
 
                     return Expanded(
-                      child: KeyedSubtree(
-                        key: cellKey,
-                        child: CalendarDayCell(
-                          date: date,
-                          month: month,
-                          events: dayEvents,
-                          indicators: dayIndicators,
-                          style: style,
-                          onTap: onDayTap == null ? null : () => onDayTap!(date),
-                        ),
+                      child: CalendarDayCell(
+                        date: date,
+                        month: month,
+                        events: dayEvents,
+                        indicators: dayIndicators,
+                        style: style,
+                        onTap: onDayTap == null ? null : () => onDayTap!(date),
                       ),
                     );
                   }),
@@ -459,198 +436,8 @@ class MonthDayGrid extends StatelessWidget {
   }
 }
 
-class MonthDayGridLayout {
-  static const weekdayHeaderGap = 4.0;
-
-  /// Measures the weekday label row height used by [MonthDayGrid].
-  static double measureWeekdayHeaderHeight(
-    BuildContext context, {
-    required bool weekStartsMonday,
-  }) {
-    final style = Theme.of(context).textTheme.labelSmall;
-    if (style == null) return 14 + weekdayHeaderGap;
-
-    final labels = weekStartsMonday
-        ? calendarWeekdayLabelsMonday
-        : calendarWeekdayLabelsSunday;
-    final textScaler = MediaQuery.textScalerOf(context);
-    final textDirection = Directionality.of(context);
-
-    var maxHeight = 0.0;
-    for (final label in labels) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: textDirection,
-        textScaler: textScaler,
-      )..layout();
-      maxHeight = math.max(maxHeight, painter.height);
-    }
-    return maxHeight + weekdayHeaderGap;
-  }
-
-  static Map<DateTime, Rect> computeFullCellRects({
-    required Size areaSize,
-    required DateTime month,
-    required bool weekStartsMonday,
-    required double weekdayHeaderHeight,
-  }) {
-    return mapDatesToSlotRects(
-      month: month,
-      weekStartsMonday: weekStartsMonday,
-      slotRects: computeSlotRects(
-        areaSize: areaSize,
-        weekdayHeaderHeight: weekdayHeaderHeight,
-      ),
-    );
-  }
-
-  /// Slot geometry for a 6×7 month grid — identical for every month.
-  static List<Rect> computeSlotRects({
-    required Size areaSize,
-    required double weekdayHeaderHeight,
-  }) {
-    final gridHeight = areaSize.height - weekdayHeaderHeight;
-    final cellWidth = areaSize.width / 7;
-    final cellHeight = gridHeight / 6;
-
-    return List.generate(42, (i) {
-      final row = i ~/ 7;
-      final col = i % 7;
-      return Rect.fromLTWH(
-        col * cellWidth,
-        weekdayHeaderHeight + row * cellHeight,
-        cellWidth,
-        cellHeight,
-      );
-    });
-  }
-
-  static Map<DateTime, Rect> mapDatesToSlotRects({
-    required DateTime month,
-    required bool weekStartsMonday,
-    required List<Rect> slotRects,
-  }) {
-    final cells = monthGridDates(month, weekStartsMonday: weekStartsMonday);
-    final rects = <DateTime, Rect>{};
-    for (var i = 0; i < cells.length && i < slotRects.length; i++) {
-      rects[cells[i]] = slotRects[i];
-    }
-    return rects;
-  }
-
-  /// Reads the 42 slot rects from a laid-out [MonthDayGrid] (calendar-area local space).
-  static List<Rect> readSlotRectsFromKeys({
-    required DateTime month,
-    required bool weekStartsMonday,
-    required GlobalKey Function(DateTime date) dayCellKeyBuilder,
-    required RenderBox areaBox,
-  }) {
-    final stackOrigin = areaBox.localToGlobal(Offset.zero);
-    final rects = <Rect>[];
-
-    for (final date in monthGridDates(month, weekStartsMonday: weekStartsMonday)) {
-      final key = dayCellKeyBuilder(date);
-      final box = key.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null && box.hasSize && box.attached) {
-        rects.add((box.localToGlobal(Offset.zero) & box.size).shift(-stackOrigin));
-      } else {
-        return const [];
-      }
-    }
-    return rects;
-  }
-
-  /// Reads day-cell bounds from laid-out [MonthDayGrid] keys (calendar-area local space).
-  static Map<DateTime, Rect> readCellRectsFromKeys({
-    required DateTime month,
-    required bool weekStartsMonday,
-    required GlobalKey Function(DateTime date) dayCellKeyBuilder,
-    required RenderBox areaBox,
-  }) {
-    final slotRects = readSlotRectsFromKeys(
-      month: month,
-      weekStartsMonday: weekStartsMonday,
-      dayCellKeyBuilder: dayCellKeyBuilder,
-      areaBox: areaBox,
-    );
-    if (slotRects.length < 42) return const {};
-    return mapDatesToSlotRects(
-      month: month,
-      weekStartsMonday: weekStartsMonday,
-      slotRects: slotRects,
-    );
-  }
-}
-
-/// Morphs individual day cells from year mini-month positions into month layout.
-class MonthZoomMorphOverlay extends StatelessWidget {
-  const MonthZoomMorphOverlay({
-    super.key,
-    required this.progress,
-    required this.month,
-    required this.fromLocalRects,
-    required this.toLocalRects,
-    required this.events,
-    required this.indicators,
-    required this.weekStartsMonday,
-    this.zoomOut = false,
-  });
-
-  final double progress;
-  final DateTime month;
-  final Map<DateTime, Rect> fromLocalRects;
-  final Map<DateTime, Rect> toLocalRects;
-  final List<CalendarEvent> events;
-  final List<CalendarDayIndicator> indicators;
-  final bool weekStartsMonday;
-  final bool zoomOut;
-
-  @override
-  Widget build(BuildContext context) {
-    final styleProgress = zoomOut ? (1 - progress) : progress;
-    final style =
-        MonthDayCellStyle.compact.lerp(MonthDayCellStyle.full, styleProgress);
-    final cells = monthGridDates(month, weekStartsMonday: weekStartsMonday);
-    final headerOpacity = zoomOut
-        ? (1 - ((progress - 0.55) / 0.4).clamp(0.0, 1.0))
-        : ((progress - 0.55) / 0.4).clamp(0.0, 1.0);
-
-    return Stack(
-      clipBehavior: Clip.none,
-      fit: StackFit.expand,
-      children: [
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: WeekdayHeaderRow(
-            weekStartsMonday: weekStartsMonday,
-            opacity: headerOpacity,
-          ),
-        ),
-        for (final date in cells)
-          if (fromLocalRects[date] != null && toLocalRects[date] != null)
-            Positioned.fromRect(
-              rect: Rect.lerp(fromLocalRects[date]!, toLocalRects[date]!, progress)!,
-              child: IgnorePointer(
-                child: CalendarDayCell(
-                  date: date,
-                  month: month,
-                  events: events
-                      .where((e) => calendarSameDay(e.start, date))
-                      .toList(),
-                  indicators: indicators
-                      .where((i) => calendarSameDay(i.day, date))
-                      .take(3)
-                      .toList(),
-                  style: style,
-                ),
-              ),
-            ),
-      ],
-    );
-  }
-}
+// weekdayHeaderGap constant formerly in MonthDayGridLayout — inlined below.
+const _weekdayHeaderGap = 4.0;
 
 bool calendarIsToday(DateTime date) {
   final now = DateTime.now();
