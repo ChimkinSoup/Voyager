@@ -25,7 +25,7 @@ class CalendarPage extends ConsumerStatefulWidget {
 
 class _CalendarPageState extends ConsumerState<CalendarPage>
     with SingleTickerProviderStateMixin {
-  CalendarViewMode _mode = CalendarViewMode.year;
+  CalendarViewMode _mode = CalendarViewMode.month;
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
 
@@ -40,6 +40,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   AnimationController? _zoomController;
   Matrix4Tween? _yearMatrixTween;
   bool _isZooming = false;
+  // true when the animation is playing in the month→year direction.
+  bool _morphReverse = false;
 
   // Morph state — populated just before the animation starts.
   List<Rect>? _morphSourceRects;
@@ -95,6 +97,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _zoomController?.stop();
     setState(() {
       _isZooming = false;
+      _morphReverse = false;
       _morphSourceRects = null;
       _morphDestRects = null;
       _morphMonth = null;
@@ -121,6 +124,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   void _onMiniCalendarDayTap(DateTime day) {
     setState(() {
       _isZooming = false;
+      _morphReverse = false;
       _morphSourceRects = null;
       _morphDestRects = null;
       _morphMonth = null;
@@ -270,7 +274,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         setState(() => _isZooming = false);
         return;
       }
-      // Dest rects are ready; trigger the animation phase rendering.
+      // Reset to 0 before the animation-phase rebuild so the first rendered
+      // frame is always at t=0 (source positions), never at a stale t=1.
+      _zoomController!.reset();
       setState(() { _morphDestRects = destRects; });
 
       // Start the controller one frame later so the animation layer is built.
@@ -285,8 +291,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   void _onViewModeSelectionChanged(Set<CalendarViewMode> selection) {
     final next = selection.first;
+
+    // Trigger the reverse zoom animation when switching month → year.
+    if (next == CalendarViewMode.year &&
+        _mode == CalendarViewMode.month &&
+        !_isZooming &&
+        _dayViewDate == null) {
+      _onReverseToYear();
+      return;
+    }
+
+    _zoomController?.stop();
+    _zoomController?.reset();
     setState(() {
       _isZooming = false;
+      _morphReverse = false;
       _morphSourceRects = null;
       _morphDestRects = null;
       _morphMonth = null;
@@ -298,8 +317,130 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         _focused = DateTime(_focused.year, 1, 1);
       }
     });
-    _zoomController?.stop();
-    _zoomController?.reset();
+  }
+
+  /// Starts the reverse zoom animation (month → year).
+  ///
+  /// Mirrors [_onMonthTapped] exactly, but with source/dest roles swapped:
+  ///   source (t=0) = full month-view cell positions
+  ///   dest   (t=1) = year-tile cell positions
+  /// The [Matrix4Tween] runs from zoomed-in → identity so the year grid flies
+  /// back in rather than out.
+  void _onReverseToYear() {
+    final areaBox =
+        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (areaBox == null || !areaBox.hasSize || !areaBox.attached) {
+      _immediatelySwitchToYear();
+      return;
+    }
+
+    // Measure source rects right now — the month grid is live with
+    // _fullMonthDayGridKey attached via the default _buildMainCalendar path.
+    final sourceRects = _computeDestRects();
+    if (sourceRects == null) {
+      _immediatelySwitchToYear();
+      return;
+    }
+
+    _zoomController ??=
+        AnimationController(vsync: this, duration: _zoomDuration);
+    _zoomController!.stop();
+
+    final areaW = areaBox.size.width;
+    final areaH = areaBox.size.height;
+
+    // Enter measurement phase: keep the month view visible while an Offstage
+    // year grid renders so we can measure year-tile positions next frame.
+    setState(() {
+      _isZooming = true;
+      _morphReverse = true;
+      _morphSourceRects = sourceRects;
+      _morphDestRects = null;
+      _morphMonth = _focused;
+      _morphTileRect = null;
+      _morphAreaSize = Size(areaW, areaH);
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      // Re-fetch areaBox — the reference captured before setState is detached
+      // once the measurement-phase widget tree replaces the month view.
+      final areaBox =
+          _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
+      final destRects = _computeSourceRects(_focused);
+      final tileKey = _monthTileKeys[_focused.month - 1];
+      final tileBox =
+          tileKey.currentContext?.findRenderObject() as RenderBox?;
+
+      if (areaBox == null ||
+          !areaBox.hasSize ||
+          !areaBox.attached ||
+          destRects == null ||
+          tileBox == null ||
+          !tileBox.hasSize ||
+          !tileBox.attached) {
+        setState(() => _isZooming = false);
+        _immediatelySwitchToYear();
+        return;
+      }
+
+      final areaW = areaBox.size.width;
+      final areaH = areaBox.size.height;
+      final tileOrigin =
+          areaBox.globalToLocal(tileBox.localToGlobal(Offset.zero));
+      final tileW = tileBox.size.width;
+      final tileH = tileBox.size.height;
+      final morphTileRect =
+          Rect.fromLTWH(tileOrigin.dx, tileOrigin.dy, tileW, tileH);
+
+      final s = max(areaW / tileW, areaH / tileH);
+
+      // Reverse matrix: begin = tile fills screen, end = normal year grid.
+      _yearMatrixTween = Matrix4Tween(
+        begin: Matrix4.identity()
+          ..translateByDouble(-tileOrigin.dx * s, -tileOrigin.dy * s, 0, 1)
+          ..scaleByDouble(s, s, 1, 1),
+        end: Matrix4.identity(),
+      );
+
+      // Reset before the animation-phase rebuild for the same reason as the
+      // forward path: avoids a stale t=1 frame on first render.
+      _zoomController!.reset();
+      setState(() {
+        _morphDestRects = destRects;
+        _morphTileRect = morphTileRect;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _zoomController!.forward(from: 0).then((_) {
+          if (!mounted) return;
+          setState(() {
+            _isZooming = false;
+            _morphReverse = false;
+            _mode = CalendarViewMode.year;
+            _focused = DateTime(_focused.year, 1, 1);
+          });
+        });
+      });
+    });
+  }
+
+  /// Falls back to an immediate view switch when measurement is unavailable.
+  void _immediatelySwitchToYear() {
+    setState(() {
+      _isZooming = false;
+      _morphReverse = false;
+      _morphSourceRects = null;
+      _morphDestRects = null;
+      _morphMonth = null;
+      _morphTileRect = null;
+      _morphAreaSize = null;
+      _mode = CalendarViewMode.year;
+      _focused = DateTime(_focused.year, 1, 1);
+      _dayViewDate = null;
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -405,6 +546,38 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
     }
 
+    // ---- Reverse measurement phase -------------------------------------------
+    // Show the current month view (unchanged) while an Offstage year grid
+    // renders so we can measure year-tile positions on the next frame.
+    if (_isZooming && _morphReverse && _morphMonth != null && _morphDestRects == null) {
+      final morphMonth = _morphMonth!;
+      return IgnorePointer(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _calendarGrid(
+              events: events,
+              indicators: indicators,
+              weekStartsMonday: weekStartsMonday,
+              mode: CalendarViewMode.month,
+              focused: morphMonth,
+            ),
+            // Offstage year grid — laid out for measurement only.
+            Offstage(
+              offstage: true,
+              child: _calendarGrid(
+                events: events,
+                indicators: indicators,
+                weekStartsMonday: weekStartsMonday,
+                mode: CalendarViewMode.year,
+                focused: DateTime(morphMonth.year, 1, 1),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (_isZooming &&
         _zoomController != null &&
         _yearMatrixTween != null &&
@@ -466,21 +639,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       final dates =
           monthGridDates(morphMonth, weekStartsMonday: weekStartsMonday);
 
-      // Source title rect: sits above the source day grid, inside the tile.
-      final sourceTitleTop = tileRect.top + 8;
+      // In the forward animation, sourceRects = tile positions and
+      // destRects = month positions.  In the reverse animation these roles are
+      // swapped, so we identify each geometrically rather than by name.
+      final tileCellRects = _morphReverse ? destRects : sourceRects;
+      final monthCellRects = _morphReverse ? sourceRects : destRects;
+
+      // Small title rect: sits in the tile header area above its day grid.
+      final tileHeaderTop = tileRect.top + 8;
       final sourceTitleRect = Rect.fromLTWH(
         tileRect.left + 8,
-        sourceTitleTop,
+        tileHeaderTop,
         tileRect.width - 16,
-        (sourceRects[0].top - sourceTitleTop - 4).clamp(4.0, double.infinity),
+        (tileCellRects[0].top - tileHeaderTop - 4).clamp(4.0, double.infinity),
       );
 
-      // Dest title rect: sits above the dest day grid, inside the card padding.
+      // Large title rect: sits above the full-size day grid.
       final destTitleRect = Rect.fromLTWH(
         8,
         8,
         areaSize.width - 16,
-        (destRects[0].top - 12).clamp(8.0, double.infinity),
+        (monthCellRects[0].top - 12).clamp(8.0, double.infinity),
       );
 
       // Pre-build static widgets that are invariant across animation ticks.
@@ -505,27 +684,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         child: IgnorePointer(
           child: AnimatedBuilder(
             animation: controller,
-            // RepaintBoundary caches the year grid as a GPU raster so the
-            // Transform matrix change each tick is a cheap compositing op
-            // rather than a full repaint of the 462-cell grid.
-            child: RepaintBoundary(
-              child: IgnorePointer(
-                child: _calendarGrid(
-                  events: events,
-                  indicators: indicators,
-                  weekStartsMonday: weekStartsMonday,
-                  mode: CalendarViewMode.year,
-                  focused: DateTime(morphMonth.year, 1, 1),
-                  hiddenMonth: morphMonth,
-                ),
+            child: IgnorePointer(
+              child: _calendarGrid(
+                events: events,
+                indicators: indicators,
+                weekStartsMonday: weekStartsMonday,
+                mode: CalendarViewMode.year,
+                focused: DateTime(morphMonth.year, 1, 1),
+                hiddenMonth: morphMonth,
               ),
             ),
             builder: (context, yearGridChild) {
               final t = Curves.easeInOutCubic.transform(controller.value);
 
               // ---- Lerped geometry ----
-              final bgRect = Rect.lerp(tileRect, fullAreaRect, t)!;
-              final titleRect = Rect.lerp(sourceTitleRect, destTitleRect, t)!;
+              // Reverse animation: card shrinks full→tile, title shrinks big→small.
+              final bgRect = _morphReverse
+                  ? Rect.lerp(fullAreaRect, tileRect, t)!
+                  : Rect.lerp(tileRect, fullAreaRect, t)!;
+              final titleRect = _morphReverse
+                  ? Rect.lerp(destTitleRect, sourceTitleRect, t)!
+                  : Rect.lerp(sourceTitleRect, destTitleRect, t)!;
 
               return Stack(
                 fit: StackFit.expand,
@@ -591,6 +770,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       focused: _mode == CalendarViewMode.year
           ? DateTime(_focused.year, 1, 1)
           : _focused,
+      // Keep the key attached to the live month grid so _computeDestRects()
+      // can measure cell positions immediately when the reverse animation starts.
+      monthDayGridKey: _mode == CalendarViewMode.month ? _fullMonthDayGridKey : null,
     );
   }
 
