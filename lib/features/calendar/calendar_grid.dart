@@ -1,5 +1,8 @@
+import 'dart:math' show max;
+
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -27,6 +30,8 @@ class CalendarGrid extends StatelessWidget {
     this.yearTileDayGridKeyBuilder,
     this.hiddenMonth,
     this.monthDayGridKey,
+    this.onPreviousMonth,
+    this.onNextMonth,
   });
 
   final CalendarViewMode mode;
@@ -46,6 +51,8 @@ class CalendarGrid extends StatelessWidget {
   /// [GlobalKey] placed on the [MonthDayGrid] inside the full month view,
   /// used to measure destination cell positions for the morph animation.
   final GlobalKey? monthDayGridKey;
+  final VoidCallback? onPreviousMonth;
+  final VoidCallback? onNextMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +71,8 @@ class CalendarGrid extends StatelessWidget {
         onDayTap: onDayTap,
         weekStartsMonday: weekStartsMonday,
         dayGridKey: monthDayGridKey,
+        onPreviousMonth: onPreviousMonth,
+        onNextMonth: onNextMonth,
       ),
       CalendarViewMode.year => _YearGrid(
         focused: focused,
@@ -274,6 +283,133 @@ class DayHourGrid extends StatelessWidget {
   }
 }
 
+/// Compact month title with optional prev/next controls hugging the label.
+/// Shared by month view and the year↔month morph overlay.
+class MonthTitleHeader extends StatelessWidget {
+  const MonthTitleHeader({
+    super.key,
+    required this.month,
+    this.onPreviousMonth,
+    this.onNextMonth,
+    this.navOpacity = 1.0,
+  });
+
+  final DateTime month;
+  final VoidCallback? onPreviousMonth;
+  final VoidCallback? onNextMonth;
+  /// 0 = text only (year-tile morph start); 1 = full nav visible.
+  final double navOpacity;
+
+  static const titleFontSize = 36.0;
+  static const navIconSize = 24.0;
+  static const navTapSize = 32.0;
+  static const navSpacing = 8.0;
+  static const cardPadding = 8.0;
+  static const titleGap = 4.0;
+
+  /// Matches the laid-out height of the title row in [_MonthGrid].
+  static double preferredHeight(TextStyle titleStyle) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Mg', style: titleStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return max(navTapSize, painter.height);
+  }
+
+  /// Computes the 42 month-view day-cell [Rect]s analytically from [areaSize],
+  /// mirroring [_MonthGrid]'s card padding, title row, and 6×7 grid layout.
+  static List<Rect> dayCellRects(Size areaSize, TextStyle titleStyle) {
+    final titleHeight = preferredHeight(titleStyle);
+    final gridLeft = cardPadding;
+    final gridTop = cardPadding + titleHeight + titleGap;
+    final gridWidth = areaSize.width - cardPadding * 2;
+    final gridHeight = areaSize.height - gridTop - cardPadding;
+    final cellW = gridWidth / 7;
+    final cellH = gridHeight / 6;
+
+    return List.generate(
+      42,
+      (i) => Rect.fromLTWH(
+        gridLeft + (i % 7) * cellW,
+        gridTop + (i ~/ 7) * cellH,
+        cellW,
+        cellH,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final opacity = navOpacity.clamp(0.0, 1.0);
+    final showNav =
+        onPreviousMonth != null || onNextMonth != null || opacity > 0;
+    final titleStyle = Theme.of(context).textTheme.titleSmall!.copyWith(
+      fontSize: titleFontSize,
+    );
+
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showNav) ...[
+            _navControl(
+              icon: PhosphorIconsRegular.caretLeft,
+              onPressed: onPreviousMonth,
+              opacity: opacity,
+            ),
+            SizedBox(width: navSpacing * opacity),
+          ],
+          Text(
+            DateFormat.MMMM().format(month),
+            style: titleStyle,
+            textAlign: TextAlign.center,
+          ),
+          if (showNav) ...[
+            SizedBox(width: navSpacing * opacity),
+            _navControl(
+              icon: PhosphorIconsRegular.caretRight,
+              onPressed: onNextMonth,
+              opacity: opacity,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _navControl({
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required double opacity,
+  }) {
+    final iconChild = Opacity(
+      opacity: opacity,
+      child: Icon(icon, size: navIconSize),
+    );
+    if (onPressed != null && opacity >= 1) {
+      return SizedBox(
+        width: navTapSize,
+        height: navTapSize,
+        child: IconButton(
+          onPressed: onPressed,
+          icon: iconChild,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(
+            width: navTapSize,
+            height: navTapSize,
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: navTapSize * opacity,
+      height: navTapSize,
+      child: Center(child: iconChild),
+    );
+  }
+}
+
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.focused,
@@ -282,6 +418,8 @@ class _MonthGrid extends StatelessWidget {
     required this.onDayTap,
     required this.weekStartsMonday,
     this.dayGridKey,
+    this.onPreviousMonth,
+    this.onNextMonth,
   });
 
   final DateTime focused;
@@ -291,6 +429,8 @@ class _MonthGrid extends StatelessWidget {
   final bool weekStartsMonday;
   /// Optional key placed on the inner [MonthDayGrid] for measurement.
   final GlobalKey? dayGridKey;
+  final VoidCallback? onPreviousMonth;
+  final VoidCallback? onNextMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -301,11 +441,10 @@ class _MonthGrid extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              DateFormat.MMMM().format(focused),
-              // Keep in sync with _kMonthTitleFontSize in calendar_page.dart.
-              style: Theme.of(context).textTheme.titleSmall!.copyWith(fontSize: 36),
-              textAlign: TextAlign.center,
+            MonthTitleHeader(
+              month: focused,
+              onPreviousMonth: onPreviousMonth,
+              onNextMonth: onNextMonth,
             ),
             const SizedBox(height: 4),
             Expanded(
