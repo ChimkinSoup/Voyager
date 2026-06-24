@@ -50,7 +50,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   Rect? _morphTileRect;
   Size? _morphAreaSize;
 
-  static const _zoomDuration = Duration(milliseconds: 5000);
+  static const _zoomDuration = Duration(milliseconds: 600);
 
   Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
     final result = await showDialog<Map<String, dynamic>>(
@@ -483,19 +483,41 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         (destRects[0].top - 12).clamp(8.0, double.infinity),
       );
 
+      // Pre-build static widgets that are invariant across animation ticks.
+      // Hoisting them out of the builder avoids re-allocating objects on every
+      // frame; only the Positioned bounds change per tick, not the children.
+      final cardWidget = Card(
+        margin: EdgeInsets.zero,
+        child: const SizedBox.expand(),
+      );
+      final titleWidget = FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          DateFormat.MMMM().format(morphMonth),
+          style: Theme.of(context).textTheme.titleSmall!.copyWith(
+            fontSize: _kMonthTitleFontSize,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+
       return ClipRect(
         child: IgnorePointer(
           child: AnimatedBuilder(
             animation: controller,
-            // Cache the year grid so it is NOT rebuilt on every animation tick.
-            child: IgnorePointer(
-              child: _calendarGrid(
-                events: events,
-                indicators: indicators,
-                weekStartsMonday: weekStartsMonday,
-                mode: CalendarViewMode.year,
-                focused: DateTime(morphMonth.year, 1, 1),
-                hiddenMonth: morphMonth,
+            // RepaintBoundary caches the year grid as a GPU raster so the
+            // Transform matrix change each tick is a cheap compositing op
+            // rather than a full repaint of the 462-cell grid.
+            child: RepaintBoundary(
+              child: IgnorePointer(
+                child: _calendarGrid(
+                  events: events,
+                  indicators: indicators,
+                  weekStartsMonday: weekStartsMonday,
+                  mode: CalendarViewMode.year,
+                  focused: DateTime(morphMonth.year, 1, 1),
+                  hiddenMonth: morphMonth,
+                ),
               ),
             ),
             builder: (context, yearGridChild) {
@@ -524,10 +546,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                     top: bgRect.top,
                     width: bgRect.width,
                     height: bgRect.height,
-                    child: Card(
-                      margin: EdgeInsets.zero,
-                      child: const SizedBox.expand(),
-                    ),
+                    child: cardWidget,
                   ),
                   // z=2 Foreground: 42 day cells morphing from mini → full.
                   CustomMultiChildLayout(
@@ -554,16 +573,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                     top: titleRect.top,
                     width: titleRect.width,
                     height: titleRect.height,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        DateFormat.MMMM().format(morphMonth),
-                        style: Theme.of(context).textTheme.titleSmall!.copyWith(
-                          fontSize: _kMonthTitleFontSize,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                    child: titleWidget,
                   ),
                 ],
               );
@@ -735,18 +745,23 @@ class _MorphCell extends StatelessWidget {
   static const _startScale = _compactFontSize / _fullFontSize;
   // Matches CalendarDayNumber's diameter formula: fontSize + (fontSize <= 9 ? 3 : 8).
   static const _diameter = _fullFontSize + 8.0;
-  // Top inset = cellMargin.top + cellPadding.top for each style.
-  // Lerping this keeps the number vertically aligned with the real cell layout.
-  static const _compactTopInset = 0.5 + 1.0; // compact margin + padding
-  static const _fullTopInset = 1.0 + 3.0;    // full margin + padding
+  // Cell margin (creates the gap between adjacent cells).
+  static const _compactCellMargin = 0.5; // compact.cellMargin.top
+  static const _fullCellMargin = 1.0;    // full.cellMargin.top
+  // Cell padding (inset inside the border, before the day number).
+  static const _compactCellPadding = 1.0; // compact.cellPadding.top
+  static const _fullCellPadding = 3.0;    // full.cellPadding.top
 
   @override
   Widget build(BuildContext context) {
     // lerp(_startScale, 1.0, t)
     final textScale = _startScale + (1.0 - _startScale) * t;
-    // lerp compact top inset → full top inset so the number's vertical
-    // position matches the real CalendarDayCell at both endpoints.
-    final topInset = _compactTopInset + (_fullTopInset - _compactTopInset) * t;
+    // Margin creates the gap between cells; padding offsets the number inside.
+    // Splitting them matches the real CalendarDayCell layout at both endpoints.
+    final cellMargin =
+        _compactCellMargin + (_fullCellMargin - _compactCellMargin) * t;
+    final cellPadding =
+        _compactCellPadding + (_fullCellPadding - _compactCellPadding) * t;
 
     // lerp(compact.borderRadius, full.borderRadius, t)
     final borderRadius =
@@ -758,6 +773,10 @@ class _MorphCell extends StatelessWidget {
     final dividerColor = Theme.of(context).dividerColor;
 
     return Container(
+      // Margin creates the visible gap between adjacent cells.  The allocated
+      // rect already includes this margin space, so shrinking inward here is
+      // correct and matches the real CalendarDayCell behaviour.
+      margin: EdgeInsets.all(cellMargin),
       decoration: BoxDecoration(
         border: Border.all(
           // Border opacity lerps 0 → 1 so it physically grows from nothing.
@@ -767,25 +786,31 @@ class _MorphCell extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
-        // Top padding lerps from compact's (margin+padding) to full's so the
-        // number's vertical position matches the real CalendarDayCell exactly
-        // at both t=0 and t=1, eliminating the end-of-animation snap.
+        // Top padding (inside the border) lerps from compact.cellPadding.top
+        // to full.cellPadding.top, keeping the number's vertical position
+        // aligned with the real CalendarDayCell at both endpoints.
         child: Padding(
-          padding: EdgeInsets.only(top: topInset),
+          padding: EdgeInsets.only(top: cellPadding),
           child: Align(
             alignment: Alignment.topCenter,
-            child: Transform.scale(
-              scale: textScale,
-              alignment: Alignment.topCenter,
-              child: SizedBox.square(
-                dimension: _diameter,
-                child: CalendarDayNumber(
-                  date: date,
-                  month: month,
-                  fontSize: _fullFontSize,
+              child: Transform.scale(
+                scale: textScale,
+                alignment: Alignment.topCenter,
+                // RepaintBoundary caches each day number circle as a GPU
+                // layer.  Transform.scale then composites it without
+                // repainting, since the content never changes mid-animation.
+                child: RepaintBoundary(
+                  child: SizedBox.square(
+                    dimension: _diameter,
+                    child: CalendarDayNumber(
+                      date: date,
+                      month: month,
+                      fontSize: _fullFontSize,
+                      mutedWhenAdjacent: true,
+                    ),
+                  ),
                 ),
               ),
-            ),
           ),
         ),
       ),
