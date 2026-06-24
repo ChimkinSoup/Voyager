@@ -12,6 +12,10 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/event_editor_dialog.dart';
 
+// Font size for the month name title in the full month view.
+// Must stay in sync with _MonthGrid's title fontSize in calendar_grid.dart.
+const _kMonthTitleFontSize = 36.0;
+
 class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
 
@@ -41,6 +45,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<Rect>? _morphSourceRects;
   List<Rect>? _morphDestRects;
   DateTime? _morphMonth;
+  // Tile bounds (area-local) and area size captured at tap time — used to
+  // position the morphing card background and month title overlay.
+  Rect? _morphTileRect;
+  Size? _morphAreaSize;
 
   static const _zoomDuration = Duration(milliseconds: 5000);
 
@@ -90,6 +98,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphSourceRects = null;
       _morphDestRects = null;
       _morphMonth = null;
+      _morphTileRect = null;
+      _morphAreaSize = null;
       final base = _dayViewDate ?? _focused;
       if (_dayViewDate != null) {
         _dayViewDate = base.add(Duration(days: delta));
@@ -114,6 +124,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphSourceRects = null;
       _morphDestRects = null;
       _morphMonth = null;
+      _morphTileRect = null;
+      _morphAreaSize = null;
       _zoomController?.stop();
       if (_dayViewDate != null &&
           _dayViewDate!.year == day.year &&
@@ -230,6 +242,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         AnimationController(vsync: this, duration: _zoomDuration);
     _zoomController!.stop();
 
+    // Capture tile and area geometry for the background/title overlay lerp.
+    final morphTileRect =
+        Rect.fromLTWH(tileOrigin.dx, tileOrigin.dy, tileW, tileH);
+    final morphAreaSize = Size(areaW, areaH);
+
     // Enter the measurement phase: show the normal year grid (visible) and
     // an Offstage full-month grid (laid out but not painted) so we can
     // measure the destination cell positions on the next frame.
@@ -241,6 +258,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphSourceRects = sourceRects;
       _morphDestRects = null;
       _morphMonth = month;
+      _morphTileRect = morphTileRect;
+      _morphAreaSize = morphAreaSize;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -271,6 +290,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphSourceRects = null;
       _morphDestRects = null;
       _morphMonth = null;
+      _morphTileRect = null;
+      _morphAreaSize = null;
       _mode = next;
       _dayViewDate = null;
       if (next == CalendarViewMode.year) {
@@ -388,11 +409,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         _zoomController != null &&
         _yearMatrixTween != null &&
         _morphSourceRects != null &&
-        _morphMonth != null) {
+        _morphMonth != null &&
+        _morphTileRect != null &&
+        _morphAreaSize != null) {
       final morphMonth = _morphMonth!;
       final sourceRects = _morphSourceRects!;
       final yearTween = _yearMatrixTween!;
       final controller = _zoomController!;
+      final tileRect = _morphTileRect!;
+      final areaSize = _morphAreaSize!;
 
       // ---- Measurement phase ------------------------------------------------
       // Dest rects have not been computed yet.  Render the normal year grid
@@ -428,15 +453,35 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       }
 
       // ---- Animation phase --------------------------------------------------
-      // Both source and dest rects are ready.  Run the bifurcated render:
+      // Bifurcated render — four layers in z-order:
       //
       //   Stack
-      //   ├── [Background] Transform → YearGrid with hole (11 months zoom away)
-      //   └── [Foreground] CustomMultiChildLayout → 42 MorphCells (Rect.lerp)
+      //   ├── [z=0] Transform → YearGrid with hole (11 months zoom away)
+      //   ├── [z=1] Positioned card background  (lerps tile → full area)
+      //   ├── [z=2] CustomMultiChildLayout → 42 MorphCells (Rect.lerp)
+      //   └── [z=3] Positioned month title      (lerps tile title → full title)
       //
       final destRects = _morphDestRects!;
+      final fullAreaRect = Rect.fromLTWH(0, 0, areaSize.width, areaSize.height);
       final dates =
           monthGridDates(morphMonth, weekStartsMonday: weekStartsMonday);
+
+      // Source title rect: sits above the source day grid, inside the tile.
+      final sourceTitleTop = tileRect.top + 8;
+      final sourceTitleRect = Rect.fromLTWH(
+        tileRect.left + 8,
+        sourceTitleTop,
+        tileRect.width - 16,
+        (sourceRects[0].top - sourceTitleTop - 4).clamp(4.0, double.infinity),
+      );
+
+      // Dest title rect: sits above the dest day grid, inside the card padding.
+      final destTitleRect = Rect.fromLTWH(
+        8,
+        8,
+        areaSize.width - 16,
+        (destRects[0].top - 12).clamp(8.0, double.infinity),
+      );
 
       return ClipRect(
         child: IgnorePointer(
@@ -454,18 +499,37 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               ),
             ),
             builder: (context, yearGridChild) {
-              final t =
-                  Curves.easeInOutCubic.transform(controller.value);
+              final t = Curves.easeInOutCubic.transform(controller.value);
+
+              // ---- Lerped geometry ----
+              final bgRect = Rect.lerp(tileRect, fullAreaRect, t)!;
+              final titleRect = Rect.lerp(sourceTitleRect, destTitleRect, t)!;
 
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Background: year grid minus the target month, zooming.
+                  // z=0 Background: year grid minus the target month, zooming.
                   Transform(
                     transform: yearTween.transform(t),
                     child: yearGridChild,
                   ),
-                  // Foreground: 42 cells morphing from mini → full positions.
+                  // z=1 Card background that grows from tile → full area.
+                  // Uses the real Card widget so its corner radius, surface
+                  // colour and border stay consistent with the year tiles and
+                  // the final month-view card throughout the entire animation.
+                  // It lives outside the Transform, so its border is never
+                  // scaled or distorted.
+                  Positioned(
+                    left: bgRect.left,
+                    top: bgRect.top,
+                    width: bgRect.width,
+                    height: bgRect.height,
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                  // z=2 Foreground: 42 day cells morphing from mini → full.
                   CustomMultiChildLayout(
                     delegate: _MorphLayoutDelegate(
                       sourceRects: sourceRects,
@@ -483,6 +547,23 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                           ),
                         ),
                     ],
+                  ),
+                  // z=3 Month name title morphing from tile header → full header.
+                  Positioned(
+                    left: titleRect.left,
+                    top: titleRect.top,
+                    width: titleRect.width,
+                    height: titleRect.height,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        DateFormat.MMMM().format(morphMonth),
+                        style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                          fontSize: _kMonthTitleFontSize,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                   ),
                 ],
               );
@@ -652,6 +733,8 @@ class _MorphCell extends StatelessWidget {
   static const _compactFontSize = 7.0;
   static const _fullFontSize = 15.0;
   static const _startScale = _compactFontSize / _fullFontSize;
+  // Matches CalendarDayNumber's diameter formula: fontSize + (fontSize <= 9 ? 3 : 8).
+  static const _diameter = _fullFontSize + 8.0;
 
   @override
   Widget build(BuildContext context) {
@@ -677,14 +760,22 @@ class _MorphCell extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
-        child: Center(
+        // Align to top-centre — matching both the compact year-tile layout
+        // (FittedBox topCenter) and the full month-view layout (Column → top).
+        // Using a fixed-size SizedBox lets us scale from a stable anchor point
+        // with no layout recalculation, eliminating the end-of-animation snap.
+        child: Align(
+          alignment: Alignment.topCenter,
           child: Transform.scale(
-            // Render at the full native size; scaling costs only a matrix op.
             scale: textScale,
-            child: CalendarDayNumber(
-              date: date,
-              month: month,
-              fontSize: _fullFontSize,
+            alignment: Alignment.topCenter,
+            child: SizedBox.square(
+              dimension: _diameter,
+              child: CalendarDayNumber(
+                date: date,
+                month: month,
+                fontSize: _fullFontSize,
+              ),
             ),
           ),
         ),

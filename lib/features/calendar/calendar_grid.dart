@@ -303,7 +303,8 @@ class _MonthGrid extends StatelessWidget {
           children: [
             Text(
               DateFormat.MMMM().format(focused),
-              style: Theme.of(context).textTheme.titleSmall!.copyWith(fontSize: 30),
+              // Keep in sync with _kMonthTitleFontSize in calendar_page.dart.
+              style: Theme.of(context).textTheme.titleSmall!.copyWith(fontSize: 36),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
