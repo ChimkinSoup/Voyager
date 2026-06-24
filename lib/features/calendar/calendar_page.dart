@@ -735,11 +735,18 @@ class _MorphCell extends StatelessWidget {
   static const _startScale = _compactFontSize / _fullFontSize;
   // Matches CalendarDayNumber's diameter formula: fontSize + (fontSize <= 9 ? 3 : 8).
   static const _diameter = _fullFontSize + 8.0;
+  // Top inset = cellMargin.top + cellPadding.top for each style.
+  // Lerping this keeps the number vertically aligned with the real cell layout.
+  static const _compactTopInset = 0.5 + 1.0; // compact margin + padding
+  static const _fullTopInset = 1.0 + 3.0;    // full margin + padding
 
   @override
   Widget build(BuildContext context) {
     // lerp(_startScale, 1.0, t)
     final textScale = _startScale + (1.0 - _startScale) * t;
+    // lerp compact top inset → full top inset so the number's vertical
+    // position matches the real CalendarDayCell at both endpoints.
+    final topInset = _compactTopInset + (_fullTopInset - _compactTopInset) * t;
 
     // lerp(compact.borderRadius, full.borderRadius, t)
     final borderRadius =
@@ -760,21 +767,23 @@ class _MorphCell extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
-        // Align to top-centre — matching both the compact year-tile layout
-        // (FittedBox topCenter) and the full month-view layout (Column → top).
-        // Using a fixed-size SizedBox lets us scale from a stable anchor point
-        // with no layout recalculation, eliminating the end-of-animation snap.
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: Transform.scale(
-            scale: textScale,
+        // Top padding lerps from compact's (margin+padding) to full's so the
+        // number's vertical position matches the real CalendarDayCell exactly
+        // at both t=0 and t=1, eliminating the end-of-animation snap.
+        child: Padding(
+          padding: EdgeInsets.only(top: topInset),
+          child: Align(
             alignment: Alignment.topCenter,
-            child: SizedBox.square(
-              dimension: _diameter,
-              child: CalendarDayNumber(
-                date: date,
-                month: month,
-                fontSize: _fullFontSize,
+            child: Transform.scale(
+              scale: textScale,
+              alignment: Alignment.topCenter,
+              child: SizedBox.square(
+                dimension: _diameter,
+                child: CalendarDayNumber(
+                  date: date,
+                  month: month,
+                  fontSize: _fullFontSize,
+                ),
               ),
             ),
           ),
