@@ -180,6 +180,12 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
   return controller;
 });
 
+final cachedCurrentWeatherProvider = Provider<WeatherSnapshot?>((ref) {
+  final settings = ref.watch(settingsProvider).valueOrNull;
+  if (settings == null) return null;
+  return ref.read(weatherServiceProvider).readCachedSnapshot(settings);
+});
+
 final currentWeatherProvider = FutureProvider<WeatherSnapshot?>((ref) async {
   ref.watch(settingsProvider);
   return ref.read(weatherServiceProvider).refreshIfNeeded();

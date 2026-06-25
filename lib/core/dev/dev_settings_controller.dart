@@ -11,8 +11,7 @@ import 'package:voyager/domain/repositories/repositories.dart';
 /// 2. Add a field + getter/setter here and include it in [applySettings] / [_persist].
 /// 3. Wire the Dev page toggle through this controller instead of a [StateProvider].
 class DevSettingsController extends ChangeNotifier {
-  DevSettingsController({SettingsRepository? settingsRepository})
-    : _settingsRepository = settingsRepository;
+  DevSettingsController({this._settingsRepository});
 
   final SettingsRepository? _settingsRepository;
 

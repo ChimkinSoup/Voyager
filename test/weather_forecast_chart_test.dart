@@ -114,6 +114,55 @@ void main() {
     expect(chartBucketRangeCenteredOn(21), (start: 19.5, end: 22.5));
   });
 
+  test('visibleForecastDays hides past calendar days', () {
+    final now = DateTime(2026, 6, 21, 14);
+    final days = [
+      DailyForecastSummary(
+        date: DateTime(2026, 6, 20),
+        highC: 20,
+        lowC: 10,
+        maxPop: 0.1,
+        icon: 'sunny',
+      ),
+      DailyForecastSummary(
+        date: DateTime(2026, 6, 21),
+        highC: 22,
+        lowC: 12,
+        maxPop: 0.2,
+        icon: 'cloudy',
+      ),
+      DailyForecastSummary(
+        date: DateTime(2026, 6, 22),
+        highC: 24,
+        lowC: 14,
+        maxPop: 0.3,
+        icon: 'rain',
+      ),
+    ];
+
+    final visible = visibleForecastDays(days, now);
+    expect(visible.map((d) => d.date.day), [21, 22]);
+  });
+
+  test('visibleForecastDays caps at today plus four future days', () {
+    final now = DateTime(2026, 6, 21, 14);
+    final days = [
+      for (var i = 0; i < 7; i++)
+        DailyForecastSummary(
+          date: DateTime(2026, 6, 21 + i),
+          highC: 20.0 + i,
+          lowC: 10.0 + i,
+          maxPop: 0.1,
+          icon: 'sunny',
+        ),
+    ];
+
+    final visible = visibleForecastDays(days, now);
+    expect(visible.length, forecastVisibleDayCount);
+    expect(visible.first.date.day, 21);
+    expect(visible.last.date.day, 25);
+  });
+
   test('resolveForecastDayIndex restores last viewed day', () {
     final days = [
       DailyForecastSummary(
@@ -140,11 +189,17 @@ void main() {
     ];
 
     expect(
-      resolveForecastDayIndex(days, DateTime(2026, 6, 21)),
+      resolveForecastDayIndex(days, DateTime(2026, 6, 21), now: DateTime(2026, 6, 20, 14)),
       2,
     );
-    expect(resolveForecastDayIndex(days, DateTime(2026, 6, 99)), 0);
-    expect(resolveForecastDayIndex(days, null), 0);
+    expect(
+      resolveForecastDayIndex(days, DateTime(2026, 6, 99), now: DateTime(2026, 6, 20, 14)),
+      1,
+    );
+    expect(
+      resolveForecastDayIndex(days, null, now: DateTime(2026, 6, 20, 14)),
+      1,
+    );
   });
 
   test('forecastRainGradientStartHour uses fetch bucket on same day', () {

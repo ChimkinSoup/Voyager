@@ -40,6 +40,25 @@ bool isTodayForecastDay(DateTime day, DateTime now) {
   return target == today;
 }
 
+/// Number of daily forecast cards shown: today + this many future days.
+const forecastVisibleDayCount = 5;
+
+/// Daily cards for today and future days only (past calendar days hidden).
+/// Capped at [forecastVisibleDayCount] — additional days remain in storage.
+List<DailyForecastSummary> visibleForecastDays(
+  List<DailyForecastSummary> days,
+  DateTime now,
+) {
+  final today = DateTime(now.year, now.month, now.day);
+  final visible = [
+    for (final day in days)
+      if (!DateTime(day.date.year, day.date.month, day.date.day).isBefore(today))
+        day,
+  ];
+  if (visible.length <= forecastVisibleDayCount) return visible;
+  return visible.sublist(0, forecastVisibleDayCount);
+}
+
 /// Fractional hour (0–24) for the current local time.
 double currentTimeChartHour(DateTime now) =>
     now.hour + now.minute / 60.0 + now.second / 3600.0;
@@ -60,11 +79,12 @@ int initialForecastDayIndex(List<DailyForecastSummary> days, DateTime now) {
   return index >= 0 ? index : 0;
 }
 
-/// Picks [lastViewedDay] when still in [days], otherwise the first day.
+/// Picks [lastViewedDay] when still in [days], otherwise today (or first day).
 int resolveForecastDayIndex(
   List<DailyForecastSummary> days,
-  DateTime? lastViewedDay,
-) {
+  DateTime? lastViewedDay, {
+  DateTime? now,
+}) {
   if (days.isEmpty) return 0;
   if (lastViewedDay != null) {
     final index = days.indexWhere(
@@ -75,7 +95,7 @@ int resolveForecastDayIndex(
     );
     if (index >= 0) return index;
   }
-  return 0;
+  return initialForecastDayIndex(days, now ?? DateTime.now());
 }
 
 class DayForecastChartSeries {

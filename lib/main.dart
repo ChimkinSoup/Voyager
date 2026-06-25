@@ -168,6 +168,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
     if (!ref.read(authNotifierProvider).isAuthenticated) return;
 
     final weather = ref.read(weatherServiceProvider);
+
+    // Drop forecast days that rolled past at local midnight, even when the
+    // 15-minute API cache is still fresh.
+    if (await weather.pruneCachedForecastIfNeeded()) {
+      if (!mounted) return;
+      ref.invalidate(weatherForecastProvider);
+    }
+
     final weatherStale = await weather.isCacheStale();
     final forecastStale = await weather.isForecastCacheStale();
     if (!weatherStale && !forecastStale) return;

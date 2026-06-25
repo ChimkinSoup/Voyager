@@ -35,6 +35,7 @@ class AppSettings {
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
+    this.weatherChartCurveTension = 0.22,
     this.journalEntryListWidth,
     List<int>? colorPalette,
   }) : colorPalette = colorPalette ?? defaultColorPalette;
@@ -72,6 +73,7 @@ class AppSettings {
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
+  final double weatherChartCurveTension;
   final double? journalEntryListWidth;
   final List<int> colorPalette;
 
@@ -105,6 +107,7 @@ class AppSettings {
     String? weatherForecastJson,
     int? weatherChartTempColor,
     int? weatherChartRainColor,
+    double? weatherChartCurveTension,
     double? journalEntryListWidth,
     List<int>? colorPalette,
     bool clearWeatherLocationLabel = false,
@@ -174,6 +177,8 @@ class AppSettings {
           : (weatherForecastJson ?? this.weatherForecastJson),
       weatherChartTempColor: weatherChartTempColor ?? this.weatherChartTempColor,
       weatherChartRainColor: weatherChartRainColor ?? this.weatherChartRainColor,
+      weatherChartCurveTension:
+          weatherChartCurveTension ?? this.weatherChartCurveTension,
       journalEntryListWidth: clearJournalEntryListWidth
           ? null
           : (journalEntryListWidth ?? this.journalEntryListWidth),

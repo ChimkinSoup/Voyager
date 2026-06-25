@@ -16,8 +16,7 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 class DriftJournalRepository implements JournalRepository {
-  DriftJournalRepository(this._db, {SyncActivityController? syncActivity})
-    : _syncActivity = syncActivity;
+  DriftJournalRepository(this._db, {this._syncActivity});
 
   final AppDatabase _db;
   final SyncActivityController? _syncActivity;
@@ -237,8 +236,7 @@ class DriftJournalRepository implements JournalRepository {
 }
 
 class DriftTodoRepository implements TodoRepository {
-  DriftTodoRepository(this._db, {SyncActivityController? syncActivity})
-    : _syncActivity = syncActivity;
+  DriftTodoRepository(this._db, {this._syncActivity});
 
   final AppDatabase _db;
   final SyncActivityController? _syncActivity;
@@ -785,6 +783,7 @@ class DriftSettingsRepository implements SettingsRepository {
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
+      weatherChartCurveTension: row.weatherChartCurveTension,
       journalEntryListWidth: row.journalEntryListWidth,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
     );
@@ -831,6 +830,7 @@ class DriftSettingsRepository implements SettingsRepository {
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),
+            weatherChartCurveTension: Value(settings.weatherChartCurveTension),
             journalEntryListWidth: Value(settings.journalEntryListWidth),
             colorPaletteJson: Value(
               encodeColorPaletteJson(settings.colorPalette),

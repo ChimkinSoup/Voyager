@@ -1,13 +1,14 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
+import 'package:voyager/features/shell/weather_chart_curve.dart';
 import 'package:voyager/features/shell/weather_forecast_chart.dart';
 
-enum _TransitionPhase { idle, sliding, settlingY }
-
-/// Slides between daily forecast charts, then eases the Y-axis to the new day.
-class WeatherForecastChartTransition extends StatefulWidget {
+/// Slides plot content between days while the axis frame stays fixed and the
+/// Y range eases in place so the scale shift is visible.
+class WeatherForecastChartTransition extends ConsumerStatefulWidget {
   const WeatherForecastChartTransition({
     super.key,
     required this.fromDayIndex,
@@ -31,53 +32,41 @@ class WeatherForecastChartTransition extends StatefulWidget {
   final bool toShowCurrentTimeLine;
   final VoidCallback? onTransitionEnd;
 
-  static const slideDuration = Duration(milliseconds: 160);
-  static const yAxisDuration = Duration(milliseconds: 210);
+  static const transitionDuration = Duration(milliseconds: 600);
 
   @override
-  State<WeatherForecastChartTransition> createState() =>
+  ConsumerState<WeatherForecastChartTransition> createState() =>
       _WeatherForecastChartTransitionState();
 }
 
 class _WeatherForecastChartTransitionState
-    extends State<WeatherForecastChartTransition>
-    with TickerProviderStateMixin {
-  late final AnimationController _slideController;
-  late final Animation<double> _slideAnimation;
-  late final AnimationController _yAxisController;
-  late final Animation<double> _yAxisAnimation;
+    extends ConsumerState<WeatherForecastChartTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
 
-  _TransitionPhase _phase = _TransitionPhase.idle;
+  bool _isTransitioning = false;
   DayForecastChartSeries? _outgoingSeries;
   int? _outgoingDayIndex;
   double _fromGradientStartHour = 0;
-  double _slideFromMinY = 0;
-  double _slideFromMaxY = 1;
+  double _fromMinY = 0;
+  double _fromMaxY = 1;
   double _targetMinY = 0;
   double _targetMaxY = 1;
+  bool _transitionCacheWarmed = false;
 
   @override
   void initState() {
     super.initState();
-    _slideController = AnimationController(
+    _controller = AnimationController(
       vsync: this,
-      duration: WeatherForecastChartTransition.slideDuration,
+      duration: WeatherForecastChartTransition.transitionDuration,
     );
-    _slideAnimation = CurvedAnimation(
-      parent: _slideController,
+    _animation = CurvedAnimation(
+      parent: _controller,
       curve: Curves.easeInOutCubic,
     );
-    _yAxisController = AnimationController(
-      vsync: this,
-      duration: WeatherForecastChartTransition.yAxisDuration,
-    );
-    _yAxisAnimation = CurvedAnimation(
-      parent: _yAxisController,
-      curve: Curves.easeInOutCubic,
-    );
-
-    _slideController.addStatusListener(_onSlideStatus);
-    _yAxisController.addStatusListener(_onYAxisStatus);
+    _controller.addStatusListener(_onTransitionStatus);
 
     if (widget.fromDayIndex != null && widget.fromSeries != null) {
       _beginTransition(
@@ -92,8 +81,7 @@ class _WeatherForecastChartTransitionState
     super.didUpdateWidget(oldWidget);
     if (widget.toDayIndex != oldWidget.toDayIndex &&
         widget.fromSeries != null) {
-      _slideController.stop();
-      _yAxisController.stop();
+      _controller.stop();
       _beginTransition(
         fromDayIndex: widget.fromDayIndex ?? oldWidget.toDayIndex,
         outgoing: widget.fromSeries!,
@@ -108,60 +96,81 @@ class _WeatherForecastChartTransitionState
     _outgoingSeries = outgoing;
     _outgoingDayIndex = fromDayIndex;
     _fromGradientStartHour = widget.fromGradientStartHour;
-    _slideFromMinY = outgoing.minTemp;
-    _slideFromMaxY = outgoing.maxTemp;
+    _fromMinY = outgoing.minTemp;
+    _fromMaxY = outgoing.maxTemp;
     _targetMinY = widget.toSeries.minTemp;
     _targetMaxY = widget.toSeries.maxTemp;
-    _phase = _TransitionPhase.sliding;
-    _yAxisController.reset();
-    _slideController.forward(from: 0);
+    _isTransitioning = true;
+    _transitionCacheWarmed = false;
+    _controller.forward(from: 0);
   }
 
-  void _onSlideStatus(AnimationStatus status) {
-    if (status != AnimationStatus.completed ||
-        _phase != _TransitionPhase.sliding) {
-      return;
-    }
-    if (_yRangesDiffer) {
-      setState(() => _phase = _TransitionPhase.settlingY);
-      _yAxisController.forward(from: 0);
-    } else {
-      _finishTransition();
-    }
+  void _warmTransitionPlotCache(
+    DayForecastChartSeries outgoing, {
+    required Size plotSize,
+  }) {
+    final colors = weatherChartColors(ref);
+    final degreeGridColor = Theme.of(context)
+        .colorScheme
+        .outlineVariant
+        .withValues(alpha: 0.15);
+    final tempFill = colors.temp.withValues(alpha: 0.4);
+    final rainFill = colors.rain.withValues(alpha: 0.4);
+
+    warmWeatherChartPlotPicture(
+      curve: WeatherChartCurve(
+        size: plotSize,
+        plotPadding: EdgeInsets.zero,
+        minX: WeatherForecastChart.minX,
+        maxX: WeatherForecastChart.maxX,
+        minY: _fromMinY,
+        maxY: _fromMaxY,
+      ),
+      series: outgoing,
+      gradientStartHour: _fromGradientStartHour,
+      tempFillColor: tempFill,
+      rainFillColor: rainFill,
+      tempLineColor: colors.temp,
+      degreeGridColor: degreeGridColor,
+    );
+    warmWeatherChartPlotPicture(
+      curve: WeatherChartCurve(
+        size: plotSize,
+        plotPadding: EdgeInsets.zero,
+        minX: WeatherForecastChart.minX,
+        maxX: WeatherForecastChart.maxX,
+        minY: _targetMinY,
+        maxY: _targetMaxY,
+      ),
+      series: widget.toSeries,
+      gradientStartHour: widget.toGradientStartHour,
+      tempFillColor: tempFill,
+      rainFillColor: rainFill,
+      tempLineColor: colors.temp,
+      degreeGridColor: degreeGridColor,
+    );
   }
 
-  void _onYAxisStatus(AnimationStatus status) {
-    if (status == AnimationStatus.completed &&
-        _phase == _TransitionPhase.settlingY) {
+  void _onTransitionStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && _isTransitioning) {
       _finishTransition();
     }
   }
 
   void _finishTransition() {
-    if (_phase == _TransitionPhase.idle) return;
+    if (!_isTransitioning) return;
     setState(() {
-      _phase = _TransitionPhase.idle;
+      _isTransitioning = false;
       _outgoingSeries = null;
       _outgoingDayIndex = null;
     });
     widget.onTransitionEnd?.call();
   }
 
-  bool get _yRangesDiffer =>
-      (_slideFromMinY - _targetMinY).abs() > 0.05 ||
-      (_slideFromMaxY - _targetMaxY).abs() > 0.05;
-
-  bool get _isBusy =>
-      _phase != _TransitionPhase.idle ||
-      _slideController.isAnimating ||
-      _yAxisController.isAnimating;
-
   @override
   void dispose() {
-    _slideController.removeStatusListener(_onSlideStatus);
-    _yAxisController.removeStatusListener(_onYAxisStatus);
-    _slideController.dispose();
-    _yAxisController.dispose();
+    _controller.removeStatusListener(_onTransitionStatus);
+    _controller.dispose();
     super.dispose();
   }
 
@@ -172,23 +181,12 @@ class _WeatherForecastChartTransitionState
     }
 
     return AnimatedBuilder(
-      animation: Listenable.merge([_slideAnimation, _yAxisAnimation]),
+      animation: _animation,
       builder: (context, _) {
-        if (!_isBusy) {
+        if (!_isTransitioning) {
           return WeatherForecastChart(
             series: widget.toSeries,
             gradientStartHour: widget.toGradientStartHour,
-            showCurrentTimeLine: widget.toShowCurrentTimeLine,
-          );
-        }
-
-        if (_phase == _TransitionPhase.settlingY) {
-          final yT = _yAxisAnimation.value;
-          return WeatherForecastChart(
-            series: widget.toSeries,
-            gradientStartHour: widget.toGradientStartHour,
-            axisMinY: ui.lerpDouble(_slideFromMinY, _targetMinY, yT)!,
-            axisMaxY: ui.lerpDouble(_slideFromMaxY, _targetMaxY, yT)!,
             showCurrentTimeLine: widget.toShowCurrentTimeLine,
           );
         }
@@ -202,66 +200,116 @@ class _WeatherForecastChartTransitionState
           );
         }
 
-        final consecutive =
-            (widget.toDayIndex - _outgoingDayIndex!).abs() == 1;
+        final t = _animation.value;
+        final axisMinY = ui.lerpDouble(_fromMinY, _targetMinY, t)!;
+        final axisMaxY = ui.lerpDouble(_fromMaxY, _targetMaxY, t)!;
+
         final forward = widget.toDayIndex > _outgoingDayIndex!;
-        final direction = forward ? 1.0 : -1.0;
-        final t = _slideAnimation.value;
+        final earlierSeries = forward ? outgoing : widget.toSeries;
+        final laterSeries = forward ? widget.toSeries : outgoing;
+        final earlierGradient = forward
+            ? _fromGradientStartHour
+            : widget.toGradientStartHour;
+        final laterGradient = forward
+            ? widget.toGradientStartHour
+            : _fromGradientStartHour;
+        final earlierShowNow = forward
+            ? widget.fromShowCurrentTimeLine
+            : widget.toShowCurrentTimeLine;
+        final laterShowNow = forward
+            ? widget.toShowCurrentTimeLine
+            : widget.fromShowCurrentTimeLine;
+        final stripOffset = forward ? -t : -(1 - t);
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final plotWidth = width - WeatherForecastChart.leftAxisWidth;
-            final slideDistance = consecutive ? plotWidth : width;
-            final fromOffset = -direction * t * slideDistance;
-            final toOffset = direction * (1 - t) * slideDistance;
+        final colors = weatherChartColors(ref);
+        final degreeGridColor = Theme.of(context)
+            .colorScheme
+            .outlineVariant
+            .withValues(alpha: 0.15);
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const WeatherChartLegendRow(),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: ClipRect(
-                    child: Stack(
-                      clipBehavior: Clip.hardEdge,
-                      children: [
-                        Positioned.fill(
-                          child: Transform.translate(
-                            offset: Offset(fromOffset, 0),
-                            child: WeatherForecastChart(
-                              series: outgoing,
-                              gradientStartHour: _fromGradientStartHour,
-                              axisMinY: _slideFromMinY,
-                              axisMaxY: _slideFromMaxY,
-                              showLegend: false,
-                              showCurrentTimeLine: widget.fromShowCurrentTimeLine,
-                            ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const WeatherChartLegendRow(),
+            const SizedBox(height: 8),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final plotWidth =
+                      constraints.maxWidth -
+                      WeatherForecastChart.leftAxisWidth;
+                  final plotHeight =
+                      constraints.maxHeight -
+                      WeatherForecastChart.bottomAxisHeight;
+                  final viewportSize = Size(plotWidth, plotHeight);
+                  final stripOffsetPx = stripOffset * plotWidth;
+
+                  if (!_transitionCacheWarmed) {
+                    _transitionCacheWarmed = true;
+                    final size = viewportSize;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted || !_isTransitioning) return;
+                      _warmTransitionPlotCache(outgoing, plotSize: size);
+                    });
+                  }
+
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      RepaintBoundary(
+                        child: WeatherForecastChart(
+                          series: widget.toSeries,
+                          gradientStartHour: widget.toGradientStartHour,
+                          axisMinY: axisMinY,
+                          axisMaxY: axisMaxY,
+                          chartFrameOnly: true,
+                          showLegend: false,
+                        ),
+                      ),
+                      Positioned(
+                        left: WeatherForecastChart.leftAxisWidth,
+                        top: 0,
+                        right: 0,
+                        bottom: WeatherForecastChart.bottomAxisHeight,
+                        child: ClipRect(
+                          child: WeatherForecastPlotStrip(
+                            viewportSize: viewportSize,
+                            stripOffsetPx: stripOffsetPx,
+                            earlierSeries: earlierSeries,
+                            laterSeries: laterSeries,
+                            earlierGradientStartHour: earlierGradient,
+                            laterGradientStartHour: laterGradient,
+                            axisMinY: axisMinY,
+                            axisMaxY: axisMaxY,
+                            tempColor: colors.temp,
+                            rainColor: colors.rain,
+                            degreeGridColor: degreeGridColor,
+                            earlierCurrentTimeHour: earlierShowNow
+                                ? _currentTimeHour(earlierSeries)
+                                : null,
+                            laterCurrentTimeHour:
+                                laterShowNow ? _currentTimeHour(laterSeries) : null,
                           ),
                         ),
-                        Positioned.fill(
-                          child: Transform.translate(
-                            offset: Offset(toOffset, 0),
-                            child: WeatherForecastChart(
-                              series: widget.toSeries,
-                              gradientStartHour: widget.toGradientStartHour,
-                              axisMinY: _slideFromMinY,
-                              axisMaxY: _slideFromMaxY,
-                              allowOverflow: true,
-                              showLegend: false,
-                              showCurrentTimeLine: widget.toShowCurrentTimeLine,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
+  }
+
+  double? _currentTimeHour(DayForecastChartSeries series) {
+    if (series.tempPoints.isEmpty) return null;
+    final now = DateTime.now();
+    final hour = currentTimeChartHour(now);
+    final first = series.tempPoints.first.hour;
+    final last = series.tempPoints.last.hour;
+    if (hour < first || hour > last) return null;
+    return hour;
   }
 }

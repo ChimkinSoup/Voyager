@@ -93,4 +93,19 @@ void main() {
       '2026_06_21_15',
     );
   });
+
+  test('prunePastForecastPeriods drops previous calendar days only', () {
+    final now = DateTime(2026, 6, 21, 14);
+    final periods = [
+      _period(DateTime(2026, 6, 20, 15), 18),
+      _period(DateTime(2026, 6, 21, 0), 8),
+      _period(DateTime(2026, 6, 21, 3), 9),
+      _period(DateTime(2026, 6, 21, 12), 14),
+      _period(DateTime(2026, 6, 22, 9), 16),
+    ];
+
+    final pruned = prunePastForecastPeriods(periods, now: now);
+    expect(pruned.map((p) => p.time.toLocal().day), [21, 21, 21, 22]);
+    expect(pruned.map((p) => p.time.toLocal().hour), [0, 3, 12, 9]);
+  });
 }

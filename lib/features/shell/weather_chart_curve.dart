@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-/// Matches [fl_chart] curved line geometry so custom fills align with the line.
+/// Cardinal tension spline through forecast points (tension fixed at 0).
 class WeatherChartCurve {
   WeatherChartCurve({
     required this.size,
@@ -12,9 +12,6 @@ class WeatherChartCurve {
     required this.maxX,
     required this.minY,
     required this.maxY,
-    required this.curveSmoothness,
-    this.preventCurveOverShooting = true,
-    this.preventCurveOvershootingThreshold = 0,
   });
 
   final Size size;
@@ -23,9 +20,10 @@ class WeatherChartCurve {
   final double maxX;
   final double minY;
   final double maxY;
-  final double curveSmoothness;
-  final bool preventCurveOverShooting;
-  final double preventCurveOvershootingThreshold;
+
+  static const _tension = 0.0;
+
+  double get _tangentScale => 1 - _tension;
 
   /// Plot area inside [size] after fl_chart title margins.
   Rect get plotRect => Rect.fromLTWH(
@@ -91,49 +89,51 @@ class WeatherChartCurve {
     return null;
   }
 
+  Offset _spotPixel(List<FlSpot> spots, int index) {
+    return Offset(pixelX(spots[index].x), pixelY(spots[index].y));
+  }
+
+  Offset _tangentAt(List<FlSpot> spots, int index) {
+    final count = spots.length;
+    final scale = _tangentScale;
+    if (count <= 1 || scale <= 0) return Offset.zero;
+
+    if (index == 0) {
+      return (_spotPixel(spots, 1) - _spotPixel(spots, 0)) * scale;
+    }
+    if (index == count - 1) {
+      return (_spotPixel(spots, count - 1) - _spotPixel(spots, count - 2)) *
+          scale;
+    }
+
+    return (_spotPixel(spots, index + 1) - _spotPixel(spots, index - 1)) /
+        2 *
+        scale;
+  }
+
   Path curvedLinePath(List<FlSpot> spots) {
     final path = Path();
     if (spots.isEmpty) return path;
 
     final count = spots.length;
-    path.moveTo(pixelX(spots[0].x), pixelY(spots[0].y));
-    if (count == 1) {
-      path.lineTo(pixelX(spots[0].x), pixelY(spots[0].y));
-      return path;
-    }
+    final first = _spotPixel(spots, 0);
+    path.moveTo(first.dx, first.dy);
+    if (count == 1) return path;
 
-    var temp = Offset.zero;
-    for (var i = 1; i < count; i++) {
-      final current = Offset(pixelX(spots[i].x), pixelY(spots[i].y));
-      final previous = Offset(pixelX(spots[i - 1].x), pixelY(spots[i - 1].y));
-      final next = Offset(
-        pixelX(spots[i + 1 < count ? i + 1 : i].x),
-        pixelY(spots[i + 1 < count ? i + 1 : i].y),
-      );
-
-      final controlPoint1 = previous + temp;
-      final smoothness = curveSmoothness;
-      temp = ((next - previous) / 2) * smoothness;
-
-      if (preventCurveOverShooting) {
-        if ((next - current).dy <= preventCurveOvershootingThreshold ||
-            (current - previous).dy <= preventCurveOvershootingThreshold) {
-          temp = Offset(temp.dx, 0);
-        }
-        if ((next - current).dx <= preventCurveOvershootingThreshold ||
-            (current - previous).dx <= preventCurveOvershootingThreshold) {
-          temp = Offset(0, temp.dy);
-        }
-      }
-
-      final controlPoint2 = current - temp;
+    for (var i = 0; i < count - 1; i++) {
+      final p0 = _spotPixel(spots, i);
+      final p1 = _spotPixel(spots, i + 1);
+      final m0 = _tangentAt(spots, i);
+      final m1 = _tangentAt(spots, i + 1);
+      final control1 = p0 + m0 / 3;
+      final control2 = p1 - m1 / 3;
       path.cubicTo(
-        controlPoint1.dx,
-        controlPoint1.dy,
-        controlPoint2.dx,
-        controlPoint2.dy,
-        current.dx,
-        current.dy,
+        control1.dx,
+        control1.dy,
+        control2.dx,
+        control2.dy,
+        p1.dx,
+        p1.dy,
       );
     }
 
@@ -159,5 +159,14 @@ class WeatherChartCurve {
       ..close();
 
     return belowPath;
+  }
+
+  bool matchesScale(WeatherChartCurve other) {
+    return size == other.size &&
+        plotPadding == other.plotPadding &&
+        minX == other.minX &&
+        maxX == other.maxX &&
+        minY == other.minY &&
+        maxY == other.maxY;
   }
 }
