@@ -18,6 +18,7 @@ class DevSettingsController extends ChangeNotifier {
 
   bool showCacheStatus = false;
   bool showCalendarZoomPrewarm = false;
+  bool showCalendarInstantViewSwitch = false;
 
   Future<void> loadFromSettings() async {
     final repo = _settingsRepository;
@@ -35,6 +36,11 @@ class DevSettingsController extends ChangeNotifier {
     }
     if (showCalendarZoomPrewarm != settings.devShowCalendarZoomPrewarm) {
       showCalendarZoomPrewarm = settings.devShowCalendarZoomPrewarm;
+      changed = true;
+    }
+    if (showCalendarInstantViewSwitch !=
+        settings.devShowCalendarInstantViewSwitch) {
+      showCalendarInstantViewSwitch = settings.devShowCalendarInstantViewSwitch;
       changed = true;
     }
 
@@ -55,6 +61,13 @@ class DevSettingsController extends ChangeNotifier {
     await _persist();
   }
 
+  Future<void> setShowCalendarInstantViewSwitch(bool value) async {
+    if (showCalendarInstantViewSwitch == value) return;
+    showCalendarInstantViewSwitch = value;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> _persist() async {
     final repo = _settingsRepository;
     if (repo == null) return;
@@ -63,6 +76,7 @@ class DevSettingsController extends ChangeNotifier {
       settings.copyWith(
         devShowCacheStatus: showCacheStatus,
         devShowCalendarZoomPrewarm: showCalendarZoomPrewarm,
+        devShowCalendarInstantViewSwitch: showCalendarInstantViewSwitch,
       ),
     );
   }

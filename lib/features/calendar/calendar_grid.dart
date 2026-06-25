@@ -292,13 +292,16 @@ class MonthTitleHeader extends StatelessWidget {
     this.onPreviousMonth,
     this.onNextMonth,
     this.navOpacity = 1.0,
+    this.navSpread = 1.0,
   });
 
   final DateTime month;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
-  /// 0 = text only (year-tile morph start); 1 = full nav visible.
+  /// Fades nav controls in/out during the year↔month morph.
   final double navOpacity;
+  /// 0 = both arrows stacked on the title centre; 1 = final spread positions.
+  final double navSpread;
 
   static const titleFontSize = 36.0;
   static const navIconSize = 24.0;
@@ -306,6 +309,18 @@ class MonthTitleHeader extends StatelessWidget {
   static const navSpacing = 8.0;
   static const cardPadding = 8.0;
   static const titleGap = 4.0;
+  // Longest English month name — sets a fixed row width so arrow spacing is
+  // identical for every month (June, September, etc.).
+  static const _widthReferenceMonth = 'September';
+
+  /// Fixed width of the title + nav row for [titleStyle].
+  static double titleRowWidth(TextStyle titleStyle) {
+    final painter = TextPainter(
+      text: TextSpan(text: _widthReferenceMonth, style: titleStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return navTapSize + navSpacing + painter.width + navSpacing + navTapSize;
+  }
 
   /// Matches the laid-out height of the title row in [_MonthGrid].
   static double preferredHeight(TextStyle titleStyle) {
@@ -341,38 +356,62 @@ class MonthTitleHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final opacity = navOpacity.clamp(0.0, 1.0);
+    final spread = navSpread.clamp(0.0, 1.0);
     final showNav =
-        onPreviousMonth != null || onNextMonth != null || opacity > 0;
+        onPreviousMonth != null ||
+        onNextMonth != null ||
+        spread > 0 ||
+        opacity > 0;
     final titleStyle = Theme.of(context).textTheme.titleSmall!.copyWith(
       fontSize: titleFontSize,
     );
+    final rowWidth = titleRowWidth(titleStyle);
+    final rowHeight = preferredHeight(titleStyle);
+    final leftFinal = 0.0;
+    final rightFinal = rowWidth - navTapSize;
+    final centerLeft = (rowWidth - navTapSize) / 2;
+    final leftPos = centerLeft + (leftFinal - centerLeft) * spread;
+    final rightPos = centerLeft + (rightFinal - centerLeft) * spread;
 
     return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (showNav) ...[
-            _navControl(
-              icon: PhosphorIconsRegular.caretLeft,
-              onPressed: onPreviousMonth,
-              opacity: opacity,
+      child: SizedBox(
+        width: rowWidth,
+        height: rowHeight,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Text(
+              DateFormat.MMMM().format(month),
+              style: titleStyle,
+              textAlign: TextAlign.center,
             ),
-            SizedBox(width: navSpacing * opacity),
+            if (showNav) ...[
+              Positioned(
+                left: leftPos,
+                top: (rowHeight - navTapSize) / 2,
+                width: navTapSize,
+                height: navTapSize,
+                child: _navControl(
+                  icon: PhosphorIconsRegular.caretLeft,
+                  onPressed: onPreviousMonth,
+                  opacity: opacity,
+                ),
+              ),
+              Positioned(
+                left: rightPos,
+                top: (rowHeight - navTapSize) / 2,
+                width: navTapSize,
+                height: navTapSize,
+                child: _navControl(
+                  icon: PhosphorIconsRegular.caretRight,
+                  onPressed: onNextMonth,
+                  opacity: opacity,
+                ),
+              ),
+            ],
           ],
-          Text(
-            DateFormat.MMMM().format(month),
-            style: titleStyle,
-            textAlign: TextAlign.center,
-          ),
-          if (showNav) ...[
-            SizedBox(width: navSpacing * opacity),
-            _navControl(
-              icon: PhosphorIconsRegular.caretRight,
-              onPressed: onNextMonth,
-              opacity: opacity,
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -387,26 +426,18 @@ class MonthTitleHeader extends StatelessWidget {
       child: Icon(icon, size: navIconSize),
     );
     if (onPressed != null && opacity >= 1) {
-      return SizedBox(
-        width: navTapSize,
-        height: navTapSize,
-        child: IconButton(
-          onPressed: onPressed,
-          icon: iconChild,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(
-            width: navTapSize,
-            height: navTapSize,
-          ),
+      return IconButton(
+        onPressed: onPressed,
+        icon: iconChild,
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(
+          width: navTapSize,
+          height: navTapSize,
         ),
       );
     }
-    return SizedBox(
-      width: navTapSize * opacity,
-      height: navTapSize,
-      child: Center(child: iconChild),
-    );
+    return Center(child: iconChild);
   }
 }
 

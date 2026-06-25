@@ -781,6 +781,7 @@ class DriftSettingsRepository implements SettingsRepository {
       devShowSyncDownloads: row.devShowSyncDownloads,
       devShowCacheStatus: row.devShowCacheStatus,
       devShowCalendarZoomPrewarm: row.devShowCalendarZoomPrewarm,
+      devShowCalendarInstantViewSwitch: row.devShowCalendarInstantViewSwitch,
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
@@ -825,6 +826,8 @@ class DriftSettingsRepository implements SettingsRepository {
             devShowSyncDownloads: Value(settings.devShowSyncDownloads),
             devShowCacheStatus: Value(settings.devShowCacheStatus),
             devShowCalendarZoomPrewarm: Value(settings.devShowCalendarZoomPrewarm),
+            devShowCalendarInstantViewSwitch:
+                Value(settings.devShowCalendarInstantViewSwitch),
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),

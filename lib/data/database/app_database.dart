@@ -209,6 +209,8 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowCalendarZoomPrewarm =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get devShowCalendarInstantViewSwitch =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
   IntColumn get weatherChartRainColor => integer().nullable()();
@@ -246,7 +248,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -388,6 +390,12 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           settingsTable,
           settingsTable.devShowCalendarZoomPrewarm,
+        );
+      }
+      if (from < 19) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devShowCalendarInstantViewSwitch,
         );
       }
     },

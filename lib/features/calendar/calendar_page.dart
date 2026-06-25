@@ -9,6 +9,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/event_editor_dialog.dart';
 
@@ -52,8 +53,37 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarDayIndicator>? _morphIndicators;
   List<CalendarEvent> _latestEvents = const [];
   List<CalendarDayIndicator> _latestIndicators = const [];
+  int _morphGeneration = 0;
+  AnimationStatusListener? _morphStatusListener;
 
   static const _zoomDuration = Duration(milliseconds: 600);
+
+  AnimationController get _ensureZoomController {
+    _zoomController ??=
+        AnimationController(vsync: this, duration: _zoomDuration);
+    return _zoomController!;
+  }
+
+  void _disposeMorphListener() {
+    if (_morphStatusListener != null) {
+      _zoomController?.removeStatusListener(_morphStatusListener!);
+      _morphStatusListener = null;
+    }
+  }
+
+  /// Invalidates in-flight morph callbacks and resets the shared controller.
+  int _prepareMorphSession() {
+    _morphGeneration++;
+    _disposeMorphListener();
+    _ensureZoomController
+      ..stop()
+      ..reset();
+    return _morphGeneration;
+  }
+
+  void _abortMorphAnimation() {
+    _prepareMorphSession();
+  }
 
   void _clearMorphCache() {
     _morphSourceRects = null;
@@ -65,13 +95,26 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _morphIndicators = null;
   }
 
-  void _startMorphAnimation({required VoidCallback onComplete}) {
+  void _startMorphAnimation({
+    required int generation,
+    required VoidCallback onComplete,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _zoomController!.forward(from: 0).whenComplete(() {
+      if (!mounted || generation != _morphGeneration) return;
+
+      _disposeMorphListener();
+      _morphStatusListener = (status) {
+        if (status != AnimationStatus.completed) return;
+        if (generation != _morphGeneration) return;
+        _disposeMorphListener();
         if (!mounted) return;
         onComplete();
-      });
+      };
+      _ensureZoomController.addStatusListener(_morphStatusListener!);
+      _ensureZoomController
+        ..stop()
+        ..reset()
+        ..forward(from: 0);
     });
   }
 
@@ -115,7 +158,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   void _shiftFocus(int delta) {
-    _zoomController?.stop();
+    _abortMorphAnimation();
     setState(() {
       _isZooming = false;
       _morphReverse = false;
@@ -139,11 +182,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   void _onMiniCalendarDayTap(DateTime day) {
+    _abortMorphAnimation();
     setState(() {
       _isZooming = false;
       _morphReverse = false;
       _clearMorphCache();
-      _zoomController?.stop();
       if (_dayViewDate != null &&
           _dayViewDate!.year == day.year &&
           _dayViewDate!.month == day.month &&
@@ -166,6 +209,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   @override
   void dispose() {
+    _disposeMorphListener();
     _zoomController?.dispose();
     super.dispose();
   }
@@ -224,6 +268,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   void _onMonthTapped(DateTime month) {
+    if (_isZooming) return;
+
     final areaBox =
         _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
     if (areaBox == null || !areaBox.hasSize || !areaBox.attached) return;
@@ -265,10 +311,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       titleStyle,
     );
 
-    _zoomController ??=
-        AnimationController(vsync: this, duration: _zoomDuration);
-    _zoomController!.stop();
-    _zoomController!.reset();
+    final generation = _prepareMorphSession();
 
     // Capture tile and area geometry for the background/title overlay lerp.
     final morphTileRect =
@@ -290,6 +333,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
 
     _startMorphAnimation(
+      generation: generation,
       onComplete: () => setState(() {
         _isZooming = false;
         _mode = CalendarViewMode.month;
@@ -310,8 +354,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       return;
     }
 
-    _zoomController?.stop();
-    _zoomController?.reset();
+    _abortMorphAnimation();
     setState(() {
       _isZooming = false;
       _morphReverse = false;
@@ -347,9 +390,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       return;
     }
 
-    _zoomController ??=
-        AnimationController(vsync: this, duration: _zoomDuration);
-    _zoomController!.stop();
+    final generation = _prepareMorphSession();
 
     final areaW = areaBox.size.width;
     final areaH = areaBox.size.height;
@@ -369,7 +410,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || generation != _morphGeneration) return;
 
       // Re-fetch areaBox — the reference captured before setState is detached
       // once the measurement-phase widget tree replaces the month view.
@@ -413,13 +454,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
       // Reset before the animation-phase rebuild for the same reason as the
       // forward path: avoids a stale t=1 frame on first render.
-      _zoomController!.reset();
+      _ensureZoomController.reset();
       setState(() {
         _morphDestRects = destRects;
         _morphTileRect = morphTileRect;
       });
 
       _startMorphAnimation(
+        generation: generation,
         onComplete: () => setState(() {
           _isZooming = false;
           _morphReverse = false;
@@ -441,6 +483,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _focused = DateTime(_focused.year, 1, 1);
       _dayViewDate = null;
     });
+  }
+
+  void _instantSwitchToMonthView() {
+    _abortMorphAnimation();
+    setState(() {
+      _isZooming = false;
+      _morphReverse = false;
+      _clearMorphCache();
+      _mode = CalendarViewMode.month;
+      _dayViewDate = null;
+    });
+  }
+
+  void _instantSwitchToYearView() {
+    _abortMorphAnimation();
+    _immediatelySwitchToYear();
   }
 
   // ---------------------------------------------------------------------------
@@ -593,6 +651,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       }
 
       return _MorphAnimationLayer(
+        key: ValueKey(_morphGeneration),
         controller: controller,
         yearTween: yearTween,
         sourceRects: sourceRects,
@@ -628,17 +687,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final eventsAsync = ref.watch(calendarEventsProvider);
-    final trackers =
-        ref.watch(trackersProvider).value ?? const <StatisticTracker>[];
-    final analytics = ref.watch(analyticsServiceProvider);
-    final weekStartsMonday =
-        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
-    final calendarTrackers = trackers
-        .where((tracker) => tracker.showOnCalendar)
-        .toList();
+  List<CalendarDayIndicator> _buildCalendarIndicators(
+    List<StatisticTracker> calendarTrackers,
+    AnalyticsService analytics,
+  ) {
     final indicators = <CalendarDayIndicator>[];
     for (final tracker in calendarTrackers) {
       final values =
@@ -665,6 +717,29 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           ),
         );
       }
+    }
+    return indicators;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final eventsAsync = ref.watch(calendarEventsProvider);
+    final weekStartsMonday =
+        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
+    final showInstantViewSwitch =
+        ref.watch(devSettingsProvider).showCalendarInstantViewSwitch;
+
+    final List<CalendarDayIndicator> indicators;
+    if (_isZooming && _morphIndicators != null) {
+      indicators = _morphIndicators!;
+    } else {
+      final trackers =
+          ref.watch(trackersProvider).value ?? const <StatisticTracker>[];
+      final analytics = ref.watch(analyticsServiceProvider);
+      final calendarTrackers = trackers
+          .where((tracker) => tracker.showOnCalendar)
+          .toList();
+      indicators = _buildCalendarIndicators(calendarTrackers, analytics);
     }
 
     return Padding(
@@ -694,6 +769,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           Expanded(
             child: eventsAsync.when(
               data: (events) {
+                final calendarEvents =
+                    _isZooming && _morphEvents != null ? _morphEvents! : events;
                 if (!_isZooming) {
                   _latestEvents = events;
                   _latestIndicators = indicators;
@@ -701,18 +778,40 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  MiniMonthCalendar(
-                    month: _focused,
-                    weekStartsMonday: weekStartsMonday,
-                    selectedDay: _dayViewDate,
-                    onDayTap: _onMiniCalendarDayTap,
+                  SizedBox(
+                    width: 180,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: MiniMonthCalendar(
+                            month: _focused,
+                            weekStartsMonday: weekStartsMonday,
+                            selectedDay: _dayViewDate,
+                            onDayTap: _onMiniCalendarDayTap,
+                          ),
+                        ),
+                        if (showInstantViewSwitch) ...[
+                          const SizedBox(height: 8),
+                          OutlinedButton(
+                            onPressed: _instantSwitchToMonthView,
+                            child: const Text('Month'),
+                          ),
+                          const SizedBox(height: 4),
+                          OutlinedButton(
+                            onPressed: _instantSwitchToYearView,
+                            child: const Text('Year'),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: KeyedSubtree(
                       key: _calendarAreaKey,
                       child: _buildMainCalendar(
-                        events: events,
+                        events: calendarEvents,
                         indicators: indicators,
                         weekStartsMonday: weekStartsMonday,
                       ),
@@ -752,6 +851,7 @@ class _MorphProgress extends InheritedWidget {
 /// Bifurcated morph stack — isolated from parent rebuilds during the animation.
 class _MorphAnimationLayer extends StatefulWidget {
   const _MorphAnimationLayer({
+    super.key,
     required this.controller,
     required this.yearTween,
     required this.sourceRects,
@@ -786,10 +886,41 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
   );
 
   late final List<Widget> _cellChildren;
+  late final Widget _yearGridChild;
+  late final Matrix4 _yearMatrixBegin;
+  late final Matrix4 _yearMatrixEnd;
+  final _yearTransform = Matrix4.identity();
+  late final Rect _fullAreaRect;
+  late final Rect _sourceTitleRect;
+  late final Rect _destTitleRect;
 
   @override
   void initState() {
     super.initState();
+    _yearGridChild = widget.yearGrid;
+    _yearMatrixBegin = Matrix4.copy(widget.yearTween.begin!);
+    _yearMatrixEnd = Matrix4.copy(widget.yearTween.end!);
+    _fullAreaRect =
+        Rect.fromLTWH(0, 0, widget.areaSize.width, widget.areaSize.height);
+
+    final tileCellRects =
+        widget.morphReverse ? widget.destRects : widget.sourceRects;
+    final monthCellRects =
+        widget.morphReverse ? widget.sourceRects : widget.destRects;
+    final tileHeaderTop = widget.tileRect.top + 8;
+    _sourceTitleRect = Rect.fromLTWH(
+      widget.tileRect.left + 8,
+      tileHeaderTop,
+      widget.tileRect.width - 16,
+      (tileCellRects[0].top - tileHeaderTop - 4).clamp(4.0, double.infinity),
+    );
+    _destTitleRect = Rect.fromLTWH(
+      8,
+      8,
+      widget.areaSize.width - 16,
+      (monthCellRects[0].top - 12).clamp(8.0, double.infinity),
+    );
+
     _cellChildren = [
       for (var i = 0; i < 42; i++)
         LayoutId(
@@ -803,44 +934,34 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
     ];
   }
 
+  void _applyYearTransform(double t) {
+    final out = _yearTransform.storage;
+    final a = _yearMatrixBegin.storage;
+    final b = _yearMatrixEnd.storage;
+    for (var i = 0; i < 16; i++) {
+      out[i] = a[i] + (b[i] - a[i]) * t;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final fullAreaRect =
-        Rect.fromLTWH(0, 0, widget.areaSize.width, widget.areaSize.height);
-    final tileCellRects =
-        widget.morphReverse ? widget.destRects : widget.sourceRects;
-    final monthCellRects =
-        widget.morphReverse ? widget.sourceRects : widget.destRects;
-
-    final tileHeaderTop = widget.tileRect.top + 8;
-    final sourceTitleRect = Rect.fromLTWH(
-      widget.tileRect.left + 8,
-      tileHeaderTop,
-      widget.tileRect.width - 16,
-      (tileCellRects[0].top - tileHeaderTop - 4).clamp(4.0, double.infinity),
-    );
-    final destTitleRect = Rect.fromLTWH(
-      8,
-      8,
-      widget.areaSize.width - 16,
-      (monthCellRects[0].top - 12).clamp(8.0, double.infinity),
-    );
-
     return ClipRect(
       child: IgnorePointer(
         child: AnimatedBuilder(
           animation: widget.controller,
-          child: IgnorePointer(child: widget.yearGrid),
+          child: IgnorePointer(child: _yearGridChild),
           builder: (context, yearGridChild) {
             final t =
                 Curves.easeInOutCubic.transform(widget.controller.value);
             final bgRect = widget.morphReverse
-                ? Rect.lerp(fullAreaRect, widget.tileRect, t)!
-                : Rect.lerp(widget.tileRect, fullAreaRect, t)!;
+                ? Rect.lerp(_fullAreaRect, widget.tileRect, t)!
+                : Rect.lerp(widget.tileRect, _fullAreaRect, t)!;
             final titleRect = widget.morphReverse
-                ? Rect.lerp(destTitleRect, sourceTitleRect, t)!
-                : Rect.lerp(sourceTitleRect, destTitleRect, t)!;
+                ? Rect.lerp(_destTitleRect, _sourceTitleRect, t)!
+                : Rect.lerp(_sourceTitleRect, _destTitleRect, t)!;
             final navOpacity = widget.morphReverse ? 1.0 - t : t;
+            final navSpread = navOpacity;
+            _applyYearTransform(t);
 
             return _MorphProgress(
               t: t,
@@ -848,7 +969,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                 fit: StackFit.expand,
                 children: [
                   Transform(
-                    transform: widget.yearTween.transform(t),
+                    transform: _yearTransform,
                     child: yearGridChild,
                   ),
                   Positioned(
@@ -876,6 +997,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                       child: MonthTitleHeader(
                         month: widget.morphMonth,
                         navOpacity: navOpacity,
+                        navSpread: navSpread,
                       ),
                     ),
                   ),

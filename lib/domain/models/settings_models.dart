@@ -31,6 +31,7 @@ class AppSettings {
     this.devShowSyncDownloads = false,
     this.devShowCacheStatus = false,
     this.devShowCalendarZoomPrewarm = false,
+    this.devShowCalendarInstantViewSwitch = false,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -67,6 +68,7 @@ class AppSettings {
   final bool devShowSyncDownloads;
   final bool devShowCacheStatus;
   final bool devShowCalendarZoomPrewarm;
+  final bool devShowCalendarInstantViewSwitch;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -99,6 +101,7 @@ class AppSettings {
     bool? devShowSyncDownloads,
     bool? devShowCacheStatus,
     bool? devShowCalendarZoomPrewarm,
+    bool? devShowCalendarInstantViewSwitch,
     String? weatherForecastJson,
     int? weatherChartTempColor,
     int? weatherChartRainColor,
@@ -164,6 +167,8 @@ class AppSettings {
       devShowCacheStatus: devShowCacheStatus ?? this.devShowCacheStatus,
       devShowCalendarZoomPrewarm:
           devShowCalendarZoomPrewarm ?? this.devShowCalendarZoomPrewarm,
+      devShowCalendarInstantViewSwitch: devShowCalendarInstantViewSwitch ??
+          this.devShowCalendarInstantViewSwitch,
       weatherForecastJson: clearWeatherForecastJson
           ? null
           : (weatherForecastJson ?? this.weatherForecastJson),
