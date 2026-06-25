@@ -9,6 +9,7 @@ import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
@@ -38,6 +39,9 @@ class AppShell extends ConsumerWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
+          // Warm up calendar morph shaders immediately after login — before the
+          // user navigates to the calendar — so the first transition is smooth.
+          const CalendarMorphWarmup(),
           Scaffold(
             body: Row(
               children: [

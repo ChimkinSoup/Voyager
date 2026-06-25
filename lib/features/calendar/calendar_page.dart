@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,9 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/event_editor_dialog.dart';
+
+/// Shared [DateFormat] instance — avoids repeated allocation on every build.
+final _mmmmFormat = DateFormat.MMMM();
 
 class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
@@ -53,20 +58,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarDayIndicator> _latestIndicators = const [];
   int _morphGeneration = 0;
   AnimationStatusListener? _morphStatusListener;
-  bool _mountMorphWarmup = true;
 
   static const _sidebarWidth = 350.0;
-  static const _zoomDuration = Duration(milliseconds: 6000);
-  static const _morphWarmupAreaSize = Size(900, 700);
-  static const _morphWarmupTileRect = Rect.fromLTWH(16, 120, 200, 148);
+  static const _zoomDuration = Duration(milliseconds: 600);
 
   @override
   void initState() {
     super.initState();
     _zoomController = AnimationController(vsync: this, duration: _zoomDuration);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _warmMorphAnimationCache();
-    });
   }
 
   void _disposeMorphListener() {
@@ -98,110 +97,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _morphAreaSize = null;
     _morphEvents = null;
     _morphIndicators = null;
-  }
-
-  /// Builds and paints the morph stack offscreen during startup so the first
-  /// real year→month transition does not stall on shader compilation.
-  void _warmMorphAnimationCache() {
-    if (!mounted || !_mountMorphWarmup) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_mountMorphWarmup) return;
-
-      // Paint one offscreen frame at t>0 so transform/cell paths are compiled.
-      _zoomController.value = 0.12;
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _zoomController.reset();
-        if (_mountMorphWarmup) {
-          setState(() => _mountMorphWarmup = false);
-        }
-      });
-    });
-  }
-
-  List<Rect> _warmupSourceRects(Rect tileRect, TextStyle yearTitleStyle) {
-    const tilePadding = 6.0;
-    final titleHeight =
-        MonthTitleHeader.measureTitleText(yearTitleStyle, 'June').height;
-    final weekdayStyle = calendarWeekdayLabelStyle(
-      context,
-      fontSize: MonthDayCellStyle.compact.fontSize,
-    );
-    final weekdayHeight = WeekdayHeaderRow.totalHeight(
-      weekdayStyle,
-      useSingleLetterLabels: true,
-    );
-    final gridLeft = tileRect.left + tilePadding;
-    final gridTop = tileRect.top +
-        tilePadding +
-        titleHeight +
-        MonthTitleHeader.titleGap +
-        weekdayHeight;
-    final gridW = tileRect.width - tilePadding * 2;
-    final gridH = tileRect.height - (gridTop - tileRect.top) - tilePadding;
-    final cellW = gridW / 7;
-    final cellH = gridH / 6;
-
-    return List.generate(
-      42,
-      (i) => Rect.fromLTWH(
-        gridLeft + (i % 7) * cellW,
-        gridTop + (i ~/ 7) * cellH,
-        cellW,
-        cellH,
-      ),
-    );
-  }
-
-  Widget _buildMorphWarmupLayer(bool weekStartsMonday) {
-    const areaSize = _morphWarmupAreaSize;
-    const tileRect = _morphWarmupTileRect;
-    final morphMonth = DateTime(_focused.year, 6, 1);
-    final (yearMonthNameStyle, monthTitleStyle) = _titleMorphStyles(context);
-    final (compactWeekdayStyle, fullWeekdayStyle) = _weekdayMorphStyles(
-      context,
-    );
-    final sourceRects = _warmupSourceRects(tileRect, yearMonthNameStyle);
-    final destRects = MonthTitleHeader.dayCellRects(
-      areaSize,
-      monthTitleStyle,
-      weekdayLabelStyle: fullWeekdayStyle,
-    );
-
-    return SizedBox(
-      width: areaSize.width,
-      height: areaSize.height,
-      child: _MorphAnimationLayer(
-        key: const ValueKey('morph-warmup'),
-        controller: _zoomController,
-        yearTween: Matrix4Tween(
-          begin: Matrix4.identity(),
-          end: _yearGridZoomMatrix(tileRect, areaSize),
-        ),
-        sourceRects: sourceRects,
-        destRects: destRects,
-        morphReverse: false,
-        tileRect: tileRect,
-        areaSize: areaSize,
-        morphMonth: morphMonth,
-        dates: monthGridDates(morphMonth, weekStartsMonday: weekStartsMonday),
-        weekStartsMonday: weekStartsMonday,
-        compactWeekdayStyle: compactWeekdayStyle,
-        fullWeekdayStyle: fullWeekdayStyle,
-        yearMonthNameStyle: yearMonthNameStyle,
-        monthTitleStyle: monthTitleStyle,
-        yearGrid: _calendarGrid(
-          events: const [],
-          indicators: const [],
-          weekStartsMonday: weekStartsMonday,
-          mode: CalendarViewMode.year,
-          focused: DateTime(morphMonth.year, 1, 1),
-          hiddenMonth: morphMonth,
-        ),
-      ),
-    );
   }
 
   void _startMorphAnimation({
@@ -320,26 +215,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   (TextStyle compact, TextStyle full) _weekdayMorphStyles(
     BuildContext context,
-  ) {
-    final full = calendarWeekdayLabelStyle(context);
-    final compact = calendarWeekdayLabelStyle(
-      context,
-      fontSize: MonthDayCellStyle.compact.fontSize,
-    ).copyWith(inherit: false);
-    return (compact, full);
-  }
+  ) => _calendarWeekdayMorphStyles(context);
 
   (TextStyle yearMonth, TextStyle monthTitle) _titleMorphStyles(
     BuildContext context,
-  ) {
-    final color = calendarTitleAccentColor(context);
-    final yearMonth = MonthTitleHeader.yearTileMonthNameStyle(context);
-    final monthTitle = Theme.of(context).textTheme.titleSmall!.copyWith(
-      fontSize: MonthTitleHeader.titleFontSize,
-      color: color,
-    );
-    return (yearMonth, monthTitle);
-  }
+  ) => _calendarTitleMorphStyles(context);
 
   /// Computes 42 source [Rect]s (calendar-area-local) from the year tile's
   /// inner [MonthDayGrid].  Returns null if the render objects are not ready.
@@ -1012,16 +892,175 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             ],
           ),
         ),
-        if (_mountMorphWarmup)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Offstage(
-                offstage: true,
-                child: _buildMorphWarmupLayer(weekStartsMonday),
-              ),
-            ),
-          ),
       ],
+    );
+  }
+}
+
+// =============================================================================
+// Shared style helpers (used by _CalendarPageState and CalendarMorphWarmup)
+// =============================================================================
+
+(TextStyle compact, TextStyle full) _calendarWeekdayMorphStyles(
+  BuildContext context,
+) {
+  final full = calendarWeekdayLabelStyle(context);
+  final compact = calendarWeekdayLabelStyle(
+    context,
+    fontSize: MonthDayCellStyle.compact.fontSize,
+  ).copyWith(inherit: false);
+  return (compact, full);
+}
+
+(TextStyle yearMonth, TextStyle monthTitle) _calendarTitleMorphStyles(
+  BuildContext context,
+) {
+  final color = calendarTitleAccentColor(context);
+  final yearMonth = MonthTitleHeader.yearTileMonthNameStyle(context);
+  final monthTitle = Theme.of(context).textTheme.titleSmall!.copyWith(
+    fontSize: MonthTitleHeader.titleFontSize,
+    color: color,
+  );
+  return (yearMonth, monthTitle);
+}
+
+/// Analytically computes 42 source [Rect]s for a year-tile given its geometry.
+List<Rect> _calendarWarmupSourceRects(
+  Rect tileRect,
+  TextStyle yearTitleStyle,
+  TextStyle compactWeekdayStyle,
+) {
+  const tilePadding = 6.0;
+  final titleHeight =
+      MonthTitleHeader.measureTitleText(yearTitleStyle, 'June').height;
+  final weekdayHeight = WeekdayHeaderRow.totalHeight(
+    compactWeekdayStyle,
+    useSingleLetterLabels: true,
+  );
+  final gridLeft = tileRect.left + tilePadding;
+  final gridTop =
+      tileRect.top +
+      tilePadding +
+      titleHeight +
+      MonthTitleHeader.titleGap +
+      weekdayHeight;
+  final gridW = tileRect.width - tilePadding * 2;
+  final gridH = tileRect.height - (gridTop - tileRect.top) - tilePadding;
+  final cellW = gridW / 7;
+  final cellH = gridH / 6;
+  return List.generate(
+    42,
+    (i) => Rect.fromLTWH(
+      gridLeft + (i % 7) * cellW,
+      gridTop + (i ~/ 7) * cellH,
+      cellW,
+      cellH,
+    ),
+  );
+}
+
+// =============================================================================
+// CalendarMorphWarmup — placed in AppShell so GPU shaders compile at login
+// =============================================================================
+
+/// Renders the calendar morph stack for two frames immediately after login so
+/// the GPU rasteriser compiles all shaders before the user first opens the
+/// calendar.  Uses [Opacity] (not [Offstage]) so painting actually occurs.
+class CalendarMorphWarmup extends StatefulWidget {
+  const CalendarMorphWarmup({super.key});
+
+  @override
+  State<CalendarMorphWarmup> createState() => _CalendarMorphWarmupState();
+}
+
+class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
+    with SingleTickerProviderStateMixin {
+  static const _areaSize = Size(900, 700);
+  static const _tileRect = Rect.fromLTWH(16, 120, 200, 148);
+
+  late final AnimationController _controller;
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _controller.value = 0.12;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _controller.reset();
+        setState(() => _done = true);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static Matrix4 _zoomMatrix(Rect tileRect, Size areaSize) {
+    final sx = areaSize.width / tileRect.width;
+    final sy = areaSize.height / tileRect.height;
+    return Matrix4.identity()
+      ..translateByDouble(-tileRect.left * sx, -tileRect.top * sy, 0, 1)
+      ..scaleByDouble(sx, sy, 1, 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_done) return const SizedBox.shrink();
+
+    final (compact, full) = _calendarWeekdayMorphStyles(context);
+    final (yearName, monthTitle) = _calendarTitleMorphStyles(context);
+    final morphMonth = DateTime(DateTime.now().year, 6, 1);
+    final dates = monthGridDates(morphMonth, weekStartsMonday: true);
+    final sourceRects = _calendarWarmupSourceRects(_tileRect, yearName, compact);
+    final destRects = MonthTitleHeader.dayCellRects(
+      _areaSize,
+      monthTitle,
+      weekdayLabelStyle: full,
+    );
+
+    // SizedBox.shrink + OverflowBox renders the warmup widget at its real size
+    // while occupying zero layout space.  Opacity > 0 ensures actual painting
+    // so Skia/Impeller pipeline shaders are compiled on this frame.
+    return SizedBox.shrink(
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        maxWidth: _areaSize.width,
+        maxHeight: _areaSize.height,
+        child: Opacity(
+          opacity: 1 / 255,
+          child: _MorphAnimationLayer(
+            key: const ValueKey('calendar-morph-warmup'),
+            controller: _controller,
+            yearTween: Matrix4Tween(
+              begin: Matrix4.identity(),
+              end: _zoomMatrix(_tileRect, _areaSize),
+            ),
+            sourceRects: sourceRects,
+            destRects: destRects,
+            morphReverse: false,
+            tileRect: _tileRect,
+            areaSize: _areaSize,
+            morphMonth: morphMonth,
+            dates: dates,
+            weekStartsMonday: true,
+            compactWeekdayStyle: compact,
+            fullWeekdayStyle: full,
+            yearMonthNameStyle: yearName,
+            monthTitleStyle: monthTitle,
+            yearGrid: const SizedBox.expand(),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1038,11 +1077,18 @@ class _MorphProgress extends InheritedWidget {
   const _MorphProgress({
     required this.t,
     required this.styleT,
+    required this.dividerColor,
+    required this.adjacentColor,
     required super.child,
   });
 
   final double t;
   final double styleT;
+
+  /// Pre-computed once per frame so the 42 [_MorphCell]s don't each call
+  /// [Theme.of] / allocate a new [Color] on every animation tick.
+  final Color dividerColor;
+  final Color adjacentColor;
 
   static _MorphProgress of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_MorphProgress>()!;
@@ -1111,6 +1157,8 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
   late final Rect _destWeekdayRect;
   late final List<WeekdayMorphMetrics> _weekdayMetrics;
   late final String _monthName;
+  late final double _navCenterYBegin;
+  late final double _navCenterYEnd;
 
   @override
   void initState() {
@@ -1142,7 +1190,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
       widget.fullWeekdayStyle,
     );
 
-    _monthName = DateFormat.MMMM().format(widget.morphMonth);
+    _monthName = _mmmmFormat.format(widget.morphMonth);
 
     final yearTitleSize = MonthTitleHeader.measureTitleText(
       widget.yearMonthNameStyle,
@@ -1166,6 +1214,15 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
       weekStartsMonday: widget.weekStartsMonday,
       compactStyle: widget.compactWeekdayStyle,
       fullStyle: widget.fullWeekdayStyle,
+    );
+
+    _navCenterYBegin = MonthTitleHeader.textVisualCenterDy(
+      widget.yearMonthNameStyle,
+      _monthName,
+    );
+    _navCenterYEnd = MonthTitleHeader.textVisualCenterDy(
+      widget.monthTitleStyle,
+      _monthName,
     );
 
     _cellChildren = [
@@ -1217,6 +1274,8 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             return _MorphProgress(
               t: t,
               styleT: styleT,
+              dividerColor: Theme.of(context).dividerColor,
+              adjacentColor: calendarAdjacentMonthColor(context),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -1249,6 +1308,11 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                       monthTitleStyle: widget.monthTitleStyle,
                       navOpacity: navOpacity,
                       navSpread: navSpread,
+                      navCenterY: lerpDouble(
+                        _navCenterYBegin,
+                        _navCenterYEnd,
+                        styleT,
+                      ),
                     ),
                   ),
                   Positioned(
@@ -1334,12 +1398,8 @@ class _MorphCell extends StatelessWidget {
         _compactCellMargin + (_fullCellMargin - _compactCellMargin) * styleT;
 
     // Compact year tiles centre the day number; full month cells top-align it.
-    final contentAlignment = Alignment.lerp(
-      Alignment.center,
-      Alignment.topCenter,
-      styleT,
-    )!;
-    final scaleAlignment = Alignment.lerp(
+    // Both content and scale share the same alignment interpolation.
+    final cellAlignment = Alignment.lerp(
       Alignment.center,
       Alignment.topCenter,
       styleT,
@@ -1351,14 +1411,15 @@ class _MorphCell extends StatelessWidget {
                 MonthDayCellStyle.compact.borderRadius) *
             styleT;
 
-    final dividerColor = Theme.of(context).dividerColor;
     final inMonth = date.month == month.month;
     final compactBorderAlpha = MonthDayCellStyle.compact.borderOpacity;
     final fullBorderAlpha = inMonth
         ? MonthDayCellStyle.full.borderOpacity
         : calendarAdjacentMonthBorderOpacity;
+    // Colors computed once per frame by the AnimatedBuilder and threaded down
+    // via _MorphProgress — avoids 42× Theme.of lookups on every animation tick.
     final fullBorderColor =
-        inMonth ? dividerColor : calendarAdjacentMonthColor(context);
+        inMonth ? progress.dividerColor : progress.adjacentColor;
     final borderAlpha =
         compactBorderAlpha + (fullBorderAlpha - compactBorderAlpha) * styleT;
 
@@ -1379,10 +1440,10 @@ class _MorphCell extends StatelessWidget {
             styleT,
           )!,
           child: Align(
-            alignment: contentAlignment,
+            alignment: cellAlignment,
             child: Transform.scale(
               scale: textScale,
-              alignment: scaleAlignment,
+              alignment: cellAlignment,
               child: SizedBox.square(
                 dimension: _diameter,
                 child: CalendarDayNumber(

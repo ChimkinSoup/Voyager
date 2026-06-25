@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
@@ -577,11 +579,18 @@ class _MorphWeekdayColumn extends StatelessWidget {
     );
   }
 
-  double _blockWidth(TextStyle style, List<String> suffixChars, double styleT) {
+  // Font advance widths scale linearly with font size for the same typeface, so
+  // lerping the two pre-measured endpoint widths is equivalent to measuring the
+  // lerped style — without allocating a TextPainter on every animation frame.
+  double _blockWidth(List<String> suffixChars, double styleT) {
     if (styleT <= 0) return metrics.compactLetterWidth;
     if (styleT >= 1) return metrics.fullFullWidth;
 
-    var width = WeekdayMorphMetrics.measureTextWidth(metrics.letter, style);
+    var width = lerpDouble(
+      metrics.compactLetterWidth,
+      metrics.fullLetterWidth,
+      styleT,
+    )!;
     for (var i = 0; i < suffixChars.length; i++) {
       width +=
           metrics.suffixCharFullWidths[i] *
@@ -601,7 +610,7 @@ class _MorphWeekdayColumn extends StatelessWidget {
         metrics.compactHeight +
         (metrics.fullHeight - metrics.compactHeight) * styleT;
 
-    final blockWidth = _blockWidth(style, suffixChars, styleT);
+    final blockWidth = _blockWidth(suffixChars, styleT);
 
     return LayoutBuilder(
       builder: (context, constraints) {

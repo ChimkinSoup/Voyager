@@ -26,6 +26,9 @@ export 'calendar_day_grid.dart'
         monthDayGridWeekdayHeaderGap,
         monthGridDates;
 
+/// Reused across all month-name formatting calls to avoid repeated allocation.
+final _mmmmFormat = DateFormat.MMMM();
+
 class CalendarGrid extends StatelessWidget {
   const CalendarGrid({
     super.key,
@@ -377,7 +380,7 @@ class MonthTitleHeader extends StatelessWidget {
       context,
       morphTitleStyle: morphTitleStyle,
     );
-    final monthName = DateFormat.MMMM().format(month);
+    final monthName = _mmmmFormat.format(month);
     final textSize = measureTitleText(titleStyle, monthName);
     final rowWidth = titleRowWidth(titleStyle);
     final rowHeight = preferredHeight(titleStyle);
@@ -478,6 +481,7 @@ class MorphMonthTitle extends StatelessWidget {
     required this.monthTitleStyle,
     this.navOpacity = 0,
     this.navSpread = 0,
+    this.navCenterY,
   });
 
   final DateTime month;
@@ -488,16 +492,20 @@ class MorphMonthTitle extends StatelessWidget {
   final double navOpacity;
   final double navSpread;
 
+  /// Pre-lerped nav icon vertical centre (distance from top of the title rect).
+  /// When provided, [MonthTitleHeader.textVisualCenterDy] is not called on each
+  /// build, saving one [TextPainter] per animation frame.
+  final double? navCenterY;
+
   @override
   Widget build(BuildContext context) {
     final titleStyle = TextStyle.lerp(yearTitleStyle, monthTitleStyle, styleT)!;
     final opacity = navOpacity.clamp(0.0, 1.0);
     final spread = navSpread.clamp(0.0, 1.0);
     final showNav = opacity > 0.01;
-    final navCenterY = MonthTitleHeader.textVisualCenterDy(
-      titleStyle,
-      monthName,
-    );
+    final effectiveNavCenterY =
+        navCenterY ??
+        MonthTitleHeader.textVisualCenterDy(titleStyle, monthName);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -520,7 +528,7 @@ class MorphMonthTitle extends StatelessWidget {
             navSpread: spread,
             showTitle: false,
             morphTitleStyle: titleStyle,
-            navCenterY: navCenterY,
+            navCenterY: effectiveNavCenterY,
           ),
       ],
     );
@@ -751,7 +759,7 @@ class _YearGrid extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  DateFormat.MMMM().format(monthDate),
+                  _mmmmFormat.format(monthDate),
                   style: MonthTitleHeader.yearTileMonthNameStyle(context),
                   textAlign: TextAlign.center,
                   maxLines: 1,
