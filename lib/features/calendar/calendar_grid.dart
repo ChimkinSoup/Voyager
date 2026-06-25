@@ -89,7 +89,7 @@ class CalendarGrid extends StatelessWidget {
   }
 }
 
-/// Persistent sidebar mini calendar with 6 rows and grey adjacent-month days.
+/// Persistent sidebar mini calendar — same cell layout as year-view month tiles.
 class MiniMonthCalendar extends StatelessWidget {
   const MiniMonthCalendar({
     super.key,
@@ -97,67 +97,53 @@ class MiniMonthCalendar extends StatelessWidget {
     required this.weekStartsMonday,
     required this.onDayTap,
     this.selectedDay,
+    this.events = const [],
+    this.indicators = const [],
   });
+
+  /// Matches [_YearGrid]'s month-tile aspect ratio (width / height).
+  static const tileAspectRatio = 1.35;
 
   final DateTime month;
   final bool weekStartsMonday;
   final void Function(DateTime day) onDayTap;
   final DateTime? selectedDay;
+  final List<CalendarEvent> events;
+  final List<CalendarDayIndicator> indicators;
 
   @override
   Widget build(BuildContext context) {
-    final cells = monthGridDates(month, weekStartsMonday: weekStartsMonday);
-    final labels = weekStartsMonday
-        ? calendarWeekdayLabelsMonday
-        : calendarWeekdayLabelsSunday;
-
-    return SizedBox(
-      width: 180,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            DateFormat.yMMMM().format(month),
-            style: Theme.of(context).textTheme.titleSmall,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Row(
+    return AspectRatio(
+      aspectRatio: tileAspectRatio,
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final label in labels)
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      label,
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                  ),
+              Text(
+                DateFormat.yMMMM().format(month),
+                style: Theme.of(context).textTheme.titleSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: MonthDayGrid(
+                  month: month,
+                  events: events,
+                  indicators: indicators,
+                  weekStartsMonday: weekStartsMonday,
+                  style: MonthDayCellStyle.sidebar,
+                  onDayTap: onDayTap,
+                  showWeekdayHeader: true,
+                  useSingleLetterWeekdays: true,
+                  selectedDay: selectedDay,
                 ),
+              ),
             ],
           ),
-          const SizedBox(height: 4),
-          Expanded(
-            child: Column(
-              children: List.generate(6, (row) {
-                return Expanded(
-                  child: Row(
-                    children: List.generate(7, (col) {
-                      final date = cells[row * 7 + col];
-                      return Expanded(
-                        child: CalendarDayNumber(
-                          date: date,
-                          month: month,
-                          fontSize: 12,
-                          mutedWhenAdjacent: date.month != month.month,
-                        ),
-                      );
-                    }),
-                  ),
-                );
-              }),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

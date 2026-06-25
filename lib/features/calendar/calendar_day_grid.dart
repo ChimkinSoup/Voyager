@@ -41,6 +41,9 @@ List<DateTime> monthGridDates(
   return cells;
 }
 
+/// Text opacity for day numbers outside the displayed month (padding weeks).
+const calendarAdjacentMonthTextOpacity = 0.20;
+
 /// Visual density for [CalendarDayCell] — compact in year tiles, full in month view.
 class MonthDayCellStyle {
   const MonthDayCellStyle({
@@ -74,10 +77,22 @@ class MonthDayCellStyle {
     borderOpacity: 0,
   );
 
+  /// Sidebar mini calendar — same layout as year tiles, tuned for ~180px width.
+  static const sidebar = MonthDayCellStyle(
+    fontSize: 8,
+    borderRadius: 3,
+    cellPadding: EdgeInsets.all(0.5),
+    cellMargin: EdgeInsets.all(0.5),
+    maxEventLines: 1,
+    dotSize: 3,
+    eventFontSize: 5,
+    borderOpacity: 0,
+  );
+
   static const full = MonthDayCellStyle(
     fontSize: 15,
     borderRadius: 10,
-    cellPadding: EdgeInsets.all(3),
+    cellPadding: EdgeInsets.fromLTRB(3, 5, 3, 3),
     cellMargin: EdgeInsets.all(1),
     maxEventLines: 2,
     dotSize: 7,
@@ -98,6 +113,7 @@ class CalendarDayCell extends StatelessWidget {
     required this.indicators,
     required this.style,
     this.onTap,
+    this.isSelected = false,
   });
 
   final DateTime date;
@@ -106,6 +122,7 @@ class CalendarDayCell extends StatelessWidget {
   final List<CalendarDayIndicator> indicators;
   final MonthDayCellStyle style;
   final VoidCallback? onTap;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +169,7 @@ class CalendarDayCell extends StatelessWidget {
             month: month,
             fontSize: style.fontSize,
             mutedWhenAdjacent: !inMonth,
+            isSelected: isSelected,
           ),
           if (indicators.isNotEmpty) ...[
             SizedBox(height: style.maxEventLines > 1 ? 2 : 1),
@@ -193,58 +211,17 @@ class CalendarDayCell extends StatelessWidget {
   }
 
   Widget _buildCompactCellContent(bool inMonth) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tight = constraints.maxHeight < 22;
-        final showIndicators = indicators.isNotEmpty && !tight;
-        final showEvents =
-            events.isNotEmpty && style.maxEventLines > 0 && !tight;
-
-        return FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: constraints.maxWidth,
-              minWidth: constraints.maxWidth,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CalendarDayNumber(
-                  date: date,
-                  month: month,
-                  fontSize: style.fontSize,
-                  mutedWhenAdjacent: !inMonth,
-                ),
-                if (showIndicators) ...[
-                  SizedBox(height: style.maxEventLines > 1 ? 2 : 1),
-                  CalendarDayIndicatorDots(
-                    indicators: indicators,
-                    dotSize: style.dotSize,
-                  ),
-                ],
-                if (showEvents)
-                  for (final event in events.take(style.maxEventLines))
-                    Container(
-                      margin: const EdgeInsets.only(top: 1),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: style.maxEventLines > 1 ? 2 : 1,
-                      ),
-                      color: Color(event.colorValue).withValues(alpha: 0.45),
-                      child: Text(
-                        event.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppFonts.style(fontSize: style.eventFontSize),
-                      ),
-                    ),
-              ],
-            ),
-          ),
-        );
-      },
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: CalendarDayNumber(
+          date: date,
+          month: month,
+          fontSize: style.fontSize,
+          mutedWhenAdjacent: !inMonth,
+          isSelected: isSelected,
+        ),
+      ),
     );
   }
 }
@@ -256,12 +233,14 @@ class CalendarDayNumber extends StatelessWidget {
     required this.month,
     required this.fontSize,
     this.mutedWhenAdjacent = false,
+    this.isSelected = false,
   });
 
   final DateTime date;
   final DateTime month;
   final double fontSize;
   final bool mutedWhenAdjacent;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -269,6 +248,7 @@ class CalendarDayNumber extends StatelessWidget {
     final isToday = calendarIsToday(date);
     final muted = mutedWhenAdjacent && date.month != month.month;
     final diameter = fontSize + (fontSize <= 9 ? 3 : 8);
+    final showSelection = isSelected && !isToday;
 
     return Center(
       child: Container(
@@ -276,18 +256,31 @@ class CalendarDayNumber extends StatelessWidget {
         height: diameter,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isToday ? accent : null,
+          color: isToday
+              ? accent
+              : showSelection
+              ? accent.withValues(alpha: 0.2)
+              : null,
           shape: BoxShape.circle,
+          border: showSelection ? Border.all(color: accent) : null,
         ),
         child: Text(
           '${date.day}',
+          textAlign: TextAlign.center,
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
+          ),
           style: AppFonts.style(
             fontSize: fontSize,
             fontWeight: isToday ? FontWeight.w600 : FontWeight.w500,
+            height: 1,
             color: isToday
                 ? Theme.of(context).colorScheme.onPrimary
                 : muted
-                ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55)
+                ? Theme.of(context).colorScheme.onSurface.withValues(
+                    alpha: calendarAdjacentMonthTextOpacity,
+                  )
                 : Theme.of(context).colorScheme.onSurface,
           ),
         ),
@@ -335,16 +328,22 @@ class WeekdayHeaderRow extends StatelessWidget {
     super.key,
     required this.weekStartsMonday,
     this.opacity = 1,
+    this.useSingleLetterLabels = false,
   });
 
   final bool weekStartsMonday;
   final double opacity;
+  final bool useSingleLetterLabels;
 
   @override
   Widget build(BuildContext context) {
-    final labels = weekStartsMonday
-        ? calendarWeekdayLabelsMonday
-        : calendarWeekdayLabelsSunday;
+    final labels = useSingleLetterLabels
+        ? (weekStartsMonday
+              ? calendarWeekdayLettersMonday
+              : calendarWeekdayLettersSunday)
+        : (weekStartsMonday
+              ? calendarWeekdayLabelsMonday
+              : calendarWeekdayLabelsSunday);
     final row = Row(
       children: [
         for (final label in labels)
@@ -375,6 +374,8 @@ class MonthDayGrid extends StatelessWidget {
     this.onDayTap,
     this.showWeekdayHeader = false,
     this.weekdayHeaderOpacity = 1,
+    this.useSingleLetterWeekdays = false,
+    this.selectedDay,
   });
 
   final DateTime month;
@@ -385,6 +386,8 @@ class MonthDayGrid extends StatelessWidget {
   final void Function(DateTime day)? onDayTap;
   final bool showWeekdayHeader;
   final double weekdayHeaderOpacity;
+  final bool useSingleLetterWeekdays;
+  final DateTime? selectedDay;
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +400,7 @@ class MonthDayGrid extends StatelessWidget {
           WeekdayHeaderRow(
             weekStartsMonday: weekStartsMonday,
             opacity: weekdayHeaderOpacity,
+            useSingleLetterLabels: useSingleLetterWeekdays,
           ),
           const SizedBox(height: _weekdayHeaderGap),
         ],
@@ -415,6 +419,9 @@ class MonthDayGrid extends StatelessWidget {
                         .take(3)
                         .toList();
 
+                    final isSelected = selectedDay != null &&
+                        calendarSameDay(date, selectedDay!);
+
                     return Expanded(
                       child: CalendarDayCell(
                         date: date,
@@ -422,6 +429,7 @@ class MonthDayGrid extends StatelessWidget {
                         events: dayEvents,
                         indicators: dayIndicators,
                         style: style,
+                        isSelected: isSelected,
                         onTap: onDayTap == null ? null : () => onDayTap!(date),
                       ),
                     );
@@ -457,6 +465,16 @@ const calendarWeekdayLabelsMonday = [
   'Sun',
 ];
 
+const calendarWeekdayLettersMonday = [
+  'M',
+  'T',
+  'W',
+  'T',
+  'F',
+  'S',
+  'S',
+];
+
 const calendarWeekdayLabelsSunday = [
   'Sun',
   'Mon',
@@ -465,4 +483,14 @@ const calendarWeekdayLabelsSunday = [
   'Thu',
   'Fri',
   'Sat',
+];
+
+const calendarWeekdayLettersSunday = [
+  'S',
+  'M',
+  'T',
+  'W',
+  'T',
+  'F',
+  'S',
 ];

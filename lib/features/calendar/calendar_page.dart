@@ -34,7 +34,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   // Key for the full-size MonthDayGrid rendered during the measurement phase.
   final _fullMonthDayGridKey = GlobalKey();
 
-  AnimationController? _zoomController;
+  late final AnimationController _zoomController;
   Matrix4Tween? _yearMatrixTween;
   bool _isZooming = false;
   // true when the animation is playing in the month→year direction.
@@ -55,18 +55,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarDayIndicator> _latestIndicators = const [];
   int _morphGeneration = 0;
   AnimationStatusListener? _morphStatusListener;
+  bool _mountMorphWarmup = true;
 
   static const _zoomDuration = Duration(milliseconds: 600);
+  static const _morphWarmupAreaSize = Size(900, 700);
+  static const _morphWarmupTileRect = Rect.fromLTWH(16, 120, 200, 148);
 
-  AnimationController get _ensureZoomController {
-    _zoomController ??=
-        AnimationController(vsync: this, duration: _zoomDuration);
-    return _zoomController!;
+  @override
+  void initState() {
+    super.initState();
+    _zoomController = AnimationController(
+      vsync: this,
+      duration: _zoomDuration,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmMorphAnimationCache();
+    });
   }
 
   void _disposeMorphListener() {
     if (_morphStatusListener != null) {
-      _zoomController?.removeStatusListener(_morphStatusListener!);
+      _zoomController.removeStatusListener(_morphStatusListener!);
       _morphStatusListener = null;
     }
   }
@@ -75,7 +84,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   int _prepareMorphSession() {
     _morphGeneration++;
     _disposeMorphListener();
-    _ensureZoomController
+    _zoomController
       ..stop()
       ..reset();
     return _morphGeneration;
@@ -95,6 +104,95 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _morphIndicators = null;
   }
 
+  /// Builds and paints the morph stack offscreen during startup so the first
+  /// real year→month transition does not stall on shader compilation.
+  void _warmMorphAnimationCache() {
+    if (!mounted || !_mountMorphWarmup) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_mountMorphWarmup) return;
+
+      // Paint one offscreen frame at t>0 so transform/cell paths are compiled.
+      _zoomController.value = 0.12;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _zoomController.reset();
+        if (_mountMorphWarmup) {
+          setState(() => _mountMorphWarmup = false);
+        }
+      });
+    });
+  }
+
+  List<Rect> _warmupSourceRects(Rect tileRect, TextStyle titleStyle) {
+    const cardPadding = 8.0;
+    final titleHeight = MonthTitleHeader.preferredHeight(titleStyle);
+    final gridLeft = tileRect.left + cardPadding;
+    final gridTop =
+        tileRect.top + cardPadding + titleHeight + MonthTitleHeader.titleGap;
+    final gridW = tileRect.width - cardPadding * 2;
+    final gridH = tileRect.height - (gridTop - tileRect.top) - cardPadding;
+    final cellW = gridW / 7;
+    final cellH = gridH / 6;
+
+    return List.generate(
+      42,
+      (i) => Rect.fromLTWH(
+        gridLeft + (i % 7) * cellW,
+        gridTop + (i ~/ 7) * cellH,
+        cellW,
+        cellH,
+      ),
+    );
+  }
+
+  Widget _buildMorphWarmupLayer(bool weekStartsMonday) {
+    const areaSize = _morphWarmupAreaSize;
+    const tileRect = _morphWarmupTileRect;
+    final morphMonth = DateTime(_focused.year, 6, 1);
+    final yearTitleStyle = Theme.of(context).textTheme.titleSmall!;
+    final monthTitleStyle = yearTitleStyle.copyWith(
+      fontSize: MonthTitleHeader.titleFontSize,
+    );
+    final sourceRects = _warmupSourceRects(tileRect, yearTitleStyle);
+    final destRects = MonthTitleHeader.dayCellRects(areaSize, monthTitleStyle);
+    final scale = max(
+      areaSize.width / tileRect.width,
+      areaSize.height / tileRect.height,
+    );
+
+    return SizedBox(
+      width: areaSize.width,
+      height: areaSize.height,
+      child: _MorphAnimationLayer(
+        key: const ValueKey('morph-warmup'),
+        controller: _zoomController,
+        yearTween: Matrix4Tween(
+          begin: Matrix4.identity(),
+          end: Matrix4.identity()
+            ..translateByDouble(-tileRect.left * scale, -tileRect.top * scale, 0, 1)
+            ..scaleByDouble(scale, scale, 1, 1),
+        ),
+        sourceRects: sourceRects,
+        destRects: destRects,
+        morphReverse: false,
+        tileRect: tileRect,
+        areaSize: areaSize,
+        morphMonth: morphMonth,
+        dates: monthGridDates(morphMonth, weekStartsMonday: weekStartsMonday),
+        yearGrid: _calendarGrid(
+          events: const [],
+          indicators: const [],
+          weekStartsMonday: weekStartsMonday,
+          mode: CalendarViewMode.year,
+          focused: DateTime(morphMonth.year, 1, 1),
+          hiddenMonth: morphMonth,
+        ),
+      ),
+    );
+  }
+
   void _startMorphAnimation({
     required int generation,
     required VoidCallback onComplete,
@@ -110,8 +208,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         if (!mounted) return;
         onComplete();
       };
-      _ensureZoomController.addStatusListener(_morphStatusListener!);
-      _ensureZoomController
+      _zoomController.addStatusListener(_morphStatusListener!);
+      _zoomController
         ..stop()
         ..reset()
         ..forward(from: 0);
@@ -210,7 +308,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   @override
   void dispose() {
     _disposeMorphListener();
-    _zoomController?.dispose();
+    _zoomController.dispose();
     super.dispose();
   }
 
@@ -454,7 +552,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
       // Reset before the animation-phase rebuild for the same reason as the
       // forward path: avoids a stale t=1 frame on first render.
-      _ensureZoomController.reset();
+      _zoomController.reset();
       setState(() {
         _morphDestRects = destRects;
         _morphTileRect = morphTileRect;
@@ -633,7 +731,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     }
 
     if (_isZooming &&
-        _zoomController != null &&
         _yearMatrixTween != null &&
         _morphSourceRects != null &&
         _morphMonth != null &&
@@ -642,7 +739,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       final morphMonth = _morphMonth!;
       final sourceRects = _morphSourceRects!;
       final yearTween = _yearMatrixTween!;
-      final controller = _zoomController!;
+      final controller = _zoomController;
       final tileRect = _morphTileRect!;
       final areaSize = _morphAreaSize!;
 
@@ -742,7 +839,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       indicators = _buildCalendarIndicators(calendarTrackers, analytics);
     }
 
-    return Padding(
+    return Stack(
+      children: [
+        Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -751,7 +850,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             children: [
               _buildViewModeSelector(),
               const Spacer(),
-              if (_mode != CalendarViewMode.month && !_isZooming)
+              if (_mode != CalendarViewMode.month)
                 _buildFocusHeader(context, weekStartsMonday),
               const SizedBox(width: 8),
               OutlinedButton(
@@ -783,13 +882,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: MiniMonthCalendar(
-                            month: _focused,
-                            weekStartsMonday: weekStartsMonday,
-                            selectedDay: _dayViewDate,
-                            onDayTap: _onMiniCalendarDayTap,
-                          ),
+                        MiniMonthCalendar(
+                          month: _focused,
+                          weekStartsMonday: weekStartsMonday,
+                          selectedDay: _dayViewDate,
+                          events: calendarEvents,
+                          indicators: indicators,
+                          onDayTap: _onMiniCalendarDayTap,
                         ),
                         if (showInstantViewSwitch) ...[
                           const SizedBox(height: 8),
@@ -826,6 +925,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           ),
         ],
       ),
+    ),
+        if (_mountMorphWarmup)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Offstage(
+                offstage: true,
+                child: _buildMorphWarmupLayer(weekStartsMonday),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -834,18 +944,26 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 // Morph animation primitives
 // =============================================================================
 
-/// Provides the current morph progress [t] to descendant [_MorphCell]s without
-/// recreating the cell widget list every tick.
+/// Provides morph progress to descendant [_MorphCell]s.
+///
+/// [t] drives layout (source → dest rects). [styleT] drives visuals: 0 = compact
+/// year tile, 1 = full month view (inverted during month→year reverse).
 class _MorphProgress extends InheritedWidget {
-  const _MorphProgress({required this.t, required super.child});
+  const _MorphProgress({
+    required this.t,
+    required this.styleT,
+    required super.child,
+  });
 
   final double t;
+  final double styleT;
 
-  static double of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_MorphProgress>()!.t;
+  static _MorphProgress of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_MorphProgress>()!;
 
   @override
-  bool updateShouldNotify(_MorphProgress old) => old.t != t;
+  bool updateShouldNotify(_MorphProgress old) =>
+      old.t != t || old.styleT != styleT;
 }
 
 /// Bifurcated morph stack — isolated from parent rebuilds during the animation.
@@ -961,10 +1079,12 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                 : Rect.lerp(_sourceTitleRect, _destTitleRect, t)!;
             final navOpacity = widget.morphReverse ? 1.0 - t : t;
             final navSpread = navOpacity;
+            final styleT = widget.morphReverse ? 1.0 - t : t;
             _applyYearTransform(t);
 
             return _MorphProgress(
               t: t,
+              styleT: styleT,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -1038,13 +1158,11 @@ class _MorphLayoutDelegate extends MultiChildLayoutDelegate {
 }
 
 /// A single calendar day cell that morphs between the compact year-tile style
-/// (t = 0) and the full month-view style (t = 1).
+/// (styleT = 0) and the full month-view style (styleT = 1).
 ///
-/// Three properties are independently interpolated:
-///   1. **Position + Size** — controlled by [_MorphLayoutDelegate] via Rect.lerp.
-///   2. **Day number scale** — text is always rendered at the full font size and
-///      scaled down with [Transform.scale], so it is always crisp.
-///   3. **Border** — opacity lerped from 0 → 1 so it physically materialises.
+/// Layout position/size uses animation [t] via [_MorphLayoutDelegate].
+/// Visual properties use [styleT] from [_MorphProgress] so month→year reverse
+/// starts at full-month styling and ends at compact year styling.
 class _MorphCell extends StatelessWidget {
   const _MorphCell({
     super.key,
@@ -1065,64 +1183,59 @@ class _MorphCell extends StatelessWidget {
   static const _compactCellMargin = 0.5; // compact.cellMargin.top
   static const _fullCellMargin = 1.0;    // full.cellMargin.top
   // Cell padding (inset inside the border, before the day number).
-  static const _compactCellPadding = 1.0; // compact.cellPadding.top
-  static const _fullCellPadding = 3.0;    // full.cellPadding.top
+  static final _compactCellPadding = MonthDayCellStyle.compact.cellPadding;
+  static final _fullCellPadding = MonthDayCellStyle.full.cellPadding;
 
   @override
   Widget build(BuildContext context) {
-    final t = _MorphProgress.of(context);
-    // lerp(_startScale, 1.0, t)
-    final textScale = _startScale + (1.0 - _startScale) * t;
-    // Margin creates the gap between cells; padding offsets the number inside.
-    // Splitting them matches the real CalendarDayCell layout at both endpoints.
+    final progress = _MorphProgress.of(context);
+    final styleT = progress.styleT;
+    // styleT 0 = compact year tile, 1 = full month cell.
+    final textScale = _startScale + (1.0 - _startScale) * styleT;
     final cellMargin =
-        _compactCellMargin + (_fullCellMargin - _compactCellMargin) * t;
-    final cellPadding =
-        _compactCellPadding + (_fullCellPadding - _compactCellPadding) * t;
+        _compactCellMargin + (_fullCellMargin - _compactCellMargin) * styleT;
 
-    // lerp(compact.borderRadius, full.borderRadius, t)
+    // Compact year tiles centre the day number; full month cells top-align it.
+    final contentAlignment =
+        Alignment.lerp(Alignment.center, Alignment.topCenter, styleT)!;
+    final scaleAlignment =
+        Alignment.lerp(Alignment.center, Alignment.topCenter, styleT)!;
+
     final borderRadius =
         MonthDayCellStyle.compact.borderRadius +
         (MonthDayCellStyle.full.borderRadius -
             MonthDayCellStyle.compact.borderRadius) *
-        t;
+        styleT;
 
     final dividerColor = Theme.of(context).dividerColor;
 
     return Container(
-      // Margin creates the visible gap between adjacent cells.  The allocated
-      // rect already includes this margin space, so shrinking inward here is
-      // correct and matches the real CalendarDayCell behaviour.
       margin: EdgeInsets.all(cellMargin),
       decoration: BoxDecoration(
         border: Border.all(
-          // Border opacity lerps 0 → 1 so it physically grows from nothing.
-          color: dividerColor.withValues(alpha: t.clamp(0.0, 1.0)),
+          color: dividerColor.withValues(alpha: styleT.clamp(0.0, 1.0)),
         ),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
-        // Top padding (inside the border) lerps from compact.cellPadding.top
-        // to full.cellPadding.top, keeping the number's vertical position
-        // aligned with the real CalendarDayCell at both endpoints.
         child: Padding(
-          padding: EdgeInsets.only(top: cellPadding),
+          padding: EdgeInsets.lerp(_compactCellPadding, _fullCellPadding, styleT)!,
           child: Align(
-            alignment: Alignment.topCenter,
-              child: Transform.scale(
-                scale: textScale,
-                alignment: Alignment.topCenter,
-                child: SizedBox.square(
-                  dimension: _diameter,
-                  child: CalendarDayNumber(
-                    date: date,
-                    month: month,
-                    fontSize: _fullFontSize,
-                    mutedWhenAdjacent: true,
-                  ),
+            alignment: contentAlignment,
+            child: Transform.scale(
+              scale: textScale,
+              alignment: scaleAlignment,
+              child: SizedBox.square(
+                dimension: _diameter,
+                child: CalendarDayNumber(
+                  date: date,
+                  month: month,
+                  fontSize: _fullFontSize,
+                  mutedWhenAdjacent: true,
                 ),
               ),
+            ),
           ),
         ),
       ),
