@@ -89,66 +89,6 @@ class CalendarGrid extends StatelessWidget {
   }
 }
 
-/// Persistent sidebar mini calendar — same cell layout as year-view month tiles.
-class MiniMonthCalendar extends StatelessWidget {
-  const MiniMonthCalendar({
-    super.key,
-    required this.month,
-    required this.weekStartsMonday,
-    required this.onDayTap,
-    this.selectedDay,
-    this.events = const [],
-    this.indicators = const [],
-  });
-
-  /// Matches [_YearGrid]'s month-tile aspect ratio (width / height).
-  static const tileAspectRatio = 1.35;
-
-  final DateTime month;
-  final bool weekStartsMonday;
-  final void Function(DateTime day) onDayTap;
-  final DateTime? selectedDay;
-  final List<CalendarEvent> events;
-  final List<CalendarDayIndicator> indicators;
-
-  @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: tileAspectRatio,
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                DateFormat.yMMMM().format(month),
-                style: Theme.of(context).textTheme.titleSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Expanded(
-                child: MonthDayGrid(
-                  month: month,
-                  events: events,
-                  indicators: indicators,
-                  weekStartsMonday: weekStartsMonday,
-                  style: MonthDayCellStyle.sidebar,
-                  onDayTap: onDayTap,
-                  showWeekdayHeader: true,
-                  useSingleLetterWeekdays: true,
-                  selectedDay: selectedDay,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Hour-by-hour view for a single day.
 class DayHourGrid extends StatelessWidget {
   const DayHourGrid({
@@ -590,7 +530,7 @@ class _YearGrid extends StatelessWidget {
     return GridView.builder(
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
+        crossAxisCount: 3,
         childAspectRatio: 1.35,
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,

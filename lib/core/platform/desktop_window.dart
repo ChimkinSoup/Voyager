@@ -24,6 +24,7 @@ Future<void> configureDesktopWindow() async {
 
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
+      await windowManager.maximize();
       await windowManager.focus();
     });
 

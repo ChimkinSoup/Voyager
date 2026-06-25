@@ -57,6 +57,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   AnimationStatusListener? _morphStatusListener;
   bool _mountMorphWarmup = true;
 
+  static const _sidebarWidth = 350.0;
   static const _zoomDuration = Duration(milliseconds: 600);
   static const _morphWarmupAreaSize = Size(900, 700);
   static const _morphWarmupTileRect = Rect.fromLTWH(16, 120, 200, 148);
@@ -276,25 +277,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ),
         CalendarViewMode.year => DateTime(_focused.year + delta, 1, 1),
       };
-    });
-  }
-
-  void _onMiniCalendarDayTap(DateTime day) {
-    _abortMorphAnimation();
-    setState(() {
-      _isZooming = false;
-      _morphReverse = false;
-      _clearMorphCache();
-      if (_dayViewDate != null &&
-          _dayViewDate!.year == day.year &&
-          _dayViewDate!.month == day.month &&
-          _dayViewDate!.day == day.day) {
-        _dayViewDate = null;
-      } else {
-        _dayViewDate = DateTime(day.year, day.month, day.day);
-        _focused = DateTime(day.year, day.month, 1);
-        _mode = CalendarViewMode.month;
-      }
     });
   }
 
@@ -875,49 +857,41 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                   _latestIndicators = indicators;
                 }
                 return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: 180,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        MiniMonthCalendar(
-                          month: _focused,
-                          weekStartsMonday: weekStartsMonday,
-                          selectedDay: _dayViewDate,
-                          events: calendarEvents,
-                          indicators: indicators,
-                          onDayTap: _onMiniCalendarDayTap,
-                        ),
-                        if (showInstantViewSwitch) ...[
-                          const SizedBox(height: 8),
-                          OutlinedButton(
-                            onPressed: _instantSwitchToMonthView,
-                            child: const Text('Month'),
-                          ),
-                          const SizedBox(height: 4),
-                          OutlinedButton(
-                            onPressed: _instantSwitchToYearView,
-                            child: const Text('Year'),
-                          ),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: _sidebarWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Spacer(),
+                          if (showInstantViewSwitch) ...[
+                            OutlinedButton(
+                              onPressed: _instantSwitchToMonthView,
+                              child: const Text('Month'),
+                            ),
+                            const SizedBox(height: 4),
+                            OutlinedButton(
+                              onPressed: _instantSwitchToYearView,
+                              child: const Text('Year'),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: KeyedSubtree(
-                      key: _calendarAreaKey,
-                      child: _buildMainCalendar(
-                        events: calendarEvents,
-                        indicators: indicators,
-                        weekStartsMonday: weekStartsMonday,
                       ),
                     ),
-                  ),
-                ],
-              );
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: KeyedSubtree(
+                        key: _calendarAreaKey,
+                        child: _buildMainCalendar(
+                          events: calendarEvents,
+                          indicators: indicators,
+                          weekStartsMonday: weekStartsMonday,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('$e')),

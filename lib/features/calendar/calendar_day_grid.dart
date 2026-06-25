@@ -77,18 +77,6 @@ class MonthDayCellStyle {
     borderOpacity: 0,
   );
 
-  /// Sidebar mini calendar — same layout as year tiles, tuned for ~180px width.
-  static const sidebar = MonthDayCellStyle(
-    fontSize: 8,
-    borderRadius: 3,
-    cellPadding: EdgeInsets.all(0.5),
-    cellMargin: EdgeInsets.all(0.5),
-    maxEventLines: 1,
-    dotSize: 3,
-    eventFontSize: 5,
-    borderOpacity: 0,
-  );
-
   static const full = MonthDayCellStyle(
     fontSize: 15,
     borderRadius: 10,
