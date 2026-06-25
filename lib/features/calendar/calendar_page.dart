@@ -29,13 +29,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
 
-  // One stable key per month tile in the year grid (for Matrix4 tween setup).
-  final _monthTileKeys = List.generate(12, (_) => GlobalKey());
-  // One stable key per tile's inner MonthDayGrid (for source-rect measurement).
-  final _yearTileDayGridKeys = List.generate(12, (_) => GlobalKey());
   final _calendarAreaKey = GlobalKey();
-  // Key for the full-size MonthDayGrid rendered during the measurement phase.
-  final _fullMonthDayGridKey = GlobalKey();
 
   late final AnimationController _zoomController;
   Matrix4Tween? _yearMatrixTween;
@@ -58,6 +52,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarDayIndicator> _latestIndicators = const [];
   int _morphGeneration = 0;
   AnimationStatusListener? _morphStatusListener;
+
+  // Pre-computed morph geometry — populated on the first [LayoutBuilder] pass
+  // (year or month view) and refreshed on resize. All tap handlers read from
+  // here; no render-object measurement at animation time.
+  CalendarLayoutCache? _layoutCache;
 
   static const _sidebarWidth = 350.0;
   static const _zoomDuration = Duration(milliseconds: 600);
@@ -97,6 +96,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _morphAreaSize = null;
     _morphEvents = null;
     _morphIndicators = null;
+  }
+
+  /// Recomputes [_layoutCache] when [areaSize] changes.
+  ///
+  /// Called from the calendar [LayoutBuilder] on the first layout pass (and on
+  /// resize). Pure math — no widget mounting, no frame waits, no render-object
+  /// reads. Safe to call synchronously from layout and tap handlers.
+  void _refreshLayoutCache(Size areaSize) {
+    if (_layoutCache?.areaSize == areaSize) return;
+
+    final (compact, full) = _weekdayMorphStyles(context);
+    final (yearName, monthTitle) = _titleMorphStyles(context);
+    _layoutCache = CalendarLayoutCache.compute(
+      areaSize: areaSize,
+      yearTileNameStyle: yearName,
+      compactWeekdayStyle: compact,
+      fullTitleStyle: monthTitle,
+      fullWeekdayStyle: full,
+    );
   }
 
   void _startMorphAnimation({
@@ -203,16 +221,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   // Animation helpers
   // ---------------------------------------------------------------------------
 
-  /// Maps a year tile to fill the calendar area with independent X/Y scale so
-  /// grid columns stay aligned during year→month zoom.
-  Matrix4 _yearGridZoomMatrix(Rect tileRect, Size areaSize) {
-    final sx = areaSize.width / tileRect.width;
-    final sy = areaSize.height / tileRect.height;
-    return Matrix4.identity()
-      ..translateByDouble(-tileRect.left * sx, -tileRect.top * sy, 0, 1)
-      ..scaleByDouble(sx, sy, 1, 1);
-  }
-
   (TextStyle compact, TextStyle full) _weekdayMorphStyles(
     BuildContext context,
   ) => _calendarWeekdayMorphStyles(context);
@@ -221,117 +229,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     BuildContext context,
   ) => _calendarTitleMorphStyles(context);
 
-  /// Computes 42 source [Rect]s (calendar-area-local) from the year tile's
-  /// inner [MonthDayGrid].  Returns null if the render objects are not ready.
-  List<Rect>? _computeSourceRects(DateTime month) {
-    final areaBox =
-        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    final gridBox =
-        _yearTileDayGridKeys[month.month - 1].currentContext?.findRenderObject()
-            as RenderBox?;
-
-    if (areaBox == null || !areaBox.hasSize || !areaBox.attached) return null;
-    if (gridBox == null || !gridBox.hasSize || !gridBox.attached) return null;
-
-    final gridOrigin = areaBox.globalToLocal(
-      gridBox.localToGlobal(Offset.zero),
-    );
-    final cellW = gridBox.size.width / 7;
-    final cellH = gridBox.size.height / 6;
-
-    return List.generate(
-      42,
-      (i) => Rect.fromLTWH(
-        gridOrigin.dx + (i % 7) * cellW,
-        gridOrigin.dy + (i ~/ 7) * cellH,
-        cellW,
-        cellH,
-      ),
-    );
-  }
-
-  /// Computes 42 destination [Rect]s from the [_fullMonthDayGridKey] widget
-  /// that was laid out (but not painted) during the measurement phase.
-  List<Rect>? _computeDestRects() {
-    final areaBox =
-        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    final gridBox =
-        _fullMonthDayGridKey.currentContext?.findRenderObject() as RenderBox?;
-
-    if (areaBox == null || !areaBox.hasSize) return null;
-    if (gridBox == null || !gridBox.hasSize) return null;
-
-    final gridOrigin = areaBox.globalToLocal(
-      gridBox.localToGlobal(Offset.zero),
-    );
-    final cellW = gridBox.size.width / 7;
-    final cellH = gridBox.size.height / 6;
-
-    return List.generate(
-      42,
-      (i) => Rect.fromLTWH(
-        gridOrigin.dx + (i % 7) * cellW,
-        gridOrigin.dy + (i ~/ 7) * cellH,
-        cellW,
-        cellH,
-      ),
-    );
-  }
-
   void _onMonthTapped(DateTime month) {
     if (_isZooming) return;
 
-    final areaBox =
-        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    if (areaBox == null || !areaBox.hasSize || !areaBox.attached) return;
+    final cache = _layoutCache;
+    if (cache == null) return;
 
-    final tileKey = _monthTileKeys[month.month - 1];
-    final tileBox = tileKey.currentContext?.findRenderObject() as RenderBox?;
-    if (tileBox == null || !tileBox.hasSize || !tileBox.attached) return;
+    final idx = month.month - 1;
+    final morphTileRect = cache.tileBounds[idx];
+    final sourceRects = cache.tileSourceRects[idx];
+    final zoomMatrixEnd = cache.tileZoomMatrices[idx];
+    final destRects = cache.destRects;
+    final areaSize = cache.areaSize;
 
-    final tileOrigin = areaBox.globalToLocal(
-      tileBox.localToGlobal(Offset.zero),
-    );
-    final tileW = tileBox.size.width;
-    final tileH = tileBox.size.height;
-    final areaW = areaBox.size.width;
-    final areaH = areaBox.size.height;
-
-    // Scale so the tapped tile fills the entire area (anisotropic — keeps columns aligned).
     _yearMatrixTween = Matrix4Tween(
       begin: Matrix4.identity(),
-      end: _yearGridZoomMatrix(
-        Rect.fromLTWH(tileOrigin.dx, tileOrigin.dy, tileW, tileH),
-        Size(areaW, areaH),
-      ),
-    );
-
-    // Source rects must be computed now, while the year grid is still rendered.
-    final sourceRects = _computeSourceRects(month);
-    if (sourceRects == null) return;
-
-    // Destination cell layout mirrors _MonthGrid — compute synchronously so we
-    // can skip the offstage measurement frame that caused a visible stall.
-    final titleStyle = Theme.of(context).textTheme.titleSmall!.copyWith(
-      fontSize: MonthTitleHeader.titleFontSize,
-      color: calendarTitleAccentColor(context),
-    );
-    final destRects = MonthTitleHeader.dayCellRects(
-      Size(areaW, areaH),
-      titleStyle,
-      weekdayLabelStyle: calendarWeekdayLabelStyle(context),
+      end: zoomMatrixEnd,
     );
 
     final generation = _prepareMorphSession();
-
-    // Capture tile and area geometry for the background/title overlay lerp.
-    final morphTileRect = Rect.fromLTWH(
-      tileOrigin.dx,
-      tileOrigin.dy,
-      tileW,
-      tileH,
-    );
-    final morphAreaSize = Size(areaW, areaH);
 
     setState(() {
       _focused = month;
@@ -343,7 +259,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphDestRects = destRects;
       _morphMonth = month;
       _morphTileRect = morphTileRect;
-      _morphAreaSize = morphAreaSize;
+      _morphAreaSize = areaSize;
       _morphEvents = List<CalendarEvent>.from(_latestEvents);
       _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
     });
@@ -384,108 +300,53 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   /// Starts the reverse zoom animation (month → year).
   ///
-  /// Mirrors [_onMonthTapped] exactly, but with source/dest roles swapped:
-  ///   source (t=0) = full month-view cell positions
-  ///   dest   (t=1) = year-tile cell positions
+  /// Mirrors [_onMonthTapped] with source/dest roles swapped:
+  ///   source (t=0) = full month-view cell positions ([CalendarLayoutCache.destRects])
+  ///   dest   (t=1) = year-tile cell positions ([CalendarLayoutCache.tileSourceRects])
   /// The [Matrix4Tween] runs from zoomed-in → identity so the year grid flies
   /// back in rather than out.
   void _onReverseToYear() {
-    final areaBox =
-        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    if (areaBox == null || !areaBox.hasSize || !areaBox.attached) {
+    final cache = _layoutCache;
+    if (cache == null) {
       _immediatelySwitchToYear();
       return;
     }
 
-    // Measure source rects right now — the month grid is live with
-    // _fullMonthDayGridKey attached via the default _buildMainCalendar path.
-    final sourceRects = _computeDestRects();
-    if (sourceRects == null) {
-      _immediatelySwitchToYear();
-      return;
-    }
+    final idx = _focused.month - 1;
+    final morphTileRect = cache.tileBounds[idx];
+    final sourceRects = cache.destRects;
+    final destRects = cache.tileSourceRects[idx];
+    final areaSize = cache.areaSize;
+
+    _yearMatrixTween = Matrix4Tween(
+      begin: cache.tileZoomMatrices[idx],
+      end: Matrix4.identity(),
+    );
 
     final generation = _prepareMorphSession();
 
-    final areaW = areaBox.size.width;
-    final areaH = areaBox.size.height;
-
-    // Enter measurement phase: keep the month view visible while an Offstage
-    // year grid renders so we can measure year-tile positions next frame.
     setState(() {
       _isZooming = true;
       _morphReverse = true;
       _morphSourceRects = sourceRects;
-      _morphDestRects = null;
+      _morphDestRects = destRects;
       _morphMonth = _focused;
-      _morphTileRect = null;
-      _morphAreaSize = Size(areaW, areaH);
+      _morphTileRect = morphTileRect;
+      _morphAreaSize = areaSize;
       _morphEvents = List<CalendarEvent>.from(_latestEvents);
       _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || generation != _morphGeneration) return;
-
-      // Re-fetch areaBox — the reference captured before setState is detached
-      // once the measurement-phase widget tree replaces the month view.
-      final areaBox =
-          _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
-      final destRects = _computeSourceRects(_focused);
-      final tileKey = _monthTileKeys[_focused.month - 1];
-      final tileBox = tileKey.currentContext?.findRenderObject() as RenderBox?;
-
-      if (areaBox == null ||
-          !areaBox.hasSize ||
-          !areaBox.attached ||
-          destRects == null ||
-          tileBox == null ||
-          !tileBox.hasSize ||
-          !tileBox.attached) {
-        setState(() => _isZooming = false);
-        _immediatelySwitchToYear();
-        return;
-      }
-
-      final areaW = areaBox.size.width;
-      final areaH = areaBox.size.height;
-      final tileOrigin = areaBox.globalToLocal(
-        tileBox.localToGlobal(Offset.zero),
-      );
-      final tileW = tileBox.size.width;
-      final tileH = tileBox.size.height;
-      final morphTileRect = Rect.fromLTWH(
-        tileOrigin.dx,
-        tileOrigin.dy,
-        tileW,
-        tileH,
-      );
-
-      // Match forward path: anisotropic zoom keeps grid columns aligned.
-      _yearMatrixTween = Matrix4Tween(
-        begin: _yearGridZoomMatrix(morphTileRect, Size(areaW, areaH)),
-        end: Matrix4.identity(),
-      );
-
-      // Reset before the animation-phase rebuild for the same reason as the
-      // forward path: avoids a stale t=1 frame on first render.
-      _zoomController.reset();
-      setState(() {
-        _morphDestRects = destRects;
-        _morphTileRect = morphTileRect;
-      });
-
-      _startMorphAnimation(
-        generation: generation,
-        onComplete: () => setState(() {
-          _isZooming = false;
-          _morphReverse = false;
-          _mode = CalendarViewMode.year;
-          _focused = DateTime(_focused.year, 1, 1);
-          _clearMorphCache();
-        }),
-      );
-    });
+    _startMorphAnimation(
+      generation: generation,
+      onComplete: () => setState(() {
+        _isZooming = false;
+        _morphReverse = false;
+        _mode = CalendarViewMode.year;
+        _focused = DateTime(_focused.year, 1, 1);
+        _clearMorphCache();
+      }),
+    );
   }
 
   /// Falls back to an immediate view switch when measurement is unavailable.
@@ -569,7 +430,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required CalendarViewMode mode,
     required DateTime focused,
     DateTime? hiddenMonth,
-    GlobalKey? monthDayGridKey,
     bool monthNavigation = false,
   }) {
     return CalendarGrid(
@@ -580,14 +440,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       weekStartsMonday: weekStartsMonday,
       onDayTap: (day) => _openEditor(day: day),
       onMonthTap: _onMonthTapped,
-      monthTileKeyBuilder: mode == CalendarViewMode.year
-          ? (month) => _monthTileKeys[month.month - 1]
-          : null,
-      yearTileDayGridKeyBuilder: mode == CalendarViewMode.year
-          ? (month) => _yearTileDayGridKeys[month.month - 1]
-          : null,
       hiddenMonth: hiddenMonth,
-      monthDayGridKey: monthDayGridKey,
       onPreviousMonth: monthNavigation ? () => _shiftFocus(-1) : null,
       onNextMonth: monthNavigation ? () => _shiftFocus(1) : null,
     );
@@ -634,45 +487,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
     }
 
-    // ---- Reverse measurement phase -------------------------------------------
-    // Show the current month view (unchanged) while an Offstage year grid
-    // renders so we can measure year-tile positions on the next frame.
-    if (_isZooming &&
-        _morphReverse &&
-        _morphMonth != null &&
-        _morphDestRects == null) {
-      final morphMonth = _morphMonth!;
-      return IgnorePointer(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _calendarGrid(
-              events: activeEvents,
-              indicators: activeIndicators,
-              weekStartsMonday: weekStartsMonday,
-              mode: CalendarViewMode.month,
-              focused: morphMonth,
-              monthNavigation: true,
-            ),
-            // Offstage year grid — laid out for measurement only.
-            Offstage(
-              offstage: true,
-              child: _calendarGrid(
-                events: activeEvents,
-                indicators: activeIndicators,
-                weekStartsMonday: weekStartsMonday,
-                mode: CalendarViewMode.year,
-                focused: DateTime(morphMonth.year, 1, 1),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     if (_isZooming &&
         _yearMatrixTween != null &&
         _morphSourceRects != null &&
+        _morphDestRects != null &&
         _morphMonth != null &&
         _morphTileRect != null &&
         _morphAreaSize != null) {
@@ -682,10 +500,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       final controller = _zoomController;
       final tileRect = _morphTileRect!;
       final areaSize = _morphAreaSize!;
-
-      if (_morphDestRects == null) {
-        return const SizedBox.shrink();
-      }
 
       final (compactWeekdayStyle, fullWeekdayStyle) = _weekdayMorphStyles(
         context,
@@ -728,7 +542,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             weekStartsMonday: weekStartsMonday,
             mode: CalendarViewMode.month,
             focused: morphMonth,
-            monthDayGridKey: _fullMonthDayGridKey,
             monthNavigation: true,
           ),
           morphOverlay: morphLayer,
@@ -746,11 +559,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       focused: _mode == CalendarViewMode.year
           ? DateTime(_focused.year, 1, 1)
           : _focused,
-      // Keep the key attached to the live month grid so _computeDestRects()
-      // can measure cell positions immediately when the reverse animation starts.
-      monthDayGridKey: _mode == CalendarViewMode.month
-          ? _fullMonthDayGridKey
-          : null,
       monthNavigation: _mode == CalendarViewMode.month,
     );
   }
@@ -872,13 +680,18 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: KeyedSubtree(
-                            key: _calendarAreaKey,
-                            child: _buildMainCalendar(
-                              events: calendarEvents,
-                              indicators: indicators,
-                              weekStartsMonday: weekStartsMonday,
-                            ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              _refreshLayoutCache(constraints.biggest);
+                              return KeyedSubtree(
+                                key: _calendarAreaKey,
+                                child: _buildMainCalendar(
+                                  events: calendarEvents,
+                                  indicators: indicators,
+                                  weekStartsMonday: weekStartsMonday,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -960,12 +773,116 @@ List<Rect> _calendarWarmupSourceRects(
 }
 
 // =============================================================================
+// CalendarLayoutCache — pre-computed morph geometry, zero render-object reads
+// =============================================================================
+
+/// Analytically pre-computes all geometry needed for the year↔month morph
+/// animations so that neither the forward nor the reverse path needs to
+/// measure any render objects at tap time.
+///
+/// All coordinates are in calendar-area-local space.  The cache is keyed on
+/// [areaSize]; call [compute] again whenever the area resizes.
+class CalendarLayoutCache {
+  const CalendarLayoutCache._({
+    required this.areaSize,
+    required this.tileBounds,
+    required this.tileSourceRects,
+    required this.tileZoomMatrices,
+    required this.destRects,
+  });
+
+  /// The area size this cache was built for.
+  final Size areaSize;
+
+  /// Outer bounding [Rect] of each of the 12 year-grid tiles (index = month−1).
+  final List<Rect> tileBounds;
+
+  /// 42 source-cell [Rect]s inside each tile's [MonthDayGrid] (index = month−1).
+  final List<List<Rect>> tileSourceRects;
+
+  /// Zoom [Matrix4] (tile → full area) for each of the 12 tiles.
+  final List<Matrix4> tileZoomMatrices;
+
+  /// 42 destination-cell [Rect]s for the full-screen month view.
+  final List<Rect> destRects;
+
+  // Year-grid layout constants — must match _YearGrid.
+  static const _crossAxisCount = 3;
+  static const _rowCount = 4;
+  static const _crossAxisSpacing = 8.0;
+  static const _mainAxisSpacing = 6.0;
+
+  /// Builds the cache from [areaSize] and resolved text styles.
+  ///
+  /// Pure math — no widget mounting, no frame waits, no render-object reads.
+  factory CalendarLayoutCache.compute({
+    required Size areaSize,
+    required TextStyle yearTileNameStyle,
+    required TextStyle compactWeekdayStyle,
+    required TextStyle fullTitleStyle,
+    required TextStyle fullWeekdayStyle,
+  }) {
+    final tileW =
+        (areaSize.width - _crossAxisSpacing * (_crossAxisCount - 1)) /
+        _crossAxisCount;
+    final tileH =
+        (areaSize.height - _mainAxisSpacing * (_rowCount - 1)) / _rowCount;
+
+    final tileBounds = <Rect>[];
+    final tileSourceRects = <List<Rect>>[];
+    final tileZoomMatrices = <Matrix4>[];
+
+    for (var i = 0; i < 12; i++) {
+      final col = i % _crossAxisCount;
+      final row = i ~/ _crossAxisCount;
+      final tileRect = Rect.fromLTWH(
+        col * (tileW + _crossAxisSpacing),
+        row * (tileH + _mainAxisSpacing),
+        tileW,
+        tileH,
+      );
+      tileBounds.add(tileRect);
+      tileSourceRects.add(
+        _calendarWarmupSourceRects(tileRect, yearTileNameStyle, compactWeekdayStyle),
+      );
+      tileZoomMatrices.add(_zoomMatrixForTile(tileRect, areaSize));
+    }
+
+    final destRects = MonthTitleHeader.dayCellRects(
+      areaSize,
+      fullTitleStyle,
+      weekdayLabelStyle: fullWeekdayStyle,
+    );
+
+    return CalendarLayoutCache._(
+      areaSize: areaSize,
+      tileBounds: tileBounds,
+      tileSourceRects: tileSourceRects,
+      tileZoomMatrices: tileZoomMatrices,
+      destRects: destRects,
+    );
+  }
+
+  static Matrix4 _zoomMatrixForTile(Rect tileRect, Size areaSize) {
+    final sx = areaSize.width / tileRect.width;
+    final sy = areaSize.height / tileRect.height;
+    return Matrix4.identity()
+      ..translateByDouble(-tileRect.left * sx, -tileRect.top * sy, 0, 1)
+      ..scaleByDouble(sx, sy, 1, 1);
+  }
+}
+
+// =============================================================================
 // CalendarMorphWarmup — placed in AppShell so GPU shaders compile at login
 // =============================================================================
 
-/// Renders the calendar morph stack for two frames immediately after login so
-/// the GPU rasteriser compiles all shaders before the user first opens the
+/// Renders the calendar morph stack for four frames immediately after login
+/// so the GPU rasteriser compiles all shaders before the user first opens the
 /// calendar.  Uses [Opacity] (not [Offstage]) so painting actually occurs.
+///
+/// Frames 1-2 render with [morphReverse]=false (forward: year→month paths).
+/// Frames 3-4 render with [morphReverse]=true (reverse: inverted lerps and
+/// the zoomed→identity [Matrix4Tween] path).
 class CalendarMorphWarmup extends StatefulWidget {
   const CalendarMorphWarmup({super.key});
 
@@ -981,6 +898,12 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
   late final AnimationController _controller;
   bool _done = false;
 
+  // Cycles through 4 warmup frames:
+  //   steps 0-1 → morphReverse=false  (forward shader paths)
+  //   steps 2-3 → morphReverse=true   (reverse lerps + inverted Matrix4Tween)
+  int _step = 0;
+  bool _morphReverse = false;
+
   @override
   void initState() {
     super.initState();
@@ -988,15 +911,26 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _controller.value = 0.12;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _controller.reset();
-        setState(() => _done = true);
-      });
-    });
+    _controller.value = 0.1;
+    WidgetsBinding.instance.addPostFrameCallback(_advanceWarmup);
+  }
+
+  void _advanceWarmup(Duration _) {
+    if (!mounted) return;
+    _step++;
+    if (_step >= 4) {
+      setState(() => _done = true);
+      return;
+    }
+    if (_step == 2) {
+      // Flip to reverse: forces the GPU to compile inverted lerps and the
+      // reverse Matrix4Tween path.  ValueKey in build triggers a full
+      // _MorphAnimationLayer rebuild so its initState re-runs with the new flag.
+      setState(() => _morphReverse = true);
+    } else {
+      setState(() {});
+    }
+    WidgetsBinding.instance.addPostFrameCallback(_advanceWarmup);
   }
 
   @override
@@ -1028,6 +962,18 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
       weekdayLabelStyle: full,
     );
 
+    // For the reverse frames the tween must run zoomed→identity so the GPU
+    // compiles the inverted matrix interpolation code path.
+    final yearTween = _morphReverse
+        ? Matrix4Tween(
+            begin: _zoomMatrix(_tileRect, _areaSize),
+            end: Matrix4.identity(),
+          )
+        : Matrix4Tween(
+            begin: Matrix4.identity(),
+            end: _zoomMatrix(_tileRect, _areaSize),
+          );
+
     // SizedBox.shrink + OverflowBox renders the warmup widget at its real size
     // while occupying zero layout space.  Opacity > 0 ensures actual painting
     // so Skia/Impeller pipeline shaders are compiled on this frame.
@@ -1036,28 +982,29 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
         alignment: Alignment.topLeft,
         maxWidth: _areaSize.width,
         maxHeight: _areaSize.height,
-        child: Opacity(
-          opacity: 1 / 255,
-          child: _MorphAnimationLayer(
-            key: const ValueKey('calendar-morph-warmup'),
-            controller: _controller,
-            yearTween: Matrix4Tween(
-              begin: Matrix4.identity(),
-              end: _zoomMatrix(_tileRect, _areaSize),
+        child: IgnorePointer(
+          child: Opacity(
+            opacity: 1 / 255,
+            child: _MorphAnimationLayer(
+              // ValueKey forces a full rebuild when morphReverse flips so that
+              // _MorphAnimationLayerState.initState re-runs with the new flag.
+              key: ValueKey(_morphReverse),
+              controller: _controller,
+              yearTween: yearTween,
+              sourceRects: sourceRects,
+              destRects: destRects,
+              morphReverse: _morphReverse,
+              tileRect: _tileRect,
+              areaSize: _areaSize,
+              morphMonth: morphMonth,
+              dates: dates,
+              weekStartsMonday: true,
+              compactWeekdayStyle: compact,
+              fullWeekdayStyle: full,
+              yearMonthNameStyle: yearName,
+              monthTitleStyle: monthTitle,
+              yearGrid: const SizedBox.expand(),
             ),
-            sourceRects: sourceRects,
-            destRects: destRects,
-            morphReverse: false,
-            tileRect: _tileRect,
-            areaSize: _areaSize,
-            morphMonth: morphMonth,
-            dates: dates,
-            weekStartsMonday: true,
-            compactWeekdayStyle: compact,
-            fullWeekdayStyle: full,
-            yearMonthNameStyle: yearName,
-            monthTitleStyle: monthTitle,
-            yearGrid: const SizedBox.expand(),
           ),
         ),
       ),

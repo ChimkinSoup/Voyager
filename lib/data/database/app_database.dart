@@ -401,10 +401,16 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 20) {
-        await migrator.addColumn(
-          settingsTable,
-          settingsTable.weatherChartCurveTension,
-        );
+        // Guard against duplicate-column error if the column was already added
+        // by a previous partial migration (e.g. after a hot restart mid-run).
+        try {
+          await migrator.addColumn(
+            settingsTable,
+            settingsTable.weatherChartCurveTension,
+          );
+        } on Exception catch (_) {
+          // Column already exists — safe to proceed.
+        }
       }
     },
   );

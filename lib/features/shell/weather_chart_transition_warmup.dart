@@ -79,7 +79,7 @@ class WeatherChartTransitionWarmup extends ConsumerStatefulWidget {
   const WeatherChartTransitionWarmup({super.key});
 
   /// How long to wait after login before starting the weather shader warmup.
-  /// Long enough for CalendarMorphWarmup's 2 frame-callbacks to finish.
+  /// Long enough for CalendarMorphWarmup's 4 warmup frames to finish.
   static const _startDelay = Duration(milliseconds: 800);
 
   @override
@@ -97,7 +97,7 @@ class _WeatherChartTransitionWarmupState
   @override
   void initState() {
     super.initState();
-    // Delay so CalendarMorphWarmup gets its two frame-callbacks uncontested.
+    // Delay so CalendarMorphWarmup gets its four warmup frames uncontested.
     _startTimer = Timer(
       WeatherChartTransitionWarmup._startDelay,
       () {
