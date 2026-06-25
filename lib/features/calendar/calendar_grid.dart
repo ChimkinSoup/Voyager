@@ -17,6 +17,12 @@ export 'calendar_day_grid.dart'
         MonthDayGrid,
         WeekdayHeaderRow,
         WeekdayMorphMetrics,
+        calendarAdjacentMonthBorderOpacity,
+        calendarAdjacentMonthColor,
+        calendarTitleAccentColor,
+        calendarWeekdayAccentColor,
+        calendarWeekdayFontSizeScale,
+        calendarWeekdayLabelStyle,
         monthDayGridWeekdayHeaderGap,
         monthGridDates;
 
@@ -229,6 +235,7 @@ class MonthTitleHeader extends StatelessWidget {
     this.navSpread = 1.0,
     this.showTitle = true,
     this.morphTitleStyle,
+    this.navCenterY,
   });
 
   final DateTime month;
@@ -247,15 +254,68 @@ class MonthTitleHeader extends StatelessWidget {
   /// Lerped title style during morph; uses [titleFontSize] when null.
   final TextStyle? morphTitleStyle;
 
+  /// Y offset from the top of the header row to the vertical centre of the
+  /// nav icons. When null, derived from measured title glyph metrics.
+  final double? navCenterY;
+
   static const titleFontSize = 36.0;
   static const navIconSize = 24.0;
   static const navTapSize = 32.0;
   static const navSpacing = 8.0;
   static const cardPadding = 8.0;
-  static const titleGap = 4.0;
+  static const titleGap = 8.0;
   // Longest English month name — sets a fixed row width so arrow spacing is
   // identical for every month (June, September, etc.).
   static const _widthReferenceMonth = 'September';
+  static const heightReferenceText = 'May';
+
+  static const _titleTextHeightBehavior = TextHeightBehavior(
+    applyHeightToFirstAscent: true,
+    applyHeightToLastDescent: true,
+  );
+
+  static const titleTextHeightBehavior = _titleTextHeightBehavior;
+
+  /// Measures the laid-out bounds of [text] for nav alignment.
+  static Size measureTitleText(TextStyle titleStyle, String text) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: titleStyle),
+      textDirection: TextDirection.ltr,
+      textHeightBehavior: _titleTextHeightBehavior,
+    )..layout();
+    return Size(painter.width, painter.height);
+  }
+
+  /// Distance from the top of the laid-out [text] to its cap-height centre.
+  static double textVisualCenterDy(TextStyle titleStyle, String text) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: titleStyle),
+      textDirection: TextDirection.ltr,
+      textHeightBehavior: _titleTextHeightBehavior,
+    )..layout();
+    final baseline = painter.computeDistanceToActualBaseline(
+      TextBaseline.alphabetic,
+    );
+    final fontSize = titleStyle.fontSize ?? 14;
+    return baseline - fontSize * 0.35;
+  }
+
+  static TextStyle yearTileMonthNameStyle(BuildContext context) {
+    return Theme.of(context).textTheme.titleSmall!.copyWith(
+      color: calendarTitleAccentColor(context),
+    );
+  }
+
+  static TextStyle resolveTitleStyle(
+    BuildContext context, {
+    TextStyle? morphTitleStyle,
+  }) {
+    return morphTitleStyle ??
+        Theme.of(context).textTheme.titleSmall!.copyWith(
+          fontSize: titleFontSize,
+          color: calendarTitleAccentColor(context),
+        );
+  }
 
   /// Fixed width of the title + nav row for [titleStyle].
   static double titleRowWidth(TextStyle titleStyle) {
@@ -269,8 +329,9 @@ class MonthTitleHeader extends StatelessWidget {
   /// Matches the laid-out height of the title row in [_MonthGrid].
   static double preferredHeight(TextStyle titleStyle) {
     final painter = TextPainter(
-      text: TextSpan(text: 'Mg', style: titleStyle),
+      text: TextSpan(text: heightReferenceText, style: titleStyle),
       textDirection: TextDirection.ltr,
+      textHeightBehavior: _titleTextHeightBehavior,
     )..layout();
     return max(navTapSize, painter.height);
   }
@@ -312,18 +373,25 @@ class MonthTitleHeader extends StatelessWidget {
         onNextMonth != null ||
         spread > 0 ||
         opacity > 0;
-    final titleStyle =
-        morphTitleStyle ??
-        Theme.of(
-          context,
-        ).textTheme.titleSmall!.copyWith(fontSize: titleFontSize);
+    final titleStyle = resolveTitleStyle(
+      context,
+      morphTitleStyle: morphTitleStyle,
+    );
+    final monthName = DateFormat.MMMM().format(month);
+    final textSize = measureTitleText(titleStyle, monthName);
     final rowWidth = titleRowWidth(titleStyle);
     final rowHeight = preferredHeight(titleStyle);
+    final textLeft = (rowWidth - textSize.width) / 2;
+    final textTop = (rowHeight - textSize.height) / 2;
+    final textCenterX = textLeft + textSize.width / 2;
+    final iconCenterY =
+        navCenterY ?? textTop + textVisualCenterDy(titleStyle, monthName);
+    final navTop = iconCenterY - navTapSize / 2;
     final leftFinal = 0.0;
     final rightFinal = rowWidth - navTapSize;
-    final centerLeft = (rowWidth - navTapSize) / 2;
-    final leftPos = centerLeft + (leftFinal - centerLeft) * spread;
-    final rightPos = centerLeft + (rightFinal - centerLeft) * spread;
+    final collapsedLeft = textCenterX - navTapSize / 2;
+    final leftPos = collapsedLeft + (leftFinal - collapsedLeft) * spread;
+    final rightPos = collapsedLeft + (rightFinal - collapsedLeft) * spread;
 
     return Center(
       child: SizedBox(
@@ -331,18 +399,23 @@ class MonthTitleHeader extends StatelessWidget {
         height: rowHeight,
         child: Stack(
           clipBehavior: Clip.none,
-          alignment: Alignment.center,
           children: [
             if (showTitle)
-              Text(
-                DateFormat.MMMM().format(month),
-                style: titleStyle,
-                textAlign: TextAlign.center,
+              Positioned(
+                left: textLeft,
+                top: textTop,
+                width: textSize.width,
+                child: Text(
+                  monthName,
+                  style: titleStyle,
+                  textAlign: TextAlign.center,
+                  textHeightBehavior: _titleTextHeightBehavior,
+                ),
               ),
             if (showNav) ...[
               Positioned(
                 left: leftPos,
-                top: (rowHeight - navTapSize) / 2,
+                top: navTop,
                 width: navTapSize,
                 height: navTapSize,
                 child: _navControl(
@@ -353,7 +426,7 @@ class MonthTitleHeader extends StatelessWidget {
               ),
               Positioned(
                 left: rightPos,
-                top: (rowHeight - navTapSize) / 2,
+                top: navTop,
                 width: navTapSize,
                 height: navTapSize,
                 child: _navControl(
@@ -421,31 +494,35 @@ class MorphMonthTitle extends StatelessWidget {
     final opacity = navOpacity.clamp(0.0, 1.0);
     final spread = navSpread.clamp(0.0, 1.0);
     final showNav = opacity > 0.01;
-    final rowWidth = MonthTitleHeader.titleRowWidth(monthTitleStyle);
-    final rowHeight = MonthTitleHeader.preferredHeight(monthTitleStyle);
+    final navCenterY = MonthTitleHeader.textVisualCenterDy(
+      titleStyle,
+      monthName,
+    );
 
-    return SizedBox(
-      width: rowWidth,
-      height: rowHeight,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          Text(
+    return Stack(
+      clipBehavior: Clip.none,
+      fit: StackFit.expand,
+      children: [
+        Align(
+          alignment: Alignment.topCenter,
+          child: Text(
             monthName,
             style: titleStyle,
             textAlign: TextAlign.center,
             maxLines: 1,
+            textHeightBehavior: MonthTitleHeader.titleTextHeightBehavior,
           ),
-          if (showNav)
-            MonthTitleHeader(
-              month: month,
-              navOpacity: opacity,
-              navSpread: spread,
-              showTitle: false,
-            ),
-        ],
-      ),
+        ),
+        if (showNav)
+          MonthTitleHeader(
+            month: month,
+            navOpacity: opacity,
+            navSpread: spread,
+            showTitle: false,
+            morphTitleStyle: titleStyle,
+            navCenterY: navCenterY,
+          ),
+      ],
     );
   }
 }
@@ -487,7 +564,7 @@ class _MonthGrid extends StatelessWidget {
               onPreviousMonth: onPreviousMonth,
               onNextMonth: onNextMonth,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: MonthTitleHeader.titleGap),
             WeekdayHeaderRow(weekStartsMonday: weekStartsMonday),
             const SizedBox(height: monthDayGridWeekdayHeaderGap),
             Expanded(
@@ -675,16 +752,18 @@ class _YearGrid extends StatelessWidget {
               children: [
                 Text(
                   DateFormat.MMMM().format(monthDate),
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: MonthTitleHeader.yearTileMonthNameStyle(context),
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  textHeightBehavior: MonthTitleHeader.titleTextHeightBehavior,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: MonthTitleHeader.titleGap),
                 WeekdayHeaderRow(
                   weekStartsMonday: weekStartsMonday,
                   useSingleLetterLabels: true,
-                  labelStyle: AppFonts.style(
+                  labelStyle: calendarWeekdayLabelStyle(
+                    context,
                     fontSize: MonthDayCellStyle.compact.fontSize,
                   ),
                 ),

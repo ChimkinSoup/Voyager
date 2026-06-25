@@ -44,6 +44,36 @@ List<DateTime> monthGridDates(
 /// Text opacity for day numbers outside the displayed month (padding weeks).
 const calendarAdjacentMonthTextOpacity = 0.20;
 
+/// Border opacity for padding-week cells in the full month grid (fainter than text).
+const calendarAdjacentMonthBorderOpacity = 0.10;
+
+Color calendarTitleAccentColor(BuildContext context) =>
+    Theme.of(context).colorScheme.primary;
+
+Color calendarWeekdayAccentColor(BuildContext context) => Color.lerp(
+  Theme.of(context).colorScheme.primary,
+  Colors.white,
+  0.5,
+)!;
+
+Color calendarAdjacentMonthColor(BuildContext context) =>
+    Theme.of(context).colorScheme.onSurface.withValues(
+      alpha: calendarAdjacentMonthTextOpacity,
+    );
+
+TextStyle calendarWeekdayLabelStyle(
+  BuildContext context, {
+  double? fontSize,
+}) {
+  final size = calendarWeekdayFontSize(context, baseFontSize: fontSize);
+  return Theme.of(context).textTheme.labelSmall!.copyWith(
+    color: calendarWeekdayAccentColor(context),
+    fontWeight: FontWeight.bold,
+    fontSize: size,
+    height: 1.0,
+  );
+}
+
 /// Visual density for [CalendarDayCell] — compact in year tiles, full in month view.
 class MonthDayCellStyle {
   const MonthDayCellStyle({
@@ -116,6 +146,13 @@ class CalendarDayCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final inMonth = date.month == month.month;
     final divider = Theme.of(context).dividerColor;
+    final isFullLayout = !style.isCompactLayout;
+    final borderColor = inMonth || !isFullLayout
+        ? divider
+        : calendarAdjacentMonthColor(context);
+    final borderAlpha = inMonth || !isFullLayout
+        ? style.borderOpacity
+        : calendarAdjacentMonthBorderOpacity;
 
     final cell = Container(
       width: double.infinity,
@@ -124,7 +161,9 @@ class CalendarDayCell extends StatelessWidget {
       padding: style.cellPadding,
       decoration: BoxDecoration(
         border: Border.all(
-          color: divider.withValues(alpha: style.borderOpacity.clamp(0.0, 1.0)),
+          color: borderColor.withValues(
+            alpha: borderAlpha.clamp(0.0, 1.0),
+          ),
         ),
         borderRadius: BorderRadius.circular(style.borderRadius),
       ),
@@ -237,8 +276,9 @@ class CalendarDayNumber extends StatelessWidget {
     final accent = Theme.of(context).colorScheme.primary;
     final isToday = calendarIsToday(date);
     final muted = mutedWhenAdjacent && date.month != month.month;
+    final mutedColor = calendarAdjacentMonthColor(context);
     final diameter = fontSize + (fontSize <= 9 ? 3 : 8);
-    final showSelection = isSelected && !isToday;
+    final showSelection = isSelected && !isToday && !muted;
 
     return Center(
       child: Container(
@@ -268,9 +308,7 @@ class CalendarDayNumber extends StatelessWidget {
             color: isToday
                 ? Theme.of(context).colorScheme.onPrimary
                 : muted
-                ? Theme.of(context).colorScheme.onSurface.withValues(
-                    alpha: calendarAdjacentMonthTextOpacity,
-                  )
+                ? mutedColor
                 : Theme.of(context).colorScheme.onSurface,
           ),
         ),
@@ -313,7 +351,19 @@ class CalendarDayIndicatorDots extends StatelessWidget {
 }
 
 /// Gap between weekday labels and the first day-cell row in [MonthDayGrid].
-const monthDayGridWeekdayHeaderGap = 4.0;
+const monthDayGridWeekdayHeaderGap = 8.0;
+
+/// Weekday labels render at [labelSmall] × this scale in month/year views.
+const calendarWeekdayFontSizeScale = 1.05;
+
+double calendarWeekdayFontSize(
+  BuildContext context, {
+  double? baseFontSize,
+}) {
+  final base =
+      baseFontSize ?? Theme.of(context).textTheme.labelSmall!.fontSize ?? 12;
+  return base * calendarWeekdayFontSizeScale;
+}
 
 /// Weekday label row shown above the month day grid.
 class WeekdayHeaderRow extends StatelessWidget {
@@ -356,7 +406,7 @@ class WeekdayHeaderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = labelStyle ?? Theme.of(context).textTheme.labelSmall!;
+    final style = labelStyle ?? calendarWeekdayLabelStyle(context);
     final labels = useSingleLetterLabels
         ? (weekStartsMonday
               ? calendarWeekdayLettersMonday
@@ -410,6 +460,9 @@ class WeekdayMorphMetrics {
     )..layout();
     return painter.width;
   }
+
+  static double measureTextWidth(String text, TextStyle style) =>
+      _textWidth(text, style);
 
   static List<WeekdayMorphMetrics> columnsFor({
     required bool weekStartsMonday,
@@ -524,6 +577,19 @@ class _MorphWeekdayColumn extends StatelessWidget {
     );
   }
 
+  double _blockWidth(TextStyle style, List<String> suffixChars, double styleT) {
+    if (styleT <= 0) return metrics.compactLetterWidth;
+    if (styleT >= 1) return metrics.fullFullWidth;
+
+    var width = WeekdayMorphMetrics.measureTextWidth(metrics.letter, style);
+    for (var i = 0; i < suffixChars.length; i++) {
+      width +=
+          metrics.suffixCharFullWidths[i] *
+          _suffixCharT(i, suffixChars.length, styleT);
+    }
+    return width;
+  }
+
   @override
   Widget build(BuildContext context) {
     final style = TextStyle.lerp(compactStyle, fullStyle, styleT)!;
@@ -534,23 +600,51 @@ class _MorphWeekdayColumn extends StatelessWidget {
     final rowHeight =
         metrics.compactHeight +
         (metrics.fullHeight - metrics.compactHeight) * styleT;
-    return SizedBox(
-      height: rowHeight,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(metrics.letter, style: style),
-            for (var i = 0; i < suffixChars.length; i++)
-              Opacity(
-                opacity: _suffixCharT(i, suffixChars.length, styleT),
-                child: Text(suffixChars[i], style: style),
-              ),
-          ],
-        ),
-      ),
+
+    final blockWidth = _blockWidth(style, suffixChars, styleT);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final blockLeft = (constraints.maxWidth - blockWidth) / 2;
+
+        return SizedBox(
+          height: rowHeight,
+          child: ClipRect(
+            child: Stack(
+              children: [
+                Positioned(
+                  left: blockLeft,
+                  top: 0,
+                  height: rowHeight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(metrics.letter, style: style),
+                      for (var i = 0; i < suffixChars.length; i++)
+                        SizedBox(
+                          width:
+                              metrics.suffixCharFullWidths[i] *
+                              _suffixCharT(
+                                i,
+                                suffixChars.length,
+                                styleT,
+                              ),
+                          child: ClipRect(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(suffixChars[i], style: style),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

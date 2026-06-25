@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -122,11 +121,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
   }
 
-  List<Rect> _warmupSourceRects(Rect tileRect, TextStyle monthTitleStyle) {
+  List<Rect> _warmupSourceRects(Rect tileRect, TextStyle yearTitleStyle) {
     const tilePadding = 6.0;
-    const monthTitleGap = 4.0;
-    final titleHeight = MonthTitleHeader.preferredHeight(monthTitleStyle);
-    final weekdayStyle = AppFonts.style(
+    final titleHeight =
+        MonthTitleHeader.measureTitleText(yearTitleStyle, 'June').height;
+    final weekdayStyle = calendarWeekdayLabelStyle(
+      context,
       fontSize: MonthDayCellStyle.compact.fontSize,
     );
     final weekdayHeight = WeekdayHeaderRow.totalHeight(
@@ -134,11 +134,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       useSingleLetterLabels: true,
     );
     final gridLeft = tileRect.left + tilePadding;
-    final gridTop =
-        tileRect.top +
+    final gridTop = tileRect.top +
         tilePadding +
         titleHeight +
-        monthTitleGap +
+        MonthTitleHeader.titleGap +
         weekdayHeight;
     final gridW = tileRect.width - tilePadding * 2;
     final gridH = tileRect.height - (gridTop - tileRect.top) - tilePadding;
@@ -322,10 +321,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   (TextStyle compact, TextStyle full) _weekdayMorphStyles(
     BuildContext context,
   ) {
-    final full = Theme.of(context).textTheme.labelSmall!;
-    final compact = AppFonts.style(
+    final full = calendarWeekdayLabelStyle(context);
+    final compact = calendarWeekdayLabelStyle(
+      context,
       fontSize: MonthDayCellStyle.compact.fontSize,
-      color: full.color,
     ).copyWith(inherit: false);
     return (compact, full);
   }
@@ -333,10 +332,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   (TextStyle yearMonth, TextStyle monthTitle) _titleMorphStyles(
     BuildContext context,
   ) {
-    final yearMonth = Theme.of(context).textTheme.titleSmall!;
-    final monthTitle = Theme.of(
-      context,
-    ).textTheme.titleSmall!.copyWith(fontSize: MonthTitleHeader.titleFontSize);
+    final color = calendarTitleAccentColor(context);
+    final yearMonth = MonthTitleHeader.yearTileMonthNameStyle(context);
+    final monthTitle = Theme.of(context).textTheme.titleSmall!.copyWith(
+      fontSize: MonthTitleHeader.titleFontSize,
+      color: color,
+    );
     return (yearMonth, monthTitle);
   }
 
@@ -431,13 +432,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     // Destination cell layout mirrors _MonthGrid — compute synchronously so we
     // can skip the offstage measurement frame that caused a visible stall.
-    final titleStyle = Theme.of(
-      context,
-    ).textTheme.titleSmall!.copyWith(fontSize: MonthTitleHeader.titleFontSize);
+    final titleStyle = Theme.of(context).textTheme.titleSmall!.copyWith(
+      fontSize: MonthTitleHeader.titleFontSize,
+      color: calendarTitleAccentColor(context),
+    );
     final destRects = MonthTitleHeader.dayCellRects(
       Size(areaW, areaH),
       titleStyle,
-      weekdayLabelStyle: Theme.of(context).textTheme.labelSmall,
+      weekdayLabelStyle: calendarWeekdayLabelStyle(context),
     );
 
     final generation = _prepareMorphSession();
@@ -1140,28 +1142,31 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
       widget.fullWeekdayStyle,
     );
 
+    _monthName = DateFormat.MMMM().format(widget.morphMonth);
+
+    final yearTitleSize = MonthTitleHeader.measureTitleText(
+      widget.yearMonthNameStyle,
+      MonthTitleHeader.heightReferenceText,
+    );
     final tileHeaderTop = widget.tileRect.top + 6;
     _sourceTitleRect = Rect.fromLTWH(
       widget.tileRect.left + 6,
       tileHeaderTop,
       widget.tileRect.width - 12,
-      (_sourceWeekdayRect.top - tileHeaderTop - 4).clamp(4.0, double.infinity),
+      yearTitleSize.height,
     );
     _destTitleRect = Rect.fromLTWH(
       MonthTitleHeader.cardPadding,
       MonthTitleHeader.cardPadding,
       widget.areaSize.width - MonthTitleHeader.cardPadding * 2,
-      (_destWeekdayRect.top - MonthTitleHeader.cardPadding - 4).clamp(
-        8.0,
-        double.infinity,
-      ),
+      MonthTitleHeader.preferredHeight(widget.monthTitleStyle),
     );
+
     _weekdayMetrics = WeekdayMorphMetrics.columnsFor(
       weekStartsMonday: widget.weekStartsMonday,
       compactStyle: widget.compactWeekdayStyle,
       fullStyle: widget.fullWeekdayStyle,
     );
-    _monthName = DateFormat.MMMM().format(widget.morphMonth);
 
     _cellChildren = [
       for (var i = 0; i < 42; i++)
@@ -1236,17 +1241,14 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                     top: titleRect.top,
                     width: titleRect.width,
                     height: titleRect.height,
-                    child: Align(
-                      alignment: Alignment.center,
-                      child: MorphMonthTitle(
-                        month: widget.morphMonth,
-                        monthName: _monthName,
-                        styleT: styleT,
-                        yearTitleStyle: widget.yearMonthNameStyle,
-                        monthTitleStyle: widget.monthTitleStyle,
-                        navOpacity: navOpacity,
-                        navSpread: navSpread,
-                      ),
+                    child: MorphMonthTitle(
+                      month: widget.morphMonth,
+                      monthName: _monthName,
+                      styleT: styleT,
+                      yearTitleStyle: widget.yearMonthNameStyle,
+                      monthTitleStyle: widget.monthTitleStyle,
+                      navOpacity: navOpacity,
+                      navSpread: navSpread,
                     ),
                   ),
                   Positioned(
@@ -1350,12 +1352,21 @@ class _MorphCell extends StatelessWidget {
             styleT;
 
     final dividerColor = Theme.of(context).dividerColor;
+    final inMonth = date.month == month.month;
+    final compactBorderAlpha = MonthDayCellStyle.compact.borderOpacity;
+    final fullBorderAlpha = inMonth
+        ? MonthDayCellStyle.full.borderOpacity
+        : calendarAdjacentMonthBorderOpacity;
+    final fullBorderColor =
+        inMonth ? dividerColor : calendarAdjacentMonthColor(context);
+    final borderAlpha =
+        compactBorderAlpha + (fullBorderAlpha - compactBorderAlpha) * styleT;
 
     return Container(
       margin: EdgeInsets.all(cellMargin),
       decoration: BoxDecoration(
         border: Border.all(
-          color: dividerColor.withValues(alpha: styleT.clamp(0.0, 1.0)),
+          color: fullBorderColor.withValues(alpha: borderAlpha.clamp(0.0, 1.0)),
         ),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
