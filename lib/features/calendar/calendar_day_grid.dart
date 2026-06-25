@@ -185,7 +185,9 @@ class CalendarDayCell extends StatelessWidget {
                             event.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppFonts.style(fontSize: style.eventFontSize),
+                            style: AppFonts.style(
+                              fontSize: style.eventFontSize,
+                            ),
                           ),
                         ),
                       ),
@@ -310,6 +312,9 @@ class CalendarDayIndicatorDots extends StatelessWidget {
   }
 }
 
+/// Gap between weekday labels and the first day-cell row in [MonthDayGrid].
+const monthDayGridWeekdayHeaderGap = 4.0;
+
 /// Weekday label row shown above the month day grid.
 class WeekdayHeaderRow extends StatelessWidget {
   const WeekdayHeaderRow({
@@ -317,14 +322,41 @@ class WeekdayHeaderRow extends StatelessWidget {
     required this.weekStartsMonday,
     this.opacity = 1,
     this.useSingleLetterLabels = false,
+    this.labelStyle,
   });
 
   final bool weekStartsMonday;
   final double opacity;
   final bool useSingleLetterLabels;
+  final TextStyle? labelStyle;
+
+  /// Text height for a single weekday label row (excludes the gap below).
+  ///
+  /// Year tiles use single-letter labels — pass [useSingleLetterLabels] so
+  /// layout math matches this widget instead of over-estimating with `'Mg'`.
+  static double labelHeight(
+    TextStyle labelStyle, {
+    bool useSingleLetterLabels = false,
+  }) {
+    final sample = useSingleLetterLabels ? 'M' : 'Mg';
+    final painter = TextPainter(
+      text: TextSpan(text: sample, style: labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return painter.height;
+  }
+
+  /// Row height plus the gap before the day grid.
+  static double totalHeight(
+    TextStyle labelStyle, {
+    bool useSingleLetterLabels = false,
+  }) =>
+      labelHeight(labelStyle, useSingleLetterLabels: useSingleLetterLabels) +
+      monthDayGridWeekdayHeaderGap;
 
   @override
   Widget build(BuildContext context) {
+    final style = labelStyle ?? Theme.of(context).textTheme.labelSmall!;
     final labels = useSingleLetterLabels
         ? (weekStartsMonday
               ? calendarWeekdayLettersMonday
@@ -336,17 +368,190 @@ class WeekdayHeaderRow extends StatelessWidget {
       children: [
         for (final label in labels)
           Expanded(
-            child: Center(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ),
+            child: Center(child: Text(label, style: style)),
           ),
       ],
     );
     if (opacity >= 1) return row;
     return Opacity(opacity: opacity.clamp(0.0, 1.0), child: row);
+  }
+}
+
+/// Pre-measured weekday label metrics for morph animation (computed once).
+class WeekdayMorphMetrics {
+  const WeekdayMorphMetrics({
+    required this.letter,
+    required this.fullLabel,
+    required this.compactLetterWidth,
+    required this.fullLetterWidth,
+    required this.compactFullWidth,
+    required this.fullFullWidth,
+    required this.compactHeight,
+    required this.fullHeight,
+    required this.suffixCharCompactWidths,
+    required this.suffixCharFullWidths,
+  });
+
+  final String letter;
+  final String fullLabel;
+  final double compactLetterWidth;
+  final double fullLetterWidth;
+  final double compactFullWidth;
+  final double fullFullWidth;
+  final double compactHeight;
+  final double fullHeight;
+  final List<double> suffixCharCompactWidths;
+  final List<double> suffixCharFullWidths;
+
+  static double _textWidth(String text, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return painter.width;
+  }
+
+  static List<WeekdayMorphMetrics> columnsFor({
+    required bool weekStartsMonday,
+    required TextStyle compactStyle,
+    required TextStyle fullStyle,
+  }) {
+    final letters = weekStartsMonday
+        ? calendarWeekdayLettersMonday
+        : calendarWeekdayLettersSunday;
+    final labels = weekStartsMonday
+        ? calendarWeekdayLabelsMonday
+        : calendarWeekdayLabelsSunday;
+
+    return List.generate(letters.length, (i) {
+      final letter = letters[i];
+      final fullLabel = labels[i];
+      final suffix = fullLabel.length > 1 ? fullLabel.substring(1) : '';
+      final suffixChars = suffix.split('');
+      return WeekdayMorphMetrics(
+        letter: letter,
+        fullLabel: fullLabel,
+        compactLetterWidth: _textWidth(letter, compactStyle),
+        fullLetterWidth: _textWidth(letter, fullStyle),
+        compactFullWidth: _textWidth(fullLabel, compactStyle),
+        fullFullWidth: _textWidth(fullLabel, fullStyle),
+        compactHeight: WeekdayHeaderRow.labelHeight(
+          compactStyle,
+          useSingleLetterLabels: true,
+        ),
+        fullHeight: WeekdayHeaderRow.labelHeight(fullStyle),
+        suffixCharCompactWidths: [
+          for (final char in suffixChars) _textWidth(char, compactStyle),
+        ],
+        suffixCharFullWidths: [
+          for (final char in suffixChars) _textWidth(char, fullStyle),
+        ],
+      );
+    });
+  }
+}
+
+/// Weekday labels that morph during the year↔month transition.
+class MorphWeekdayHeader extends StatelessWidget {
+  const MorphWeekdayHeader({
+    super.key,
+    required this.columns,
+    required this.styleT,
+    required this.compactStyle,
+    required this.fullStyle,
+  });
+
+  final List<WeekdayMorphMetrics> columns;
+  final double styleT;
+  final TextStyle compactStyle;
+  final TextStyle fullStyle;
+
+  /// Weekday label row bounds above the first day-cell row.
+  static Rect rowRectFromDayCells(
+    List<Rect> dayCells,
+    TextStyle labelStyle, {
+    bool useSingleLetterLabels = false,
+  }) {
+    final labelHeight = WeekdayHeaderRow.labelHeight(
+      labelStyle,
+      useSingleLetterLabels: useSingleLetterLabels,
+    );
+    return Rect.fromLTWH(
+      dayCells[0].left,
+      dayCells[0].top - monthDayGridWeekdayHeaderGap - labelHeight,
+      dayCells[6].right - dayCells[0].left,
+      labelHeight,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (final metrics in columns)
+          Expanded(
+            child: _MorphWeekdayColumn(
+              metrics: metrics,
+              styleT: styleT,
+              compactStyle: compactStyle,
+              fullStyle: fullStyle,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _MorphWeekdayColumn extends StatelessWidget {
+  const _MorphWeekdayColumn({
+    required this.metrics,
+    required this.styleT,
+    required this.compactStyle,
+    required this.fullStyle,
+  });
+
+  final WeekdayMorphMetrics metrics;
+  final double styleT;
+  final TextStyle compactStyle;
+  final TextStyle fullStyle;
+
+  double _suffixCharT(int index, int total, double styleT) {
+    if (total == 0) return 0;
+    final start = 0.15 + (index / total) * 0.5;
+    final end = start + 0.35;
+    return Curves.easeOutCubic.transform(
+      ((styleT - start) / (end - start)).clamp(0.0, 1.0),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle.lerp(compactStyle, fullStyle, styleT)!;
+    final suffixChars = metrics.fullLabel.length > 1
+        ? metrics.fullLabel.substring(1).split('')
+        : const <String>[];
+
+    final rowHeight =
+        metrics.compactHeight +
+        (metrics.fullHeight - metrics.compactHeight) * styleT;
+    return SizedBox(
+      height: rowHeight,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(metrics.letter, style: style),
+            for (var i = 0; i < suffixChars.length; i++)
+              Opacity(
+                opacity: _suffixCharT(i, suffixChars.length, styleT),
+                child: Text(suffixChars[i], style: style),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -390,7 +595,7 @@ class MonthDayGrid extends StatelessWidget {
             opacity: weekdayHeaderOpacity,
             useSingleLetterLabels: useSingleLetterWeekdays,
           ),
-          const SizedBox(height: _weekdayHeaderGap),
+          const SizedBox(height: monthDayGridWeekdayHeaderGap),
         ],
         Expanded(
           child: Column(
@@ -407,7 +612,8 @@ class MonthDayGrid extends StatelessWidget {
                         .take(3)
                         .toList();
 
-                    final isSelected = selectedDay != null &&
+                    final isSelected =
+                        selectedDay != null &&
                         calendarSameDay(date, selectedDay!);
 
                     return Expanded(
@@ -432,9 +638,6 @@ class MonthDayGrid extends StatelessWidget {
   }
 }
 
-// weekdayHeaderGap constant formerly in MonthDayGridLayout — inlined below.
-const _weekdayHeaderGap = 4.0;
-
 bool calendarIsToday(DateTime date) {
   final now = DateTime.now();
   return calendarSameDay(date, now);
@@ -453,15 +656,7 @@ const calendarWeekdayLabelsMonday = [
   'Sun',
 ];
 
-const calendarWeekdayLettersMonday = [
-  'M',
-  'T',
-  'W',
-  'T',
-  'F',
-  'S',
-  'S',
-];
+const calendarWeekdayLettersMonday = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 const calendarWeekdayLabelsSunday = [
   'Sun',
@@ -473,12 +668,4 @@ const calendarWeekdayLabelsSunday = [
   'Sat',
 ];
 
-const calendarWeekdayLettersSunday = [
-  'S',
-  'M',
-  'T',
-  'W',
-  'T',
-  'F',
-  'S',
-];
+const calendarWeekdayLettersSunday = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
