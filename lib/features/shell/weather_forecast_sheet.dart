@@ -7,9 +7,6 @@ import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
-import 'package:voyager/features/shell/weather_chart_curve.dart';
-import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
-import 'package:voyager/features/shell/weather_forecast_chart.dart';
 import 'package:voyager/features/shell/weather_forecast_chart_transition.dart';
 
 Future<void> showWeatherForecastSheet(BuildContext context) {
@@ -103,76 +100,20 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
   int? _selectedDayIndex;
   int? _transitionFromIndex;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _warmVisibleDayPlots());
-  }
-
-  void _warmVisibleDayPlots() {
-    if (!mounted) return;
-
-    final colors = weatherChartColors(ref);
-    final degreeGridColor = Theme.of(context)
-        .colorScheme
-        .outlineVariant
-        .withValues(alpha: 0.15);
-    final now = DateTime.now();
-    final days = _visibleDays(now);
-
-    for (var i = 0; i < days.length; i++) {
-      final series = _seriesForDay(days, i, now);
-      if (series.isEmpty) continue;
-      final gradientStartHour = forecastRainGradientStartHour(
-        days[i].date,
-        widget.forecast.fetchedAt,
-      );
-      warmWeatherChartPlotCache(
-        series: series,
-        gradientStartHour: gradientStartHour,
-        tempColor: colors.temp,
-        rainColor: colors.rain,
-        degreeGridColor: degreeGridColor,
-      );
-      warmWeatherChartPlotPicture(
-        curve: WeatherChartCurve(
-          size: weatherChartWarmupChartSize,
-          plotPadding: const EdgeInsets.only(
-            left: WeatherForecastChart.leftAxisWidth,
-            bottom: WeatherForecastChart.bottomAxisHeight,
-          ),
-          minX: WeatherForecastChart.minX,
-          maxX: WeatherForecastChart.maxX,
-          minY: series.minTemp,
-          maxY: series.maxTemp,
-        ),
-        series: series,
-        gradientStartHour: gradientStartHour,
-        tempFillColor: colors.temp.withValues(alpha: 0.4),
-        rainFillColor: colors.rain.withValues(alpha: 0.4),
-        tempLineColor: colors.temp,
-        degreeGridColor: degreeGridColor,
-      );
-    }
-  }
-
-  List<DailyForecastSummary> _visibleDays(DateTime now) =>
-      visibleForecastDays(widget.forecast.dailySummaries, now);
-
-  int _resolveDayIndex(List<DailyForecastSummary> days, DateTime now) {
-    return resolveForecastDayIndex(
-      days,
+  int get _dayIndex {
+    _selectedDayIndex ??= resolveForecastDayIndex(
+      widget.forecast.dailySummaries,
       ref.read(weatherForecastLastDayProvider),
-      now: now,
     );
+    return _selectedDayIndex!;
   }
 
-  void _selectDay(int index, List<DailyForecastSummary> days) {
-    if (index == _selectedDayIndex) return;
+  void _selectDay(int index) {
+    if (index == _dayIndex) return;
     ref.read(weatherForecastLastDayProvider.notifier).state =
-        days[index].date;
+        widget.forecast.dailySummaries[index].date;
     setState(() {
-      _transitionFromIndex = _selectedDayIndex;
+      _transitionFromIndex = _dayIndex;
       _selectedDayIndex = index;
     });
   }
@@ -181,15 +122,11 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
     if (mounted) setState(() => _transitionFromIndex = null);
   }
 
-  DayForecastChartSeries _seriesForDay(
-    List<DailyForecastSummary> days,
-    int index,
-    DateTime now,
-  ) {
+  DayForecastChartSeries _seriesForDay(int index) {
     return buildDayForecastChartSeries(
       widget.forecast.periods,
-      days[index].date,
-      now: now,
+      widget.forecast.dailySummaries[index].date,
+      now: DateTime.now(),
     );
   }
 
@@ -199,35 +136,21 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
     final dayFormat = DateFormat('EEE d MMM');
     final updated =
         '${DateFormat('d MMM').format(widget.forecast.fetchedAt.toLocal())}, ${formatTime12Hour(widget.forecast.fetchedAt)}';
+    final days = widget.forecast.dailySummaries;
+    final selectedDay = days[_dayIndex];
+    final chartSeries = _seriesForDay(_dayIndex);
     final now = DateTime.now();
-    final days = _visibleDays(now);
-    if (days.isEmpty) {
-      return const Center(child: Text('No forecast data available.'));
-    }
-
-    _selectedDayIndex ??= _resolveDayIndex(days, now);
-    final dayIndex = _selectedDayIndex!.clamp(0, days.length - 1);
-    if (dayIndex != _selectedDayIndex) {
-      _selectedDayIndex = dayIndex;
-    }
-
-    final selectedDay = days[dayIndex];
-    final chartSeries = _seriesForDay(days, dayIndex, now);
     final showCurrentTimeLine =
         isTodayForecastDay(selectedDay.date, now);
     final fromShowCurrentTimeLine = _transitionFromIndex == null
         ? false
         : isTodayForecastDay(
-            days[_transitionFromIndex!.clamp(0, days.length - 1)].date,
+            days[_transitionFromIndex!].date,
             now,
           );
     final fromSeries = _transitionFromIndex == null
         ? null
-        : _seriesForDay(
-            days,
-            _transitionFromIndex!.clamp(0, days.length - 1),
-            now,
-          );
+        : _seriesForDay(_transitionFromIndex!);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -273,8 +196,8 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
                     child: _DailyCard(
                       day: days[i],
                       dayFormat: dayFormat,
-                      selected: i == dayIndex,
-                      onTap: () => _selectDay(i, days),
+                      selected: i == _dayIndex,
+                      onTap: () => _selectDay(i),
                     ),
                   ),
                 ),
@@ -292,14 +215,13 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
                 )
               : WeatherForecastChartTransition(
                   fromDayIndex: _transitionFromIndex,
-                  toDayIndex: dayIndex,
+                  toDayIndex: _dayIndex,
                   fromSeries: fromSeries,
                   toSeries: chartSeries,
                   fromGradientStartHour: _transitionFromIndex == null
                       ? 0
                       : forecastRainGradientStartHour(
-                          days[_transitionFromIndex!.clamp(0, days.length - 1)]
-                              .date,
+                          days[_transitionFromIndex!].date,
                           widget.forecast.fetchedAt,
                         ),
                   toGradientStartHour: forecastRainGradientStartHour(

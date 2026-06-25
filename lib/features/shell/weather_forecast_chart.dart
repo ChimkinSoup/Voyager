@@ -10,12 +10,11 @@ import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
 import 'package:voyager/features/shell/weather_chart_curve.dart';
-import 'package:voyager/features/shell/weather_chart_plot_cache.dart';
 
 const _defaultRainColor = 0xFFFF9800;
 const _defaultAccentColor = 0xFF7C9EFF;
 
-({Color temp, Color rain}) weatherChartColors(WidgetRef ref) {
+({Color temp, Color rain}) _chartColors(WidgetRef ref) {
   final settings = ref.watch(settingsProvider).valueOrNull;
   final cached = ref.watch(weatherChartColorsProvider);
   return (
@@ -41,9 +40,6 @@ class WeatherForecastChart extends ConsumerStatefulWidget {
     this.axisMaxY,
     this.allowOverflow = false,
     this.showCurrentTimeLine = false,
-    this.chartFrameOnly = false,
-    this.plotContentOnly = false,
-    this.showDegreeGrid,
   });
 
   final DayForecastChartSeries series;
@@ -58,19 +54,11 @@ class WeatherForecastChart extends ConsumerStatefulWidget {
   /// When true, vertical plot clipping is disabled so data can exceed the axis.
   final bool allowOverflow;
 
-  /// Axes and border only — no curves or fills (used during day transitions).
-  final bool chartFrameOnly;
-
-  /// Curves and fills only — no axes or border; parent must size to the plot rect.
-  final bool plotContentOnly;
-
-  /// When null, degree grid shows on full and plot-only charts, not frame-only.
-  final bool? showDegreeGrid;
-
   static const minX = 0.0;
   static const maxX = 24.0;
   static const leftAxisWidth = 40.0;
   static const bottomAxisHeight = 28.0;
+  static const curveSmoothness = 0.78;
 
   double get chartMinY => axisMinY ?? series.minTemp;
   double get chartMaxY => axisMaxY ?? series.maxTemp;
@@ -130,21 +118,16 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final colors = weatherChartColors(ref);
+    final colors = _chartColors(ref);
     final tempColor = colors.temp;
     final rainColor = colors.rain;
     final tempFillColor = tempColor.withValues(alpha: 0.4);
     final rainFillColor = rainColor.withValues(alpha: 0.4);
-    final degreeGridColor = colorScheme.outlineVariant.withValues(alpha: 0.15);
-    final tempSpots = [
-      for (final point in widget.series.tempPoints)
-        FlSpot(point.hour, point.tempC),
-    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.showLegend && !widget.plotContentOnly) ...[
+        if (widget.showLegend) ...[
           const WeatherChartLegendRow(),
           const SizedBox(height: 8),
         ],
@@ -155,14 +138,10 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
                 constraints.maxWidth,
                 constraints.maxHeight,
               );
-              final showFrame = !widget.plotContentOnly;
-              final showPlot = !widget.chartFrameOnly;
-              final plotPadding = widget.plotContentOnly
-                  ? EdgeInsets.zero
-                  : EdgeInsets.only(
-                      left: WeatherForecastChart.leftAxisWidth,
-                      bottom: WeatherForecastChart.bottomAxisHeight,
-                    );
+              final plotPadding = EdgeInsets.only(
+                left: WeatherForecastChart.leftAxisWidth,
+                bottom: WeatherForecastChart.bottomAxisHeight,
+              );
               final curve = WeatherChartCurve(
                 size: chartSize,
                 plotPadding: plotPadding,
@@ -170,143 +149,13 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
                 maxX: WeatherForecastChart.maxX,
                 minY: widget.chartMinY,
                 maxY: widget.chartMaxY,
+                curveSmoothness: WeatherForecastChart.curveSmoothness,
               );
 
-              final hoveredBucket = showPlot && _hoveredHour != null
-                  ? _bucketForHour(widget.series, _hoveredHour!)
-                  : null;
-              final currentTimeHour =
-                  showPlot && widget.showCurrentTimeLine ? _currentTimeHour() : null;
-
-              // On the sliding plot layers during day transitions; omitted from the
-              // fixed axis frame so lines move with the graph instead of clipping.
-              final showDegreeGrid =
-                  widget.showDegreeGrid ?? !widget.chartFrameOnly;
-
-              final lineChart = LineChart(
-                duration: widget.axisMinY != null || widget.axisMaxY != null
-                    ? Duration.zero
-                    : const Duration(milliseconds: 150),
-                LineChartData(
-                  minX: WeatherForecastChart.minX,
-                  maxX: WeatherForecastChart.maxX,
-                  minY: widget.chartMinY,
-                  maxY: widget.chartMaxY,
-                  clipData: widget.allowOverflow
-                      ? const FlClipData.horizontal()
-                      : const FlClipData.all(),
-                  gridData: const FlGridData(show: false),
-                  titlesData: FlTitlesData(
-                    topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: showFrame,
-                        reservedSize: WeatherForecastChart.leftAxisWidth,
-                        interval: _tempAxisInterval,
-                        getTitlesWidget: (value, meta) {
-                          if (!showFrame ||
-                              value <= meta.min ||
-                              value >= meta.max) {
-                            return const SizedBox.shrink();
-                          }
-                          return Text(
-                            '${value.round()}°',
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: tempColor),
-                          );
-                        },
-                      ),
-                    ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: showFrame,
-                        reservedSize: WeatherForecastChart.bottomAxisHeight,
-                        interval: 6,
-                        getTitlesWidget: (value, meta) {
-                          if (!showFrame) return const SizedBox.shrink();
-                          final hour = value.round();
-                          if (![6, 12, 18].contains(hour)) {
-                            return const SizedBox.shrink();
-                          }
-                          return Text(
-                            _formatHourLabel(hour),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  borderData: FlBorderData(
-                    show: showFrame,
-                    border: Border.all(
-                      color: colorScheme.outlineVariant.withValues(
-                        alpha: 0.4,
-                      ),
-                    ),
-                  ),
-                  lineTouchData: const LineTouchData(enabled: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: showPlot && tempSpots.isNotEmpty
-                          ? tempSpots
-                          : [
-                              FlSpot(
-                                WeatherForecastChart.minX,
-                                widget.chartMinY,
-                              ),
-                              FlSpot(
-                                WeatherForecastChart.maxX,
-                                widget.chartMinY,
-                              ),
-                            ],
-                      isCurved: false,
-                      color: Colors.transparent,
-                      barWidth: 0,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(show: false),
-                    ),
-                  ],
-                ),
-              );
-
-              final plotStack = Stack(
-                children: [
-                  if (showPlot && tempSpots.isNotEmpty)
-                    Positioned.fill(
-                      child: CustomPaint(
-                        isComplex: widget.plotContentOnly,
-                        willChange: widget.plotContentOnly,
-                        painter: _WeatherPlotPainter(
-                          series: widget.series,
-                          curve: curve,
-                          spots: tempSpots,
-                          gradientStartHour: widget.gradientStartHour,
-                          tempFillColor: tempFillColor,
-                          rainFillColor: rainFillColor,
-                          tempLineColor: tempColor,
-                          degreeGridColor: degreeGridColor,
-                          showDegreeGrid: showDegreeGrid,
-                          currentTimeHour: currentTimeHour,
-                          hoveredBucket: hoveredBucket,
-                          allowVerticalOverflow: widget.allowOverflow,
-                        ),
-                      ),
-                    ),
-                  if (showFrame)
-                    Positioned.fill(child: lineChart),
-                ],
-              );
-
-              if (widget.plotContentOnly) {
-                return plotStack;
-              }
+              final hoveredBucket = _hoveredHour == null
+                  ? null
+                  : _bucketForHour(widget.series, _hoveredHour!);
+              final currentTimeHour = _currentTimeHour();
 
               return Stack(
                 clipBehavior: Clip.none,
@@ -324,7 +173,128 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
                         _hoveredHour = null;
                         _hoverPosition = null;
                       }),
-                      child: plotStack,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _WeatherFillPainter(
+                                series: widget.series,
+                                curve: curve,
+                                gradientStartHour: widget.gradientStartHour,
+                                tempFillColor: tempFillColor,
+                                rainFillColor: rainFillColor,
+                                hoveredBucket: hoveredBucket,
+                              ),
+                            ),
+                          ),
+                          LineChart(
+                            duration: widget.axisMinY != null ||
+                                    widget.axisMaxY != null
+                                ? Duration.zero
+                                : const Duration(milliseconds: 150),
+                            LineChartData(
+                              minX: WeatherForecastChart.minX,
+                              maxX: WeatherForecastChart.maxX,
+                              minY: widget.chartMinY,
+                              maxY: widget.chartMaxY,
+                              clipData: widget.allowOverflow
+                                  ? const FlClipData.horizontal()
+                                  : const FlClipData.all(),
+                              gridData: const FlGridData(show: false),
+                              titlesData: FlTitlesData(
+                                topTitles: const AxisTitles(
+                                  sideTitles: SideTitles(showTitles: false),
+                                ),
+                                rightTitles: const AxisTitles(
+                                  sideTitles: SideTitles(showTitles: false),
+                                ),
+                                leftTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    reservedSize:
+                                        WeatherForecastChart.leftAxisWidth,
+                                    interval: _niceTempInterval(
+                                      widget.chartMinY,
+                                      widget.chartMaxY,
+                                    ),
+                                    getTitlesWidget: (value, meta) {
+                                      if (value <= meta.min ||
+                                          value >= meta.max) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Text(
+                                        '${value.round()}°',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(color: tempColor),
+                                      );
+                                    },
+                                  ),
+                                ),
+                                bottomTitles: AxisTitles(
+                                  sideTitles: SideTitles(
+                                    showTitles: true,
+                                    reservedSize:
+                                        WeatherForecastChart.bottomAxisHeight,
+                                    interval: 6,
+                                    getTitlesWidget: (value, meta) {
+                                      final hour = value.round();
+                                      if (![6, 12, 18].contains(hour)) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Text(
+                                        _formatHourLabel(hour),
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              color: colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                              borderData: FlBorderData(
+                                show: true,
+                                border: Border.all(
+                                  color: colorScheme.outlineVariant.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                ),
+                              ),
+                              lineTouchData: const LineTouchData(
+                                enabled: false,
+                              ),
+                              lineBarsData: [
+                                LineChartBarData(
+                                  spots: [
+                                    for (final point in widget.series.tempPoints)
+                                      FlSpot(point.hour, point.tempC),
+                                  ],
+                                  isCurved: true,
+                                  curveSmoothness:
+                                      WeatherForecastChart.curveSmoothness,
+                                  preventCurveOverShooting: true,
+                                  preventCurveOvershootingThreshold: 0,
+                                  color: tempColor,
+                                  barWidth: 2.5,
+                                  dotData: const FlDotData(show: false),
+                                  belowBarData: BarAreaData(show: false),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (currentTimeHour != null)
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _CurrentTimeLinePainter(
+                                  series: widget.series,
+                                  curve: curve,
+                                  currentTimeHour: currentTimeHour,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   if (hoveredBucket != null && _hoverPosition != null)
@@ -344,7 +314,12 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
     );
   }
 
-  static const _tempAxisInterval = 5.0;
+  static double _niceTempInterval(double minY, double maxY) {
+    final span = maxY - minY;
+    if (span <= 4) return 1;
+    if (span <= 10) return 2;
+    return 5;
+  }
 
   static String _formatHourLabel(int hour) {
     if (hour == 0 || hour == 24) return '12 AM';
@@ -398,7 +373,7 @@ class WeatherChartLegendRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = weatherChartColors(ref);
+    final colors = _chartColors(ref);
 
     return Row(
       children: [
@@ -512,361 +487,149 @@ double _rainAtHour(
   return points.last.rainPercent;
 }
 
-/// Records a plot layer into the cache and returns the picture.
-ui.Picture warmWeatherChartPlotPicture({
-  required WeatherChartCurve curve,
-  required DayForecastChartSeries series,
-  required double gradientStartHour,
-  required Color tempFillColor,
-  required Color rainFillColor,
-  required Color tempLineColor,
-  required Color degreeGridColor,
-  bool showDegreeGrid = true,
-  double? currentTimeHour,
-}) {
-  final key = WeatherChartPlotCacheKey.from(
-    curve: curve,
-    series: series,
-    gradientStartHour: gradientStartHour,
-    tempFillColor: tempFillColor,
-    rainFillColor: rainFillColor,
-    tempLineColor: tempLineColor,
-    degreeGridColor: degreeGridColor,
-    showDegreeGrid: showDegreeGrid,
-    currentTimeHour: currentTimeHour,
-  );
-
-  final cached = WeatherChartPlotCache.instance.lookup(key);
-  if (cached != null) return cached;
-
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder);
-  final spots = [
-    for (final point in series.tempPoints) FlSpot(point.hour, point.tempC),
-  ];
-  _paintWeatherPlot(
-    canvas: canvas,
-    series: series,
-    curve: curve,
-    spots: spots,
-    gradientStartHour: gradientStartHour,
-    tempFillColor: tempFillColor,
-    rainFillColor: rainFillColor,
-    tempLineColor: tempLineColor,
-    degreeGridColor: degreeGridColor,
-    showDegreeGrid: showDegreeGrid,
-    currentTimeHour: currentTimeHour,
-  );
-  final picture = recorder.endRecording();
-  WeatherChartPlotCache.instance.store(key, picture);
-  return picture;
-}
-
-/// Returns true when a cached picture was drawn.
-bool paintWeatherChartPlotCached({
-  required Canvas canvas,
-  required WeatherChartCurve curve,
-  required DayForecastChartSeries series,
-  required double gradientStartHour,
-  required Color tempFillColor,
-  required Color rainFillColor,
-  required Color tempLineColor,
-  required Color degreeGridColor,
-  bool showDegreeGrid = true,
-  double? currentTimeHour,
-}) {
-  final key = WeatherChartPlotCacheKey.from(
-    curve: curve,
-    series: series,
-    gradientStartHour: gradientStartHour,
-    tempFillColor: tempFillColor,
-    rainFillColor: rainFillColor,
-    tempLineColor: tempLineColor,
-    degreeGridColor: degreeGridColor,
-    showDegreeGrid: showDegreeGrid,
-    currentTimeHour: currentTimeHour,
-  );
-
-  final cached = WeatherChartPlotCache.instance.lookup(key);
-  if (cached != null) {
-    canvas.drawPicture(cached);
-    return true;
-  }
-
-  final recorder = ui.PictureRecorder();
-  final recordingCanvas = Canvas(recorder);
-  final spots = [
-    for (final point in series.tempPoints) FlSpot(point.hour, point.tempC),
-  ];
-  _paintWeatherPlot(
-    canvas: recordingCanvas,
-    series: series,
-    curve: curve,
-    spots: spots,
-    gradientStartHour: gradientStartHour,
-    tempFillColor: tempFillColor,
-    rainFillColor: rainFillColor,
-    tempLineColor: tempLineColor,
-    degreeGridColor: degreeGridColor,
-    showDegreeGrid: showDegreeGrid,
-    currentTimeHour: currentTimeHour,
-  );
-  final picture = recorder.endRecording();
-  WeatherChartPlotCache.instance.store(key, picture);
-  canvas.drawPicture(picture);
-  return true;
-}
-
-/// Single-pass plot renderer for transitions (both days in one paint).
-class WeatherForecastPlotStrip extends StatelessWidget {
-  const WeatherForecastPlotStrip({
-    super.key,
-    required this.viewportSize,
-    required this.stripOffsetPx,
-    required this.earlierSeries,
-    required this.laterSeries,
-    required this.earlierGradientStartHour,
-    required this.laterGradientStartHour,
-    required this.axisMinY,
-    required this.axisMaxY,
-    required this.tempColor,
-    required this.rainColor,
-    required this.degreeGridColor,
-    this.earlierCurrentTimeHour,
-    this.laterCurrentTimeHour,
-  });
-
-  final Size viewportSize;
-  final double stripOffsetPx;
-  final DayForecastChartSeries earlierSeries;
-  final DayForecastChartSeries laterSeries;
-  final double earlierGradientStartHour;
-  final double laterGradientStartHour;
-  final double axisMinY;
-  final double axisMaxY;
-  final Color tempColor;
-  final Color rainColor;
-  final Color degreeGridColor;
-  final double? earlierCurrentTimeHour;
-  final double? laterCurrentTimeHour;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: viewportSize,
-      isComplex: true,
-      willChange: true,
-      painter: _WeatherFilmStripPainter(
-        stripOffsetPx: stripOffsetPx,
-        earlierSeries: earlierSeries,
-        laterSeries: laterSeries,
-        earlierGradientStartHour: earlierGradientStartHour,
-        laterGradientStartHour: laterGradientStartHour,
-        axisMinY: axisMinY,
-        axisMaxY: axisMaxY,
-        tempFillColor: tempColor.withValues(alpha: 0.4),
-        rainFillColor: rainColor.withValues(alpha: 0.4),
-        tempLineColor: tempColor,
-        degreeGridColor: degreeGridColor,
-        earlierCurrentTimeHour: earlierCurrentTimeHour,
-        laterCurrentTimeHour: laterCurrentTimeHour,
-      ),
-    );
-  }
-}
-
-class _WeatherPlotPainter extends CustomPainter {
-  _WeatherPlotPainter({
+class _CurrentTimeLinePainter extends CustomPainter {
+  _CurrentTimeLinePainter({
     required this.series,
     required this.curve,
-    required this.spots,
-    required this.gradientStartHour,
-    required this.tempFillColor,
-    required this.rainFillColor,
-    required this.tempLineColor,
-    required this.degreeGridColor,
-    required this.showDegreeGrid,
-    this.currentTimeHour,
-    this.hoveredBucket,
-    this.allowVerticalOverflow = false,
+    required this.currentTimeHour,
   });
 
   final DayForecastChartSeries series;
   final WeatherChartCurve curve;
-  final List<FlSpot> spots;
-  final double gradientStartHour;
-  final Color tempFillColor;
-  final Color rainFillColor;
-  final Color tempLineColor;
-  final Color degreeGridColor;
-  final bool showDegreeGrid;
-  final double? currentTimeHour;
-  final _WeatherBucket? hoveredBucket;
-  final bool allowVerticalOverflow;
+  final double currentTimeHour;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (hoveredBucket == null &&
-        paintWeatherChartPlotCached(
-          canvas: canvas,
-          curve: curve,
-          series: series,
-          gradientStartHour: gradientStartHour,
-          tempFillColor: tempFillColor,
-          rainFillColor: rainFillColor,
-          tempLineColor: tempLineColor,
-          degreeGridColor: degreeGridColor,
-          showDegreeGrid: showDegreeGrid,
-          currentTimeHour: currentTimeHour,
-        )) {
-      return;
-    }
+  static const _dashLength = 3.0;
+  static const _gapLength = 3.0;
 
-    _paintWeatherPlot(
-        canvas: canvas,
-        series: series,
-        curve: curve,
-        spots: spots,
-        gradientStartHour: gradientStartHour,
-        tempFillColor: tempFillColor,
-        rainFillColor: rainFillColor,
-        tempLineColor: tempLineColor,
-        degreeGridColor: degreeGridColor,
-        showDegreeGrid: showDegreeGrid,
-      currentTimeHour: currentTimeHour,
-      hoveredBucket: hoveredBucket,
-      allowVerticalOverflow: allowVerticalOverflow,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _WeatherPlotPainter oldDelegate) {
-    return oldDelegate.series != series ||
-        !oldDelegate.curve.matchesScale(curve) ||
-        oldDelegate.spots != spots ||
-        oldDelegate.gradientStartHour != gradientStartHour ||
-        oldDelegate.tempFillColor != tempFillColor ||
-        oldDelegate.rainFillColor != rainFillColor ||
-        oldDelegate.tempLineColor != tempLineColor ||
-        oldDelegate.degreeGridColor != degreeGridColor ||
-        oldDelegate.showDegreeGrid != showDegreeGrid ||
-        oldDelegate.currentTimeHour != currentTimeHour ||
-        oldDelegate.hoveredBucket?.hour != hoveredBucket?.hour ||
-        oldDelegate.allowVerticalOverflow != allowVerticalOverflow;
-  }
-}
-
-class _WeatherFilmStripPainter extends CustomPainter {
-  _WeatherFilmStripPainter({
-    required this.stripOffsetPx,
-    required this.earlierSeries,
-    required this.laterSeries,
-    required this.earlierGradientStartHour,
-    required this.laterGradientStartHour,
-    required this.axisMinY,
-    required this.axisMaxY,
-    required this.tempFillColor,
-    required this.rainFillColor,
-    required this.tempLineColor,
-    required this.degreeGridColor,
-    this.earlierCurrentTimeHour,
-    this.laterCurrentTimeHour,
-  });
-
-  final double stripOffsetPx;
-  final DayForecastChartSeries earlierSeries;
-  final DayForecastChartSeries laterSeries;
-  final double earlierGradientStartHour;
-  final double laterGradientStartHour;
-  final double axisMinY;
-  final double axisMaxY;
-  final Color tempFillColor;
-  final Color rainFillColor;
-  final Color tempLineColor;
-  final Color degreeGridColor;
-  final double? earlierCurrentTimeHour;
-  final double? laterCurrentTimeHour;
+  List<FlSpot> get _spots => [
+        for (final point in series.tempPoints)
+          FlSpot(point.hour, point.tempC),
+      ];
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    final plotWidth = size.width;
-    final plotSize = Size(plotWidth, size.height);
+    final curvePoint = curve.pointOnCurveAtX(_spots, currentTimeHour);
+    if (curvePoint == null) return;
 
-    canvas.save();
-    canvas.translate(stripOffsetPx, 0);
+    final bottom = curve.plotRect.bottom;
+    final paint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.25
+      ..strokeCap = StrokeCap.round;
 
-    _paintDayPanel(
-      canvas: canvas,
-      plotSize: plotSize,
-      offsetX: 0,
-      series: earlierSeries,
-      gradientStartHour: earlierGradientStartHour,
-      currentTimeHour: earlierCurrentTimeHour,
+    _drawDottedLine(
+      canvas,
+      Offset(curvePoint.dx, bottom),
+      curvePoint,
+      paint,
     );
-    _paintDayPanel(
-      canvas: canvas,
-      plotSize: plotSize,
-      offsetX: plotWidth,
-      series: laterSeries,
-      gradientStartHour: laterGradientStartHour,
-      currentTimeHour: laterCurrentTimeHour,
-    );
-
-    canvas.restore();
   }
 
-  void _paintDayPanel({
-    required Canvas canvas,
-    required Size plotSize,
-    required double offsetX,
-    required DayForecastChartSeries series,
-    required double gradientStartHour,
-    double? currentTimeHour,
-  }) {
-    if (series.tempPoints.isEmpty) return;
+  void _drawDottedLine(Canvas canvas, Offset start, Offset end, Paint paint) {
+    final dx = end.dx - start.dx;
+    final dy = end.dy - start.dy;
+    final distance = math.sqrt(dx * dx + dy * dy);
+    if (distance <= 0) return;
 
-    canvas.save();
-    canvas.translate(offsetX, 0);
+    final unit = Offset(dx / distance, dy / distance);
+    var travelled = 0.0;
+    var drawing = true;
 
-    final curve = WeatherChartCurve(
-      size: plotSize,
-      plotPadding: EdgeInsets.zero,
-      minX: WeatherForecastChart.minX,
-      maxX: WeatherForecastChart.maxX,
-      minY: axisMinY,
-      maxY: axisMaxY,
-    );
+    while (travelled < distance) {
+      final segment = drawing ? _dashLength : _gapLength;
+      final next = math.min(travelled + segment, distance);
+      if (drawing) {
+        canvas.drawLine(
+          start + unit * travelled,
+          start + unit * next,
+          paint,
+        );
+      }
+      travelled = next;
+      drawing = !drawing;
+    }
+  }
 
-    if (!paintWeatherChartPlotCached(
-      canvas: canvas,
-      curve: curve,
-      series: series,
-      gradientStartHour: gradientStartHour,
-      tempFillColor: tempFillColor,
-      rainFillColor: rainFillColor,
-      tempLineColor: tempLineColor,
-      degreeGridColor: degreeGridColor,
-      showDegreeGrid: true,
-      currentTimeHour: currentTimeHour,
-    )) {
-      final spots = [
+  @override
+  bool shouldRepaint(covariant _CurrentTimeLinePainter oldDelegate) {
+    return oldDelegate.series != series ||
+        oldDelegate.curve.size != curve.size ||
+        oldDelegate.currentTimeHour != currentTimeHour;
+  }
+}
+
+class _WeatherFillPainter extends CustomPainter {
+  _WeatherFillPainter({
+    required this.series,
+    required this.curve,
+    required this.gradientStartHour,
+    required this.tempFillColor,
+    required this.rainFillColor,
+    required this.hoveredBucket,
+  });
+
+  final DayForecastChartSeries series;
+  final WeatherChartCurve curve;
+  final double gradientStartHour;
+  final Color tempFillColor;
+  final Color rainFillColor;
+  final _WeatherBucket? hoveredBucket;
+
+  static const _hoverLighten = 0.22;
+
+  List<FlSpot> get _spots => [
         for (final point in series.tempPoints)
           FlSpot(point.hour, point.tempC),
       ];
-      _paintWeatherPlot(
-        canvas: canvas,
-        series: series,
-        curve: curve,
-        spots: spots,
-        gradientStartHour: gradientStartHour,
-        tempFillColor: tempFillColor,
-        rainFillColor: rainFillColor,
-        tempLineColor: tempLineColor,
-        degreeGridColor: degreeGridColor,
-        showDegreeGrid: true,
-        currentTimeHour: currentTimeHour,
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    if (series.tempPoints.isEmpty) return;
+
+    final fillPath = curve.belowCurvePath(_spots);
+    canvas.save();
+    canvas.clipPath(fillPath);
+
+    final fillStartHour = series.tempPoints.first.hour;
+    final fillEndHour = series.tempPoints.last.hour;
+    final startPx = curve.pixelX(fillStartHour).ceil();
+    final endPx = curve.pixelX(fillEndHour).floor();
+
+    final hoverStartPx = hoveredBucket == null
+        ? null
+        : curve.pixelX(hoveredBucket!.startHour).round();
+    final hoverEndPx = hoveredBucket == null
+        ? null
+        : curve.pixelX(hoveredBucket!.endHour).round();
+    final plotRect = curve.plotRect;
+
+    for (var px = startPx; px <= endPx; px++) {
+      final hour = curve.hourAtPixelX(px.toDouble());
+      final rain = _rainAtHour(series.rainPoints, hour).clamp(0, 100);
+      final rainWeight = rainFillBlendFactor(hour, gradientStartHour);
+      var fillColor = Color.lerp(
+        tempFillColor,
+        rainFillColor,
+        (rain / 100) * rainWeight,
+      )!;
+
+      final inHover = hoverStartPx != null &&
+          hoverEndPx != null &&
+          px >= hoverStartPx &&
+          px < hoverEndPx;
+      if (inHover) {
+        fillColor = Color.lerp(fillColor, Colors.white, _hoverLighten)!;
+      }
+
+      canvas.drawLine(
+        Offset(px.toDouble(), plotRect.top),
+        Offset(px.toDouble(), plotRect.bottom),
+        Paint()
+          ..color = fillColor
+          ..strokeWidth = 1,
       );
     }
 
@@ -874,252 +637,13 @@ class _WeatherFilmStripPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WeatherFilmStripPainter oldDelegate) {
-    return oldDelegate.stripOffsetPx != stripOffsetPx ||
-        oldDelegate.earlierSeries != earlierSeries ||
-        oldDelegate.laterSeries != laterSeries ||
-        oldDelegate.earlierGradientStartHour != earlierGradientStartHour ||
-        oldDelegate.laterGradientStartHour != laterGradientStartHour ||
-        oldDelegate.axisMinY != axisMinY ||
-        oldDelegate.axisMaxY != axisMaxY ||
+  bool shouldRepaint(covariant _WeatherFillPainter oldDelegate) {
+    return oldDelegate.series != series ||
+        oldDelegate.curve.size != curve.size ||
+        oldDelegate.gradientStartHour != gradientStartHour ||
         oldDelegate.tempFillColor != tempFillColor ||
         oldDelegate.rainFillColor != rainFillColor ||
-        oldDelegate.tempLineColor != tempLineColor ||
-        oldDelegate.degreeGridColor != degreeGridColor ||
-        oldDelegate.earlierCurrentTimeHour != earlierCurrentTimeHour ||
-        oldDelegate.laterCurrentTimeHour != laterCurrentTimeHour;
-  }
-}
-
-void _paintWeatherPlot({
-  required Canvas canvas,
-  required DayForecastChartSeries series,
-  required WeatherChartCurve curve,
-  required List<FlSpot> spots,
-  required double gradientStartHour,
-  required Color tempFillColor,
-  required Color rainFillColor,
-  required Color tempLineColor,
-  required Color degreeGridColor,
-  required bool showDegreeGrid,
-  double? currentTimeHour,
-  _WeatherBucket? hoveredBucket,
-  bool allowVerticalOverflow = false,
-}) {
-  if (spots.isEmpty) return;
-
-  final plotRect = curve.plotRect;
-  if (plotRect.width <= 0 || plotRect.height <= 0) return;
-
-  canvas.save();
-  if (allowVerticalOverflow) {
-    final overshoot = plotRect.height * 4;
-    canvas.clipRect(
-      Rect.fromLTRB(
-        plotRect.left,
-        plotRect.top - overshoot,
-        plotRect.right,
-        plotRect.bottom + overshoot,
-      ),
-    );
-  } else {
-    canvas.clipRect(plotRect);
-  }
-
-  final belowPath = curve.belowCurvePath(spots);
-  final linePath = curve.curvedLinePath(spots);
-
-  _paintWeatherFill(
-    canvas: canvas,
-    series: series,
-    curve: curve,
-    belowPath: belowPath,
-    gradientStartHour: gradientStartHour,
-    tempFillColor: tempFillColor,
-    rainFillColor: rainFillColor,
-    hoveredBucket: hoveredBucket,
-  );
-
-  if (showDegreeGrid) {
-    _paintDegreeGrid(
-      canvas: canvas,
-      curve: curve,
-      belowPath: belowPath,
-      degreeGridColor: degreeGridColor,
-    );
-  }
-
-  canvas.drawPath(
-    linePath,
-    Paint()
-      ..color = tempLineColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round,
-  );
-
-  if (currentTimeHour != null) {
-    _paintCurrentTimeLine(
-      canvas: canvas,
-      curve: curve,
-      spots: spots,
-      currentTimeHour: currentTimeHour,
-    );
-  }
-
-  canvas.restore();
-}
-
-void _paintWeatherFill({
-  required Canvas canvas,
-  required DayForecastChartSeries series,
-  required WeatherChartCurve curve,
-  required Path belowPath,
-  required double gradientStartHour,
-  required Color tempFillColor,
-  required Color rainFillColor,
-  _WeatherBucket? hoveredBucket,
-}) {
-  if (series.tempPoints.isEmpty) return;
-
-  canvas.save();
-  canvas.clipPath(belowPath);
-
-  final fillStartHour = series.tempPoints.first.hour;
-  final fillEndHour = series.tempPoints.last.hour;
-  final startPx = curve.pixelX(fillStartHour).ceil();
-  final endPx = curve.pixelX(fillEndHour).floor();
-  final plotRect = curve.plotRect;
-
-  final hoverStartPx = hoveredBucket == null
-      ? null
-      : curve.pixelX(hoveredBucket.startHour).round();
-  final hoverEndPx = hoveredBucket == null
-      ? null
-      : curve.pixelX(hoveredBucket.endHour).round();
-
-  const hoverLighten = 0.22;
-  var runStart = startPx.toDouble();
-  Color? runColor;
-
-  void flushRun(double runEnd) {
-    final color = runColor;
-    if (color == null || runEnd <= runStart) return;
-    canvas.drawRect(
-      Rect.fromLTRB(runStart, plotRect.top, runEnd, plotRect.bottom),
-      Paint()..color = color,
-    );
-  }
-
-  for (var px = startPx; px <= endPx; px++) {
-    final hour = curve.hourAtPixelX(px.toDouble());
-    final rain = _rainAtHour(series.rainPoints, hour).clamp(0, 100);
-    final rainWeight = rainFillBlendFactor(hour, gradientStartHour);
-    var fillColor = Color.lerp(
-      tempFillColor,
-      rainFillColor,
-      (rain / 100) * rainWeight,
-    )!;
-
-    final inHover = hoverStartPx != null &&
-        hoverEndPx != null &&
-        px >= hoverStartPx &&
-        px < hoverEndPx;
-    if (inHover) {
-      fillColor = Color.lerp(fillColor, Colors.white, hoverLighten)!;
-    }
-
-    if (runColor == null) {
-      runColor = fillColor;
-      runStart = px.toDouble();
-      continue;
-    }
-
-    if (fillColor != runColor) {
-      flushRun(px.toDouble());
-      runColor = fillColor;
-      runStart = px.toDouble();
-    }
-  }
-
-  flushRun(endPx + 1.0);
-  canvas.restore();
-}
-
-void _paintDegreeGrid({
-  required Canvas canvas,
-  required WeatherChartCurve curve,
-  required Path belowPath,
-  required Color degreeGridColor,
-}) {
-  final rect = curve.plotRect;
-  if (rect.width <= 0 || rect.height <= 0) return;
-
-  final paint = Paint()
-    ..color = degreeGridColor
-    ..strokeWidth = 0.5;
-
-  final firstDeg = curve.minY.ceil();
-  final lastDeg = curve.maxY.floor();
-  if (firstDeg > lastDeg) return;
-
-  canvas.save();
-  canvas.clipPath(belowPath);
-
-  for (var deg = firstDeg; deg <= lastDeg; deg++) {
-    if (deg <= curve.minY || deg >= curve.maxY) continue;
-    final y = curve.pixelY(deg.toDouble());
-    canvas.drawLine(
-      Offset(rect.left, y),
-      Offset(rect.right, y),
-      paint,
-    );
-  }
-
-  canvas.restore();
-}
-
-void _paintCurrentTimeLine({
-  required Canvas canvas,
-  required WeatherChartCurve curve,
-  required List<FlSpot> spots,
-  required double currentTimeHour,
-}) {
-  final curvePoint = curve.pointOnCurveAtX(spots, currentTimeHour);
-  if (curvePoint == null) return;
-
-  final bottom = curve.plotRect.bottom;
-  final paint = Paint()
-    ..color = Colors.white
-    ..strokeWidth = 1.25
-    ..strokeCap = StrokeCap.round;
-
-  const dashLength = 3.0;
-  const gapLength = 3.0;
-  final start = Offset(curvePoint.dx, bottom);
-  final end = curvePoint;
-  final dx = end.dx - start.dx;
-  final dy = end.dy - start.dy;
-  final distance = math.sqrt(dx * dx + dy * dy);
-  if (distance <= 0) return;
-
-  final unit = Offset(dx / distance, dy / distance);
-  var travelled = 0.0;
-  var drawing = true;
-
-  while (travelled < distance) {
-    final segment = drawing ? dashLength : gapLength;
-    final next = math.min(travelled + segment, distance);
-    if (drawing) {
-      canvas.drawLine(
-        start + unit * travelled,
-        start + unit * next,
-        paint,
-      );
-    }
-    travelled = next;
-    drawing = !drawing;
+        oldDelegate.hoveredBucket?.hour != hoveredBucket?.hour;
   }
 }
 

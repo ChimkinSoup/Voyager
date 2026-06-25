@@ -190,17 +190,12 @@ class WeatherService {
     await syncForecastFromRemote();
     settings = await _settingsRepository.getSettings();
 
-    // Drop any calendar days that rolled into the past since the last fetch.
-    if (await pruneCachedForecastIfNeeded()) {
-      settings = await _settingsRepository.getSettings();
-    }
-
-    var forecast = _readCachedForecastRaw(settings);
+    var forecast = readCachedForecast(settings);
     final now = DateTime.now().toUtc();
     if (!force &&
         forecast != null &&
         now.difference(forecast.fetchedAt) < refreshInterval) {
-      return prunePastForecast(forecast);
+      return forecast;
     }
 
     final apiForecast = await _weatherApiClient.refreshForecast(
@@ -227,34 +222,11 @@ class WeatherService {
           )
         : apiForecast;
 
-    final pruned = prunePastForecast(merged);
-    await _persistForecast(settings, pruned);
-    return pruned;
-  }
-
-  /// Removes past-calendar-day buckets from the cached forecast when midnight
-  /// has passed. Returns true when the cache was updated.
-  Future<bool> pruneCachedForecastIfNeeded() async {
-    final settings = await _settingsRepository.getSettings();
-    if (!settings.hasWeatherLocation) return false;
-
-    final forecast = _readCachedForecastRaw(settings);
-    if (forecast == null) return false;
-
-    final pruned = prunePastForecast(forecast);
-    if (pruned.periods.length == forecast.periods.length) return false;
-
-    await _persistForecast(settings, pruned);
-    return true;
+    await _persistForecast(settings, merged);
+    return merged;
   }
 
   WeatherForecast? readCachedForecast(AppSettings settings) {
-    final forecast = _readCachedForecastRaw(settings);
-    if (forecast == null) return null;
-    return prunePastForecast(forecast);
-  }
-
-  WeatherForecast? _readCachedForecastRaw(AppSettings settings) {
     final raw = settings.weatherForecastJson;
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -306,10 +278,9 @@ class WeatherService {
     AppSettings settings,
     WeatherForecast forecast,
   ) async {
-    final pruned = prunePastForecast(forecast);
     await _settingsRepository.saveSettings(
       settings.copyWith(
-        weatherForecastJson: jsonEncode(pruned.toJson()),
+        weatherForecastJson: jsonEncode(forecast.toJson()),
       ),
     );
   }

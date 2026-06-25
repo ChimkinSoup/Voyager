@@ -74,42 +74,6 @@ List<ForecastPeriod> mergeForecastArchive({
   return periods;
 }
 
-/// Drops forecast buckets whose local calendar day is before [now]'s local today.
-///
-/// Entire today is kept — including hours that have already passed (e.g. 3 AM
-/// when it is now afternoon). A day is removed only once it becomes a previous
-/// calendar day (i.e. at local midnight).
-List<ForecastPeriod> prunePastForecastPeriods(
-  List<ForecastPeriod> periods, {
-  DateTime? now,
-}) {
-  if (periods.isEmpty) return periods;
-
-  final reference = (now ?? DateTime.now()).toLocal();
-  final today = DateTime(reference.year, reference.month, reference.day);
-
-  return [
-    for (final period in periods)
-      if (!_forecastPeriodLocalDay(period).isBefore(today)) period,
-  ];
-}
-
-DateTime _forecastPeriodLocalDay(ForecastPeriod period) {
-  final local = period.time.toLocal();
-  return DateTime(local.year, local.month, local.day);
-}
-
-/// Returns [forecast] with [prunePastForecastPeriods] applied.
-WeatherForecast prunePastForecast(WeatherForecast forecast, {DateTime? now}) {
-  final pruned = prunePastForecastPeriods(forecast.periods, now: now);
-  if (pruned.length == forecast.periods.length) return forecast;
-  return WeatherForecast(
-    fetchedAt: forecast.fetchedAt,
-    locationLabel: forecast.locationLabel,
-    periods: pruned,
-  );
-}
-
 WeatherForecast? weatherForecastFromFirestoreArchive(
   Map<String, dynamic> data,
 ) {
@@ -125,12 +89,10 @@ WeatherForecast? weatherForecastFromFirestoreArchive(
   }
   periods.sort((a, b) => a.time.compareTo(b.time));
 
-  return prunePastForecast(
-    WeatherForecast(
-      fetchedAt: parseWeatherDate(data['fetchedAt']),
-      locationLabel: data['locationLabel'] as String?,
-      periods: periods,
-    ),
+  return WeatherForecast(
+    fetchedAt: parseWeatherDate(data['fetchedAt']),
+    locationLabel: data['locationLabel'] as String?,
+    periods: periods,
   );
 }
 

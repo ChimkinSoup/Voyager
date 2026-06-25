@@ -13,7 +13,6 @@ import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
-import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
 import 'package:voyager/features/shell/weather_forecast_sheet.dart';
 
 const _railItemWidth = 68.0;
@@ -43,7 +42,6 @@ class AppShell extends ConsumerWidget {
           // Warm up calendar morph shaders immediately after login — before the
           // user navigates to the calendar — so the first transition is smooth.
           const CalendarMorphWarmup(),
-          const WeatherChartTransitionWarmup(),
           Scaffold(
             body: Row(
               children: [
@@ -299,9 +297,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
   @override
   Widget build(BuildContext context) {
     final weatherAsync = ref.watch(currentWeatherProvider);
-    final cachedWeather = ref.watch(cachedCurrentWeatherProvider);
-    final weather = weatherAsync.value ?? cachedWeather;
-    final icon = weather?.icon;
+    final icon = weatherAsync.value?.icon;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
@@ -354,10 +350,10 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
                           color: widget.accent,
                           size: 22,
                         ),
-                        if (weather?.tempC != null) ...[
+                        if (weatherAsync.value?.tempC != null) ...[
                           const SizedBox(height: 4),
                           Text(
-                            '${weather!.tempC!.round()}°',
+                            '${weatherAsync.value!.tempC!.round()}°',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: widget.accent,
