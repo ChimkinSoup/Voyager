@@ -42,6 +42,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   String _journalFilter = _allJournals;
   String? _lastViewedJournalId;
+  Journal? _pendingJournal;
   String? _selectedEntryId;
   JournalEntry? _selectedEntry;
   final _titleController = TextEditingController();
@@ -212,11 +213,26 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _createJournal() async {
-    final createdId = await showJournalManageSheet(context, ref);
-    if (createdId != null && mounted) {
-      setState(() => _journalFilter = createdId);
-      await _rememberViewedJournal(createdId);
+    final created = await showJournalManageSheet(context, ref);
+    if (created != null && mounted) {
+      setState(() {
+        _pendingJournal = created;
+        _journalFilter = created.id;
+        _selectedEntryId = null;
+        _selectedEntry = null;
+      });
+      unawaited(_rememberViewedJournal(created.id));
     }
+  }
+
+  void _reconcilePendingJournal(List<Journal> journals) {
+    final pending = _pendingJournal;
+    if (pending == null) return;
+    if (!journals.any((journal) => journal.id == pending.id)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _pendingJournal = null);
+    });
   }
 
   Future<void> _createEntry() async {
@@ -264,11 +280,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       createdAt: now,
       updatedAt: now,
     );
-    await journalRepo.upsertEntry(entry);
-    remoteSync.pushJournalEntryNow(entry);
     _suppressAutoSelect = true;
     _loadEntry(entry);
     _invalidateJournalEntriesIfMounted();
+    unawaited(() async {
+      await journalRepo.upsertEntry(entry);
+      remoteSync.pushJournalEntryNow(entry);
+    }());
   }
 
   void _loadEntry(JournalEntry entry) {
@@ -308,6 +326,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   void _updateBodyDraft(String entryId, String body) {
     _entryBodyDrafts[entryId] = body;
+    if (entryId == _selectedEntryId) {
+      setState(() {});
+    }
   }
 
   JournalEntry _entryWithDraftBody(JournalEntry entry) {
@@ -430,6 +451,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _selectedEntryId = null;
       _selectedEntry = null;
       _titleController.clear();
+      _journalFilter = _allJournals;
     });
     _invalidateJournalEntriesIfMounted();
   }
@@ -442,13 +464,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit quote'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Quote'),
-          onSubmitted: (_) => Navigator.pop(context, controller.text),
+        content: SizedBox(
+          width: 420,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 8,
+            decoration: const InputDecoration(labelText: 'Quote'),
+            onSubmitted: (_) => Navigator.pop(context, controller.text),
+          ),
         ),
         actions: [
           TextButton(
@@ -541,11 +566,27 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final settings = ref.watch(settingsProvider).value;
 
     return journalsAsync.when(
-      data: (journals) => entriesAsync.when(
+        data: (journals) => entriesAsync.when(
         data: (entries) {
+          _reconcilePendingJournal(journals);
+          final displayJournals = _pendingJournal != null &&
+                  !journals.any((j) => j.id == _pendingJournal!.id)
+              ? [...journals, _pendingJournal!]
+              : journals;
           final filtered = _journalFilter == _allJournals
               ? entries
               : entries.where((e) => e.journalId == _journalFilter).toList();
+          final accentJournal = _selectedEntry == null
+              ? null
+              : displayJournals.cast<Journal?>().firstWhere(
+                  (j) => j!.id == _selectedEntry!.journalId,
+                  orElse: () => null,
+                );
+          final accentColor = Color(
+            accentJournal != null
+                ? _journalFlagColor(accentJournal)
+                : Theme.of(context).colorScheme.primary.toARGB32(),
+          );
           final selectedVisible = filtered.any(
             (entry) => entry.id == _selectedEntryId,
           );
@@ -584,28 +625,32 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               Expanded(
                                 child: RoundedDropdown<String>(
                                   value:
-                                      journals.any(
+                                      displayJournals.any(
                                             (j) => j.id == _journalFilter,
                                           ) ||
                                           _journalFilter == _allJournals
                                       ? _journalFilter
-                                      : (journals.isNotEmpty
-                                            ? journals.first.id
+                                      : (displayJournals.isNotEmpty
+                                            ? displayJournals.first.id
                                             : _allJournals),
                                   items: [
-                                    if (journals.length > 1)
+                                    if (displayJournals.length > 1)
                                       const RoundedDropdownItem(
                                         value: _allJournals,
                                         label: 'All journals',
                                       ),
-                                    ...journals.map(
+                                    ...displayJournals.map(
                                       (j) => RoundedDropdownItem(
                                         value: j.id,
                                         label: j.name,
+                                        leading: JournalBookmarkFlag(
+                                          colorValue: _journalFlagColor(j),
+                                          size: 12,
+                                        ),
                                       ),
                                     ),
                                   ],
-                                  onChanged: journals.isEmpty
+                                  onChanged: displayJournals.isEmpty
                                       ? null
                                       : (v) => setState(() {
                                           _journalFilter = v;
@@ -772,7 +817,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     right: 10,
                                     child: _journalFlagForEntry(
                                       _selectedEntry!,
-                                      journals,
+                                      displayJournals,
                                     )!,
                                   ),
                               ],
@@ -781,14 +826,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                           if (_selectedEntryId != null) ...[
                             Row(
                               children: [
-                                const Text('Mood'),
+                                Text(
+                                  'Mood',
+                                  style: TextStyle(color: accentColor),
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: _MoodGradientSlider(
                                     value: _mood ?? 5,
-                                    accent: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
+                                    accent: accentColor,
                                     onChanged: (value) {
                                       setState(() {
                                         _mood = value;
@@ -801,7 +847,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 ),
                                 const SizedBox(width: 12),
                                 PopupMenuButton<VoyagerMenuCatalogEntry>(
-                                  icon: Icon(_weatherData(_weatherIcon)),
+                                  icon: Icon(
+                                    _weatherData(_weatherIcon),
+                                    color: accentColor,
+                                  ),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(
                                     minWidth: 40,
@@ -823,9 +872,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 Flexible(
                                   child: OutlinedButton.icon(
                                     onPressed: _changeEntryDate,
-                                    icon: const Icon(
+                                    icon: Icon(
                                       VoyagerIcons.calendar,
                                       size: 18,
+                                      color: accentColor,
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: accentColor,
+                                      side: BorderSide(
+                                        color: accentColor.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                      ),
                                     ),
                                     label: Text(
                                       _entryDateTimeLabel(

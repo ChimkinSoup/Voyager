@@ -24,6 +24,7 @@ class TodoEditPanel extends ConsumerStatefulWidget {
     required this.onChanged,
     required this.onDeleted,
     required this.onToggleStar,
+    this.onTaskOptimistic,
     this.listColor,
   });
 
@@ -32,6 +33,7 @@ class TodoEditPanel extends ConsumerStatefulWidget {
   final VoidCallback onChanged;
   final VoidCallback onDeleted;
   final VoidCallback onToggleStar;
+  final ValueChanged<TodoTask>? onTaskOptimistic;
   final int? listColor;
 
   @override
@@ -160,7 +162,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   Future<void> _onTitleSubmitted(String value) async {
-    await _save(title: value.trim());
+    final title = value.trim();
+    if (title.isEmpty) return;
+    final updated = widget.task.copyWith(title: title);
+    widget.onTaskOptimistic?.call(updated);
+    unawaited(_save(title: title));
     if (mounted) FocusScope.of(context).unfocus();
   }
 
@@ -187,25 +193,22 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       initialDateTime: (_dueDate ?? DateTime.now()).toLocal(),
     );
     if (picked == null || !mounted) return;
-    setState(() => _dueDate = picked.toUtc());
-    await _save(dueDate: _dueDate);
-  }
-
-  Future<void> _pickDueDay() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: (_dueDate ?? DateTime.now()).toLocal(),
-      firstDate: DateTime(1970),
-      lastDate: DateTime(2100),
+    final due = picked.hour == 0 && picked.minute == 0
+        ? DateUtils.dateOnly(picked).toUtc()
+        : picked.toUtc();
+    setState(() => _dueDate = due);
+    widget.onTaskOptimistic?.call(
+      widget.task.copyWith(dueDate: due),
     );
-    if (picked == null || !mounted) return;
-    setState(() => _dueDate = DateUtils.dateOnly(picked).toUtc());
-    await _save(dueDate: _dueDate);
+    unawaited(_save(dueDate: due));
   }
 
   Future<void> _clearDueDate() async {
     setState(() => _dueDate = null);
-    await _save(clearDueDate: true);
+    widget.onTaskOptimistic?.call(
+      widget.task.copyWith(clearDueDate: true),
+    );
+    unawaited(_save(clearDueDate: true));
   }
 
   Future<void> _addSubtask() async {
@@ -244,10 +247,12 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       message: 'Delete "${widget.task.title}"?',
     );
     if (!confirmed) return;
-    final deleted = widget.task.copyWith(deletedAt: utcNow());
-    await ref.read(todoRepositoryProvider).upsertTask(deleted);
-    await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
     widget.onDeleted();
+    final deleted = widget.task.copyWith(deletedAt: utcNow());
+    unawaited(() async {
+      await ref.read(todoRepositoryProvider).upsertTask(deleted);
+      await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    }());
   }
 
   String _formatDue(DateTime dateTime) {
@@ -269,7 +274,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       elevation: 0,
       color: theme.colorScheme.surface,
       child: Container(
-        width: 420,
+        width: double.infinity,
         decoration: BoxDecoration(
           border: Border(left: BorderSide(color: theme.dividerColor)),
         ),
@@ -333,33 +338,14 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                     ),
                   ),
                   label: Text(
-                    _dueDate == null
-                        ? 'Add due date & time'
-                        : _formatDue(_dueDate!),
+                    _dueDate == null ? 'Set due date' : _formatDue(_dueDate!),
                   ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _pickDueDay,
-                  icon: const Icon(
-                    PhosphorIconsRegular.calendarBlank,
-                    size: 18,
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: listColor,
-                    side: listColor == null
-                        ? null
-                        : BorderSide(color: listColor.withValues(alpha: 0.7)),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  label: const Text('Add due day'),
                 ),
                 if (_dueDate != null)
                   TextButton(
                     onPressed: _clearDueDate,
-                    child: const Text('Clear due date'),
+                    style: TextButton.styleFrom(foregroundColor: listColor),
+                    child: const Text('Reset due date'),
                   ),
               ],
             ),
@@ -373,11 +359,22 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 expands: true,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
-                onChanged: _onNotesChanged,
+                onChanged: (value) {
+                  final notes = value.trim();
+                  widget.onTaskOptimistic?.call(
+                    notes.isEmpty
+                        ? widget.task.copyWith(clearNotes: true)
+                        : widget.task.copyWith(notes: notes),
+                  );
+                  unawaited(_onNotesChanged(value));
+                },
               ),
             ),
             const SizedBox(height: 12),
-            Text('Subtasks', style: theme.textTheme.titleSmall),
+            Text(
+              'Subtasks',
+              style: theme.textTheme.titleSmall?.copyWith(color: listColor),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -400,27 +397,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               child: ListView(
                 children: _subtasks
                     .map(
-                      (subtask) => CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        activeColor: listColor,
-                        value: subtask.completed,
-                        onChanged: (v) => _toggleSubtask(subtask, v ?? false),
-                        title: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOut,
-                          style: theme.textTheme.bodyMedium!.copyWith(
-                            decoration: subtask.completed
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
-                            color: subtask.completed
-                                ? theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.55,
-                                  )
-                                : null,
-                          ),
-                          child: Text(subtask.title),
-                        ),
+                      (subtask) => _SubtaskRow(
+                        subtask: subtask,
+                        listColor: listColor,
+                        onToggle: (completed) =>
+                            _toggleSubtask(subtask, completed),
                       ),
                     )
                     .toList(),
@@ -434,9 +415,132 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               ),
             ),
             const SizedBox(height: 8),
-            FilledButton(onPressed: _close, child: const Text('Save')),
+            FilledButton(
+              onPressed: _close,
+              style: FilledButton.styleFrom(
+                backgroundColor: listColor,
+                foregroundColor: listColor == null ? null : Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SubtaskRow extends StatefulWidget {
+  const _SubtaskRow({
+    required this.subtask,
+    required this.onToggle,
+    this.listColor,
+  });
+
+  final TodoTask subtask;
+  final ValueChanged<bool> onToggle;
+  final Color? listColor;
+
+  @override
+  State<_SubtaskRow> createState() => _SubtaskRowState();
+}
+
+class _SubtaskRowState extends State<_SubtaskRow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _strikeProgress;
+  var _displayCompleted = false;
+  var _animating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayCompleted = widget.subtask.completed;
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _strikeProgress = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
+    );
+    if (widget.subtask.completed) _controller.value = 1.0;
+  }
+
+  @override
+  void didUpdateWidget(covariant _SubtaskRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_animating) return;
+    if (oldWidget.subtask.completed != widget.subtask.completed) {
+      _displayCompleted = widget.subtask.completed;
+      _controller.value = widget.subtask.completed ? 1.0 : 0.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleToggle(bool? value) async {
+    if (_animating) return;
+    if (value == true && !widget.subtask.completed) {
+      setState(() {
+        _animating = true;
+        _displayCompleted = true;
+      });
+      await _controller.forward(from: 0);
+      if (!mounted) return;
+      widget.onToggle(true);
+      setState(() => _animating = false);
+    } else if (value == false && widget.subtask.completed) {
+      setState(() => _animating = true);
+      await _controller.reverse(from: 1.0);
+      if (!mounted) return;
+      setState(() => _displayCompleted = false);
+      widget.onToggle(false);
+      setState(() => _animating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strikeColor = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.55);
+    return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      activeColor: widget.listColor,
+      value: _displayCompleted,
+      onChanged: _handleToggle,
+      title: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Text(
+            widget.subtask.title,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: _displayCompleted ? strikeColor : null,
+            ),
+          ),
+          if (_displayCompleted)
+            Positioned.fill(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: AnimatedBuilder(
+                  animation: _strikeProgress,
+                  builder: (context, _) {
+                    return FractionallySizedBox(
+                      widthFactor: _strikeProgress.value.clamp(0.0, 1.0),
+                      alignment: Alignment.centerLeft,
+                      child: Container(height: 1.5, color: strikeColor),
+                    );
+                  },
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

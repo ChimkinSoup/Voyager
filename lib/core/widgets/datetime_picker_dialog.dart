@@ -78,8 +78,14 @@ class _DateTimePickerDialogState extends State<DateTimePickerDialog> {
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(
+                      DateTime(_date.year, _date.month, _date.day),
+                    ),
+                    child: const Text('Add date'),
+                  ),
+                  const Spacer(),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
                     child: const Text('Cancel'),

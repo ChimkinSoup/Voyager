@@ -819,6 +819,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }) {
     final next = selection.first;
 
+    if (_dayViewDate != null) {
+      _abortMorphAnimation();
+      setState(() {
+        _dayViewDate = null;
+        _mode = next;
+        if (next == CalendarViewMode.year) {
+          _focused = DateTime(_focused.year, 1, 1);
+        } else if (next == CalendarViewMode.month) {
+          _focused = DateTime(_focused.year, _focused.month, 1);
+        } else {
+          _focused = _weekStart(_focused, weekStartsMonday);
+        }
+      });
+      return;
+    }
+
     if (next == CalendarViewMode.week &&
         _mode == CalendarViewMode.month &&
         !_isZooming &&
@@ -891,11 +907,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _isWeekMorphing = false;
       _weekMorphForward = true;
       _clearWeekMorphCache();
+      if (_dayViewDate != null) {
+        _dayViewDate = null;
+      }
       if (_mode == CalendarViewMode.week) {
         _rememberViewedWeek(_focused, weekStartsMonday);
       }
       _mode = next;
-      _dayViewDate = null;
       if (next == CalendarViewMode.year) {
         _focused = DateTime(_focused.year, 1, 1);
       } else if (next == CalendarViewMode.month) {
@@ -1119,9 +1137,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     }
 
     return _ViewModeSegmentedControl(
-      weekSelect: _mode == CalendarViewMode.week ? 1.0 : 0.0,
-      monthSelect: _mode == CalendarViewMode.month ? 1.0 : 0.0,
-      yearSelect: _mode == CalendarViewMode.year ? 1.0 : 0.0,
+      weekSelect: _dayViewDate != null
+          ? 0.0
+          : (_mode == CalendarViewMode.week ? 1.0 : 0.0),
+      monthSelect: _dayViewDate != null
+          ? 0.0
+          : (_mode == CalendarViewMode.month ? 1.0 : 0.0),
+      yearSelect: _dayViewDate != null
+          ? 0.0
+          : (_mode == CalendarViewMode.year ? 1.0 : 0.0),
       onSelectionChanged: onSelectionChanged,
       interactive: interactive,
     );
@@ -1450,7 +1474,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                     const Spacer(),
                     if (_isWeekMorphing)
                       _buildMorphFocusHeader(context, weekStartsMonday)
-                    else if (_mode != CalendarViewMode.month)
+                    else if (_mode != CalendarViewMode.month &&
+                        _dayViewDate == null)
                       _buildFocusHeader(context, weekStartsMonday),
                     const SizedBox(width: 8),
                     OutlinedButton(

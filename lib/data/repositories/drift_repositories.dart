@@ -74,6 +74,19 @@ class DriftJournalRepository implements JournalRepository {
   }
 
   @override
+  Future<void> softDeleteEntriesInJournal(String journalId) async {
+    final now = utcNow();
+    await (_db.update(_db.journalEntriesTable)
+          ..where((t) => t.journalId.equals(journalId)))
+        .write(
+      JournalEntriesTableCompanion(
+        deletedAt: Value(now),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  @override
   Future<void> deleteAllJournals() async {
     await _db.delete(_db.journalsTable).go();
   }
@@ -287,6 +300,30 @@ class DriftTodoRepository implements TodoRepository {
     await (_db.update(_db.todoListsTable)..where((t) => t.id.equals(id))).write(
       TodoListsTableCompanion(
         deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<void> softDeleteTasksInList(String listId) async {
+    final now = utcNow();
+    await (_db.update(_db.todoTasksTable)..where((t) => t.listId.equals(listId)))
+        .write(
+      TodoTasksTableCompanion(
+        deletedAt: Value(now),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  @override
+  Future<void> reassignTasksList(String fromListId, String toListId) async {
+    await (_db.update(_db.todoTasksTable)
+          ..where((t) => t.listId.equals(fromListId)))
+        .write(
+      TodoTasksTableCompanion(
+        listId: Value(toListId),
         updatedAt: Value(utcNow()),
       ),
     );

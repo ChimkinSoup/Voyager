@@ -309,31 +309,35 @@ class _ColorSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+  final ringColor = theme.colorScheme.onSurface.withValues(alpha: 0.45);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: BorderRadius.circular(radius + 3),
       child: Container(
-        width: radius * 2,
-        height: radius * 2,
+        width: radius * 2 + 6,
+        height: radius * 2 + 6,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: used && !selected
-              ? Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.32),
-                  width: 2,
-                )
-              : null,
+          border: selected
+              ? Border.all(color: ringColor, width: 2.5)
+              : (used
+                    ? Border.all(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.32,
+                        ),
+                        width: 2,
+                      )
+                    : null),
         ),
-        padding: EdgeInsets.all(used && !selected ? 2 : 0),
+        alignment: Alignment.center,
         child: CircleAvatar(
           radius: radius,
           backgroundColor: Color(colorValue),
           child: selected
               ? const Icon(
-                  PhosphorIconsRegular.check,
-                  size: 18,
+                  PhosphorIconsBold.check,
+                  size: 20,
                   color: Colors.white,
                 )
               : null,

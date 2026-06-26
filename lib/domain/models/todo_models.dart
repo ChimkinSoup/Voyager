@@ -55,6 +55,7 @@ class TodoTask extends SoftDeletable {
   bool get isSubtask => parentTaskId != null;
 
   TodoTask copyWith({
+    String? listId,
     String? title,
     String? notes,
     DateTime? dueDate,
@@ -72,7 +73,7 @@ class TodoTask extends SoftDeletable {
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
       deletedAt: deletedAt ?? this.deletedAt,
-      listId: listId,
+      listId: listId ?? this.listId,
       title: title ?? this.title,
       notes: clearNotes ? null : (notes ?? this.notes),
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
@@ -88,15 +89,19 @@ class TodoTask extends SoftDeletable {
 }
 
 int compareTodoTasks(TodoTask a, TodoTask b) {
+  if (a.starred != b.starred) return a.starred ? -1 : 1;
+
+  if (!a.starred && !b.starred) {
+    if (a.dueDate != null || b.dueDate != null) {
+      if (a.dueDate == null) return 1;
+      if (b.dueDate == null) return -1;
+      final dueOrder = a.dueDate!.compareTo(b.dueDate!);
+      if (dueOrder != 0) return dueOrder;
+    }
+  }
+
   final order = a.sortOrder.compareTo(b.sortOrder);
   if (order != 0) return order;
-  if (a.starred != b.starred) return a.starred ? -1 : 1;
-  if (a.dueDate != null || b.dueDate != null) {
-    if (a.dueDate == null) return 1;
-    if (b.dueDate == null) return -1;
-    final dueOrder = a.dueDate!.compareTo(b.dueDate!);
-    if (dueOrder != 0) return dueOrder;
-  }
   return a.createdAt.compareTo(b.createdAt);
 }
 

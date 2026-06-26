@@ -92,7 +92,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     final text = widget.controller.text;
 
     return Stack(
-      fit: StackFit.expand,
+      fit: widget.expands ? StackFit.expand : StackFit.loose,
       textDirection: textDirection,
       children: [
         Positioned.fill(

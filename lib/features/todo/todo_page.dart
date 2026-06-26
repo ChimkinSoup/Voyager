@@ -1,14 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
-import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
@@ -31,6 +32,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   final _taskFocusNode = FocusNode();
   List<String>? _optimisticActiveTaskOrder;
   final _completionOverrides = <String, bool>{};
+  final _taskOverrides = <String, TodoTask>{};
   var _completedExpanded = true;
 
   @override
@@ -42,21 +44,26 @@ class _TodoPageState extends ConsumerState<TodoPage> {
 
   Future<void> _ensureDefaultList() async {
     final repo = ref.read(todoRepositoryProvider);
-    final lists = await repo.listLists();
-    if (lists.isEmpty) {
+    var lists = await repo.listLists();
+    if (!lists.any((list) => list.id == legacyTodoListId)) {
       final now = utcNow();
       final list = TodoListModel(
-        id: newId(),
+        id: legacyTodoListId,
         name: 'To-do',
         createdAt: now,
         updatedAt: now,
       );
       await repo.upsertList(list);
       ref.read(remoteSyncServiceProvider).pushTodoList(list);
-      _selectedListId = list.id;
-    } else {
-      _selectedListId ??= lists.first.id;
+      lists = await repo.listLists();
     }
+    _selectedListId ??= lists
+        .cast<TodoListModel?>()
+        .firstWhere(
+          (l) => l!.id == legacyTodoListId,
+          orElse: () => lists.isNotEmpty ? lists.first : null,
+        )
+        ?.id;
   }
 
   Future<void> _addTask() async {
@@ -103,15 +110,35 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
   }
 
-  List<TodoTask> _tasksWithCompletionOverrides(List<TodoTask> tasks) {
-    if (_completionOverrides.isEmpty) return tasks;
+  List<TodoTask> _tasksWithOverrides(List<TodoTask> tasks) {
+    if (_completionOverrides.isEmpty && _taskOverrides.isEmpty) return tasks;
     return [
       for (final task in tasks)
-        switch (_completionOverrides[task.id]) {
-          null => task,
-          final completed => task.copyWith(completed: completed),
-        },
+        _taskOverrides[task.id] ??
+            switch (_completionOverrides[task.id]) {
+              null => task,
+              final completed => task.copyWith(completed: completed),
+            },
     ];
+  }
+
+  void _reconcileTaskOverrides(List<TodoTask> tasks) {
+    if (_taskOverrides.isEmpty) return;
+    final resolvedIds = <String>[
+      for (final task in tasks)
+        if (_taskOverrides.containsKey(task.id) &&
+            _taskOverrides[task.id] == task)
+          task.id,
+    ];
+    if (resolvedIds.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        for (final id in resolvedIds) {
+          _taskOverrides.remove(id);
+        }
+      });
+    });
   }
 
   void _reconcileCompletionOverrides(List<TodoTask> tasks) {
@@ -131,17 +158,56 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     });
   }
 
-  Future<void> _toggleStar(TodoTask task) async {
-    final repo = ref.read(todoRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    final updated = task.copyWith(
-      starred: !task.starred,
-      clearPreStarSortOrder: true,
-    );
-    await repo.upsertTask(updated);
-    remoteSync.pushTodoTaskNow(updated);
+  Future<void> _toggleStar(TodoTask task, List<TodoTask> activeTasks) async {
+    final starring = !task.starred;
+    final TodoTask updated;
+    if (starring) {
+      final orders = activeTasks
+          .where((t) => t.starred && t.id != task.id)
+          .map((t) => _taskOverrides[t.id]?.sortOrder ?? t.sortOrder);
+      final minOrder = orders.isEmpty
+          ? (activeTasks.isEmpty
+                ? task.sortOrder - 1
+                : activeTasks
+                      .map((t) => _taskOverrides[t.id]?.sortOrder ?? t.sortOrder)
+                      .reduce(math.min))
+          : orders.reduce(math.min);
+      updated = task.copyWith(
+        starred: true,
+        sortOrder: minOrder - 1,
+        preStarSortOrder: task.sortOrder,
+      );
+    } else {
+      updated = task.copyWith(
+        starred: false,
+        sortOrder: task.preStarSortOrder ?? task.sortOrder,
+        clearPreStarSortOrder: true,
+      );
+    }
+
+    setState(() {
+      _taskOverrides[task.id] = updated;
+      if (starring) {
+        _optimisticActiveTaskOrder = [
+          task.id,
+          ...activeTasks
+              .where((t) => t.id != task.id)
+              .map((t) => t.id),
+        ];
+      } else {
+        _optimisticActiveTaskOrder = null;
+      }
+    });
+
+    unawaited(_persistTaskUpdate(updated));
+  }
+
+  Future<void> _persistTaskUpdate(TodoTask updated) async {
+    await ref.read(todoRepositoryProvider).upsertTask(updated);
+    if (!mounted) return;
     ref.invalidate(todoTasksProvider(updated.listId));
     ref.invalidate(todoListsProvider);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
   }
 
   Future<({int completed, int total})> _subtaskStats(String taskId) async {
@@ -218,7 +284,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
         return tasksAsync.when(
           data: (tasks) {
             _reconcileCompletionOverrides(tasks);
-            final sorted = sortTodoTasks(_tasksWithCompletionOverrides(tasks));
+            _reconcileTaskOverrides(tasks);
+            final sorted = sortTodoTasks(_tasksWithOverrides(tasks));
             final active = _applyOptimisticActiveOrder(
               sorted.where((t) => !t.completed).toList(),
             );
@@ -241,13 +308,6 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                       children: [
                         Row(
                           children: [
-                            if (currentList?.colorValue != null) ...[
-                              ColorCornerFlag(
-                                colorValue: currentList!.colorValue!,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 8),
-                            ],
                             Expanded(
                               child: RoundedDropdown<String>(
                                 value: _selectedListId!,
@@ -314,7 +374,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                             onToggle: (v) =>
                                                 _toggleTask(active[i], v),
                                             onStar: () =>
-                                                _toggleStar(active[i]),
+                                                _toggleStar(active[i], active),
                                             onEdit: () => setState(
                                               () => _selectedTaskId =
                                                   active[i].id,
@@ -366,7 +426,8 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                         listColor: currentList?.colorValue,
                                         subtaskStats: _subtaskStats(task.id),
                                         onToggle: (v) => _toggleTask(task, v),
-                                        onStar: () => _toggleStar(task),
+                                        onStar: () =>
+                                            _toggleStar(task, active),
                                         onEdit: () => setState(
                                           () => _selectedTaskId = task.id,
                                         ),
@@ -395,6 +456,16 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                               height: 48,
                               child: FilledButton(
                                 onPressed: _addTask,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: currentList?.colorValue ==
+                                          null
+                                      ? null
+                                      : Color(currentList!.colorValue!),
+                                  foregroundColor: currentList?.colorValue ==
+                                          null
+                                      ? null
+                                      : Colors.white,
+                                ),
                                 child: const Text('Add'),
                               ),
                             ),
@@ -404,21 +475,15 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                     ),
                   ),
                 ),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  reverseDuration: const Duration(milliseconds: 160),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) {
-                    final offset = Tween<Offset>(
-                      begin: const Offset(1, 0),
-                      end: Offset.zero,
-                    ).animate(animation);
-                    return SlideTransition(position: offset, child: child);
-                  },
-                  child: selectedTask == null
-                      ? const SizedBox.shrink()
-                      : TodoEditPanel(
+                ClipRect(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    width: selectedTask == null ? 0 : 420,
+                    child: selectedTask == null
+                        ? const SizedBox.shrink()
+                        : TodoEditPanel(
+                          key: ValueKey(selectedTask.id),
                           task: selectedTask,
                           listColor: currentList?.colorValue,
                           onClose: () => setState(() => _selectedTaskId = null),
@@ -435,8 +500,15 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                             );
                             ref.invalidate(todoListsProvider);
                           },
-                          onToggleStar: () => _toggleStar(selectedTask),
+                          onToggleStar: () => _toggleStar(
+                            selectedTask,
+                            sorted.where((t) => !t.completed).toList(),
+                          ),
+                          onTaskOptimistic: (task) => setState(
+                            () => _taskOverrides[task.id] = task,
+                          ),
                         ),
+                  ),
                 ),
               ],
             );
@@ -568,17 +640,31 @@ class _TaskRowState extends State<_TaskRow>
     return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dueDate)}';
   }
 
-  String? _metadataLabel(
+  List<Widget> _metadataWidgets(
     String? dueLabel,
     ({int completed, int total})? stats,
+    bool hasNotes,
+    Color? metadataColor,
   ) {
-    final parts = <String>[];
-    if (dueLabel != null) parts.add(dueLabel);
-    if (stats != null && stats.total > 0) {
-      parts.add('${stats.completed} : ${stats.total}');
+    final widgets = <Widget>[];
+    if (dueLabel != null) {
+      widgets.add(Text(dueLabel));
     }
-    if (parts.isEmpty) return null;
-    return parts.join(' · ');
+    if (stats != null && stats.total > 0) {
+      if (widgets.isNotEmpty) widgets.add(const Text(' · '));
+      widgets.add(Text('${stats.completed} : ${stats.total}'));
+    }
+    if (hasNotes) {
+      if (widgets.isNotEmpty) widgets.add(const Text(' · '));
+      widgets.add(
+        Icon(
+          PhosphorIconsRegular.note,
+          size: 10,
+          color: metadataColor,
+        ),
+      );
+    }
+    return widgets;
   }
 
   @override
@@ -658,23 +744,32 @@ class _TaskRowState extends State<_TaskRow>
                     FutureBuilder(
                       future: widget.subtaskStats,
                       builder: (context, snapshot) {
-                        final metadata = _metadataLabel(
+                        final metadataColor = Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.72);
+                        final metadata = _metadataWidgets(
                           dueLabel,
                           snapshot.data,
+                          widget.task.notes?.trim().isNotEmpty == true,
+                          metadataColor,
                         );
-                        if (metadata == null) return const SizedBox.shrink();
+                        if (metadata.isEmpty) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            metadata,
+                          child: DefaultTextStyle(
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   fontSize: 10,
-                                  color: Theme.of(context).colorScheme.onSurface
-                                      .withValues(alpha: 0.72),
-                                ),
+                                  color: metadataColor,
+                                ) ??
+                                TextStyle(fontSize: 10, color: metadataColor),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: metadata,
+                            ),
                           ),
                         );
                       },

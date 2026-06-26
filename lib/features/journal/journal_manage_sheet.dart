@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,17 +12,19 @@ import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
-Future<String?> showJournalManageSheet(
+Future<Journal?> showJournalManageSheet(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  final createdId = await showDialog<String?>(
+  final created = await showDialog<Journal?>(
     context: context,
     builder: (context) => const _JournalManageDialog(),
   );
-  ref.invalidate(journalsProvider);
-  ref.invalidate(journalEntriesProvider);
-  return createdId;
+  if (created != null) {
+    ref.invalidate(journalsProvider);
+    ref.invalidate(journalEntriesProvider);
+  }
+  return created;
 }
 
 class _JournalManageDialog extends ConsumerStatefulWidget {
@@ -35,7 +39,6 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
   var _loading = true;
   List<Journal> _journals = [];
   Map<String, int> _entryCounts = {};
-  String? _createdJournalId;
 
   @override
   void initState() {
@@ -85,27 +88,48 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
           .map((j) => j.colorValue!)
           .toSet(),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
 
-    final repo = ref.read(journalRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
     final now = utcNow();
     final trimmed = result.name;
+    final Journal created;
+    if (_journals.isEmpty) {
+      created = Journal(
+        id: newId(),
+        name: trimmed,
+        colorValue: result.color,
+        createdAt: now,
+        updatedAt: now,
+      );
+    } else {
+      created = Journal(
+        id: newId(),
+        name: trimmed,
+        colorValue: result.color,
+        createdAt: now,
+        updatedAt: now,
+      );
+    }
+
+    if (!mounted) return;
+    Navigator.pop(context, created);
+    unawaited(_persistCreatedJournal(created, defaultJournalColor));
+  }
+
+  Future<void> _persistCreatedJournal(
+    Journal created,
+    int defaultJournalColor,
+  ) async {
+    final repo = ref.read(journalRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
 
     if (_journals.isEmpty) {
       final legacy = Journal(
         id: legacyJournalId,
         name: 'Journal',
         colorValue: defaultJournalColor,
-        createdAt: now,
-        updatedAt: now,
-      );
-      final named = Journal(
-        id: newId(),
-        name: trimmed,
-        colorValue: result.color,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
       );
       await repo.upsertJournal(legacy);
       remoteSync.pushJournal(legacy);
@@ -119,22 +143,12 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
           remoteSync.pushJournalEntry(migrated);
         }
       }
-      await repo.upsertJournal(named);
-      remoteSync.pushJournal(named);
-      _createdJournalId = named.id;
-    } else {
-      final journal = Journal(
-        id: newId(),
-        name: trimmed,
-        colorValue: result.color,
-        createdAt: now,
-        updatedAt: now,
-      );
-      await repo.upsertJournal(journal);
-      remoteSync.pushJournal(journal);
-      _createdJournalId = journal.id;
     }
-    await _reload();
+
+    await repo.upsertJournal(created);
+    remoteSync.pushJournal(created);
+    ref.invalidate(journalsProvider);
+    ref.invalidate(journalEntriesProvider);
   }
 
   Future<void> _renameJournal(Journal journal) async {
@@ -168,18 +182,27 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
   Future<void> _deleteJournal(Journal journal) async {
     if (journal.id == legacyJournalId) return;
     final count = _entryCounts[journal.id] ?? 0;
-    final confirmed = await showConfirmDialog(
+    final choice = await showDeleteContainerDialog(
       context,
       title: 'Delete "${journal.name}"?',
       message: count == 0
           ? 'This journal has no entries and will be removed.'
-          : 'This journal has $count entries. They will be kept under the default journal.',
+          : 'This journal has $count entries. Move them to the default "Journal", or delete everything.',
+      deleteAllLabel: 'Yes (delete all entries)',
     );
-    if (!confirmed) return;
+    if (choice == DeleteContainerChoice.cancel) return;
 
     final repo = ref.read(journalRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
-    if (count > 0) {
+
+    if (choice == DeleteContainerChoice.deleteAll && count > 0) {
+      final entries = await repo.listEntries(journalId: journal.id);
+      await repo.softDeleteEntriesInJournal(journal.id);
+      final now = utcNow();
+      for (final entry in entries) {
+        remoteSync.pushJournalEntryNow(entry.copyWith(deletedAt: now));
+      }
+    } else if (choice == DeleteContainerChoice.moveToDefault && count > 0) {
       final fallback = _journals.firstWhere(
         (item) => item.id == legacyJournalId,
         orElse: () {
@@ -200,12 +223,16 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       final entries = await repo.listEntries(journalId: journal.id);
       await repo.reassignEntriesJournal(journal.id, legacyJournalId);
       for (final entry in entries) {
-        final migrated = entry.copyWith(journalId: legacyJournalId);
-        remoteSync.pushJournalEntry(migrated);
+        remoteSync.pushJournalEntryNow(
+          entry.copyWith(journalId: legacyJournalId),
+        );
       }
     }
+
     await repo.softDeleteJournal(journal.id);
     await remoteSync.pushJournalById(journal.id);
+    ref.invalidate(journalsProvider);
+    ref.invalidate(journalEntriesProvider);
     await _reload();
   }
 
@@ -312,7 +339,7 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context, _createdJournalId),
+          onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
         ),
         FilledButton.icon(

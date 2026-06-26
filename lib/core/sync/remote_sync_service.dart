@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -316,12 +317,18 @@ class RemoteSyncService {
     if (collection == FirestoreCollections.journals) {
       return journalDocumentIdForFirestore(localId);
     }
+    if (collection == FirestoreCollections.todoLists) {
+      return todoListDocumentIdForFirestore(localId);
+    }
     return localId;
   }
 
   String _localDocumentId(String collection, String firestoreId) {
     if (collection == FirestoreCollections.journals) {
       return journalDocumentIdFromFirestore(firestoreId);
+    }
+    if (collection == FirestoreCollections.todoLists) {
+      return todoListDocumentIdFromFirestore(firestoreId);
     }
     return firestoreId;
   }
@@ -337,10 +344,22 @@ class RemoteSyncService {
         normalized['id'] as String,
       );
     }
+    if (collection == FirestoreCollections.todoLists &&
+        normalized['id'] is String) {
+      normalized['id'] = todoListDocumentIdFromFirestore(
+        normalized['id'] as String,
+      );
+    }
     if (collection == FirestoreCollections.journalEntries &&
         normalized['journalId'] is String) {
       normalized['journalId'] = journalReferenceIdFromFirestore(
         normalized['journalId'] as String,
+      );
+    }
+    if (collection == FirestoreCollections.todoTasks &&
+        normalized['listId'] is String) {
+      normalized['listId'] = todoListDocumentIdFromFirestore(
+        normalized['listId'] as String,
       );
     }
     return normalized;
@@ -437,7 +456,7 @@ class RemoteSyncService {
   Future<void> _uploadTodoListNow(TodoListModel list) {
     return _syncEngine.syncDocumentImmediately(
       collection: FirestoreCollections.todoLists,
-      documentId: list.id,
+      documentId: todoListDocumentIdForFirestore(list.id),
       payload: todoListToFirestore(list),
     );
   }

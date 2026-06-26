@@ -3,10 +3,15 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
 class RoundedDropdownItem<T> {
-  const RoundedDropdownItem({required this.value, required this.label});
+  const RoundedDropdownItem({
+    required this.value,
+    required this.label,
+    this.leading,
+  });
 
   final T value;
   final String label;
+  final Widget? leading;
 }
 
 /// Toggle to restore the bordered dropdown style from before feedback changes.
@@ -60,6 +65,10 @@ class RoundedDropdown<T> extends StatelessWidget {
               ),
               child: Row(
                 children: [
+                  if (selected?.leading != null) ...[
+                    selected!.leading!,
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       selected?.label ?? '',
@@ -103,12 +112,35 @@ class RoundedDropdown<T> extends StatelessWidget {
         minWidth: buttonRect.width,
         maxWidth: buttonRect.width,
       ),
-      items: voyagerSelectMenuEntries<T>(
-        context: context,
-        items: [
-          for (final item in items) (value: item.value, label: item.label),
+      items: voyagerPopupMenuEntries<T>(
+        [
+          for (final item in items)
+            (
+              value: item.value,
+              child: Row(
+                children: [
+                  if (item.leading != null) ...[
+                    item.leading!,
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      item.label,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (item.value == value) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      PhosphorIconsRegular.check,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ],
+              ),
+            ),
         ],
-        selected: value,
       ),
     );
     if (picked != null) onChanged?.call(picked);

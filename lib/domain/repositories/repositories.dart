@@ -10,6 +10,7 @@ abstract class JournalRepository {
   Future<Journal?> getJournal(String id);
   Future<void> upsertJournal(Journal journal, {bool recordLocalActivity = true});
   Future<void> softDeleteJournal(String id);
+  Future<void> softDeleteEntriesInJournal(String journalId);
   Future<void> deleteAllJournals();
   Future<void> deleteAllEntries();
   Future<void> reassignEntriesJournal(String fromJournalId, String toJournalId);
@@ -31,6 +32,8 @@ abstract class TodoRepository {
   Future<List<TodoListModel>> listLists({bool includeDeleted = false});
   Future<void> upsertList(TodoListModel list, {bool recordLocalActivity = true});
   Future<void> softDeleteList(String id);
+  Future<void> softDeleteTasksInList(String listId);
+  Future<void> reassignTasksList(String fromListId, String toListId);
 
   Future<List<TodoTask>> listTasks(
     String listId, {

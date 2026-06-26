@@ -2,6 +2,7 @@ import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/core/constants/todo_constants.dart';
 
 DateTime? parseFirestoreDate(dynamic value) {
   if (value == null) return null;
@@ -138,7 +139,7 @@ JournalEntry mergeJournalEntryFromRemote(
 }
 
 Map<String, dynamic> todoListToFirestore(TodoListModel list) => {
-  'id': list.id,
+  'id': todoListDocumentIdForFirestore(list.id),
   'name': list.name,
   'colorValue': list.colorValue,
   'createdAt': list.createdAt.toIso8601String(),
@@ -172,7 +173,7 @@ TodoListModel mergeTodoListFromRemote(
 
 Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'id': task.id,
-  'listId': task.listId,
+  'listId': todoListDocumentIdForFirestore(task.listId),
   'title': task.title,
   'notes': task.notes,
   'dueDate': _dateToFirestore(task.dueDate),

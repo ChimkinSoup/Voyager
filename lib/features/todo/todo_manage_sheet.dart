@@ -7,6 +7,7 @@ import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
+import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 Future<String?> showTodoListManageSheet(
@@ -113,21 +114,71 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
     final updated = list.copyWith(colorValue: color);
     await ref.read(todoRepositoryProvider).upsertList(updated);
     ref.read(remoteSyncServiceProvider).pushTodoList(updated);
+    ref.invalidate(todoListsProvider);
     await _reload();
   }
 
   Future<void> _deleteList(TodoListModel list) async {
-    final confirmed = await showConfirmDialog(
+    if (list.id == legacyTodoListId) return;
+    final stat = _stats[list.id];
+    final total = (stat?.active ?? 0) + (stat?.completed ?? 0);
+    final choice = await showDeleteContainerDialog(
       context,
       title: 'Delete "${list.name}"?',
-      message: 'All tasks in this list will be soft-deleted.',
+      message: total == 0
+          ? 'This list has no tasks and will be removed.'
+          : 'This list has $total tasks. Move them to the default "To-do" list, or delete everything.',
+      deleteAllLabel: 'Yes (delete all tasks)',
     );
-    if (!confirmed) return;
-    await ref.read(todoRepositoryProvider).softDeleteList(list.id);
+    if (choice == DeleteContainerChoice.cancel) return;
+
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+
+    if (choice == DeleteContainerChoice.moveToDefault && total > 0) {
+      final fallback = _lists.firstWhere(
+        (item) => item.id == legacyTodoListId,
+        orElse: () {
+          final now = utcNow();
+          return TodoListModel(
+            id: legacyTodoListId,
+            name: 'To-do',
+            colorValue: Theme.of(context).colorScheme.primary.toARGB32(),
+            createdAt: now,
+            updatedAt: now,
+          );
+        },
+      );
+      if (!_lists.any((item) => item.id == legacyTodoListId)) {
+        await repo.upsertList(fallback);
+        remoteSync.pushTodoList(fallback);
+      }
+      final tasks = await repo.listTasks(
+        list.id,
+        topLevelOnly: false,
+      );
+      await repo.reassignTasksList(list.id, legacyTodoListId);
+      for (final task in tasks) {
+        remoteSync.pushTodoTaskNow(task.copyWith(listId: legacyTodoListId));
+      }
+    } else if (choice == DeleteContainerChoice.deleteAll && total > 0) {
+      final tasks = await repo.listTasks(
+        list.id,
+        topLevelOnly: false,
+      );
+      await repo.softDeleteTasksInList(list.id);
+      final now = utcNow();
+      for (final task in tasks) {
+        remoteSync.pushTodoTaskNow(task.copyWith(deletedAt: now));
+      }
+    }
+
+    await repo.softDeleteList(list.id);
     final deleted =
-        (await ref.read(todoRepositoryProvider).listLists(includeDeleted: true))
+        (await repo.listLists(includeDeleted: true))
             .firstWhere((item) => item.id == list.id);
-    ref.read(remoteSyncServiceProvider).pushTodoList(deleted);
+    remoteSync.pushTodoList(deleted);
+    ref.invalidate(todoListsProvider);
     await _reload();
   }
 
@@ -202,7 +253,12 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                       },
                       itemBuilder: (context) => buildCatalogMenu(
                         context,
-                        from: entityManageMenuEntries,
+                        from: list.id == legacyTodoListId
+                            ? entityManageMenuEntries.where(
+                                (entry) =>
+                                    entry != VoyagerMenuCatalogEntry.delete,
+                              )
+                            : entityManageMenuEntries,
                       ),
                     ),
                   );
