@@ -10,6 +10,7 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart';
 
 export 'calendar_day_grid.dart'
     show
+        CalendarDayCell,
         CalendarDayIndicator,
         CalendarDayNumber,
         MorphWeekdayHeader,
@@ -19,10 +20,13 @@ export 'calendar_day_grid.dart'
         WeekdayMorphMetrics,
         calendarAdjacentMonthBorderOpacity,
         calendarAdjacentMonthColor,
+        calendarSameDay,
         calendarTitleAccentColor,
         calendarWeekdayAccentColor,
         calendarWeekdayFontSizeScale,
         calendarWeekdayLabelStyle,
+        calendarWeekdayLabelsMonday,
+        calendarWeekdayLabelsSunday,
         monthDayGridWeekdayHeaderGap,
         monthGridDates;
 
@@ -43,6 +47,8 @@ class CalendarGrid extends StatelessWidget {
     this.yearTileDayGridKeyBuilder,
     this.hiddenMonth,
     this.monthDayGridKey,
+    this.hiddenWeekRow,
+    this.showMonthChrome = true,
     this.onPreviousMonth,
     this.onNextMonth,
   });
@@ -67,6 +73,12 @@ class CalendarGrid extends StatelessWidget {
   /// [GlobalKey] placed on the [MonthDayGrid] inside the full month view,
   /// used to measure destination cell positions for the morph animation.
   final GlobalKey? monthDayGridKey;
+
+  /// Hides one 7-cell row in month view (used during month↔week morph).
+  final int? hiddenWeekRow;
+
+  /// When false, renders only the card shell and day grid (no title/weekday row).
+  final bool showMonthChrome;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
 
@@ -87,6 +99,8 @@ class CalendarGrid extends StatelessWidget {
         onDayTap: onDayTap,
         weekStartsMonday: weekStartsMonday,
         dayGridKey: monthDayGridKey,
+        hiddenWeekRow: hiddenWeekRow,
+        showMonthChrome: showMonthChrome,
         onPreviousMonth: onPreviousMonth,
         onNextMonth: onNextMonth,
       ),
@@ -339,6 +353,14 @@ class MonthTitleHeader extends StatelessWidget {
     return max(navTapSize, painter.height);
   }
 
+  /// Top [Y] of the weekday label row in month view (area-local).
+  ///
+  /// Matches [_MonthGrid]'s card padding + title row + title gap — independent
+  /// of which day row is focused during month↔week morph.
+  static double weekdayHeaderY(TextStyle titleStyle) {
+    return cardPadding + preferredHeight(titleStyle) + titleGap;
+  }
+
   /// Computes the 42 month-view day-cell [Rect]s analytically from [areaSize],
   /// mirroring [_MonthGrid]'s card padding, title row, weekday row, and 6×7 grid.
   static List<Rect> dayCellRects(
@@ -543,6 +565,8 @@ class _MonthGrid extends StatelessWidget {
     required this.onDayTap,
     required this.weekStartsMonday,
     this.dayGridKey,
+    this.hiddenWeekRow,
+    this.showMonthChrome = true,
     this.onPreviousMonth,
     this.onNextMonth,
   });
@@ -555,11 +579,23 @@ class _MonthGrid extends StatelessWidget {
 
   /// Optional key placed on the inner [MonthDayGrid] for measurement.
   final GlobalKey? dayGridKey;
+  final int? hiddenWeekRow;
+  final bool showMonthChrome;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
 
   @override
   Widget build(BuildContext context) {
+    final chromeSpacer = showMonthChrome
+        ? null
+        : MonthTitleHeader.preferredHeight(
+                MonthTitleHeader.resolveTitleStyle(context),
+              ) +
+              MonthTitleHeader.titleGap +
+              WeekdayHeaderRow.totalHeight(
+                calendarWeekdayLabelStyle(context),
+              );
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -567,14 +603,17 @@ class _MonthGrid extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            MonthTitleHeader(
-              month: focused,
-              onPreviousMonth: onPreviousMonth,
-              onNextMonth: onNextMonth,
-            ),
-            const SizedBox(height: MonthTitleHeader.titleGap),
-            WeekdayHeaderRow(weekStartsMonday: weekStartsMonday),
-            const SizedBox(height: monthDayGridWeekdayHeaderGap),
+            if (showMonthChrome) ...[
+              MonthTitleHeader(
+                month: focused,
+                onPreviousMonth: onPreviousMonth,
+                onNextMonth: onNextMonth,
+              ),
+              const SizedBox(height: MonthTitleHeader.titleGap),
+              WeekdayHeaderRow(weekStartsMonday: weekStartsMonday),
+              const SizedBox(height: monthDayGridWeekdayHeaderGap),
+            ] else if (chromeSpacer != null)
+              SizedBox(height: chromeSpacer),
             Expanded(
               child: MonthDayGrid(
                 key: dayGridKey,
@@ -584,6 +623,7 @@ class _MonthGrid extends StatelessWidget {
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
                 onDayTap: onDayTap,
+                hiddenWeekRow: hiddenWeekRow,
               ),
             ),
           ],
@@ -611,29 +651,23 @@ class _WeekGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final start = _weekStart(focused, weekStartsMonday);
-    final labels = weekStartsMonday
-        ? calendarWeekdayLabelsMonday
-        : calendarWeekdayLabelsSunday;
     return Column(
       children: [
-        Row(
-          children: [
-            for (final label in labels)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    label,
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                ),
-              ),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: MonthTitleHeader.cardPadding,
+          ),
+          child: WeekdayHeaderRow(weekStartsMonday: weekStartsMonday),
         ),
         const SizedBox(height: 6),
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: List.generate(7, (i) {
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: MonthTitleHeader.cardPadding,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: List.generate(7, (i) {
               final date = start.add(Duration(days: i));
               final dayEvents = events
                   .where((e) => calendarSameDay(e.start, date))
@@ -648,11 +682,12 @@ class _WeekGrid extends StatelessWidget {
                   month: date,
                   events: dayEvents,
                   indicators: dayIndicators,
-                  style: _weekDayStyle,
+                  style: weekViewDayCellStyle,
                   onTap: () => onDayTap(date),
                 ),
               );
             }),
+            ),
           ),
         ),
       ],
@@ -660,11 +695,12 @@ class _WeekGrid extends StatelessWidget {
   }
 }
 
-const _weekDayStyle = MonthDayCellStyle(
+/// Day-cell density for the week view — also the morph end-state for month↔week.
+const weekViewDayCellStyle = MonthDayCellStyle(
   fontSize: 13,
   borderRadius: 12,
   cellPadding: EdgeInsets.all(4),
-  cellMargin: EdgeInsets.symmetric(horizontal: 2),
+  cellMargin: EdgeInsets.all(1),
   maxEventLines: 8,
   dotSize: 7,
   eventFontSize: 10,
@@ -748,11 +784,14 @@ class _YearGrid extends StatelessWidget {
 
     return KeyedSubtree(
       key: tileKey,
-      child: InkWell(
-        onTap: () => onMonthTap(monthDate),
-        borderRadius: BorderRadius.circular(18),
-        child: Card(
-          margin: EdgeInsets.zero,
+      child: Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: InkWell(
+          onTap: () => onMonthTap(monthDate),
           child: Padding(
             padding: const EdgeInsets.all(6),
             child: Column(

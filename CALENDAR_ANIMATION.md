@@ -1,76 +1,77 @@
-Here is the candid, low-level design (LLD) for a mathematically seamless, zero-stutter transition between the Month and Week views.
+Here is the precise Low-Level Design (LLD) for the segment-triggered Month $\leftrightarrow$ Week morph animation.
 
-This builds directly on your highly successful bifurcated render architecture, using pure geometry instead of layout recalculations.
+Since the user no longer taps a specific date to trigger the transition, the engine must intelligently anchor the animation to the currently active data state.
 
-### **1. The Visual Illusion (How the Lines Merge)**
+### **I. State & Trigger Logic (The Anchor)**
 
-To achieve the effect where horizontal lines fade out and vertical lines merge into straight columns, you do not need to animate individual line segments. You animate the **bounding boxes (`Rect`) of the 7 active day cells**.
+When the user clicks "Week" in the segment control, the app needs to know *which* week to zoom into.
 
-* **The Horizontal Fade:** The 4 "non-active" weeks simply fade to 0.0 opacity. Their horizontal lines vanish.
-* **The Vertical Merge:** The 7 day cells of the "active" week are stretched vertically. Their `top` coordinate interpolates to the top of the screen, and their `bottom` coordinate interpolates to the bottom. As the cells stretch, their left and right borders physically elongate into the straight vertical lines of the weekly columns.
+**The Anchor:** You must use the currently selected date (e.g., `_selectedDate`) or, if none is selected, the first day of the currently visible month.
+**The Index:** 1. Find the anchor date's index (0 to 41) in the current 42-cell month grid.
+2. Calculate the row index: `rowIndex = index ~/ 7`.
+3. The 7 cells to morph are exactly `(rowIndex * 7)` through `(rowIndex * 7 + 6)`.
 
-### **2. The Geometry Cache (Pre-computed Math)**
+### **II. The Geometry Cache (`CalendarLayoutCache`)**
 
-Run this exactly once when the calendar loads (just like `CalendarLayoutCache`). Store these absolute local coordinates:
+Expand your existing geometric cache to include Week View coordinates. Calculate these using pure math on startup (zero widget mounting):
 
-* **`monthCellRects` (List of 42 Rects):** The dimensions of every day cell in the month grid.
-* **`weekColumnRects` (List of 7 Rects):** The dimensions of the 7 tall columns in the week grid.
-* **`monthHeaderY` & `weekHeaderY` (Doubles):** The exact vertical `Y` offset for the "Mon, Tue, Wed" text in both views.
+* **`monthCellRects` (List of 42):** The standard month day cells.
+* **`weekColumnRects` (List of 7):** The tall, screen-height columns for the week view.
+* **`monthCardRect` vs `weekAreaRect`:** The bounding box of the Month's background Card vs the flat boundaries of the Week grid.
+* **`monthHeaderY` & `weekHeaderY`:** The vertical Y-offsets for the weekday labels (Mon, Tue, Wed...).
 
-### **3. Animation Orchestration (The Controller)**
+### **III. Animation Orchestration**
 
-Use a single `AnimationController` (e.g., 500ms, `Curves.easeInOutCubic`).
+Use a dedicated `AnimationController` (e.g., 500ms, `easeInOutCubic`). Progress is defined as $t$ ($0.0 = \text{Month}$, $1.0 = \text{Week}$).
 
-**The Progress Variable (`t`):**
+**Properties to Interpolate (`lerp`):**
 
-* $t = 0.0$: Month View
-* $t = 1.0$: Week View
+1. **Cell Geometry:** `Rect.lerp(monthCellRects[i], weekColumnRects[i], t)`. As the `top` and `bottom` stretch to the screen edges, the horizontal borders naturally slide off-screen/fade out, and the vertical borders elongate into the Week view's column dividers.
+2. **Card Background:** The Month view has a Card; the Week view is flat. Crossfade the Card opacity: `1.0 - t`.
+3. **Weekday Headers:** `lerpDouble(monthHeaderY, weekHeaderY, t)`. The text physically slides up/down.
+4. **Text Visibility:** For dates outside the current month (e.g., Sept 28-30), interpolate their color from the muted Month-style color at $t=0$ to the bright, active Week-style color at $t=1$.
 
-### **4. The Bifurcated Widget Tree (The LLD)**
+### **IV. The Bifurcated Widget Tree**
 
-When the user taps a specific week, snap the state to the morphing transition and render this precise `Stack`.
+During the 500ms transition, intercept the mode switch, set `_isWeekMorphing = true` (blocking all pointer input), and render this specific `Stack`:
 
 ```text
 Stack
-├── [Layer 1: The Fading Inactive Weeks]
-│    ├── Opacity (applies 1.0 - t)
-│    │    └── MonthGrid (Renders all weeks EXCEPT the active tapped week)
-│    │
-│    └── Opacity (applies t)
-│         └── WeekGridBackground (Any background elements specific to Week View)
+├── [Background Layer: The Fading UI]
+│    ├── Opacity (1.0 - t): Month Card Background & Inactive Rows (The 5 rows NOT selected)
+│    └── Opacity (t): Week View Background elements
 │
-├── [Layer 2: The Morphing Active Week]
-│    └── CustomMultiChildLayout (MorphLayoutDelegate)
-│         ├── MorphCell 0 (Monday)   -> Rect.lerp(monthCellRects[target+0], weekColumnRects[0], t)
-│         ├── MorphCell 1 (Tuesday)  -> Rect.lerp(monthCellRects[target+1], weekColumnRects[1], t)
-│         ├── ...
-│         └── MorphCell 6 (Sunday)   -> Rect.lerp(monthCellRects[target+6], weekColumnRects[6], t)
+├── [Morphing Layer: The Active Week]
+│    └── CustomMultiChildLayout (MorphWeekDelegate)
+│         ├── Cell 0 (Mon): lerps Rect, cell padding (8px -> 6px), and text styles
+│         ├── Cell 1 (Tue): ...
+│         └── Cell 6 (Sun): ...
 │
-├── [Layer 3: The Shifting Weekday Headers]
-│    └── Transform.translate (Y = lerpDouble(monthHeaderY, weekHeaderY, t))
-│         └── Row (Mon, Tue, Wed, Thu, Fri, Sat, Sun)
+├── [Header Layer: Shifting Weekdays]
+│    └── Transform.translate (Y = lerped header offset)
+│         └── Row (Mon, Tue, Wed...)
 │
-└── [Layer 4: The Title Crossfade]
+└── [Title Layer: Crossfade]
      └── Stack
           ├── Opacity (1.0 - t): Text("October")
           └── Opacity (t): Text("Week of Sep 28")
 
 ```
 
-### **5. Execution Flow**
+### **V. Execution Flow**
 
 **Month $\rightarrow$ Week (Zoom In):**
 
-1. User taps a day. Calculate which of the 5 weeks that day belongs to (e.g., Week 3).
-2. Grab the 7 `monthCellRects` for Week 3 from the cache.
-3. Start the `AnimationController` forward.
-4. The 7 cells stretch vertically. The other 4 weeks fade out. The headers slide up.
-5. On complete, switch the active widget to the true `WeekGrid`.
+1. User clicks "Week" in the segment control.
+2. Determine `rowIndex` using the currently selected date.
+3. Lock input (`_isWeekMorphing = true`).
+4. `controller.forward()`. The target row stretches vertically. The other 5 rows and the Month Card dissolve. Weekday headers slide up.
+5. On complete, set `_mode = week`, unlock input, and swap to the real `_WeekGrid` widget.
 
 **Week $\rightarrow$ Month (Zoom Out):**
 
-1. User clicks the "Month" segment button.
-2. The active week is already known.
-3. Start the same `AnimationController` in reverse.
-4. The 7 tall columns compress vertically back into their specific week slot in the month grid. The other 4 weeks fade back in. The headers slide down.
-5. On complete, switch the active widget to the true `MonthGrid`.
+1. User clicks "Month" in the segment control.
+2. The current week's dates are known. Find their corresponding `rowIndex` in the target month.
+3. Lock input.
+4. `controller.reverse()`. The 7 tall columns compress into their specific row slot. The Month Card and 5 inactive rows fade back in.
+5. On complete, set `_mode = month`, unlock input, and swap to the real `_MonthGrid` widget.

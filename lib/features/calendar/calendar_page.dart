@@ -24,7 +24,7 @@ class CalendarPage extends ConsumerStatefulWidget {
 }
 
 class _CalendarPageState extends ConsumerState<CalendarPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   CalendarViewMode _mode = CalendarViewMode.month;
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
@@ -58,13 +58,50 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   // here; no render-object measurement at animation time.
   CalendarLayoutCache? _layoutCache;
 
+  // Month ↔ week morph state.
+  late final AnimationController _weekMorphController;
+
+  // One-shot GPU warmup for month→year at the calendar's real layout size.
+  late final AnimationController _reverseMorphWarmupController;
+  bool _reverseMorphGpuWarmed = false;
+  bool _reverseMorphWarmupActive = false;
+  int _reverseMorphWarmupStep = 0;
+  static const _reverseMorphWarmupT = [0.0, 0.08, 0.18, 0.32, 0.14, 0.0];
+
+  bool _isWeekMorphing = false;
+  bool _weekMorphForward = true;
+  int _weekMorphWeekRow = 0;
+  DateTime? _weekMorphAnchor;
+  DateTime? _monthViewMonth;
+  DateTime? _lastViewedMonth;
+  DateTime? _lastViewedWeekStart;
+  int _weekMorphGeneration = 0;
+  AnimationStatusListener? _weekMorphStatusListener;
+  List<CalendarEvent>? _weekMorphEvents;
+  List<CalendarDayIndicator>? _weekMorphIndicators;
+
   static const _sidebarWidth = 350.0;
   static const _zoomDuration = Duration(milliseconds: 600);
+  static const _weekMorphDuration = Duration(milliseconds: 600);
+  static const _chainedMorphDuration = Duration(milliseconds: 400);
+
+  bool _isChainedWeekToYear = false;
+  bool _isChainedYearToWeek = false;
 
   @override
   void initState() {
     super.initState();
     _zoomController = AnimationController(vsync: this, duration: _zoomDuration);
+    _weekMorphController = AnimationController(
+      vsync: this,
+      duration: _weekMorphDuration,
+    );
+    _reverseMorphWarmupController = AnimationController(
+      vsync: this,
+      duration: _zoomDuration,
+    );
+    final now = DateTime.now();
+    _lastViewedMonth = DateTime(now.year, now.month, 1);
   }
 
   void _disposeMorphListener() {
@@ -85,7 +122,95 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   void _abortMorphAnimation() {
+    _isChainedWeekToYear = false;
+    _isChainedYearToWeek = false;
+    _weekMorphController.duration = _weekMorphDuration;
+    _zoomController.duration = _zoomDuration;
     _prepareMorphSession();
+    _prepareWeekMorphSession();
+  }
+
+  void _disposeWeekMorphListener() {
+    if (_weekMorphStatusListener != null) {
+      _weekMorphController.removeStatusListener(_weekMorphStatusListener!);
+      _weekMorphStatusListener = null;
+    }
+  }
+
+  int _prepareWeekMorphSession({bool resetValue = true}) {
+    _weekMorphGeneration++;
+    _disposeWeekMorphListener();
+    _weekMorphController.stop();
+    if (resetValue) {
+      _weekMorphController.value = 0;
+    }
+    return _weekMorphGeneration;
+  }
+
+  void _clearWeekMorphCache() {
+    _weekMorphEvents = null;
+    _weekMorphIndicators = null;
+    _weekMorphAnchor = null;
+  }
+
+  /// Month grid month to restore when leaving week view (may differ from week
+  /// start when the week spans a month boundary).
+  DateTime _visibleMonthForWeekReturn() {
+    return _monthViewMonth ?? DateTime(_focused.year, _focused.month, 1);
+  }
+
+  void _rememberViewedMonth(DateTime month) {
+    _lastViewedMonth = DateTime(month.year, month.month, 1);
+  }
+
+  void _rememberViewedWeek(DateTime date, bool weekStartsMonday) {
+    final start = _weekStart(date, weekStartsMonday);
+    _lastViewedWeekStart = DateTime(start.year, start.month, start.day);
+  }
+
+  /// Month to open when zooming from year view via the segment control.
+  DateTime _monthTargetForYear(int year) {
+    final saved = _lastViewedMonth;
+    if (saved != null && saved.year == year) {
+      return saved;
+    }
+    final now = DateTime.now();
+    if (year == now.year) {
+      return DateTime(year, now.month, 1);
+    }
+    return DateTime(year, 1, 1);
+  }
+
+  void _startWeekMorphAnimation({
+    required int generation,
+    required bool reverse,
+    required VoidCallback onComplete,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _weekMorphGeneration) return;
+
+      _disposeWeekMorphListener();
+      void onStatus(AnimationStatus status) {
+        final done = reverse
+            ? status == AnimationStatus.dismissed
+            : status == AnimationStatus.completed;
+        if (!done) return;
+        if (generation != _weekMorphGeneration) return;
+        _disposeWeekMorphListener();
+        if (!mounted) return;
+        onComplete();
+      }
+
+      _weekMorphStatusListener = onStatus;
+      _weekMorphController.addStatusListener(_weekMorphStatusListener!);
+      if (reverse) {
+        _weekMorphController
+          ..value = 1.0
+          ..reverse(from: 1.0);
+      } else {
+        _weekMorphController.forward(from: 0);
+      }
+    });
   }
 
   void _clearMorphCache() {
@@ -108,12 +233,101 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     final (compact, full) = _weekdayMorphStyles(context);
     final (yearName, monthTitle) = _titleMorphStyles(context);
+    final weekdayStyle = calendarWeekdayLabelStyle(context);
     _layoutCache = CalendarLayoutCache.compute(
       areaSize: areaSize,
       yearTileNameStyle: yearName,
       compactWeekdayStyle: compact,
       fullTitleStyle: monthTitle,
       fullWeekdayStyle: full,
+      weekWeekdayStyle: weekdayStyle,
+    );
+    _maybeScheduleReverseMorphGpuWarmup();
+  }
+
+  /// Paints an invisible reverse morph at the real calendar size so the first
+  /// month→year transition does not pay GPU shader compilation on the hot path.
+  void _maybeScheduleReverseMorphGpuWarmup() {
+    if (_reverseMorphGpuWarmed || _reverseMorphWarmupActive) return;
+    WidgetsBinding.instance.addPostFrameCallback(_beginReverseMorphGpuWarmup);
+  }
+
+  void _beginReverseMorphGpuWarmup(Duration _) {
+    if (!mounted || _reverseMorphGpuWarmed || _layoutCache == null) return;
+    _reverseMorphWarmupActive = true;
+    _reverseMorphWarmupStep = 0;
+    _advanceReverseMorphGpuWarmup(Duration.zero);
+  }
+
+  void _advanceReverseMorphGpuWarmup(Duration _) {
+    if (!mounted || !_reverseMorphWarmupActive || _layoutCache == null) {
+      return;
+    }
+
+    if (_reverseMorphWarmupStep >= _reverseMorphWarmupT.length) {
+      setState(() {
+        _reverseMorphGpuWarmed = true;
+        _reverseMorphWarmupActive = false;
+        _reverseMorphWarmupStep = 0;
+      });
+      return;
+    }
+
+    _reverseMorphWarmupController.value =
+        _reverseMorphWarmupT[_reverseMorphWarmupStep];
+    setState(() {});
+    _reverseMorphWarmupStep++;
+    WidgetsBinding.instance.addPostFrameCallback(_advanceReverseMorphGpuWarmup);
+  }
+
+  Widget _buildReverseMorphGpuWarmupLayer({
+    required bool weekStartsMonday,
+    required List<CalendarEvent> events,
+    required List<CalendarDayIndicator> indicators,
+  }) {
+    final cache = _layoutCache!;
+    final morphMonth = DateTime(_focused.year, _focused.month, 1);
+    final idx = morphMonth.month - 1;
+    final (compactWeekdayStyle, fullWeekdayStyle) = _weekdayMorphStyles(
+      context,
+    );
+    final (yearMonthNameStyle, monthTitleStyle) = _titleMorphStyles(context);
+
+    return IgnorePointer(
+      child: Opacity(
+        opacity: 1 / 255,
+        child: _MorphAnimationLayer(
+          key: ValueKey('rev-gpu-warmup-$_reverseMorphWarmupStep'),
+          controller: _reverseMorphWarmupController,
+          yearTween: Matrix4Tween(
+            begin: cache.tileZoomMatrices[idx],
+            end: Matrix4.identity(),
+          ),
+          sourceRects: cache.destRects,
+          destRects: cache.tileSourceRects[idx],
+          morphReverse: true,
+          tileRect: cache.tileBounds[idx],
+          areaSize: cache.areaSize,
+          morphMonth: morphMonth,
+          dates: monthGridDates(
+            morphMonth,
+            weekStartsMonday: weekStartsMonday,
+          ),
+          weekStartsMonday: weekStartsMonday,
+          compactWeekdayStyle: compactWeekdayStyle,
+          fullWeekdayStyle: fullWeekdayStyle,
+          yearMonthNameStyle: yearMonthNameStyle,
+          monthTitleStyle: monthTitleStyle,
+          yearGrid: _calendarGrid(
+            events: events,
+            indicators: indicators,
+            weekStartsMonday: weekStartsMonday,
+            mode: CalendarViewMode.year,
+            focused: DateTime(morphMonth.year, 1, 1),
+            hiddenMonth: morphMonth,
+          ),
+        ),
+      ),
     );
   }
 
@@ -179,12 +393,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     }
   }
 
-  void _shiftFocus(int delta) {
+  void _shiftFocus(int delta, {required bool weekStartsMonday}) {
     _abortMorphAnimation();
     setState(() {
       _isZooming = false;
       _morphReverse = false;
       _clearMorphCache();
+      _isWeekMorphing = false;
+      _weekMorphForward = true;
+      _clearWeekMorphCache();
       final base = _dayViewDate ?? _focused;
       if (_dayViewDate != null) {
         _dayViewDate = base.add(Duration(days: delta));
@@ -200,6 +417,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ),
         CalendarViewMode.year => DateTime(_focused.year + delta, 1, 1),
       };
+      if (_mode == CalendarViewMode.month) {
+        _rememberViewedMonth(_focused);
+      } else if (_mode == CalendarViewMode.week) {
+        _rememberViewedWeek(_focused, weekStartsMonday);
+      }
     });
   }
 
@@ -210,10 +432,42 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     CalendarViewMode.year => '${_focused.year}',
   };
 
+  String _weekMorphHeaderLabel(bool weekStartsMonday) {
+    final anchor = _weekMorphAnchor ?? _focused;
+    return 'Week of ${DateFormat.MMMd().format(_weekStart(anchor, weekStartsMonday))}';
+  }
+
+  Widget _buildMorphFocusHeader(BuildContext context, bool weekStartsMonday) {
+    final titleStyle = Theme.of(context).textTheme.titleMedium;
+    return AnimatedBuilder(
+      animation: _weekMorphController,
+      builder: (context, _) {
+        final t = Curves.easeInOutCubic.transform(_weekMorphController.value);
+        final opacity = (_weekMorphForward ? t : 1.0 - t).clamp(0.0, 1.0);
+        if (opacity <= 0) return const SizedBox.shrink();
+        return Opacity(
+          opacity: opacity,
+          child: IgnorePointer(
+            child: _buildFocusHeaderControls(
+              weekStartsMonday: weekStartsMonday,
+              label: Text(
+                _weekMorphHeaderLabel(weekStartsMonday),
+                style: titleStyle,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _disposeMorphListener();
+    _disposeWeekMorphListener();
     _zoomController.dispose();
+    _weekMorphController.dispose();
+    _reverseMorphWarmupController.dispose();
     super.dispose();
   }
 
@@ -229,13 +483,396 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     BuildContext context,
   ) => _calendarTitleMorphStyles(context);
 
-  void _onMonthTapped(DateTime month) {
-    if (_isZooming) return;
+  int _weekRowForDate(
+    DateTime month,
+    DateTime day,
+    bool weekStartsMonday,
+  ) {
+    final dates = monthGridDates(month, weekStartsMonday: weekStartsMonday);
+    final idx = dates.indexWhere((d) => calendarSameDay(d, day));
+    if (idx < 0) return 0;
+    return idx ~/ 7;
+  }
+
+  /// Anchor for month→week morph: saved week when visible in [visibleMonth],
+  /// else focused day when it lies in that month, otherwise the 1st.
+  DateTime _weekMorphAnchorDate(DateTime visibleMonth, bool weekStartsMonday) {
+    final saved = _lastViewedWeekStart;
+    if (saved != null) {
+      final weekStart = _weekStart(saved, weekStartsMonday);
+      final dates = monthGridDates(visibleMonth, weekStartsMonday: weekStartsMonday);
+      for (var i = 0; i < 7; i++) {
+        final day = weekStart.add(Duration(days: i));
+        if (dates.any((d) => calendarSameDay(d, day))) return day;
+      }
+    }
+    if (_focused.year == visibleMonth.year &&
+        _focused.month == visibleMonth.month) {
+      return _focused;
+    }
+    return visibleMonth;
+  }
+
+  void _onMonthToWeek(bool weekStartsMonday) {
+    if (_isWeekMorphing ||
+        _isZooming ||
+        _isChainedWeekToYear ||
+        _isChainedYearToWeek) {
+      return;
+    }
+
+    final morphMonth = DateTime(_focused.year, _focused.month, 1);
+    final started = _beginMonthToWeekMorph(
+      weekStartsMonday: weekStartsMonday,
+      morphMonth: morphMonth,
+      onComplete: () {
+        if (!mounted) return;
+        final anchor = _weekMorphAnchor ?? morphMonth;
+        setState(() {
+          _isWeekMorphing = false;
+          _weekMorphForward = true;
+          _clearWeekMorphCache();
+          _mode = CalendarViewMode.week;
+          _focused = _weekStart(anchor, weekStartsMonday);
+          _rememberViewedWeek(_focused, weekStartsMonday);
+          _weekMorphController.duration = _weekMorphDuration;
+        });
+      },
+    );
+
+    if (!started) return;
+  }
+
+  /// Month → week zoom-in. Returns false when morph state could not be started.
+  bool _beginMonthToWeekMorph({
+    required bool weekStartsMonday,
+    required DateTime morphMonth,
+    Duration? duration,
+    required VoidCallback onComplete,
+  }) {
+    if (_isWeekMorphing || _isZooming) return false;
 
     final cache = _layoutCache;
-    if (cache == null) return;
+    if (cache == null) return false;
 
-    final idx = month.month - 1;
+    final anchor = _weekMorphAnchorDate(morphMonth, weekStartsMonday);
+    final weekRow = _weekRowForDate(morphMonth, anchor, weekStartsMonday);
+    final generation = _prepareWeekMorphSession();
+
+    if (duration != null) {
+      _weekMorphController.duration = duration;
+    }
+
+    setState(() {
+      _isWeekMorphing = true;
+      _weekMorphForward = true;
+      _weekMorphWeekRow = weekRow;
+      _weekMorphAnchor = anchor;
+      _monthViewMonth = morphMonth;
+      _rememberViewedMonth(morphMonth);
+      _weekMorphEvents = List<CalendarEvent>.from(_latestEvents);
+      _weekMorphIndicators = List<CalendarDayIndicator>.from(
+        _latestIndicators,
+      );
+    });
+
+    _startWeekMorphAnimation(
+      generation: generation,
+      reverse: false,
+      onComplete: onComplete,
+    );
+    return true;
+  }
+
+  void _onWeekToMonth(bool weekStartsMonday) {
+    if (_isWeekMorphing ||
+        _isZooming ||
+        _isChainedWeekToYear ||
+        _isChainedYearToWeek) {
+      return;
+    }
+
+    final cache = _layoutCache;
+    if (cache == null) {
+      _rememberViewedWeek(_focused, weekStartsMonday);
+      setState(() {
+        _mode = CalendarViewMode.month;
+        _focused = _visibleMonthForWeekReturn();
+        _monthViewMonth = null;
+      });
+      return;
+    }
+
+    _beginWeekToMonthMorph(
+      weekStartsMonday: weekStartsMonday,
+      onComplete: (morphMonth) {
+        if (!mounted) return;
+        setState(() {
+          _isWeekMorphing = false;
+          _weekMorphForward = true;
+          _clearWeekMorphCache();
+          _mode = CalendarViewMode.month;
+          _focused = morphMonth;
+          _monthViewMonth = null;
+          _rememberViewedMonth(morphMonth);
+          _weekMorphController.duration = _weekMorphDuration;
+        });
+      },
+    );
+  }
+
+  /// Week → month phase. Returns false when morph state could not be started.
+  bool _beginWeekToMonthMorph({
+    required bool weekStartsMonday,
+    Duration? duration,
+    required void Function(DateTime morphMonth) onComplete,
+  }) {
+    if (_isWeekMorphing || _isZooming) return false;
+
+    final cache = _layoutCache;
+    if (cache == null) return false;
+
+    final morphMonth = _visibleMonthForWeekReturn();
+    _rememberViewedWeek(_focused, weekStartsMonday);
+    final anchor = _focused;
+    final weekRow = _weekRowForDate(morphMonth, anchor, weekStartsMonday);
+    final generation = _prepareWeekMorphSession(resetValue: false);
+
+    if (duration != null) {
+      _weekMorphController.duration = duration;
+    }
+
+    setState(() {
+      _isWeekMorphing = true;
+      _weekMorphForward = false;
+      _weekMorphWeekRow = weekRow;
+      _weekMorphAnchor = anchor;
+      _weekMorphEvents = List<CalendarEvent>.from(_latestEvents);
+      _weekMorphIndicators = List<CalendarDayIndicator>.from(
+        _latestIndicators,
+      );
+    });
+    _weekMorphController.value = 1.0;
+
+    _startWeekMorphAnimation(
+      generation: generation,
+      reverse: true,
+      onComplete: () => onComplete(morphMonth),
+    );
+    return true;
+  }
+
+  void _onWeekToYear(bool weekStartsMonday) {
+    if (_isWeekMorphing ||
+        _isZooming ||
+        _isChainedWeekToYear ||
+        _isChainedYearToWeek) {
+      return;
+    }
+
+    final cache = _layoutCache;
+    if (cache == null) {
+      _rememberViewedWeek(_focused, weekStartsMonday);
+      _immediatelySwitchToYear();
+      return;
+    }
+
+    _isChainedWeekToYear = true;
+
+    final started = _beginWeekToMonthMorph(
+      weekStartsMonday: weekStartsMonday,
+      duration: _chainedMorphDuration,
+      onComplete: (morphMonth) {
+        if (!mounted || !_isChainedWeekToYear) return;
+        _handoffChainedWeekToYearMorph(morphMonth);
+      },
+    );
+
+    if (!started) {
+      _isChainedWeekToYear = false;
+      _weekMorphController.duration = _weekMorphDuration;
+      _immediatelySwitchToYear();
+    }
+  }
+
+  void _handoffChainedWeekToYearMorph(DateTime morphMonth) {
+    if (!mounted || !_isChainedWeekToYear) return;
+
+    final cache = _layoutCache;
+    if (cache == null) {
+      _isChainedWeekToYear = false;
+      _weekMorphController.duration = _weekMorphDuration;
+      _immediatelySwitchToYear();
+      return;
+    }
+
+    final idx = morphMonth.month - 1;
+    final morphTileRect = cache.tileBounds[idx];
+    final sourceRects = cache.destRects;
+    final destRects = cache.tileSourceRects[idx];
+    final areaSize = cache.areaSize;
+
+    _yearMatrixTween = Matrix4Tween(
+      begin: cache.tileZoomMatrices[idx],
+      end: Matrix4.identity(),
+    );
+
+    final generation = _prepareMorphSession();
+    _zoomController.duration = _chainedMorphDuration;
+
+    setState(() {
+      _isWeekMorphing = false;
+      _weekMorphForward = true;
+      _clearWeekMorphCache();
+      _focused = morphMonth;
+      _monthViewMonth = null;
+      _rememberViewedMonth(morphMonth);
+      _mode = CalendarViewMode.month;
+      _isZooming = true;
+      _morphReverse = true;
+      _morphSourceRects = sourceRects;
+      _morphDestRects = destRects;
+      _morphMonth = morphMonth;
+      _morphTileRect = morphTileRect;
+      _morphAreaSize = areaSize;
+      _morphEvents = List<CalendarEvent>.from(_latestEvents);
+      _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
+    });
+
+    _startMorphAnimation(
+      generation: generation,
+      onComplete: () {
+        if (!mounted) return;
+        setState(() {
+          _isChainedWeekToYear = false;
+          _isZooming = false;
+          _morphReverse = false;
+          _mode = CalendarViewMode.year;
+          _focused = DateTime(morphMonth.year, 1, 1);
+          _clearMorphCache();
+          _weekMorphController.duration = _weekMorphDuration;
+          _zoomController.duration = _zoomDuration;
+        });
+      },
+    );
+  }
+
+  void _onYearToWeek(bool weekStartsMonday) {
+    if (_isWeekMorphing ||
+        _isZooming ||
+        _isChainedWeekToYear ||
+        _isChainedYearToWeek) {
+      return;
+    }
+
+    final cache = _layoutCache;
+    final targetMonth = _monthTargetForYear(_focused.year);
+    if (cache == null) {
+      _immediatelySwitchToWeek(weekStartsMonday, targetMonth);
+      return;
+    }
+
+    _isChainedYearToWeek = true;
+
+    final started = _beginYearToMonthMorph(
+      month: targetMonth,
+      duration: _chainedMorphDuration,
+      onComplete: () {
+        if (!mounted || !_isChainedYearToWeek) return;
+        _handoffChainedYearToWeekMorph(weekStartsMonday, targetMonth);
+      },
+    );
+
+    if (!started) {
+      _isChainedYearToWeek = false;
+      _zoomController.duration = _zoomDuration;
+      _immediatelySwitchToWeek(weekStartsMonday, targetMonth);
+    }
+  }
+
+  void _handoffChainedYearToWeekMorph(
+    bool weekStartsMonday,
+    DateTime morphMonth,
+  ) {
+    if (!mounted || !_isChainedYearToWeek) return;
+
+    setState(() {
+      _isZooming = false;
+      _morphReverse = false;
+      _clearMorphCache();
+      _focused = morphMonth;
+      _rememberViewedMonth(morphMonth);
+    });
+
+    final started = _beginMonthToWeekMorph(
+      weekStartsMonday: weekStartsMonday,
+      morphMonth: morphMonth,
+      duration: _chainedMorphDuration,
+      onComplete: () {
+        if (!mounted) return;
+        final anchor = _weekMorphAnchor ?? morphMonth;
+        setState(() {
+          _isChainedYearToWeek = false;
+          _isWeekMorphing = false;
+          _weekMorphForward = true;
+          _clearWeekMorphCache();
+          _mode = CalendarViewMode.week;
+          _focused = _weekStart(anchor, weekStartsMonday);
+          _rememberViewedWeek(_focused, weekStartsMonday);
+          _weekMorphController.duration = _weekMorphDuration;
+          _zoomController.duration = _zoomDuration;
+        });
+      },
+    );
+
+    if (!started) {
+      _isChainedYearToWeek = false;
+      _weekMorphController.duration = _weekMorphDuration;
+      _zoomController.duration = _zoomDuration;
+      _immediatelySwitchToWeek(weekStartsMonday, morphMonth);
+    }
+  }
+
+  void _onYearToMonth() {
+    _onMonthTapped(_monthTargetForYear(_focused.year));
+  }
+
+  void _onMonthTapped(DateTime month) {
+    if (_isZooming ||
+        _isWeekMorphing ||
+        _isChainedWeekToYear ||
+        _isChainedYearToWeek) {
+      return;
+    }
+
+    if (_layoutCache == null) return;
+
+    _beginYearToMonthMorph(
+      month: month,
+      onComplete: () {
+        if (!mounted) return;
+        setState(() {
+          _isZooming = false;
+          _clearMorphCache();
+          _zoomController.duration = _zoomDuration;
+        });
+      },
+    );
+  }
+
+  /// Year → month zoom-in. Returns false when morph state could not be started.
+  bool _beginYearToMonthMorph({
+    required DateTime month,
+    Duration? duration,
+    required VoidCallback onComplete,
+  }) {
+    if (_isZooming || _isWeekMorphing) return false;
+
+    final cache = _layoutCache;
+    if (cache == null) return false;
+
+    final morphMonth = DateTime(month.year, month.month, 1);
+    final idx = morphMonth.month - 1;
     final morphTileRect = cache.tileBounds[idx];
     final sourceRects = cache.tileSourceRects[idx];
     final zoomMatrixEnd = cache.tileZoomMatrices[idx];
@@ -249,39 +886,97 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     final generation = _prepareMorphSession();
 
+    if (duration != null) {
+      _zoomController.duration = duration;
+    }
+
     setState(() {
-      _focused = month;
+      _focused = morphMonth;
+      _rememberViewedMonth(morphMonth);
       _dayViewDate = null;
       _mode = CalendarViewMode.month;
       _isZooming = true;
       _morphReverse = false;
       _morphSourceRects = sourceRects;
       _morphDestRects = destRects;
-      _morphMonth = month;
+      _morphMonth = morphMonth;
       _morphTileRect = morphTileRect;
       _morphAreaSize = areaSize;
       _morphEvents = List<CalendarEvent>.from(_latestEvents);
       _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
     });
 
-    _startMorphAnimation(
-      generation: generation,
-      onComplete: () => setState(() {
-        _isZooming = false;
-        _clearMorphCache();
-      }),
-    );
+    _startMorphAnimation(generation: generation, onComplete: onComplete);
+    return true;
   }
 
-  void _onViewModeSelectionChanged(Set<CalendarViewMode> selection) {
+  void _onViewModeSelectionChanged(
+    Set<CalendarViewMode> selection, {
+    required bool weekStartsMonday,
+  }) {
     final next = selection.first;
+
+    if (next == CalendarViewMode.week &&
+        _mode == CalendarViewMode.month &&
+        !_isZooming &&
+        !_isWeekMorphing &&
+        _dayViewDate == null) {
+      _onMonthToWeek(weekStartsMonday);
+      return;
+    }
+
+    if (next == CalendarViewMode.month &&
+        _mode == CalendarViewMode.week &&
+        !_isZooming &&
+        !_isWeekMorphing &&
+        _dayViewDate == null) {
+      _onWeekToMonth(weekStartsMonday);
+      return;
+    }
+
+    // Trigger the forward zoom animation when switching year → month.
+    if (next == CalendarViewMode.month &&
+        _mode == CalendarViewMode.year &&
+        !_isZooming &&
+        !_isWeekMorphing &&
+        _dayViewDate == null) {
+      _onYearToMonth();
+      return;
+    }
 
     // Trigger the reverse zoom animation when switching month → year.
     if (next == CalendarViewMode.year &&
         _mode == CalendarViewMode.month &&
         !_isZooming &&
+        !_isWeekMorphing &&
+        !_isChainedWeekToYear &&
+        !_isChainedYearToWeek &&
         _dayViewDate == null) {
       _onReverseToYear();
+      return;
+    }
+
+    // Chained week → month (400 ms) → year (400 ms).
+    if (next == CalendarViewMode.year &&
+        _mode == CalendarViewMode.week &&
+        !_isZooming &&
+        !_isWeekMorphing &&
+        !_isChainedWeekToYear &&
+        !_isChainedYearToWeek &&
+        _dayViewDate == null) {
+      _onWeekToYear(weekStartsMonday);
+      return;
+    }
+
+    // Chained year → month (400 ms) → week (400 ms).
+    if (next == CalendarViewMode.week &&
+        _mode == CalendarViewMode.year &&
+        !_isZooming &&
+        !_isWeekMorphing &&
+        !_isChainedWeekToYear &&
+        !_isChainedYearToWeek &&
+        _dayViewDate == null) {
+      _onYearToWeek(weekStartsMonday);
       return;
     }
 
@@ -290,10 +985,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _isZooming = false;
       _morphReverse = false;
       _clearMorphCache();
+      _isWeekMorphing = false;
+      _weekMorphForward = true;
+      _clearWeekMorphCache();
+      if (_mode == CalendarViewMode.week) {
+        _rememberViewedWeek(_focused, weekStartsMonday);
+      }
       _mode = next;
       _dayViewDate = null;
       if (next == CalendarViewMode.year) {
         _focused = DateTime(_focused.year, 1, 1);
+      } else if (next == CalendarViewMode.month) {
+        _focused = _mode == CalendarViewMode.week
+            ? _visibleMonthForWeekReturn()
+            : _monthTargetForYear(_focused.year);
+        _monthViewMonth = null;
       }
     });
   }
@@ -306,13 +1012,43 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// The [Matrix4Tween] runs from zoomed-in → identity so the year grid flies
   /// back in rather than out.
   void _onReverseToYear() {
-    final cache = _layoutCache;
-    if (cache == null) {
+    if (_isZooming || _isWeekMorphing) return;
+
+    final morphMonth = DateTime(_focused.year, _focused.month, 1);
+    _rememberViewedMonth(morphMonth);
+    if (_layoutCache == null) {
       _immediatelySwitchToYear();
       return;
     }
 
-    final idx = _focused.month - 1;
+    _beginMonthToYearMorph(
+      morphMonth: morphMonth,
+      onComplete: () {
+        if (!mounted) return;
+        setState(() {
+          _isZooming = false;
+          _morphReverse = false;
+          _mode = CalendarViewMode.year;
+          _focused = DateTime(morphMonth.year, 1, 1);
+          _clearMorphCache();
+          _zoomController.duration = _zoomDuration;
+        });
+      },
+    );
+  }
+
+  /// Month → year zoom-out. Returns false when morph state could not be started.
+  bool _beginMonthToYearMorph({
+    required DateTime morphMonth,
+    Duration? duration,
+    required VoidCallback onComplete,
+  }) {
+    if (_isZooming) return false;
+
+    final cache = _layoutCache;
+    if (cache == null) return false;
+
+    final idx = morphMonth.month - 1;
     final morphTileRect = cache.tileBounds[idx];
     final sourceRects = cache.destRects;
     final destRects = cache.tileSourceRects[idx];
@@ -325,32 +1061,32 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     final generation = _prepareMorphSession();
 
+    if (duration != null) {
+      _zoomController.duration = duration;
+    }
+
     setState(() {
       _isZooming = true;
       _morphReverse = true;
       _morphSourceRects = sourceRects;
       _morphDestRects = destRects;
-      _morphMonth = _focused;
+      _morphMonth = morphMonth;
       _morphTileRect = morphTileRect;
       _morphAreaSize = areaSize;
       _morphEvents = List<CalendarEvent>.from(_latestEvents);
       _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
+      _focused = morphMonth;
     });
 
-    _startMorphAnimation(
-      generation: generation,
-      onComplete: () => setState(() {
-        _isZooming = false;
-        _morphReverse = false;
-        _mode = CalendarViewMode.year;
-        _focused = DateTime(_focused.year, 1, 1);
-        _clearMorphCache();
-      }),
-    );
+    _startMorphAnimation(generation: generation, onComplete: onComplete);
+    return true;
   }
 
   /// Falls back to an immediate view switch when measurement is unavailable.
   void _immediatelySwitchToYear() {
+    if (_mode == CalendarViewMode.month) {
+      _rememberViewedMonth(_focused);
+    }
     setState(() {
       _isZooming = false;
       _morphReverse = false;
@@ -361,13 +1097,42 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
   }
 
+  void _immediatelySwitchToWeek(bool weekStartsMonday, DateTime morphMonth) {
+    final anchor = _weekMorphAnchorDate(morphMonth, weekStartsMonday);
+    final weekStart = _weekStart(anchor, weekStartsMonday);
+    setState(() {
+      _isZooming = false;
+      _isWeekMorphing = false;
+      _morphReverse = false;
+      _clearMorphCache();
+      _clearWeekMorphCache();
+      _mode = CalendarViewMode.week;
+      _focused = weekStart;
+      _monthViewMonth = morphMonth;
+      _rememberViewedMonth(morphMonth);
+      _rememberViewedWeek(weekStart, weekStartsMonday);
+      _dayViewDate = null;
+    });
+  }
+
   void _instantSwitchToMonthView() {
     _abortMorphAnimation();
+    final fromYear = _mode == CalendarViewMode.year;
     setState(() {
       _isZooming = false;
       _morphReverse = false;
       _clearMorphCache();
+      _isWeekMorphing = false;
+      _weekMorphForward = true;
+      _clearWeekMorphCache();
       _mode = CalendarViewMode.month;
+      _focused = fromYear
+          ? _monthTargetForYear(_focused.year)
+          : _visibleMonthForWeekReturn();
+      if (fromYear) {
+        _rememberViewedMonth(_focused);
+      }
+      _monthViewMonth = null;
       _dayViewDate = null;
     });
   }
@@ -389,25 +1154,73 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          onPressed: () => _shiftFocus(-1),
+          onPressed: () => _shiftFocus(-1, weekStartsMonday: weekStartsMonday),
           icon: const Icon(PhosphorIconsRegular.caretLeft),
         ),
         label,
         IconButton(
-          onPressed: () => _shiftFocus(1),
+          onPressed: () => _shiftFocus(1, weekStartsMonday: weekStartsMonday),
           icon: const Icon(PhosphorIconsRegular.caretRight),
         ),
       ],
     );
   }
 
-  Widget _buildViewModeSelector() {
+  Widget _buildViewModeSelector(bool weekStartsMonday) {
+    final onSelectionChanged = (Set<CalendarViewMode> selection) =>
+        _onViewModeSelectionChanged(
+          selection,
+          weekStartsMonday: weekStartsMonday,
+        );
+    final interactive = !_isZooming && !_isWeekMorphing;
+
+    if (_isWeekMorphing) {
+      return AnimatedBuilder(
+        animation: _weekMorphController,
+        builder: (context, _) {
+          final t = Curves.easeInOutCubic.transform(_weekMorphController.value);
+          return _ViewModeSegmentedControl(
+            weekSelect: t,
+            monthSelect: 1.0 - t,
+            yearSelect: 0.0,
+            onSelectionChanged: onSelectionChanged,
+            interactive: interactive,
+          );
+        },
+      );
+    }
+
+    if (_isZooming) {
+      return AnimatedBuilder(
+        animation: _zoomController,
+        builder: (context, _) {
+          final t = Curves.easeInOutCubic.transform(_zoomController.value);
+          if (_morphReverse) {
+            return _ViewModeSegmentedControl(
+              weekSelect: 0.0,
+              monthSelect: 1.0 - t,
+              yearSelect: t,
+              onSelectionChanged: onSelectionChanged,
+              interactive: interactive,
+            );
+          }
+          return _ViewModeSegmentedControl(
+            weekSelect: 0.0,
+            monthSelect: t,
+            yearSelect: 1.0 - t,
+            onSelectionChanged: onSelectionChanged,
+            interactive: interactive,
+          );
+        },
+      );
+    }
+
     return _ViewModeSegmentedControl(
-      weekSelect: _mode == CalendarViewMode.week ? 1 : 0,
-      monthSelect: _mode == CalendarViewMode.month ? 1 : 0,
-      yearSelect: _mode == CalendarViewMode.year ? 1 : 0,
-      onSelectionChanged: _onViewModeSelectionChanged,
-      interactive: !_isZooming,
+      weekSelect: _mode == CalendarViewMode.week ? 1.0 : 0.0,
+      monthSelect: _mode == CalendarViewMode.month ? 1.0 : 0.0,
+      yearSelect: _mode == CalendarViewMode.year ? 1.0 : 0.0,
+      onSelectionChanged: onSelectionChanged,
+      interactive: interactive,
     );
   }
 
@@ -430,6 +1243,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required CalendarViewMode mode,
     required DateTime focused,
     DateTime? hiddenMonth,
+    int? hiddenWeekRow,
+    bool showMonthChrome = true,
     bool monthNavigation = false,
   }) {
     return CalendarGrid(
@@ -441,8 +1256,51 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       onDayTap: (day) => _openEditor(day: day),
       onMonthTap: _onMonthTapped,
       hiddenMonth: hiddenMonth,
-      onPreviousMonth: monthNavigation ? () => _shiftFocus(-1) : null,
-      onNextMonth: monthNavigation ? () => _shiftFocus(1) : null,
+      hiddenWeekRow: hiddenWeekRow,
+      showMonthChrome: showMonthChrome,
+      onPreviousMonth: monthNavigation
+          ? () => _shiftFocus(-1, weekStartsMonday: weekStartsMonday)
+          : null,
+      onNextMonth: monthNavigation
+          ? () => _shiftFocus(1, weekStartsMonday: weekStartsMonday)
+          : null,
+    );
+  }
+
+  /// Inactive month rows (5 of 6) for the week morph — no card, no chrome.
+  Widget _buildInactiveMonthRows({
+    required BuildContext context,
+    required List<CalendarEvent> events,
+    required List<CalendarDayIndicator> indicators,
+    required bool weekStartsMonday,
+    required DateTime morphMonth,
+    required int hiddenWeekRow,
+    required TextStyle monthTitleStyle,
+    required TextStyle monthWeekdayStyle,
+  }) {
+    final chromeSpacer =
+        MonthTitleHeader.preferredHeight(monthTitleStyle) +
+        MonthTitleHeader.titleGap +
+        WeekdayHeaderRow.totalHeight(monthWeekdayStyle);
+
+    return Padding(
+      padding: const EdgeInsets.all(MonthTitleHeader.cardPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: chromeSpacer),
+          Expanded(
+            child: MonthDayGrid(
+              month: morphMonth,
+              events: events,
+              indicators: indicators,
+              weekStartsMonday: weekStartsMonday,
+              style: MonthDayCellStyle.full,
+              hiddenWeekRow: hiddenWeekRow,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -472,8 +1330,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required List<CalendarDayIndicator> indicators,
     required bool weekStartsMonday,
   }) {
-    final activeEvents = _morphEvents ?? events;
-    final activeIndicators = _morphIndicators ?? indicators;
+    final activeEvents = _weekMorphEvents ?? _morphEvents ?? events;
+    final activeIndicators = _weekMorphIndicators ?? _morphIndicators ?? indicators;
 
     if (_dayViewDate != null) {
       return DayHourGrid(
@@ -484,6 +1342,53 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           _dayViewDate = day;
           _focused = DateTime(day.year, day.month, 1);
         }),
+      );
+    }
+
+    if (_isWeekMorphing && _layoutCache != null && _weekMorphAnchor != null) {
+      final cache = _layoutCache!;
+      final morphMonth = _weekMorphForward
+          ? DateTime(_focused.year, _focused.month, 1)
+          : _visibleMonthForWeekReturn();
+      final weekRow = _weekMorphWeekRow;
+      final anchor = _weekMorphAnchor!;
+      final monthRowRects = cache.monthCellRects.sublist(
+        weekRow * 7,
+        weekRow * 7 + 7,
+      );
+      final monthTitleStyle = _titleMorphStyles(context).$2;
+      final monthWeekdayStyle = calendarWeekdayLabelStyle(context);
+      final weekWeekdayStyle = monthWeekdayStyle;
+
+      return _MonthWeekMorphLayer(
+        key: ValueKey(_weekMorphGeneration),
+        controller: _weekMorphController,
+        morphMonth: morphMonth,
+        anchor: anchor,
+        weekRow: weekRow,
+        monthRowRects: monthRowRects,
+        weekColumnRects: cache.weekColumnRects,
+        monthCardRect: cache.monthCardRect,
+        weekAreaRect: cache.weekAreaRect,
+        monthWeekdayHeaderY: cache.monthWeekdayHeaderY,
+        weekWeekdayHeaderY: cache.weekWeekdayHeaderY,
+        areaSize: cache.areaSize,
+        weekStartsMonday: weekStartsMonday,
+        monthWeekdayStyle: monthWeekdayStyle,
+        weekWeekdayStyle: weekWeekdayStyle,
+        monthTitleStyle: monthTitleStyle,
+        events: activeEvents,
+        indicators: activeIndicators,
+        inactiveMonthRows: _buildInactiveMonthRows(
+          context: context,
+          events: activeEvents,
+          indicators: activeIndicators,
+          weekStartsMonday: weekStartsMonday,
+          morphMonth: morphMonth,
+          hiddenWeekRow: weekRow,
+          monthTitleStyle: monthTitleStyle,
+          monthWeekdayStyle: monthWeekdayStyle,
+        ),
       );
     }
 
@@ -607,7 +1512,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         .showCalendarInstantViewSwitch;
 
     final List<CalendarDayIndicator> indicators;
-    if (_isZooming && _morphIndicators != null) {
+    if (_isWeekMorphing && _weekMorphIndicators != null) {
+      indicators = _weekMorphIndicators!;
+    } else if (_isZooming && _morphIndicators != null) {
       indicators = _morphIndicators!;
     } else {
       final trackers =
@@ -628,9 +1535,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             children: [
               Row(
                 children: [
-                  _buildViewModeSelector(),
+                  _buildViewModeSelector(weekStartsMonday),
                   const Spacer(),
-                  if (_mode != CalendarViewMode.month)
+                  if (_isWeekMorphing)
+                    _buildMorphFocusHeader(context, weekStartsMonday)
+                  else if (_mode != CalendarViewMode.month)
                     _buildFocusHeader(context, weekStartsMonday),
                   const SizedBox(width: 8),
                   OutlinedButton(
@@ -648,10 +1557,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               Expanded(
                 child: eventsAsync.when(
                   data: (events) {
-                    final calendarEvents = _isZooming && _morphEvents != null
+                    final calendarEvents =
+                        _isWeekMorphing && _weekMorphEvents != null
+                        ? _weekMorphEvents!
+                        : _isZooming && _morphEvents != null
                         ? _morphEvents!
                         : events;
-                    if (!_isZooming) {
+                    if (!_isZooming && !_isWeekMorphing) {
                       _latestEvents = events;
                       _latestIndicators = indicators;
                     }
@@ -685,10 +1597,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                               _refreshLayoutCache(constraints.biggest);
                               return KeyedSubtree(
                                 key: _calendarAreaKey,
-                                child: _buildMainCalendar(
-                                  events: calendarEvents,
-                                  indicators: indicators,
-                                  weekStartsMonday: weekStartsMonday,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    _buildMainCalendar(
+                                      events: calendarEvents,
+                                      indicators: indicators,
+                                      weekStartsMonday: weekStartsMonday,
+                                    ),
+                                    if (_reverseMorphWarmupActive)
+                                      _buildReverseMorphGpuWarmupLayer(
+                                        weekStartsMonday: weekStartsMonday,
+                                        events: calendarEvents,
+                                        indicators: indicators,
+                                      ),
+                                  ],
                                 ),
                               );
                             },
@@ -789,6 +1712,12 @@ class CalendarLayoutCache {
     required this.tileSourceRects,
     required this.tileZoomMatrices,
     required this.destRects,
+    required this.monthCellRects,
+    required this.weekColumnRects,
+    required this.monthCardRect,
+    required this.weekAreaRect,
+    required this.monthWeekdayHeaderY,
+    required this.weekWeekdayHeaderY,
   });
 
   /// The area size this cache was built for.
@@ -806,11 +1735,32 @@ class CalendarLayoutCache {
   /// 42 destination-cell [Rect]s for the full-screen month view.
   final List<Rect> destRects;
 
+  /// Same as [destRects] — every day cell in the month grid.
+  final List<Rect> monthCellRects;
+
+  /// Seven column [Rect]s for the week view day area.
+  final List<Rect> weekColumnRects;
+
+  /// Bounding box of the month view [Card] (area-local).
+  final Rect monthCardRect;
+
+  /// Flat bounding box of the week view (area-local).
+  final Rect weekAreaRect;
+
+  /// Top [Y] of the weekday label row in month view (area-local).
+  final double monthWeekdayHeaderY;
+
+  /// Top [Y] of the weekday label row in week view (area-local).
+  final double weekWeekdayHeaderY;
+
   // Year-grid layout constants — must match _YearGrid.
   static const _crossAxisCount = 3;
   static const _rowCount = 4;
   static const _crossAxisSpacing = 8.0;
   static const _mainAxisSpacing = 6.0;
+
+  /// Gap below weekday labels in [_WeekGrid] — must match calendar_grid.dart.
+  static const weekHeaderGap = 6.0;
 
   /// Builds the cache from [areaSize] and resolved text styles.
   ///
@@ -821,6 +1771,7 @@ class CalendarLayoutCache {
     required TextStyle compactWeekdayStyle,
     required TextStyle fullTitleStyle,
     required TextStyle fullWeekdayStyle,
+    required TextStyle weekWeekdayStyle,
   }) {
     final tileW =
         (areaSize.width - _crossAxisSpacing * (_crossAxisCount - 1)) /
@@ -854,12 +1805,38 @@ class CalendarLayoutCache {
       weekdayLabelStyle: fullWeekdayStyle,
     );
 
+    final weekColumnRects = _weekColumnRects(areaSize, fullWeekdayStyle);
+    final monthWeekdayHeaderY = MonthTitleHeader.weekdayHeaderY(
+      fullTitleStyle,
+    );
+    final monthCardRect = Rect.fromLTWH(0, 0, areaSize.width, areaSize.height);
+    final weekAreaRect = monthCardRect;
+
     return CalendarLayoutCache._(
       areaSize: areaSize,
       tileBounds: tileBounds,
       tileSourceRects: tileSourceRects,
       tileZoomMatrices: tileZoomMatrices,
       destRects: destRects,
+      monthCellRects: destRects,
+      weekColumnRects: weekColumnRects,
+      monthCardRect: monthCardRect,
+      weekAreaRect: weekAreaRect,
+      monthWeekdayHeaderY: monthWeekdayHeaderY,
+      weekWeekdayHeaderY: 0,
+    );
+  }
+
+  static List<Rect> _weekColumnRects(Size areaSize, TextStyle weekdayStyle) {
+    final weekdayHeight = WeekdayHeaderRow.labelHeight(weekdayStyle);
+    final gridTop = weekdayHeight + weekHeaderGap;
+    final gridH = areaSize.height - gridTop;
+    final gridLeft = MonthTitleHeader.cardPadding;
+    final gridWidth = areaSize.width - MonthTitleHeader.cardPadding * 2;
+    final cellW = gridWidth / 7;
+    return List.generate(
+      7,
+      (i) => Rect.fromLTWH(gridLeft + i * cellW, gridTop, cellW, gridH),
     );
   }
 
@@ -876,13 +1853,12 @@ class CalendarLayoutCache {
 // CalendarMorphWarmup — placed in AppShell so GPU shaders compile at login
 // =============================================================================
 
-/// Renders the calendar morph stack for four frames immediately after login
+/// Renders the calendar morph stack for seven frames immediately after login
 /// so the GPU rasteriser compiles all shaders before the user first opens the
 /// calendar.  Uses [Opacity] (not [Offstage]) so painting actually occurs.
 ///
-/// Frames 1-2 render with [morphReverse]=false (forward: year→month paths).
-/// Frames 3-4 render with [morphReverse]=true (reverse: inverted lerps and
-/// the zoomed→identity [Matrix4Tween] path).
+/// Steps 0-2 render with [morphReverse]=false at t = 0.05, 0.20, 0.35.
+/// Steps 3-6 render with [morphReverse]=true at t = 0.05, 0.20, 0.35, 0.0.
 class CalendarMorphWarmup extends StatefulWidget {
   const CalendarMorphWarmup({super.key});
 
@@ -895,12 +1871,13 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
   static const _areaSize = Size(900, 700);
   static const _tileRect = Rect.fromLTWH(16, 120, 200, 148);
 
+  static const _forwardT = [0.05, 0.20, 0.35];
+  static const _reverseT = [0.05, 0.20, 0.35, 0.0];
+
   late final AnimationController _controller;
   bool _done = false;
 
-  // Cycles through 4 warmup frames:
-  //   steps 0-1 → morphReverse=false  (forward shader paths)
-  //   steps 2-3 → morphReverse=true   (reverse lerps + inverted Matrix4Tween)
+  // 3 forward paint frames + 4 reverse paint frames.
   int _step = 0;
   bool _morphReverse = false;
 
@@ -911,25 +1888,24 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _controller.value = 0.1;
+    _controller.value = _forwardT.first;
     WidgetsBinding.instance.addPostFrameCallback(_advanceWarmup);
   }
 
   void _advanceWarmup(Duration _) {
     if (!mounted) return;
-    _step++;
-    if (_step >= 4) {
+    if (_step >= _forwardT.length + _reverseT.length) {
       setState(() => _done = true);
       return;
     }
-    if (_step == 2) {
-      // Flip to reverse: forces the GPU to compile inverted lerps and the
-      // reverse Matrix4Tween path.  ValueKey in build triggers a full
-      // _MorphAnimationLayer rebuild so its initState re-runs with the new flag.
+    if (_step == _forwardT.length) {
       setState(() => _morphReverse = true);
-    } else {
-      setState(() {});
     }
+    _controller.value = _step < _forwardT.length
+        ? _forwardT[_step]
+        : _reverseT[_step - _forwardT.length];
+    setState(() {});
+    _step++;
     WidgetsBinding.instance.addPostFrameCallback(_advanceWarmup);
   }
 
@@ -1003,7 +1979,16 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
               fullWeekdayStyle: full,
               yearMonthNameStyle: yearName,
               monthTitleStyle: monthTitle,
-              yearGrid: const SizedBox.expand(),
+              yearGrid: CalendarGrid(
+                mode: CalendarViewMode.year,
+                focused: DateTime(morphMonth.year, 1, 1),
+                events: const [],
+                indicators: const [],
+                weekStartsMonday: true,
+                onDayTap: (_) {},
+                onMonthTap: (_) {},
+                hiddenMonth: _morphReverse ? morphMonth : null,
+              ),
             ),
           ),
         ),
@@ -1299,7 +2284,8 @@ class _MorphLayoutDelegate extends MultiChildLayoutDelegate {
 
   @override
   void performLayout(Size size) {
-    for (var i = 0; i < 42; i++) {
+    final count = sourceRects.length;
+    for (var i = 0; i < count; i++) {
       final rect = Rect.lerp(sourceRects[i], destRects[i], t)!;
       layoutChild(i, BoxConstraints.tight(rect.size));
       positionChild(i, rect.topLeft);
@@ -1537,6 +2523,320 @@ class _ViewModeSegmentedControl extends StatelessWidget {
     }
 
     return control;
+  }
+}
+
+// =============================================================================
+// Month ↔ week morph
+// =============================================================================
+
+/// Visual progress for month↔week morph cells (0 = month, 1 = week).
+class _WeekMorphProgress extends InheritedWidget {
+  const _WeekMorphProgress({
+    required this.t,
+    required super.child,
+  });
+
+  final double t;
+
+  static _WeekMorphProgress of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_WeekMorphProgress>()!;
+
+  @override
+  bool updateShouldNotify(_WeekMorphProgress old) => old.t != t;
+}
+
+class _MonthWeekMorphLayer extends StatefulWidget {
+  const _MonthWeekMorphLayer({
+    super.key,
+    required this.controller,
+    required this.morphMonth,
+    required this.anchor,
+    required this.weekRow,
+    required this.monthRowRects,
+    required this.weekColumnRects,
+    required this.monthCardRect,
+    required this.weekAreaRect,
+    required this.monthWeekdayHeaderY,
+    required this.weekWeekdayHeaderY,
+    required this.areaSize,
+    required this.weekStartsMonday,
+    required this.monthWeekdayStyle,
+    required this.weekWeekdayStyle,
+    required this.monthTitleStyle,
+    required this.events,
+    required this.indicators,
+    required this.inactiveMonthRows,
+  });
+
+  final AnimationController controller;
+  final DateTime morphMonth;
+  final DateTime anchor;
+  final int weekRow;
+  final List<Rect> monthRowRects;
+  final List<Rect> weekColumnRects;
+  final Rect monthCardRect;
+  final Rect weekAreaRect;
+  final double monthWeekdayHeaderY;
+  final double weekWeekdayHeaderY;
+  final Size areaSize;
+  final bool weekStartsMonday;
+  final TextStyle monthWeekdayStyle;
+  final TextStyle weekWeekdayStyle;
+  final TextStyle monthTitleStyle;
+  final List<CalendarEvent> events;
+  final List<CalendarDayIndicator> indicators;
+  final Widget inactiveMonthRows;
+
+  @override
+  State<_MonthWeekMorphLayer> createState() => _MonthWeekMorphLayerState();
+}
+
+class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
+  late final List<Widget> _cellChildren;
+  late final List<DateTime> _weekDates;
+  late final String _monthTitleLabel;
+  late final double _monthTitleHeight;
+  late final Widget _inactiveMonthChild;
+
+  @override
+  void initState() {
+    super.initState();
+    final dates = monthGridDates(
+      widget.morphMonth,
+      weekStartsMonday: widget.weekStartsMonday,
+    );
+    _weekDates = dates.sublist(
+      widget.weekRow * 7,
+      widget.weekRow * 7 + 7,
+    );
+    _monthTitleLabel = _mmmmFormat.format(widget.morphMonth);
+    _monthTitleHeight = MonthTitleHeader.preferredHeight(widget.monthTitleStyle);
+    _inactiveMonthChild = widget.inactiveMonthRows;
+
+    _cellChildren = [
+      for (var i = 0; i < 7; i++)
+        LayoutId(
+          id: i,
+          child: _MonthWeekMorphCell(
+            key: ValueKey(_weekDates[i]),
+            date: _weekDates[i],
+            month: widget.morphMonth,
+            events: widget.events,
+            indicators: widget.indicators,
+          ),
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: IgnorePointer(
+        child: AnimatedBuilder(
+          animation: widget.controller,
+          child: _inactiveMonthChild,
+          builder: (context, inactiveMonthChild) {
+            final t = Curves.easeInOutCubic.transform(widget.controller.value);
+            final monthFade = (1.0 - t).clamp(0.0, 1.0);
+            final weekFade = t.clamp(0.0, 1.0);
+            final headerY = lerpDouble(
+              widget.monthWeekdayHeaderY,
+              widget.weekWeekdayHeaderY,
+              t,
+            )!;
+            final weekdayLabelHeight = WeekdayHeaderRow.labelHeight(
+              widget.monthWeekdayStyle,
+            );
+            final divider = Theme.of(context).dividerColor;
+
+            return _WeekMorphProgress(
+              t: t,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Month card + inactive rows fade out.
+                  Opacity(
+                    opacity: monthFade,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Positioned.fromRect(
+                          rect: widget.monthCardRect,
+                          child: Card(
+                            margin: EdgeInsets.zero,
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                        inactiveMonthChild!,
+                      ],
+                    ),
+                  ),
+                  // Week flat background fades in.
+                  Positioned.fromRect(
+                    rect: widget.weekAreaRect,
+                    child: Opacity(
+                      opacity: weekFade,
+                      child: CustomPaint(
+                        painter: _WeekColumnDividerPainter(
+                          columnRects: widget.weekColumnRects,
+                          color: divider,
+                        ),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  ),
+                  // Month title fades out beneath morph cells as they expand upward.
+                  Positioned(
+                    left: MonthTitleHeader.cardPadding,
+                    right: MonthTitleHeader.cardPadding,
+                    top: MonthTitleHeader.cardPadding,
+                    height: _monthTitleHeight,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Opacity(
+                        opacity: monthFade,
+                        child: Text(
+                          _monthTitleLabel,
+                          style: widget.monthTitleStyle,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          textHeightBehavior:
+                              MonthTitleHeader.titleTextHeightBehavior,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Morphing active week row (painted over fading month title).
+                  CustomMultiChildLayout(
+                    delegate: _MorphLayoutDelegate(
+                      sourceRects: widget.monthRowRects,
+                      destRects: widget.weekColumnRects,
+                      t: t,
+                    ),
+                    children: _cellChildren,
+                  ),
+                  // Weekday headers: fixed month Y at t=0, slide up to week Y.
+                  Positioned(
+                    left: MonthTitleHeader.cardPadding,
+                    right: MonthTitleHeader.cardPadding,
+                    top: headerY,
+                    height: weekdayLabelHeight,
+                    child: WeekdayHeaderRow(
+                      weekStartsMonday: widget.weekStartsMonday,
+                      labelStyle: widget.monthWeekdayStyle,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _WeekColumnDividerPainter extends CustomPainter {
+  _WeekColumnDividerPainter({
+    required this.columnRects,
+    required this.color,
+  });
+
+  final List<Rect> columnRects;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (columnRects.length < 2) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    final top = columnRects.first.top;
+    final bottom = columnRects.first.bottom;
+    for (var i = 1; i < columnRects.length; i++) {
+      final x = columnRects[i].left;
+      canvas.drawLine(Offset(x, top), Offset(x, bottom), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WeekColumnDividerPainter old) =>
+      old.columnRects != columnRects || old.color != color;
+}
+
+class _MonthWeekMorphCell extends StatelessWidget {
+  const _MonthWeekMorphCell({
+    super.key,
+    required this.date,
+    required this.month,
+    required this.events,
+    required this.indicators,
+  });
+
+  final DateTime date;
+  final DateTime month;
+  final List<CalendarEvent> events;
+  final List<CalendarDayIndicator> indicators;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _WeekMorphProgress.of(context).t;
+    final monthStyle = MonthDayCellStyle.full;
+    final weekStyle = weekViewDayCellStyle;
+
+    final fontSize = lerpDouble(monthStyle.fontSize, weekStyle.fontSize, t)!;
+    final borderRadius = monthStyle.borderRadius +
+        (weekStyle.borderRadius - monthStyle.borderRadius) * t;
+    final cellMargin = lerpDouble(
+      monthStyle.cellMargin.top,
+      weekStyle.cellMargin.top,
+      t,
+    )!;
+    final cellPadding = EdgeInsets.lerp(
+      monthStyle.cellPadding,
+      weekStyle.cellPadding,
+      t,
+    )!;
+
+    final inMonth = date.month == month.month;
+    final borderAlpha = lerpDouble(
+      monthStyle.borderOpacity,
+      weekStyle.borderOpacity,
+      t,
+    )!;
+
+    final dayEvents =
+        events.where((e) => calendarSameDay(e.start, date)).toList();
+    final dayIndicators = indicators
+        .where((i) => calendarSameDay(i.day, date))
+        .take(3)
+        .toList();
+
+    return CalendarDayCell(
+      date: date,
+      month: month,
+      events: dayEvents,
+      indicators: dayIndicators,
+      adjacentTextT: inMonth ? null : t,
+      adjacentBorderT: inMonth ? null : t,
+      style: MonthDayCellStyle(
+        fontSize: fontSize,
+        borderRadius: borderRadius,
+        cellPadding: cellPadding,
+        cellMargin: EdgeInsets.all(cellMargin),
+        maxEventLines: (monthStyle.maxEventLines +
+                (weekStyle.maxEventLines - monthStyle.maxEventLines) * t)
+            .round(),
+        dotSize: lerpDouble(monthStyle.dotSize, weekStyle.dotSize, t)!,
+        eventFontSize: lerpDouble(
+          monthStyle.eventFontSize,
+          weekStyle.eventFontSize,
+          t,
+        )!,
+        borderOpacity: borderAlpha,
+      ),
+    );
   }
 }
 

@@ -134,6 +134,8 @@ class CalendarDayCell extends StatelessWidget {
     required this.style,
     this.onTap,
     this.isSelected = false,
+    this.adjacentTextT,
+    this.adjacentBorderT,
   });
 
   final DateTime date;
@@ -144,17 +146,39 @@ class CalendarDayCell extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isSelected;
 
+  /// When set, adjacent-month day numbers lerp from muted (0) to active (1).
+  final double? adjacentTextT;
+
+  /// When set, adjacent-month borders lerp from muted (0) to active (1).
+  final double? adjacentBorderT;
+
   @override
   Widget build(BuildContext context) {
     final inMonth = date.month == month.month;
     final divider = Theme.of(context).dividerColor;
     final isFullLayout = !style.isCompactLayout;
-    final borderColor = inMonth || !isFullLayout
-        ? divider
-        : calendarAdjacentMonthColor(context);
-    final borderAlpha = inMonth || !isFullLayout
-        ? style.borderOpacity
-        : calendarAdjacentMonthBorderOpacity;
+
+    final Color borderColor;
+    final double borderAlpha;
+    if (!inMonth && isFullLayout && adjacentBorderT != null) {
+      final t = adjacentBorderT!.clamp(0.0, 1.0);
+      borderColor = Color.lerp(
+        calendarAdjacentMonthColor(context),
+        divider,
+        t,
+      )!;
+      borderAlpha = lerpDouble(
+        calendarAdjacentMonthBorderOpacity,
+        style.borderOpacity,
+        t,
+      )!;
+    } else if (inMonth || !isFullLayout) {
+      borderColor = divider;
+      borderAlpha = style.borderOpacity;
+    } else {
+      borderColor = calendarAdjacentMonthColor(context);
+      borderAlpha = calendarAdjacentMonthBorderOpacity;
+    }
 
     final cell = Container(
       width: double.infinity,
@@ -198,6 +222,7 @@ class CalendarDayCell extends StatelessWidget {
             month: month,
             fontSize: style.fontSize,
             mutedWhenAdjacent: !inMonth,
+            adjacentTextT: adjacentTextT,
             isSelected: isSelected,
           ),
           if (indicators.isNotEmpty) ...[
@@ -250,6 +275,7 @@ class CalendarDayCell extends StatelessWidget {
           month: month,
           fontSize: style.fontSize,
           mutedWhenAdjacent: !inMonth,
+          adjacentTextT: adjacentTextT,
           isSelected: isSelected,
         ),
       ),
@@ -264,6 +290,7 @@ class CalendarDayNumber extends StatelessWidget {
     required this.month,
     required this.fontSize,
     this.mutedWhenAdjacent = false,
+    this.adjacentTextT,
     this.isSelected = false,
   });
 
@@ -271,6 +298,9 @@ class CalendarDayNumber extends StatelessWidget {
   final DateTime month;
   final double fontSize;
   final bool mutedWhenAdjacent;
+
+  /// Lerps adjacent-month text from muted (0) to active (1). Ignored when null.
+  final double? adjacentTextT;
   final bool isSelected;
 
   @override
@@ -279,8 +309,20 @@ class CalendarDayNumber extends StatelessWidget {
     final isToday = calendarIsToday(date);
     final muted = mutedWhenAdjacent && date.month != month.month;
     final mutedColor = calendarAdjacentMonthColor(context);
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     final diameter = fontSize + (fontSize <= 9 ? 3 : 8);
     final showSelection = isSelected && !isToday && !muted;
+
+    Color textColor;
+    if (isToday) {
+      textColor = Theme.of(context).colorScheme.onPrimary;
+    } else if (muted && adjacentTextT != null) {
+      textColor = Color.lerp(mutedColor, onSurface, adjacentTextT!.clamp(0.0, 1.0))!;
+    } else if (muted) {
+      textColor = mutedColor;
+    } else {
+      textColor = onSurface;
+    }
 
     return Center(
       child: Container(
@@ -307,11 +349,7 @@ class CalendarDayNumber extends StatelessWidget {
             fontSize: fontSize,
             fontWeight: isToday ? FontWeight.w600 : FontWeight.w500,
             height: 1,
-            color: isToday
-                ? Theme.of(context).colorScheme.onPrimary
-                : muted
-                ? mutedColor
-                : Theme.of(context).colorScheme.onSurface,
+            color: textColor,
           ),
         ),
       ),
@@ -672,6 +710,7 @@ class MonthDayGrid extends StatelessWidget {
     this.weekdayHeaderOpacity = 1,
     this.useSingleLetterWeekdays = false,
     this.selectedDay,
+    this.hiddenWeekRow,
   });
 
   final DateTime month;
@@ -684,6 +723,9 @@ class MonthDayGrid extends StatelessWidget {
   final double weekdayHeaderOpacity;
   final bool useSingleLetterWeekdays;
   final DateTime? selectedDay;
+
+  /// Row index (0–5) whose cells are omitted — used during month↔week morph.
+  final int? hiddenWeekRow;
 
   @override
   Widget build(BuildContext context) {
@@ -703,6 +745,9 @@ class MonthDayGrid extends StatelessWidget {
         Expanded(
           child: Column(
             children: List.generate(6, (row) {
+              if (hiddenWeekRow == row) {
+                return const Expanded(child: SizedBox.shrink());
+              }
               return Expanded(
                 child: Row(
                   children: List.generate(7, (col) {
