@@ -475,12 +475,89 @@ double _compactYearDotsTop(double cellHeight) {
   return blockTop + dayHeight + gap;
 }
 
+/// Inner content height of a full-month morph cell (margin + padding stripped).
+double calendarMorphMonthInnerCellHeight(double outerCellHeight) {
+  const margin = 1.0 * 2; // MonthDayCellStyle.full.cellMargin.top × 2
+  final padding = MonthDayCellStyle.full.cellPadding.vertical;
+  return outerCellHeight - margin - padding;
+}
+
+/// Day-number layout diameter at full month scale — matches [_MorphCell].
+double calendarMorphMonthDayLayoutSize(double innerCellHeight) {
+  const fullFontSize = 15.0;
+  return (fullFontSize + 8).clamp(0.0, innerCellHeight);
+}
+
+/// Pre-computes frozen event metrics for event counts 0…[MorphDayEventStack.maxMonthEvents].
+List<MorphDayEventFrozenMetrics> calendarMorphEventFrozenMetrics({
+  required double monthCellOuterHeight,
+}) {
+  final cellHeight = calendarMorphMonthInnerCellHeight(monthCellOuterHeight);
+  final layoutDay = calendarMorphMonthDayLayoutSize(cellHeight);
+  return List.generate(
+    MorphDayEventStack.maxMonthEvents + 1,
+    (count) => MorphDayEventFrozenMetrics.fromLayout(
+      cellHeight: cellHeight,
+      layoutDay: layoutDay,
+      eventCount: count,
+    ),
+  );
+}
+
+/// Month-layout metrics for month→year morph.
+///
+/// Cell height shrinks every animation frame; freezing bar stride/height avoids
+/// per-frame layout drift. Values are pre-computed in [CalendarLayoutCache].
+class MorphDayEventFrozenMetrics {
+  const MorphDayEventFrozenMetrics({
+    required this.monthEventsTop,
+    required this.barHeight,
+    required this.barStride,
+    required this.eventFontSize,
+    required this.monthLayoutCount,
+  });
+
+  final double monthEventsTop;
+  final double barHeight;
+  final double barStride;
+  final double eventFontSize;
+  final int monthLayoutCount;
+
+  static MorphDayEventFrozenMetrics fromLayout({
+    required double cellHeight,
+    required double layoutDay,
+    required int eventCount,
+  }) {
+    final capped = eventCount.clamp(0, MorphDayEventStack.maxMonthEvents);
+    final monthLayoutCount = _morphMonthLayoutEventCount(
+      cellHeight: cellHeight,
+      eventCount: capped,
+    );
+    final visible = monthLayoutCount.clamp(1, MorphDayEventStack.maxMonthEvents);
+    final barHeight = calendarMonthEventBarHeight(
+      cellHeight: cellHeight,
+      style: MonthDayCellStyle.full,
+      visibleEventCount: visible,
+    );
+    return MorphDayEventFrozenMetrics(
+      monthEventsTop: layoutDay + 2,
+      barHeight: barHeight,
+      barStride: barHeight + 1,
+      eventFontSize: calendarMonthEventFontSize(
+        barHeight: barHeight,
+        style: MonthDayCellStyle.full,
+      ),
+      monthLayoutCount: monthLayoutCount,
+    );
+  }
+}
+
 /// Morphs year-view event dots into month-view bars during year↔month zoom.
 ///
-/// Year→month (styleT 0→1): stack dots → expand A–C → slide out extras from bottom.
-/// Month→year (styleT 1→0): minimize bottom-up (extras vanish); top 3 become dots
-/// in place, then dots ease to the year row below the date.
-class MorphDayEventStack extends StatelessWidget {
+/// Both directions share one [styleT] timeline (0 = year dots, 1 = full month bars):
+/// bottom-up in-place shrink/grow per event, then dot-row travel. Year→month runs
+/// styleT forward; month→year runs it backward — exact opposites.
+class MorphDayEventStack extends StatefulWidget {
   const MorphDayEventStack({
     super.key,
     required this.events,
@@ -491,6 +568,7 @@ class MorphDayEventStack extends StatelessWidget {
     required this.dayLayoutSize,
     required this.morphReverse,
     this.layoutDayLayoutSize,
+    this.frozenMetrics,
   });
 
   final List<CalendarEvent> events;
@@ -504,21 +582,41 @@ class MorphDayEventStack extends StatelessWidget {
   /// Frozen day-number size for month bar/dot layout during month→year morph.
   final double? layoutDayLayoutSize;
 
+  /// Pre-computed from [CalendarLayoutCache] — avoids per-cell work on frame 1.
+  final MorphDayEventFrozenMetrics? frozenMetrics;
+
   static const maxYearDots = 3;
   static const maxMonthEvents = 5;
-  static const stackPhaseEnd = 0.35;
-  static const expandPhaseEnd = 0.55;
-  static const slideSegment = 0.10;
-  static const dotStagger = 0.11;
-  /// Month→year: each event (bottom-up) minimizes during this styleT span.
+  static const yearDotSize = 2.0; // MonthDayCellStyle.compact.eventDotSize
+  /// Each event (bottom-up) shrinks/grows during this styleT span.
   static const reverseSlotSegment = 0.09;
-  /// Month→year: after all slots finish shrinking, dots travel to the year row.
+  /// After all slots finish, dots travel between the year row and month rows.
   static const reverseMoveDuration = 0.30;
 
-  /// Freeze month layout metrics for the full month→year morph.
-  static double shrinkAnchorStyleT(int eventCount) => 1.0;
+  /// Whether [_MorphCell] should hand off to the static compact year layout.
+  static bool yearDotsSettled({
+    required bool morphReverse,
+    required int eventCount,
+    required double styleT,
+  }) {
+    if (!morphReverse) return false;
+    if (eventCount == 0) return styleT < 0.02;
+    final capped = eventCount.clamp(0, maxMonthEvents);
+    return reverseDotMoveT(count: capped, styleT: styleT) >= 1.0;
+  }
 
-  /// Bottom-up minimize progress for month→year. 0 = full bar, 1 = done.
+  /// Eased dot-row travel progress for month→year (0 = month rows, 1 = year row).
+  static double reverseDotMoveEased({
+    required int count,
+    required double styleT,
+  }) {
+    if (count <= 0) return 0.0;
+    return Curves.easeInOutCubic.transform(
+      reverseDotMoveT(count: count, styleT: styleT),
+    );
+  }
+
+  /// Bottom-up morph progress. 0 = full bar, 1 = shrunk to dot / vanished.
   static double reverseSlotShrinkT({
     required int index,
     required int count,
@@ -533,7 +631,7 @@ class MorphDayEventStack extends StatelessWidget {
     return ((end - styleT) / (end - start)).clamp(0.0, 1.0);
   }
 
-  /// 0 = dots at month rows, 1 = dots at year row (month→year final phase).
+  /// 0 = dots at month rows, 1 = dots at year row.
   static double reverseDotMoveT({
     required int count,
     required double styleT,
@@ -546,393 +644,219 @@ class MorphDayEventStack extends StatelessWidget {
     return ((shrinkPhaseEnd - styleT) / reverseMoveDuration).clamp(0.0, 1.0);
   }
 
-  /// Per-slot morph for A/B/C. When [shrinking] (month→year), bottom slot leads.
-  static double dotSlotMorphT(
-    int index,
-    double globalT, {
-    required bool shrinking,
-    double stagger = dotStagger,
-  }) {
-    final order = shrinking ? maxYearDots - 1 - index : index;
-    if (shrinking) {
-      final end = 1.0 - order * stagger;
-      final start = end - stagger;
-      if (globalT >= end) return 1.0;
-      if (globalT <= start) return 0.0;
-      return ((globalT - start) / (end - start)).clamp(0.0, 1.0);
-    }
-    final start = order * stagger;
-    final end = start + stagger;
-    if (globalT <= start) return 0.0;
-    if (globalT >= end) return 1.0;
-    return ((globalT - start) / (end - start)).clamp(0.0, 1.0);
-  }
-
-  static double stackProgress(double styleT) =>
-      (styleT / stackPhaseEnd).clamp(0.0, 1.0);
-
-  static double expandProgress(double styleT) => styleT <= stackPhaseEnd
-      ? 0.0
-      : ((styleT - stackPhaseEnd) / (expandPhaseEnd - stackPhaseEnd))
-          .clamp(0.0, 1.0);
-
-  /// 0 = hidden below row above; 1 = at own month row.
-  static double extraSlideT({
-    required int index,
-    required int total,
-    required double styleT,
-    required bool monthToYear,
-  }) {
-    if (index < maxYearDots) return 1.0;
-
-    if (monthToYear) {
-      return reverseSlotShrinkT(index: index, count: total, styleT: styleT);
-    }
-
-    final order = index - maxYearDots;
-    final start = expandPhaseEnd + order * slideSegment;
-    final end = start + slideSegment;
-    return ((styleT - start) / (end - start)).clamp(0.0, 1.0);
-  }
-
-  /// styleT threshold before A–C begin shrinking (year→month only).
-  static double _extrasPhaseEnd(int extraCount, {required bool monthToYear}) {
-    if (extraCount <= 0) return 1.0;
-    if (monthToYear) return 1.0 - extraCount * reverseSlotSegment;
-    return expandPhaseEnd;
-  }
-
-  int _displayCount(double collapseEnd) {
-    final cappedCount = events.length.clamp(0, maxMonthEvents);
-    if (cappedCount == 0) return 0;
-    if (!inMonth && styleT <= 0) return 0;
-
-    final monthLayoutCount = _morphMonthLayoutEventCount(
-      cellHeight: cellHeight,
-      eventCount: cappedCount,
-    );
-
-    if (morphReverse) return cappedCount;
-
-    if (styleT >= 1.0) return monthLayoutCount;
-    return cappedCount;
-  }
-
-  double _yearDotXOffset(int index, int dotCount, double dotSize) {
+  static double _yearDotXOffset(int index, int dotCount, double dotSize) {
     if (dotCount <= 1) return 0;
     final spacing = dotSize + 1;
     return -((dotCount - 1) * spacing) / 2 + index * spacing;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final cappedCount = events.length.clamp(0, maxMonthEvents);
-    final extraCount = (cappedCount - maxYearDots).clamp(0, cappedCount);
-    final collapseEnd = _extrasPhaseEnd(extraCount, monthToYear: morphReverse);
+  State<MorphDayEventStack> createState() => _MorphDayEventStackState();
+}
 
-    final count = _displayCount(collapseEnd);
+class _MorphDayEventStackState extends State<MorphDayEventStack> {
+  int _displayCount() {
+    final cappedCount =
+        widget.events.length.clamp(0, MorphDayEventStack.maxMonthEvents);
+    if (cappedCount == 0) return 0;
+    if (!widget.inMonth && widget.styleT <= 0) return 0;
+    return cappedCount;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cappedCount =
+        widget.events.length.clamp(0, MorphDayEventStack.maxMonthEvents);
+    final count = _displayCount();
     if (count == 0) return const SizedBox.shrink();
 
-    final reverseMove = morphReverse
-        ? Curves.easeInOutCubic.transform(
-            reverseDotMoveT(count: cappedCount, styleT: styleT),
-          )
-        : 0.0;
-
-    final dotStyleT = morphReverse ? 1.0 : styleT;
-
-    final barMetricT = morphReverse ? 1.0 : styleT;
-
-    final monthLayoutCount = _morphMonthLayoutEventCount(
-      cellHeight: cellHeight,
-      eventCount: cappedCount,
-    );
-    final heightEventCount = morphReverse || styleT >= 1.0
-        ? monthLayoutCount
-        : count.clamp(1, maxMonthEvents);
-
-    final fullMonthBarHeight = calendarMonthEventBarHeight(
-      cellHeight: cellHeight,
-      style: MonthDayCellStyle.full,
-      visibleEventCount: heightEventCount,
-    );
-    final fullMonthFontSize = calendarMonthEventFontSize(
-      barHeight: fullMonthBarHeight,
-      style: MonthDayCellStyle.full,
+    final reverseMove = MorphDayEventStack.reverseDotMoveEased(
+      count: cappedCount,
+      styleT: widget.styleT,
     );
 
-    final stackT = stackProgress(dotStyleT);
-    final expandT = expandProgress(dotStyleT);
-    final yearDotSize = MonthDayCellStyle.compact.eventDotSize;
+    final frozen = widget.frozenMetrics;
+    final frozenMonthEventsTop =
+        frozen?.monthEventsTop ??
+        (widget.layoutDayLayoutSize ?? widget.dayLayoutSize) + 2;
+    final frozenBarHeight = frozen?.barHeight ??
+        calendarMonthEventBarHeight(
+          cellHeight: widget.cellHeight,
+          style: MonthDayCellStyle.full,
+          visibleEventCount: cappedCount.clamp(1, MorphDayEventStack.maxMonthEvents),
+        );
+    final frozenBarStride = frozen?.barStride ?? frozenBarHeight + 1;
+    final frozenEventFontSize = frozen?.eventFontSize ??
+        calendarMonthEventFontSize(
+          barHeight: frozenBarHeight,
+          style: MonthDayCellStyle.full,
+        );
 
+    const yearDotSize = MorphDayEventStack.yearDotSize;
     final yearDotCount =
-        inMonth ? cappedCount.clamp(0, maxYearDots) : 0;
+        widget.inMonth ? cappedCount.clamp(0, MorphDayEventStack.maxYearDots) : 0;
+    final yearEventsTop = _compactYearDotsTop(widget.cellHeight);
 
-    final layoutDay = layoutDayLayoutSize ?? dayLayoutSize;
-    final frozenMonthEventsTop = layoutDay + 2;
-    final frozenBarHeight = calendarMonthEventBarHeight(
-      cellHeight: cellHeight,
-      style: MonthDayCellStyle.full,
-      visibleEventCount: monthLayoutCount.clamp(1, maxMonthEvents),
-    );
-    final frozenBarStride = frozenBarHeight + 1;
+    final slotShrinkEased = List<double>.filled(count, 0);
+    for (var i = 0; i < count; i++) {
+      slotShrinkEased[i] = Curves.easeInOutCubic.transform(
+        MorphDayEventStack.reverseSlotShrinkT(
+          index: i,
+          count: count,
+          styleT: widget.styleT,
+        ),
+      );
+    }
 
-    final eventFontSize = lerpDouble(5.5, fullMonthFontSize, barMetricT)!;
-    final barHeight = lerpDouble(yearDotSize, fullMonthBarHeight, barMetricT)!;
-    final dotStride = yearDotSize + 1;
-    final barStride = barHeight + 1;
+    final yearXOffsets = List<double>.filled(MorphDayEventStack.maxYearDots, 0);
+    if (widget.inMonth && yearDotCount > 1) {
+      for (var i = 0; i < yearDotCount; i++) {
+        yearXOffsets[i] = MorphDayEventStack._yearDotXOffset(
+          i,
+          yearDotCount,
+          yearDotSize,
+        );
+      }
+    }
 
-    final minEventTop = dayLayoutSize + 2;
-
-    final yearEventsTop = _compactYearDotsTop(cellHeight);
-    final monthEventsTop = minEventTop;
-    final dotRowY = lerpDouble(yearEventsTop, monthEventsTop, stackT)!
-        .clamp(minEventTop, cellHeight);
-
-    return Stack(
-      clipBehavior: Clip.hardEdge,
-      children: [
-        // Highest-index extras paint first so E slides underneath D.
-        for (var i = count - 1; i >= maxYearDots; i--)
-          _buildEventMarker(
-            event: events[i],
-            index: i,
-            count: count,
-            yearDotCount: yearDotCount,
-            dotRowY: dotRowY,
-            monthEventsTop: monthEventsTop,
-            dotStride: dotStride,
-            barStride: barStride,
-            stackT: stackT,
-            expandT: expandT,
-            dotSize: yearDotSize,
-            barHeight: barHeight,
-            eventFontSize: eventFontSize,
-            morphReverse: morphReverse,
-            minEventTop: minEventTop,
-            reverseMove: reverseMove,
-            yearEventsTop: yearEventsTop,
-            frozenMonthEventsTop: frozenMonthEventsTop,
-            frozenBarStride: frozenBarStride,
-            frozenBarHeight: frozenBarHeight,
-            frozenEventFontSize: fullMonthFontSize,
-          ),
-        for (var i = 0; i < count && i < maxYearDots; i++)
-          _buildEventMarker(
-            event: events[i],
-            index: i,
-            count: count,
-            yearDotCount: yearDotCount,
-            dotRowY: dotRowY,
-            monthEventsTop: monthEventsTop,
-            dotStride: dotStride,
-            barStride: barStride,
-            stackT: stackT,
-            expandT: expandT,
-            dotSize: yearDotSize,
-            barHeight: barHeight,
-            eventFontSize: eventFontSize,
-            morphReverse: morphReverse,
-            minEventTop: minEventTop,
-            reverseMove: reverseMove,
-            yearEventsTop: yearEventsTop,
-            frozenMonthEventsTop: frozenMonthEventsTop,
-            frozenBarStride: frozenBarStride,
-            frozenBarHeight: frozenBarHeight,
-            frozenEventFontSize: fullMonthFontSize,
-          ),
-      ],
+    return RepaintBoundary(
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          for (var i = count - 1; i >= MorphDayEventStack.maxYearDots; i--)
+            _buildEventMarker(
+              event: widget.events[i],
+              index: i,
+              dotSize: yearDotSize,
+              reverseMove: reverseMove,
+              yearEventsTop: yearEventsTop,
+              frozenMonthEventsTop: frozenMonthEventsTop,
+              frozenBarStride: frozenBarStride,
+              frozenBarHeight: frozenBarHeight,
+              frozenEventFontSize: frozenEventFontSize,
+              shrinkEased: slotShrinkEased[i],
+              yearX: 0,
+            ),
+          for (var i = 0; i < count && i < MorphDayEventStack.maxYearDots; i++)
+            _buildEventMarker(
+              event: widget.events[i],
+              index: i,
+              dotSize: yearDotSize,
+              reverseMove: reverseMove,
+              yearEventsTop: yearEventsTop,
+              frozenMonthEventsTop: frozenMonthEventsTop,
+              frozenBarStride: frozenBarStride,
+              frozenBarHeight: frozenBarHeight,
+              frozenEventFontSize: frozenEventFontSize,
+              shrinkEased: slotShrinkEased[i],
+              yearX: yearXOffsets[i],
+            ),
+        ],
+      ),
     );
   }
 
   Widget _buildEventMarker({
     required CalendarEvent event,
     required int index,
-    required int count,
-    required int yearDotCount,
-    required double dotRowY,
-    required double monthEventsTop,
-    required double dotStride,
-    required double barStride,
-    required double stackT,
-    required double expandT,
     required double dotSize,
-    required double barHeight,
-    required double eventFontSize,
-    required bool morphReverse,
-    required double minEventTop,
-    double reverseMove = 0.0,
-    double yearEventsTop = 0.0,
-    double frozenMonthEventsTop = 0.0,
-    double frozenBarStride = 0.0,
-    double frozenBarHeight = 0.0,
-    double frozenEventFontSize = 9.0,
+    required double shrinkEased,
+    required double yearX,
+    required double reverseMove,
+    required double yearEventsTop,
+    required double frozenMonthEventsTop,
+    required double frozenBarStride,
+    required double frozenBarHeight,
+    required double frozenEventFontSize,
   }) {
-    final isDotSlot = index < maxYearDots;
-
-    double clampEventY(double y, double height) =>
-        y.clamp(minEventTop, (cellHeight - height).clamp(minEventTop, cellHeight));
+    final isDotSlot = index < MorphDayEventStack.maxYearDots;
 
     if (!isDotSlot) {
-      if (morphReverse) {
-        final shrinkT = Curves.easeInOutCubic.transform(
-          extraSlideT(
-            index: index,
-            total: count,
-            styleT: styleT,
-            monthToYear: true,
-          ),
-        );
-        if (shrinkT >= 1.0) return const SizedBox.shrink();
-        if (shrinkT <= 0.0) {
-          final ownY = frozenMonthEventsTop + index * frozenBarStride;
-          return _eventPill(
-            event: event,
-            left: 0,
-            top: clampEventY(ownY, frozenBarHeight),
-            width: maxWidth,
-            height: frozenBarHeight,
-            eventFontSize: frozenEventFontSize,
-            expandT: 1.0,
-          );
-        }
-
-        final width = lerpDouble(maxWidth, 0, shrinkT)!;
-        final height = lerpDouble(frozenBarHeight, 0, shrinkT)!;
+      final shrinkT = shrinkEased;
+      if (shrinkT >= 1.0) return const SizedBox.shrink();
+      if (shrinkT <= 0.0) {
         final ownY = frozenMonthEventsTop + index * frozenBarStride;
-        if (width < 0.25 || height < 0.25) {
-          return const SizedBox.shrink();
-        }
-
         return _eventPill(
           event: event,
-          left: (maxWidth - width) / 2,
-          top: clampEventY(ownY + (frozenBarHeight - height) / 2, height),
-          width: width,
-          height: height,
+          left: 0,
+          top: ownY.clamp(
+            0.0,
+            (widget.cellHeight - frozenBarHeight)
+                .clamp(0.0, widget.cellHeight),
+          ),
+          width: widget.maxWidth,
+          height: frozenBarHeight,
           eventFontSize: frozenEventFontSize,
-          expandT: 1.0 - shrinkT,
-          opacity: 1.0 - shrinkT,
+          expandT: 1.0,
         );
       }
 
-      final slideOut = extraSlideT(
-        index: index,
-        total: count,
-        styleT: styleT,
-        monthToYear: false,
-      );
-      if (slideOut <= 0) return const SizedBox.shrink();
-
-      final eventsTop = monthEventsTop;
-      final stride = barStride;
-      final pillHeight = barHeight;
-      final ownY = eventsTop + index * stride;
-      final underY = eventsTop + (index - 1) * stride;
-      final emergeY = underY + pillHeight;
-      final y = clampEventY(lerpDouble(emergeY, ownY, slideOut)!, pillHeight);
-
-      return _eventPill(
-        event: event,
-        left: 0,
-        top: y,
-        width: maxWidth,
-        height: pillHeight,
-        eventFontSize: eventFontSize,
-        expandT: 1.0,
-        opacity: slideOut,
-      );
-    }
-
-    // A (top), B, C — month→year: shrink in place, then ease dots to year row.
-    if (morphReverse) {
-      final shrinkT = Curves.easeInOutCubic.transform(
-        reverseSlotShrinkT(index: index, count: count, styleT: styleT),
-      );
-      final yearX = inMonth
-          ? _yearDotXOffset(index, yearDotCount, dotSize)
-          : 0.0;
-      final barY = frozenMonthEventsTop + index * frozenBarStride;
-
-      final width = lerpDouble(maxWidth, dotSize, shrinkT)!;
-      final height = lerpDouble(frozenBarHeight, dotSize, shrinkT)!;
-      final shrinkTop = barY + (frozenBarHeight - height) / 2;
-
-      final x = lerpDouble(0, yearX, reverseMove)!;
-      final y = lerpDouble(shrinkTop, yearEventsTop, reverseMove)!;
-
-      final textOpacity = shrinkT > 0.85
-          ? 0.0
-          : ((1.0 - shrinkT - 0.15) / 0.7).clamp(0.0, 1.0);
-
-      if (height < 0.25) return const SizedBox.shrink();
-
-      if (shrinkT >= 1.0) {
-        return _yearEventDot(
-          event: event,
-          left: (maxWidth - dotSize) / 2 + x,
-          top: y,
-          size: dotSize,
-        );
+      final width = lerpDouble(widget.maxWidth, 0, shrinkT)!;
+      final height = lerpDouble(frozenBarHeight, 0, shrinkT)!;
+      final ownY = frozenMonthEventsTop + index * frozenBarStride;
+      if (width < 0.25 || height < 0.25) {
+        return const SizedBox.shrink();
       }
 
       return _eventPill(
         event: event,
-        left: (maxWidth - width) / 2 + x,
-        top: y.clamp(0.0, (cellHeight - height).clamp(0.0, cellHeight)),
+        left: (widget.maxWidth - width) / 2,
+        top: (ownY + (frozenBarHeight - height) / 2).clamp(
+          0.0,
+          (widget.cellHeight - height).clamp(0.0, widget.cellHeight),
+        ),
         width: width,
         height: height,
-        textOpacity: textOpacity,
         eventFontSize: frozenEventFontSize,
         expandT: 1.0 - shrinkT,
+        opacity: 1.0 - shrinkT,
+        showText: false,
       );
     }
 
-    final slotStackT = dotSlotMorphT(index, stackT, shrinking: false);
-    final slotExpandT = dotSlotMorphT(index, expandT, shrinking: false);
+    final shrinkT = shrinkEased;
+    final barY = frozenMonthEventsTop + index * frozenBarStride;
 
-    final yearX = inMonth
-        ? _yearDotXOffset(index, yearDotCount, dotSize)
-        : 0.0;
-    final dotStackY = dotRowY + index * dotStride;
-    final barY = monthEventsTop + index * barStride;
+    final width = lerpDouble(widget.maxWidth, dotSize, shrinkT)!;
+    final height = lerpDouble(frozenBarHeight, dotSize, shrinkT)!;
+    final shrinkTop = barY + (frozenBarHeight - height) / 2;
 
-    final x = lerpDouble(yearX, 0, slotStackT)!;
-    final rawY = lerpDouble(
-      lerpDouble(dotRowY, dotStackY, slotStackT)!,
-      barY,
-      slotExpandT,
-    )!;
-    final width = lerpDouble(dotSize, maxWidth, slotExpandT)!;
-    final height = lerpDouble(dotSize, barHeight, slotExpandT)!;
-    final y = clampEventY(rawY, height);
-    final textOpacity = ((slotExpandT - 0.3) / 0.7).clamp(0.0, 1.0);
+    final x = lerpDouble(0, yearX, reverseMove)!;
+    final y = lerpDouble(shrinkTop, yearEventsTop, reverseMove)!;
 
-    if (height < 0.25 && slotExpandT <= 0) return const SizedBox.shrink();
+    if (height < 0.25) return const SizedBox.shrink();
 
-    if (!morphReverse && slotExpandT <= 0) {
+    if (shrinkT >= 1.0) {
       return _yearEventDot(
-        event: event,
-        left: (maxWidth - dotSize) / 2 + x,
+        color: Color(event.colorValue),
+        left: (widget.maxWidth - dotSize) / 2 + x,
         top: y,
         size: dotSize,
       );
     }
 
+    final textOpacity = shrinkT > 0.85
+        ? 0.0
+        : ((1.0 - shrinkT - 0.15) / 0.7).clamp(0.0, 1.0);
+
     return _eventPill(
       event: event,
-      left: (maxWidth - width) / 2 + x,
-      top: y,
+      left: (widget.maxWidth - width) / 2 + x,
+      top: y.clamp(
+        0.0,
+        (widget.cellHeight - height).clamp(0.0, widget.cellHeight),
+      ),
       width: width,
       height: height,
       textOpacity: textOpacity,
-      eventFontSize: eventFontSize,
-      expandT: slotExpandT,
+      eventFontSize: frozenEventFontSize,
+      expandT: 1.0 - shrinkT,
+      showText: textOpacity > 0,
     );
   }
 
   Widget _yearEventDot({
-    required CalendarEvent event,
+    required Color color,
     required double left,
     required double top,
     required double size,
@@ -944,7 +868,7 @@ class MorphDayEventStack extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: Color(event.colorValue),
+          color: color,
           shape: BoxShape.circle,
         ),
       ),
@@ -961,29 +885,34 @@ class MorphDayEventStack extends StatelessWidget {
     required double expandT,
     double textOpacity = 1.0,
     double opacity = 1.0,
+    bool showText = true,
   }) {
-    final label = Text(
-      event.title,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: AppFonts.style(
-        fontSize: eventFontSize * expandT.clamp(0.6, 1.0),
-        height: 1,
-      ),
-    );
-
+    final color = Color(event.colorValue);
     Widget content = DecoratedBox(
       decoration: BoxDecoration(
-        color: Color(event.colorValue).withValues(alpha: calendarEventBarFillAlpha),
+        color: color.withValues(alpha: calendarEventBarFillAlpha),
         borderRadius: BorderRadius.circular(height / 2),
       ),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4 * expandT),
-          child: textOpacity < 1.0 ? Opacity(opacity: textOpacity, child: label) : label,
-        ),
-      ),
+      child: showText && textOpacity > 0
+          ? Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4 * expandT),
+                child: Opacity(
+                  opacity: textOpacity,
+                  child: Text(
+                    event.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.style(
+                      fontSize: eventFontSize * expandT.clamp(0.6, 1.0),
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : const SizedBox.shrink(),
     );
 
     if (opacity < 1.0) {
@@ -991,7 +920,7 @@ class MorphDayEventStack extends StatelessWidget {
     }
 
     return Positioned(
-      left: left.clamp(0.0, maxWidth - width),
+      left: left.clamp(0.0, widget.maxWidth - width),
       top: top,
       width: width,
       height: height,

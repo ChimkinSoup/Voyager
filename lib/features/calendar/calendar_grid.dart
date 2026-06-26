@@ -15,6 +15,8 @@ export 'calendar_day_grid.dart'
         CalendarDayIndicator,
         CalendarDayNumber,
         MorphDayEventStack,
+        MorphDayEventFrozenMetrics,
+        calendarMorphEventFrozenMetrics,
         MorphWeekdayHeader,
         MonthDayCellStyle,
         MonthDayGrid,
