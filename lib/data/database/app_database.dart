@@ -89,6 +89,8 @@ class CalendarEventsTable extends Table {
   TextColumn get notes => text().withDefault(const Constant(''))();
   TextColumn get source => text().withDefault(const Constant('local'))();
   TextColumn get externalId => text().nullable()();
+  TextColumn get recurrence =>
+      text().withDefault(const Constant('none'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -192,6 +194,7 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   TextColumn get deviceId => text().nullable()();
   TextColumn get lastViewedJournalId => text().nullable()();
+  TextColumn get lastViewedTodoListId => text().nullable()();
   TextColumn get weatherLocationLabel => text().nullable()();
   RealColumn get weatherLat => real().nullable()();
   RealColumn get weatherLon => real().nullable()();
@@ -254,7 +257,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -424,6 +427,16 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           settingsTable,
           settingsTable.calendarNavigateRightKey,
+        );
+      }
+      if (from < 22) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.lastViewedTodoListId,
+        );
+        await migrator.addColumn(
+          calendarEventsTable,
+          calendarEventsTable.recurrence,
         );
       }
     },

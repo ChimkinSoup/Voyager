@@ -2723,6 +2723,18 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _recurrenceMeta = const VerificationMeta(
+    'recurrence',
+  );
+  @override
+  late final GeneratedColumn<String> recurrence = GeneratedColumn<String>(
+    'recurrence',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('none'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2767,6 +2779,7 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     notes,
     source,
     externalId,
+    recurrence,
     createdAt,
     updatedAt,
     deletedAt,
@@ -2842,6 +2855,12 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         externalId.isAcceptableOrUnknown(data['external_id']!, _externalIdMeta),
       );
     }
+    if (data.containsKey('recurrence')) {
+      context.handle(
+        _recurrenceMeta,
+        recurrence.isAcceptableOrUnknown(data['recurrence']!, _recurrenceMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2912,6 +2931,10 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         DriftSqlType.string,
         data['${effectivePrefix}external_id'],
       ),
+      recurrence: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recurrence'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2944,6 +2967,7 @@ class CalendarEventsTableData extends DataClass
   final String notes;
   final String source;
   final String? externalId;
+  final String recurrence;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -2957,6 +2981,7 @@ class CalendarEventsTableData extends DataClass
     required this.notes,
     required this.source,
     this.externalId,
+    required this.recurrence,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -2975,6 +3000,7 @@ class CalendarEventsTableData extends DataClass
     if (!nullToAbsent || externalId != null) {
       map['external_id'] = Variable<String>(externalId);
     }
+    map['recurrence'] = Variable<String>(recurrence);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -2996,6 +3022,7 @@ class CalendarEventsTableData extends DataClass
       externalId: externalId == null && nullToAbsent
           ? const Value.absent()
           : Value(externalId),
+      recurrence: Value(recurrence),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -3019,6 +3046,7 @@ class CalendarEventsTableData extends DataClass
       notes: serializer.fromJson<String>(json['notes']),
       source: serializer.fromJson<String>(json['source']),
       externalId: serializer.fromJson<String?>(json['externalId']),
+      recurrence: serializer.fromJson<String>(json['recurrence']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -3037,6 +3065,7 @@ class CalendarEventsTableData extends DataClass
       'notes': serializer.toJson<String>(notes),
       'source': serializer.toJson<String>(source),
       'externalId': serializer.toJson<String?>(externalId),
+      'recurrence': serializer.toJson<String>(recurrence),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -3053,6 +3082,7 @@ class CalendarEventsTableData extends DataClass
     String? notes,
     String? source,
     Value<String?> externalId = const Value.absent(),
+    String? recurrence,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -3066,6 +3096,7 @@ class CalendarEventsTableData extends DataClass
     notes: notes ?? this.notes,
     source: source ?? this.source,
     externalId: externalId.present ? externalId.value : this.externalId,
+    recurrence: recurrence ?? this.recurrence,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -3085,6 +3116,9 @@ class CalendarEventsTableData extends DataClass
       externalId: data.externalId.present
           ? data.externalId.value
           : this.externalId,
+      recurrence: data.recurrence.present
+          ? data.recurrence.value
+          : this.recurrence,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -3103,6 +3137,7 @@ class CalendarEventsTableData extends DataClass
           ..write('notes: $notes, ')
           ..write('source: $source, ')
           ..write('externalId: $externalId, ')
+          ..write('recurrence: $recurrence, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -3121,6 +3156,7 @@ class CalendarEventsTableData extends DataClass
     notes,
     source,
     externalId,
+    recurrence,
     createdAt,
     updatedAt,
     deletedAt,
@@ -3138,6 +3174,7 @@ class CalendarEventsTableData extends DataClass
           other.notes == this.notes &&
           other.source == this.source &&
           other.externalId == this.externalId &&
+          other.recurrence == this.recurrence &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -3154,6 +3191,7 @@ class CalendarEventsTableCompanion
   final Value<String> notes;
   final Value<String> source;
   final Value<String?> externalId;
+  final Value<String> recurrence;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -3168,6 +3206,7 @@ class CalendarEventsTableCompanion
     this.notes = const Value.absent(),
     this.source = const Value.absent(),
     this.externalId = const Value.absent(),
+    this.recurrence = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -3183,6 +3222,7 @@ class CalendarEventsTableCompanion
     this.notes = const Value.absent(),
     this.source = const Value.absent(),
     this.externalId = const Value.absent(),
+    this.recurrence = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
@@ -3203,6 +3243,7 @@ class CalendarEventsTableCompanion
     Expression<String>? notes,
     Expression<String>? source,
     Expression<String>? externalId,
+    Expression<String>? recurrence,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -3218,6 +3259,7 @@ class CalendarEventsTableCompanion
       if (notes != null) 'notes': notes,
       if (source != null) 'source': source,
       if (externalId != null) 'external_id': externalId,
+      if (recurrence != null) 'recurrence': recurrence,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -3235,6 +3277,7 @@ class CalendarEventsTableCompanion
     Value<String>? notes,
     Value<String>? source,
     Value<String?>? externalId,
+    Value<String>? recurrence,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -3250,6 +3293,7 @@ class CalendarEventsTableCompanion
       notes: notes ?? this.notes,
       source: source ?? this.source,
       externalId: externalId ?? this.externalId,
+      recurrence: recurrence ?? this.recurrence,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -3287,6 +3331,9 @@ class CalendarEventsTableCompanion
     if (externalId.present) {
       map['external_id'] = Variable<String>(externalId.value);
     }
+    if (recurrence.present) {
+      map['recurrence'] = Variable<String>(recurrence.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3314,6 +3361,7 @@ class CalendarEventsTableCompanion
           ..write('notes: $notes, ')
           ..write('source: $source, ')
           ..write('externalId: $externalId, ')
+          ..write('recurrence: $recurrence, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -5973,6 +6021,17 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _lastViewedTodoListIdMeta =
+      const VerificationMeta('lastViewedTodoListId');
+  @override
+  late final GeneratedColumn<String> lastViewedTodoListId =
+      GeneratedColumn<String>(
+        'last_viewed_todo_list_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _weatherLocationLabelMeta =
       const VerificationMeta('weatherLocationLabel');
   @override
@@ -6258,6 +6317,7 @@ class $SettingsTableTable extends SettingsTable
     hideCompletedTasks,
     deviceId,
     lastViewedJournalId,
+    lastViewedTodoListId,
     weatherLocationLabel,
     weatherLat,
     weatherLon,
@@ -6425,6 +6485,15 @@ class $SettingsTableTable extends SettingsTable
         lastViewedJournalId.isAcceptableOrUnknown(
           data['last_viewed_journal_id']!,
           _lastViewedJournalIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_viewed_todo_list_id')) {
+      context.handle(
+        _lastViewedTodoListIdMeta,
+        lastViewedTodoListId.isAcceptableOrUnknown(
+          data['last_viewed_todo_list_id']!,
+          _lastViewedTodoListIdMeta,
         ),
       );
     }
@@ -6697,6 +6766,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}last_viewed_journal_id'],
       ),
+      lastViewedTodoListId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_viewed_todo_list_id'],
+      ),
       weatherLocationLabel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_location_label'],
@@ -6813,6 +6886,7 @@ class SettingsTableData extends DataClass
   final bool hideCompletedTasks;
   final String? deviceId;
   final String? lastViewedJournalId;
+  final String? lastViewedTodoListId;
   final String? weatherLocationLabel;
   final double? weatherLat;
   final double? weatherLon;
@@ -6853,6 +6927,7 @@ class SettingsTableData extends DataClass
     required this.hideCompletedTasks,
     this.deviceId,
     this.lastViewedJournalId,
+    this.lastViewedTodoListId,
     this.weatherLocationLabel,
     this.weatherLat,
     this.weatherLon,
@@ -6905,6 +6980,9 @@ class SettingsTableData extends DataClass
     }
     if (!nullToAbsent || lastViewedJournalId != null) {
       map['last_viewed_journal_id'] = Variable<String>(lastViewedJournalId);
+    }
+    if (!nullToAbsent || lastViewedTodoListId != null) {
+      map['last_viewed_todo_list_id'] = Variable<String>(lastViewedTodoListId);
     }
     if (!nullToAbsent || weatherLocationLabel != null) {
       map['weather_location_label'] = Variable<String>(weatherLocationLabel);
@@ -6994,6 +7072,9 @@ class SettingsTableData extends DataClass
       lastViewedJournalId: lastViewedJournalId == null && nullToAbsent
           ? const Value.absent()
           : Value(lastViewedJournalId),
+      lastViewedTodoListId: lastViewedTodoListId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastViewedTodoListId),
       weatherLocationLabel: weatherLocationLabel == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherLocationLabel),
@@ -7080,6 +7161,9 @@ class SettingsTableData extends DataClass
       lastViewedJournalId: serializer.fromJson<String?>(
         json['lastViewedJournalId'],
       ),
+      lastViewedTodoListId: serializer.fromJson<String?>(
+        json['lastViewedTodoListId'],
+      ),
       weatherLocationLabel: serializer.fromJson<String?>(
         json['weatherLocationLabel'],
       ),
@@ -7159,6 +7243,7 @@ class SettingsTableData extends DataClass
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
       'deviceId': serializer.toJson<String?>(deviceId),
       'lastViewedJournalId': serializer.toJson<String?>(lastViewedJournalId),
+      'lastViewedTodoListId': serializer.toJson<String?>(lastViewedTodoListId),
       'weatherLocationLabel': serializer.toJson<String?>(weatherLocationLabel),
       'weatherLat': serializer.toJson<double?>(weatherLat),
       'weatherLon': serializer.toJson<double?>(weatherLon),
@@ -7214,6 +7299,7 @@ class SettingsTableData extends DataClass
     bool? hideCompletedTasks,
     Value<String?> deviceId = const Value.absent(),
     Value<String?> lastViewedJournalId = const Value.absent(),
+    Value<String?> lastViewedTodoListId = const Value.absent(),
     Value<String?> weatherLocationLabel = const Value.absent(),
     Value<double?> weatherLat = const Value.absent(),
     Value<double?> weatherLon = const Value.absent(),
@@ -7259,6 +7345,9 @@ class SettingsTableData extends DataClass
     lastViewedJournalId: lastViewedJournalId.present
         ? lastViewedJournalId.value
         : this.lastViewedJournalId,
+    lastViewedTodoListId: lastViewedTodoListId.present
+        ? lastViewedTodoListId.value
+        : this.lastViewedTodoListId,
     weatherLocationLabel: weatherLocationLabel.present
         ? weatherLocationLabel.value
         : this.weatherLocationLabel,
@@ -7354,6 +7443,9 @@ class SettingsTableData extends DataClass
       lastViewedJournalId: data.lastViewedJournalId.present
           ? data.lastViewedJournalId.value
           : this.lastViewedJournalId,
+      lastViewedTodoListId: data.lastViewedTodoListId.present
+          ? data.lastViewedTodoListId.value
+          : this.lastViewedTodoListId,
       weatherLocationLabel: data.weatherLocationLabel.present
           ? data.weatherLocationLabel.value
           : this.weatherLocationLabel,
@@ -7444,6 +7536,7 @@ class SettingsTableData extends DataClass
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
+          ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
           ..write('weatherLat: $weatherLat, ')
           ..write('weatherLon: $weatherLon, ')
@@ -7491,6 +7584,7 @@ class SettingsTableData extends DataClass
     hideCompletedTasks,
     deviceId,
     lastViewedJournalId,
+    lastViewedTodoListId,
     weatherLocationLabel,
     weatherLat,
     weatherLon,
@@ -7535,6 +7629,7 @@ class SettingsTableData extends DataClass
           other.hideCompletedTasks == this.hideCompletedTasks &&
           other.deviceId == this.deviceId &&
           other.lastViewedJournalId == this.lastViewedJournalId &&
+          other.lastViewedTodoListId == this.lastViewedTodoListId &&
           other.weatherLocationLabel == this.weatherLocationLabel &&
           other.weatherLat == this.weatherLat &&
           other.weatherLon == this.weatherLon &&
@@ -7578,6 +7673,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> hideCompletedTasks;
   final Value<String?> deviceId;
   final Value<String?> lastViewedJournalId;
+  final Value<String?> lastViewedTodoListId;
   final Value<String?> weatherLocationLabel;
   final Value<double?> weatherLat;
   final Value<double?> weatherLon;
@@ -7618,6 +7714,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.hideCompletedTasks = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
+    this.lastViewedTodoListId = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
     this.weatherLat = const Value.absent(),
     this.weatherLon = const Value.absent(),
@@ -7659,6 +7756,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.hideCompletedTasks = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
+    this.lastViewedTodoListId = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
     this.weatherLat = const Value.absent(),
     this.weatherLon = const Value.absent(),
@@ -7700,6 +7798,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? hideCompletedTasks,
     Expression<String>? deviceId,
     Expression<String>? lastViewedJournalId,
+    Expression<String>? lastViewedTodoListId,
     Expression<String>? weatherLocationLabel,
     Expression<double>? weatherLat,
     Expression<double>? weatherLon,
@@ -7748,6 +7847,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (deviceId != null) 'device_id': deviceId,
       if (lastViewedJournalId != null)
         'last_viewed_journal_id': lastViewedJournalId,
+      if (lastViewedTodoListId != null)
+        'last_viewed_todo_list_id': lastViewedTodoListId,
       if (weatherLocationLabel != null)
         'weather_location_label': weatherLocationLabel,
       if (weatherLat != null) 'weather_lat': weatherLat,
@@ -7808,6 +7909,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? hideCompletedTasks,
     Value<String?>? deviceId,
     Value<String?>? lastViewedJournalId,
+    Value<String?>? lastViewedTodoListId,
     Value<String?>? weatherLocationLabel,
     Value<double?>? weatherLat,
     Value<double?>? weatherLon,
@@ -7852,6 +7954,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       deviceId: deviceId ?? this.deviceId,
       lastViewedJournalId: lastViewedJournalId ?? this.lastViewedJournalId,
+      lastViewedTodoListId: lastViewedTodoListId ?? this.lastViewedTodoListId,
       weatherLocationLabel: weatherLocationLabel ?? this.weatherLocationLabel,
       weatherLat: weatherLat ?? this.weatherLat,
       weatherLon: weatherLon ?? this.weatherLon,
@@ -7949,6 +8052,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (lastViewedJournalId.present) {
       map['last_viewed_journal_id'] = Variable<String>(
         lastViewedJournalId.value,
+      );
+    }
+    if (lastViewedTodoListId.present) {
+      map['last_viewed_todo_list_id'] = Variable<String>(
+        lastViewedTodoListId.value,
       );
     }
     if (weatherLocationLabel.present) {
@@ -8066,6 +8174,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
+          ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
           ..write('weatherLat: $weatherLat, ')
           ..write('weatherLon: $weatherLon, ')
@@ -9652,6 +9761,7 @@ typedef $$CalendarEventsTableTableCreateCompanionBuilder =
       Value<String> notes,
       Value<String> source,
       Value<String?> externalId,
+      Value<String> recurrence,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
@@ -9668,6 +9778,7 @@ typedef $$CalendarEventsTableTableUpdateCompanionBuilder =
       Value<String> notes,
       Value<String> source,
       Value<String?> externalId,
+      Value<String> recurrence,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -9725,6 +9836,11 @@ class $$CalendarEventsTableTableFilterComposer
 
   ColumnFilters<String> get externalId => $composableBuilder(
     column: $table.externalId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recurrence => $composableBuilder(
+    column: $table.recurrence,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9798,6 +9914,11 @@ class $$CalendarEventsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recurrence => $composableBuilder(
+    column: $table.recurrence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9851,6 +9972,11 @@ class $$CalendarEventsTableTableAnnotationComposer
 
   GeneratedColumn<String> get externalId => $composableBuilder(
     column: $table.externalId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get recurrence => $composableBuilder(
+    column: $table.recurrence,
     builder: (column) => column,
   );
 
@@ -9916,6 +10042,7 @@ class $$CalendarEventsTableTableTableManager
                 Value<String> notes = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> externalId = const Value.absent(),
+                Value<String> recurrence = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9930,6 +10057,7 @@ class $$CalendarEventsTableTableTableManager
                 notes: notes,
                 source: source,
                 externalId: externalId,
+                recurrence: recurrence,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -9946,6 +10074,7 @@ class $$CalendarEventsTableTableTableManager
                 Value<String> notes = const Value.absent(),
                 Value<String> source = const Value.absent(),
                 Value<String?> externalId = const Value.absent(),
+                Value<String> recurrence = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9960,6 +10089,7 @@ class $$CalendarEventsTableTableTableManager
                 notes: notes,
                 source: source,
                 externalId: externalId,
+                recurrence: recurrence,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -11240,6 +11370,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> hideCompletedTasks,
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
+      Value<String?> lastViewedTodoListId,
       Value<String?> weatherLocationLabel,
       Value<double?> weatherLat,
       Value<double?> weatherLon,
@@ -11282,6 +11413,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> hideCompletedTasks,
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
+      Value<String?> lastViewedTodoListId,
       Value<String?> weatherLocationLabel,
       Value<double?> weatherLat,
       Value<double?> weatherLon,
@@ -11397,6 +11529,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get lastViewedJournalId => $composableBuilder(
     column: $table.lastViewedJournalId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastViewedTodoListId => $composableBuilder(
+    column: $table.lastViewedTodoListId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11606,6 +11743,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get lastViewedTodoListId => $composableBuilder(
+    column: $table.lastViewedTodoListId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get weatherLocationLabel => $composableBuilder(
     column: $table.weatherLocationLabel,
     builder: (column) => ColumnOrderings(column),
@@ -11806,6 +11948,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get lastViewedTodoListId => $composableBuilder(
+    column: $table.lastViewedTodoListId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get weatherLocationLabel => $composableBuilder(
     column: $table.weatherLocationLabel,
     builder: (column) => column,
@@ -11970,6 +12117,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
+                Value<String?> lastViewedTodoListId = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
                 Value<double?> weatherLat = const Value.absent(),
                 Value<double?> weatherLon = const Value.absent(),
@@ -12012,6 +12160,7 @@ class $$SettingsTableTableTableManager
                 hideCompletedTasks: hideCompletedTasks,
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
+                lastViewedTodoListId: lastViewedTodoListId,
                 weatherLocationLabel: weatherLocationLabel,
                 weatherLat: weatherLat,
                 weatherLon: weatherLon,
@@ -12055,6 +12204,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
+                Value<String?> lastViewedTodoListId = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
                 Value<double?> weatherLat = const Value.absent(),
                 Value<double?> weatherLon = const Value.absent(),
@@ -12097,6 +12247,7 @@ class $$SettingsTableTableTableManager
                 hideCompletedTasks: hideCompletedTasks,
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
+                lastViewedTodoListId: lastViewedTodoListId,
                 weatherLocationLabel: weatherLocationLabel,
                 weatherLat: weatherLat,
                 weatherLon: weatherLon,

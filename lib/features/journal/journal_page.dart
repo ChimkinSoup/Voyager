@@ -21,6 +21,7 @@ import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/mood_gradient_slider.dart';
 import 'package:voyager/core/widgets/resizable_pane_divider.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -99,6 +100,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   void _invalidateJournalEntriesIfMounted() {
     if (!mounted) return;
     ref.invalidate(journalEntriesProvider);
+    ref.invalidate(journalListEntriesProvider);
+  }
+
+  String _entryListScope(List<Journal>? journals) {
+    if (_journalFilter == _allJournals) return allJournalEntriesScope;
+    if (journals != null &&
+        !journals.any((journal) => journal.id == _journalFilter)) {
+      return allJournalEntriesScope;
+    }
+    return _journalFilter;
   }
 
   Future<void> _ensureDefaultJournal() async {
@@ -156,6 +167,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     setState(() {
       if (restoredJournalId != null) {
         _lastViewedJournalId = restoredJournalId;
+        _journalFilter = restoredJournalId;
       }
       _entryListWidth = settings.journalEntryListWidth;
     });
@@ -581,12 +593,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       builder: (context) => AlertDialog(
         title: const Text('Edit quote'),
         content: SizedBox(
-          width: 420,
+          width: 560,
           child: TextField(
             controller: controller,
             autofocus: true,
-            minLines: 3,
-            maxLines: 8,
+            minLines: 5,
+            maxLines: 12,
             decoration: const InputDecoration(labelText: 'Quote'),
             onSubmitted: (_) => Navigator.pop(context, controller.text),
           ),
@@ -678,7 +690,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
     final journalsAsync = ref.watch(journalsProvider);
-    final entriesAsync = ref.watch(journalEntriesProvider);
+    final entryListScope = _entryListScope(journalsAsync.valueOrNull);
+    final entriesAsync = ref.watch(journalListEntriesProvider(entryListScope));
     final settings = ref.watch(settingsProvider).value;
 
     return journalsAsync.when(
@@ -692,10 +705,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                   !journals.any((j) => j.id == _pendingJournal!.id)
               ? [...journals, _pendingJournal!]
               : journals;
-          final filtered = _journalFilter == _allJournals
+          final journalFilter =
+              _journalFilter == _allJournals ||
+                  displayJournals.any((j) => j.id == _journalFilter)
+              ? _journalFilter
+              : _allJournals;
+          if (journalFilter != _journalFilter) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() => _journalFilter = _allJournals);
+            });
+          }
+          final filtered = entryListScope == allJournalEntriesScope
               ? displayEntries
               : displayEntries
-                  .where((e) => e.journalId == _journalFilter)
+                  .where((e) => e.journalId == entryListScope)
                   .toList();
           final accentJournal = _selectedEntry == null
               ? null
@@ -747,15 +771,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             children: [
                               Expanded(
                                 child: RoundedDropdown<String>(
-                                  value:
-                                      displayJournals.any(
-                                            (j) => j.id == _journalFilter,
-                                          ) ||
-                                          _journalFilter == _allJournals
-                                      ? _journalFilter
-                                      : (displayJournals.isNotEmpty
-                                            ? displayJournals.first.id
-                                            : _allJournals),
+                                  value: journalFilter,
+                                  labelColor: journalFilter == _allJournals
+                                      ? null
+                                      : Color(
+                                          _journalFlagColor(
+                                            displayJournals.firstWhere(
+                                              (j) => j.id == journalFilter,
+                                            ),
+                                          ),
+                                        ),
                                   items: [
                                     if (displayJournals.length > 1)
                                       const RoundedDropdownItem(
@@ -867,6 +892,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     controller: _titleController,
                                     focusNode: _titleFocusNode,
                                     textInputAction: TextInputAction.next,
+                                    accentColor: accentColor,
                                     contentPadding: const EdgeInsets.fromLTRB(
                                       16,
                                       16,
@@ -903,7 +929,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: _MoodGradientSlider(
+                                  child: MoodGradientSlider(
                                     value: _mood ?? 5,
                                     accent: accentColor,
                                     onChanged: (value) {
@@ -980,6 +1006,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             child: _PlainJournalEditor(
                               entry: _selectedEntry,
                               focusNode: _bodyFocusNode,
+                              accentColor: accentColor,
                               onDraftChanged: _updateBodyDraft,
                               onEntryPersisted: (updated) =>
                                   setState(() => _selectedEntry = updated),
@@ -1014,11 +1041,13 @@ class _PlainJournalEditor extends ConsumerStatefulWidget {
     required this.entry,
     required this.focusNode,
     required this.onDraftChanged,
+    required this.accentColor,
     this.onEntryPersisted,
   });
 
   final JournalEntry? entry;
   final FocusNode focusNode;
+  final Color accentColor;
   final void Function(String entryId, String body) onDraftChanged;
   final ValueChanged<JournalEntry>? onEntryPersisted;
 
@@ -1215,6 +1244,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     );
     if (refreshList && mounted) {
       ref.invalidate(journalEntriesProvider);
+      ref.invalidate(journalListEntriesProvider);
     }
   }
 
@@ -1332,14 +1362,14 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: _editorFocused
-              ? theme.colorScheme.primary.withValues(alpha: 0.95)
+              ? widget.accentColor.withValues(alpha: 0.95)
               : theme.dividerColor,
           width: 1.8,
         ),
         boxShadow: [
           if (_editorFocused)
             BoxShadow(
-              color: theme.colorScheme.primary.withValues(alpha: 0.14),
+              color: widget.accentColor.withValues(alpha: 0.14),
               blurRadius: 14,
               spreadRadius: 1,
             ),
@@ -1468,110 +1498,6 @@ class _JournalEntryListTile extends StatelessWidget {
         ),
         onTap: onTap,
       ),
-    );
-  }
-}
-
-class _MoodGradientSlider extends StatelessWidget {
-  const _MoodGradientSlider({
-    required this.value,
-    required this.accent,
-    required this.onChanged,
-  });
-
-  final int value;
-  final Color accent;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SliderTheme(
-      data: SliderTheme.of(context).copyWith(
-        trackHeight: 8,
-        activeTrackColor: Colors.transparent,
-        inactiveTrackColor: Colors.transparent,
-        overlayColor: accent.withValues(alpha: 0.16),
-        thumbColor: accent,
-        trackShape: _GradientSliderTrackShape(
-          gradient: LinearGradient(colors: [Colors.white, accent]),
-          inactiveColor: Theme.of(context).colorScheme.surface,
-        ),
-      ),
-      child: Slider(
-        min: 1,
-        max: 10,
-        divisions: 9,
-        label: '$value',
-        value: value.toDouble(),
-        onChanged: (next) => onChanged(next.round()),
-      ),
-    );
-  }
-}
-
-class _GradientSliderTrackShape extends SliderTrackShape
-    with BaseSliderTrackShape {
-  const _GradientSliderTrackShape({
-    required this.gradient,
-    required this.inactiveColor,
-  });
-
-  final LinearGradient gradient;
-  final Color inactiveColor;
-
-  @override
-  Rect getPreferredRect({
-    required RenderBox parentBox,
-    Offset offset = Offset.zero,
-    required SliderThemeData sliderTheme,
-    bool isEnabled = false,
-    bool isDiscrete = false,
-  }) {
-    final trackHeight = sliderTheme.trackHeight ?? 4;
-    final trackLeft = offset.dx;
-    final trackTop = offset.dy + (parentBox.size.height - trackHeight) / 2;
-    final trackWidth = parentBox.size.width;
-    return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
-  }
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset offset, {
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required Animation<double> enableAnimation,
-    required TextDirection textDirection,
-    required Offset thumbCenter,
-    Offset? secondaryOffset,
-    bool isEnabled = false,
-    bool isDiscrete = false,
-  }) {
-    final rect = getPreferredRect(
-      parentBox: parentBox,
-      offset: offset,
-      sliderTheme: sliderTheme,
-      isEnabled: isEnabled,
-      isDiscrete: isDiscrete,
-    );
-    final radius = Radius.circular(rect.height / 2);
-    final inactivePaint = Paint()..color = inactiveColor;
-    context.canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, radius),
-      inactivePaint,
-    );
-
-    final activeRect = Rect.fromLTRB(
-      rect.left,
-      rect.top,
-      thumbCenter.dx.clamp(rect.left, rect.right),
-      rect.bottom,
-    );
-    if (activeRect.width <= 0) return;
-    final activePaint = Paint()..shader = gradient.createShader(rect);
-    context.canvas.drawRRect(
-      RRect.fromRectAndRadius(activeRect, radius),
-      activePaint,
     );
   }
 }

@@ -24,6 +24,7 @@ import 'package:voyager/data/remote/http_callable_client.dart';
 import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
+import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
@@ -170,7 +171,7 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
     remoteSync: ref.watch(remoteSyncServiceProvider),
     syncRepository: ref.watch(syncRepositoryProvider),
     onChanged: () {
-      ref.invalidate(journalEntriesProvider);
+      invalidateJournalEntryProviders(ref);
       ref.invalidate(journalsProvider);
       ref.invalidate(todoListsProvider);
       ref.invalidate(todoTasksProvider);
@@ -276,6 +277,24 @@ final journalsProvider = FutureProvider((ref) {
 final journalEntriesProvider = FutureProvider((ref) {
   ref.keepAlive();
   return ref.watch(lazyLoadProvider).loadRecentEntries();
+});
+
+/// Journal entry list scope: [allJournalEntriesScope] for recent entries across
+/// all journals, otherwise a specific journal id for that journal's full list.
+const allJournalEntriesScope = '__all__';
+
+void invalidateJournalEntryProviders(Ref ref) {
+  ref.invalidate(journalEntriesProvider);
+  ref.invalidate(journalListEntriesProvider);
+}
+
+final journalListEntriesProvider = FutureProvider.family<
+    List<JournalEntry>, String>((ref, scope) {
+  ref.keepAlive();
+  if (scope == allJournalEntriesScope) {
+    return ref.watch(lazyLoadProvider).loadRecentEntries();
+  }
+  return ref.watch(journalRepositoryProvider).listEntries(journalId: scope);
 });
 
 final historicalJournalEntriesProvider = FutureProvider.family((

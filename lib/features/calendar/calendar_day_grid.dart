@@ -3,6 +3,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 
 class CalendarDayIndicator {
   const CalendarDayIndicator({
@@ -50,7 +51,48 @@ const calendarAdjacentMonthTextOpacity = 0.20;
 const calendarAdjacentMonthBorderOpacity = 0.10;
 
 /// Fill alpha for month-view event pills (background tint over the cell).
-const calendarEventBarFillAlpha = 0.45;
+const calendarEventBarFillAlpha = 0.58;
+
+/// Fill alpha for day-view event tiles.
+const calendarDayEventTileFillAlpha = 0.48;
+
+/// Bottom-right gradient saturation as a fraction of the event color's native saturation.
+const calendarEventGradientEndSaturationScale = 0.4;
+
+/// Top-left → bottom-right fill: native saturation fading to 40% of native.
+LinearGradient calendarEventFillGradient(
+  Color base, {
+  double alpha = calendarEventBarFillAlpha,
+}) {
+  final hsv = HSVColor.fromColor(base);
+  final nativeSaturation = hsv.saturation;
+  final start = hsv.toColor().withValues(alpha: alpha);
+  final end = hsv
+      .withSaturation(
+        (nativeSaturation * calendarEventGradientEndSaturationScale).clamp(
+          0.0,
+          nativeSaturation,
+        ),
+      )
+      .toColor()
+      .withValues(alpha: alpha);
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [start, end],
+  );
+}
+
+BoxDecoration calendarEventFillDecoration(
+  Color base, {
+  double alpha = calendarEventBarFillAlpha,
+  BorderRadius? borderRadius,
+}) {
+  return BoxDecoration(
+    gradient: calendarEventFillGradient(base, alpha: alpha),
+    borderRadius: borderRadius,
+  );
+}
 
 Color calendarTitleAccentColor(BuildContext context) =>
     Theme.of(context).colorScheme.primary;
@@ -233,6 +275,14 @@ class CalendarDayCell extends StatelessWidget {
       eventCount: events.length,
       hasIndicators: indicators.isNotEmpty,
     );
+    final barHeight = visibleEvents > 0
+        ? calendarMonthEventBarHeight(
+            cellHeight: cellHeight,
+            style: style,
+            visibleEventCount: visibleEvents,
+            hasIndicators: indicators.isNotEmpty,
+          )
+        : 0.0;
 
     return ClipRect(
       child: Column(
@@ -253,7 +303,7 @@ class CalendarDayCell extends StatelessWidget {
               dotSize: style.dotSize,
             ),
           ],
-          if (visibleEvents > 0) ...[
+          if (inMonth && visibleEvents > 0) ...[
             const SizedBox(height: 2),
             SizedBox(
               height: eventAreaHeight,
@@ -262,10 +312,10 @@ class CalendarDayCell extends StatelessWidget {
                 children: [
                   for (var i = 0; i < visibleEvents; i++) ...[
                     if (i > 0) const SizedBox(height: 1),
-                    Expanded(
+                    SizedBox(
+                      height: barHeight,
                       child: LayoutBuilder(
                         builder: (context, constraints) {
-                          final barHeight = constraints.maxHeight;
                           final eventFontSize = calendarMonthEventFontSize(
                             barHeight: barHeight,
                             style: style,
@@ -440,10 +490,11 @@ double calendarMonthEventBarHeight({
   }
   const eventGap = 2.0;
   const betweenEventGap = 1.0;
+  final slotCount = style.maxEventLines.clamp(1, style.maxEventLines);
   final eventAreaHeight =
       (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
-  final gaps = (visibleEventCount - 1) * betweenEventGap;
-  return ((eventAreaHeight - gaps) / visibleEventCount)
+  final slotGaps = (slotCount - 1) * betweenEventGap;
+  return ((eventAreaHeight - slotGaps) / slotCount)
       .clamp(0.0, double.infinity);
 }
 
@@ -889,8 +940,8 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
   }) {
     final color = Color(event.colorValue);
     Widget content = DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: calendarEventBarFillAlpha),
+      decoration: calendarEventFillDecoration(
+        color,
         borderRadius: BorderRadius.circular(height / 2),
       ),
       child: showText && textOpacity > 0
@@ -950,8 +1001,8 @@ class CalendarDayEventBar extends StatelessWidget {
     return Container(
       height: barHeight,
       padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: Color(event.colorValue).withValues(alpha: calendarEventBarFillAlpha),
+      decoration: calendarEventFillDecoration(
+        Color(event.colorValue),
         borderRadius: BorderRadius.circular(barHeight / 2),
       ),
       alignment: Alignment.centerLeft,
@@ -1394,9 +1445,13 @@ class MonthDayGrid extends StatelessWidget {
                 child: Row(
                   children: List.generate(7, (col) {
                     final date = cells[row * 7 + col];
-                    final dayEvents = events
-                        .where((e) => calendarSameDay(e.start, date))
-                        .toList();
+                    final inMonth =
+                        date.month == month.month && date.year == month.year;
+                    final dayEvents = inMonth
+                        ? events
+                            .where((e) => calendarEventOnDay(e, date))
+                            .toList()
+                        : const <CalendarEvent>[];
                     final dayIndicators = indicators
                         .where((i) => calendarSameDay(i.day, date))
                         .take(3)
@@ -1435,6 +1490,9 @@ bool calendarIsToday(DateTime date) {
 
 bool calendarSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
+
+bool calendarEventOnDay(CalendarEvent event, DateTime day) =>
+    calendarEventOccursOnDay(event, day);
 
 const calendarWeekdayLabelsMonday = [
   'Mon',

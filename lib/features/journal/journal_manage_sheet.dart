@@ -21,8 +21,9 @@ Future<Journal?> showJournalManageSheet(
     builder: (context) => const _JournalManageDialog(),
   );
   if (created != null) {
-    ref.invalidate(journalsProvider);
     ref.invalidate(journalEntriesProvider);
+    ref.invalidate(journalListEntriesProvider);
+    ref.invalidate(journalsProvider);
   }
   return created;
 }
@@ -147,8 +148,9 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
 
     await repo.upsertJournal(created);
     remoteSync.pushJournal(created);
-    ref.invalidate(journalsProvider);
     ref.invalidate(journalEntriesProvider);
+    ref.invalidate(journalListEntriesProvider);
+    ref.invalidate(journalsProvider);
   }
 
   Future<void> _renameJournal(Journal journal) async {
@@ -231,8 +233,9 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
 
     await repo.softDeleteJournal(journal.id);
     await remoteSync.pushJournalById(journal.id);
-    ref.invalidate(journalsProvider);
     ref.invalidate(journalEntriesProvider);
+    ref.invalidate(journalListEntriesProvider);
+    ref.invalidate(journalsProvider);
     await _reload();
   }
 

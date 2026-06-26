@@ -1,5 +1,7 @@
 import 'package:voyager/domain/models/soft_deletable.dart';
 
+enum EventRecurrence { none, daily, weekly, monthly, yearly }
+
 class CalendarEvent extends SoftDeletable {
   const CalendarEvent({
     required super.id,
@@ -14,6 +16,7 @@ class CalendarEvent extends SoftDeletable {
     this.notes = '',
     this.source = EventSource.local,
     this.externalId,
+    this.recurrence = EventRecurrence.none,
   });
 
   final String title;
@@ -24,6 +27,7 @@ class CalendarEvent extends SoftDeletable {
   final String notes;
   final EventSource source;
   final String? externalId;
+  final EventRecurrence recurrence;
 
   CalendarEvent copyWith({
     String? title,
@@ -33,6 +37,7 @@ class CalendarEvent extends SoftDeletable {
     int? colorValue,
     String? notes,
     DateTime? deletedAt,
+    EventRecurrence? recurrence,
   }) {
     return CalendarEvent(
       id: id,
@@ -47,6 +52,7 @@ class CalendarEvent extends SoftDeletable {
       notes: notes ?? this.notes,
       source: source,
       externalId: externalId,
+      recurrence: recurrence ?? this.recurrence,
     );
   }
 }

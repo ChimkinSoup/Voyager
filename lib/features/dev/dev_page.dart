@@ -131,6 +131,17 @@ class DevPage extends ConsumerWidget {
           ),
           onTap: () => _confirmDeleteAllEntries(context, ref),
         ),
+        ListTile(
+          title: const Text('Delete all calendar events'),
+          subtitle: const Text(
+            'Permanently removes every calendar event from the local database',
+          ),
+          trailing: const Icon(
+            PhosphorIconsRegular.trash,
+            color: Colors.redAccent,
+          ),
+          onTap: () => _confirmDeleteAllCalendarEvents(context, ref),
+        ),
         const Divider(height: 32),
         ListTile(
           title: const Text('Reset all journals'),
@@ -177,6 +188,40 @@ class DevPage extends ConsumerWidget {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('All journal entries deleted')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteAllCalendarEvents(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete all calendar events?'),
+        content: const Text(
+          'This permanently deletes every calendar event on this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete events'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(calendarRepositoryProvider).deleteAllEvents();
+    ref.invalidate(calendarEventsProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All calendar events deleted')),
       );
     }
   }

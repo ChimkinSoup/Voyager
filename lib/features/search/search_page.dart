@@ -9,6 +9,8 @@ import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/mood_gradient_slider.dart';
+import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -39,6 +41,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final entriesAsync = ref.watch(journalEntriesProvider);
     final journalsAsync = ref.watch(journalsProvider);
     final search = ref.watch(searchServiceProvider);
+    final theme = Theme.of(context);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -48,16 +51,22 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             controller: _queryController,
             focusNode: _queryFocusNode,
             hintText: 'Search keywords or #tag',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurface,
+            ),
             tagColorFor: colorForTag,
             decoration: const InputDecoration(
               labelText: 'Search keywords or #tag',
+              filled: true,
             ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: entriesAsync.when(
+              skipLoadingOnReload: true,
               data: (entries) => journalsAsync.when(
+                skipLoadingOnReload: true,
                 data: (journals) {
                   final parsedQuery = _parseSearchQuery(_queryController.text);
                   final results = search.searchEntries(
@@ -67,17 +76,30 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         ? null
                         : [parsedQuery.tag!],
                   );
+                  final keywords = parsedQuery.keywords
+                      .split(RegExp(r'\s+'))
+                      .where((k) => k.isNotEmpty)
+                      .toList();
                   return KeepAliveScrollList(
                     storageKey: ShellPageStorageKeys.searchResults,
                     itemCount: results.length,
                     itemBuilder: (_, i) {
                       final entry = results[i];
+                      final bodyStyle = theme.textTheme.bodyMedium!;
                       return ListTile(
-                        title: Text(
+                        title: searchHighlightedText(
                           entry.title.isEmpty ? 'Untitled' : entry.title,
+                          style: bodyStyle.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          keywords: keywords,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(
+                        subtitle: searchHighlightedText(
                           entry.body,
+                          style: bodyStyle,
+                          keywords: keywords,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -145,17 +167,19 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
   late final FocusNode _bodyFocusNode;
+  late JournalEntry _entry;
   late int? _mood;
   late String _weatherIcon;
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.entry.title);
-    _bodyController = TextEditingController(text: widget.entry.body);
+    _entry = widget.entry;
+    _titleController = TextEditingController(text: _entry.title);
+    _bodyController = TextEditingController(text: _entry.body);
     _bodyFocusNode = FocusNode();
-    _mood = widget.entry.mood;
-    _weatherIcon = widget.entry.weatherIcon ?? 'sunny';
+    _mood = _entry.mood;
+    _weatherIcon = _entry.weatherIcon ?? 'sunny';
   }
 
   @override
@@ -168,7 +192,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   Journal? get _journal {
     for (final journal in widget.journals) {
-      if (journal.id == widget.entry.journalId) return journal;
+      if (journal.id == _entry.journalId) return journal;
     }
     return null;
   }
@@ -179,7 +203,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   Future<void> _save() async {
     final body = _bodyController.text.trimRight();
-    final updated = widget.entry.copyWith(
+    final updated = _entry.copyWith(
       title: _titleController.text.trim(),
       body: body,
       tags: extractTags(body),
@@ -188,33 +212,36 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     );
     await ref.read(journalRepositoryProvider).upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
+    if (mounted) setState(() => _entry = updated);
     widget.onSaved();
   }
 
   Future<void> _changeEntryDate() async {
     final picked = await showDateTimePickerDialog(
       context,
-      initialDateTime: widget.entry.entryDate.toLocal(),
+      initialDateTime: _entry.entryDate.toLocal(),
     );
     if (picked == null || !mounted) return;
-    final updated = widget.entry.copyWith(entryDate: picked.toUtc());
+    final updated = _entry.copyWith(entryDate: picked.toUtc());
     await ref.read(journalRepositoryProvider).upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
+    if (!mounted) return;
+    setState(() => _entry = updated);
     widget.onSaved();
-    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _moveToJournal(String journalId) async {
-    if (journalId == widget.entry.journalId) return;
-    final updated = widget.entry.copyWith(journalId: journalId);
+    if (journalId == _entry.journalId) return;
+    final updated = _entry.copyWith(journalId: journalId);
     await ref.read(journalRepositoryProvider).upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
+    if (!mounted) return;
+    setState(() => _entry = updated);
     widget.onSaved();
-    if (mounted) Navigator.pop(context);
   }
 
   String _entryDateTimeLabel(BuildContext context) {
-    final local = widget.entry.entryDate.toLocal();
+    final local = _entry.entryDate.toLocal();
     final materialLocalizations = MaterialLocalizations.of(context);
     return '${materialLocalizations.formatShortDate(local)} ${formatTime12Hour(local)}';
   }
@@ -237,11 +264,13 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                     label: 'Title',
                     controller: _titleController,
                     textInputAction: TextInputAction.next,
+                    accentColor: _accentColor,
+                    contentPadding: const EdgeInsets.fromLTRB(16, 16, 56, 16),
                     onSubmitted: (_) => _bodyFocusNode.requestFocus(),
                   ),
                   Positioned(
-                    top: 0,
-                    right: 0,
+                    top: 10,
+                    right: 10,
                     child: JournalTitleCornerFlag(
                       colorValue: _accentColor.toARGB32(),
                       onSelected: _moveToJournal,
@@ -277,14 +306,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                   Text('Mood', style: TextStyle(color: _accentColor)),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Slider(
-                      value: (_mood ?? 5).toDouble(),
-                      min: 1,
-                      max: 10,
-                      divisions: 9,
-                      activeColor: _accentColor,
-                      onChanged: (value) =>
-                          setState(() => _mood = value.round()),
+                    child: MoodGradientSlider(
+                      value: _mood ?? 5,
+                      accent: _accentColor,
+                      onChanged: (value) => setState(() => _mood = value),
                     ),
                   ),
                   PopupMenuButton<VoyagerMenuCatalogEntry>(
@@ -336,9 +361,16 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                   expands: true,
                   keyboardType: TextInputType.multiline,
                   tagColorFor: colorForTag,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   decoration: const InputDecoration(
-                    labelText: 'Body',
-                    alignLabelWithHint: true,
+                    hintText: 'Start writing...',
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.all(16),
                   ),
                 ),
               ),
@@ -356,6 +388,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
             await _save();
             if (context.mounted) Navigator.pop(context);
           },
+          style: FilledButton.styleFrom(backgroundColor: _accentColor),
           child: const Text('Save'),
         ),
       ],

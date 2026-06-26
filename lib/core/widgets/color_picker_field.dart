@@ -15,7 +15,7 @@ computeColorPaletteLayout({
   required int colorCount,
   required double maxWidth,
   required double maxHeight,
-  double swatchRadius = 18,
+  double swatchRadius = 26,
 }) {
   if (colorCount == 0) {
     return (width: 200, height: 150, columns: 1, scrollable: false);
@@ -272,11 +272,15 @@ class _PalettePickDialogState extends State<_PalettePickDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
-      content: ColorPaletteGrid(
-        palette: widget.palette,
-        selected: _picked,
-        usedColors: widget.usedColors,
-        onSelected: (color) => setState(() => _picked = color),
+      content: SizedBox(
+        width: 520,
+        child: ColorPaletteGrid(
+          palette: widget.palette,
+          selected: _picked,
+          usedColors: widget.usedColors,
+          onSelected: (color) => setState(() => _picked = color),
+          swatchRadius: 26,
+        ),
       ),
       actions: [
         TextButton(
@@ -310,7 +314,7 @@ class _ColorSwatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-  final ringColor = theme.colorScheme.onSurface.withValues(alpha: 0.45);
+  final ringColor = theme.colorScheme.onSurface.withValues(alpha: 0.28);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(radius + 3),
@@ -324,9 +328,9 @@ class _ColorSwatch extends StatelessWidget {
               : (used
                     ? Border.all(
                         color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.32,
+                          alpha: 0.65,
                         ),
-                        width: 2,
+                        width: 3,
                       )
                     : null),
         ),

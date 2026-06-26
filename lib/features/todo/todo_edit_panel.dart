@@ -4,16 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
+import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 class TodoEditPanel extends ConsumerStatefulWidget {
@@ -26,6 +29,7 @@ class TodoEditPanel extends ConsumerStatefulWidget {
     required this.onToggleStar,
     this.onTaskOptimistic,
     this.listColor,
+    this.lists = const [],
   });
 
   final TodoTask task;
@@ -35,12 +39,15 @@ class TodoEditPanel extends ConsumerStatefulWidget {
   final VoidCallback onToggleStar;
   final ValueChanged<TodoTask>? onTaskOptimistic;
   final int? listColor;
+  final List<TodoListModel> lists;
 
   @override
   ConsumerState<TodoEditPanel> createState() => _TodoEditPanelState();
 }
 
 class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
+  static const _saveDebounce = Duration(milliseconds: 400);
+
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final TextEditingController _subtaskController;
@@ -50,6 +57,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   List<TodoTask> _subtasks = [];
   RemoteSyncService? _remoteSync;
   late String _lastNonEmptyTitle;
+  Timer? _titleSaveTimer;
+  Timer? _notesSaveTimer;
 
   @override
   void initState() {
@@ -86,6 +95,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   @override
   void dispose() {
+    _titleSaveTimer?.cancel();
+    _notesSaveTimer?.cancel();
     final remoteSync = _remoteSync;
     if (remoteSync != null) {
       unawaited(
@@ -103,11 +114,15 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     super.dispose();
   }
 
+  Color? get _accentColor =>
+      widget.listColor == null ? null : Color(widget.listColor!);
+
   Future<void> _save({
     String? title,
     String? notes,
     DateTime? dueDate,
     bool clearDueDate = false,
+    String? listId,
   }) async {
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
@@ -120,6 +135,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
     final updated = widget.task.copyWith(
       title: titleText,
+      listId: listId,
       notes: notesText.isEmpty ? null : notesText,
       clearNotes: notesText.isEmpty,
       dueDate: clearDueDate ? null : (dueDate ?? _dueDate),
@@ -137,6 +153,22 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   Future<void> _close() async {
     if (mounted) widget.onClose();
     unawaited(_save());
+  }
+
+  void _scheduleTitleSave(String value) {
+    _titleSaveTimer?.cancel();
+    _titleSaveTimer = Timer(_saveDebounce, () {
+      if (!mounted) return;
+      unawaited(_onTitleChanged(value));
+    });
+  }
+
+  void _scheduleNotesSave(String value) {
+    _notesSaveTimer?.cancel();
+    _notesSaveTimer = Timer(_saveDebounce, () {
+      if (!mounted) return;
+      unawaited(_onNotesChanged(value));
+    });
   }
 
   Future<void> _onNotesChanged(String value) async {
@@ -164,10 +196,18 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   Future<void> _onTitleSubmitted(String value) async {
     final title = value.trim();
     if (title.isEmpty) return;
+    _titleSaveTimer?.cancel();
     final updated = widget.task.copyWith(title: title);
     widget.onTaskOptimistic?.call(updated);
     unawaited(_save(title: title));
     if (mounted) FocusScope.of(context).unfocus();
+  }
+
+  Future<void> _moveToList(String listId) async {
+    if (listId == widget.task.listId) return;
+    final updated = widget.task.copyWith(listId: listId);
+    widget.onTaskOptimistic?.call(updated);
+    unawaited(_save(listId: listId));
   }
 
   KeyEventResult _handleNotesKey(FocusNode node, KeyEvent event) {
@@ -183,6 +223,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   void _saveNotesAndUnfocus() {
+    _notesSaveTimer?.cancel();
     FocusManager.instance.primaryFocus?.unfocus();
     unawaited(_save());
   }
@@ -263,13 +304,14 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dateTime)}';
   }
 
+  int _listFlagColor(TodoListModel list) =>
+      list.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32();
+
   @override
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
     final theme = Theme.of(context);
-    final listColor = widget.listColor == null
-        ? null
-        : Color(widget.listColor!);
+    final listColor = _accentColor;
     return Material(
       elevation: 0,
       color: theme.colorScheme.surface,
@@ -311,14 +353,57 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               ],
             ),
             const SizedBox(height: 12),
-            LabeledTextField(
-              label: 'Title',
-              controller: _titleController,
-              textInputAction: TextInputAction.done,
-              onSubmitted: _onTitleSubmitted,
-              onChanged: _onTitleChanged,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                LabeledTextField(
+                  label: 'Title',
+                  controller: _titleController,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: _onTitleSubmitted,
+                  onChanged: _scheduleTitleSave,
+                  accentColor: listColor,
+                  contentPadding: const EdgeInsets.fromLTRB(16, 16, 56, 16),
+                ),
+                if (widget.lists.isNotEmpty)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: JournalTitleCornerFlag(
+                      colorValue: widget.listColor ??
+                          theme.colorScheme.primary.toARGB32(),
+                      onSelected: _moveToList,
+                      menuEntries: (_) => [
+                        for (var i = 0; i < widget.lists.length; i++)
+                          VoyagerPopupMenuItem<String>(
+                            value: widget.lists[i].id,
+                            position: VoyagerMenuTheme.positionFor(
+                              i,
+                              widget.lists.length,
+                            ),
+                            child: Row(
+                              children: [
+                                JournalBookmarkFlag(
+                                  colorValue: _listFlagColor(widget.lists[i]),
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(widget.lists[i].name)),
+                                if (widget.lists[i].id == widget.task.listId)
+                                  Icon(
+                                    PhosphorIconsRegular.check,
+                                    size: 18,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -349,7 +434,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             SizedBox(
               height: 120,
               child: LabeledTextField(
@@ -359,6 +444,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 expands: true,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
+                accentColor: listColor,
                 onChanged: (value) {
                   final notes = value.trim();
                   widget.onTaskOptimistic?.call(
@@ -366,11 +452,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                         ? widget.task.copyWith(clearNotes: true)
                         : widget.task.copyWith(notes: notes),
                   );
-                  unawaited(_onNotesChanged(value));
+                  _scheduleNotesSave(value);
                 },
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
               'Subtasks',
               style: theme.textTheme.titleSmall?.copyWith(color: listColor),
@@ -382,7 +468,15 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   child: TextField(
                     controller: _subtaskController,
                     focusNode: _subtaskFocusNode,
-                    decoration: const InputDecoration(hintText: 'Add subtask'),
+                    decoration: InputDecoration(
+                      hintText: 'Add subtask',
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(
+                          color: listColor ?? theme.colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                    ),
                     onSubmitted: (_) => _addSubtask(),
                   ),
                 ),
@@ -451,6 +545,8 @@ class _SubtaskRowState extends State<_SubtaskRow>
   late final Animation<double> _strikeProgress;
   var _displayCompleted = false;
   var _animating = false;
+  double _textWidth = 0;
+  double _textHeight = 0;
 
   @override
   void initState() {
@@ -483,6 +579,17 @@ class _SubtaskRowState extends State<_SubtaskRow>
     super.dispose();
   }
 
+  void _measureText(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodyMedium;
+    final painter = TextPainter(
+      text: TextSpan(text: widget.subtask.title, style: style),
+      textDirection: Directionality.of(context),
+      maxLines: null,
+    )..layout(maxWidth: MediaQuery.sizeOf(context).width - 120);
+    _textWidth = painter.size.width;
+    _textHeight = painter.size.height;
+  }
+
   Future<void> _handleToggle(bool? value) async {
     if (_animating) return;
     if (value == true && !widget.subtask.completed) {
@@ -506,9 +613,14 @@ class _SubtaskRowState extends State<_SubtaskRow>
 
   @override
   Widget build(BuildContext context) {
+    _measureText(context);
     final strikeColor = Theme.of(
       context,
     ).colorScheme.onSurface.withValues(alpha: 0.55);
+    final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: _displayCompleted ? strikeColor : null,
+    );
+
     return CheckboxListTile(
       contentPadding: EdgeInsets.zero,
       controlAffinity: ListTileControlAffinity.leading,
@@ -518,30 +630,87 @@ class _SubtaskRowState extends State<_SubtaskRow>
       title: Stack(
         clipBehavior: Clip.none,
         children: [
-          Text(
-            widget.subtask.title,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: _displayCompleted ? strikeColor : null,
-            ),
-          ),
+          Text(widget.subtask.title, style: textStyle),
           if (_displayCompleted)
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: AnimatedBuilder(
-                  animation: _strikeProgress,
-                  builder: (context, _) {
-                    return FractionallySizedBox(
-                      widthFactor: _strikeProgress.value.clamp(0.0, 1.0),
-                      alignment: Alignment.centerLeft,
-                      child: Container(height: 1.5, color: strikeColor),
-                    );
-                  },
-                ),
+            Positioned(
+              left: 0,
+              top: 0,
+              width: _textWidth,
+              height: _textHeight,
+              child: AnimatedBuilder(
+                animation: _strikeProgress,
+                builder: (context, _) {
+                  return CustomPaint(
+                    painter: _MultilineStrikePainter(
+                      text: widget.subtask.title,
+                      style: textStyle ?? const TextStyle(),
+                      progress: _strikeProgress.value.clamp(0.0, 1.0),
+                      color: strikeColor,
+                      textDirection: Directionality.of(context),
+                    ),
+                  );
+                },
               ),
             ),
         ],
       ),
     );
+  }
+}
+
+class _MultilineStrikePainter extends CustomPainter {
+  _MultilineStrikePainter({
+    required this.text,
+    required this.style,
+    required this.progress,
+    required this.color,
+    required this.textDirection,
+  });
+
+  final String text;
+  final TextStyle style;
+  final double progress;
+  final Color color;
+  final TextDirection textDirection;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0) return;
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: textDirection,
+      maxLines: null,
+    )..layout(maxWidth: size.width);
+
+    final metrics = painter.computeLineMetrics();
+    if (metrics.isEmpty) return;
+
+    final totalLength = metrics.fold<double>(
+      0,
+      (sum, line) => sum + line.width,
+    );
+    var remaining = totalLength * progress;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5;
+
+    for (final line in metrics) {
+      if (remaining <= 0) break;
+      final drawWidth = remaining < line.width ? remaining : line.width;
+      final y = line.baseline - (line.ascent * 0.35);
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(drawWidth, y),
+        paint,
+      );
+      remaining -= line.width;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MultilineStrikePainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.text != text ||
+        oldDelegate.color != color;
   }
 }

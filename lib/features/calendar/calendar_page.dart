@@ -264,7 +264,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       builder: (_) =>
           EventEditorDialog(event: event, initialDate: day ?? _focused),
     );
-    if (result == null || (result['title'] as String).isEmpty) return;
+    if (result == null) return;
 
     final now = utcNow();
     final saved = CalendarEvent(
@@ -275,6 +275,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       isFullDay: result['isFullDay'] as bool,
       colorValue: result['colorValue'] as int,
       notes: result['notes'] as String,
+      recurrence: result['recurrence'] as EventRecurrence? ?? EventRecurrence.none,
       source: event?.source ?? EventSource.local,
       externalId: event?.externalId,
       createdAt: event?.createdAt ?? now,
@@ -2120,9 +2121,12 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             key: ValueKey(widget.dates[i]),
             date: widget.dates[i],
             month: widget.morphMonth,
-            events: widget.events
-                .where((e) => calendarSameDay(e.start, widget.dates[i]))
-                .toList(),
+            events: widget.dates[i].month == widget.morphMonth.month &&
+                    widget.dates[i].year == widget.morphMonth.year
+                ? widget.events
+                    .where((e) => calendarEventOnDay(e, widget.dates[i]))
+                    .toList()
+                : const <CalendarEvent>[],
           ),
         ),
     ];
@@ -2354,8 +2358,7 @@ class _MorphCell extends StatelessWidget {
             builder: (context, constraints) {
               final dayLayoutSize = _dayLayoutDiameter(dayFontSize)
                   .clamp(0.0, constraints.maxHeight);
-              final showEvents =
-                  events.isNotEmpty && (inMonth || styleT > 0);
+              final showEvents = events.isNotEmpty && inMonth;
               final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
                 morphReverse: progress.morphReverse,
                 eventCount: events.length,
@@ -2855,8 +2858,9 @@ class _MonthWeekMorphCell extends StatelessWidget {
       t,
     )!;
 
-    final dayEvents =
-        events.where((e) => calendarSameDay(e.start, date)).toList();
+    final dayEvents = inMonth
+        ? events.where((e) => calendarEventOnDay(e, date)).toList()
+        : const <CalendarEvent>[];
     final dayIndicators = indicators
         .where((i) => calendarSameDay(i.day, date))
         .take(3)

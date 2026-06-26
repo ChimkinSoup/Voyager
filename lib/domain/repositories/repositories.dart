@@ -55,6 +55,7 @@ abstract class CalendarRepository {
   });
   Future<void> upsertEvent(CalendarEvent event);
   Future<void> softDeleteEvent(String id);
+  Future<void> deleteAllEvents();
   Future<void> replaceGoogleEvents(List<CalendarEvent> events);
   Future<void> purgeExpiredDeleted(DateTime now);
 }

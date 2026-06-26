@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 
 class EventEditorDialog extends StatefulWidget {
   const EventEditorDialog({super.key, this.event, required this.initialDate});
@@ -16,10 +17,13 @@ class EventEditorDialog extends StatefulWidget {
 class _EventEditorDialogState extends State<EventEditorDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
+  late final FocusNode _titleFocusNode;
   late bool _isFullDay;
   late DateTime _start;
   late DateTime _end;
   late int _colorValue;
+  late EventRecurrence _recurrence;
+  String? _titleError;
 
   @override
   void initState() {
@@ -27,6 +31,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     final e = widget.event;
     _titleController = TextEditingController(text: e?.title ?? '');
     _notesController = TextEditingController(text: e?.notes ?? '');
+    _titleFocusNode = FocusNode();
     _isFullDay = e?.isFullDay ?? true;
     _start =
         e?.start ??
@@ -45,13 +50,32 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           59,
         );
     _colorValue = e?.colorValue ?? 0xFF7C9EFF;
+    _recurrence = e?.recurrence ?? EventRecurrence.none;
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _notesController.dispose();
+    _titleFocusNode.dispose();
     super.dispose();
+  }
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      setState(() => _titleError = 'Title cannot be empty');
+      return;
+    }
+    Navigator.pop(context, {
+      'title': title,
+      'notes': _notesController.text.trim(),
+      'isFullDay': _isFullDay,
+      'start': _start,
+      'end': _end,
+      'colorValue': _colorValue,
+      'recurrence': _recurrence,
+    });
   }
 
   @override
@@ -63,7 +87,30 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LabeledTextField(label: 'Title', controller: _titleController),
+            LabeledTextField(
+              label: 'Title',
+              controller: _titleController,
+              focusNode: _titleFocusNode,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              onChanged: (_) {
+                if (_titleError != null) {
+                  setState(() => _titleError = null);
+                }
+              },
+            ),
+            if (_titleError != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _titleError!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -71,6 +118,23 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
               value: _isFullDay,
               onChanged: (v) => setState(() => _isFullDay = v),
             ),
+            DropdownButtonFormField<EventRecurrence>(
+              initialValue: _recurrence,
+              decoration: const InputDecoration(labelText: 'Repeat'),
+              items: EventRecurrence.values
+                  .map(
+                    (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(recurrenceLabel(value)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _recurrence = value);
+              },
+            ),
+            const SizedBox(height: 8),
             LabeledTextField(
               label: 'Notes',
               controller: _notesController,
@@ -91,14 +155,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, {
-            'title': _titleController.text.trim(),
-            'notes': _notesController.text.trim(),
-            'isFullDay': _isFullDay,
-            'start': _start,
-            'end': _end,
-            'colorValue': _colorValue,
-          }),
+          onPressed: _submit,
           child: const Text('Save'),
         ),
       ],

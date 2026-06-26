@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:voyager/core/constants/todo_sort_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -13,6 +14,7 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 class DriftJournalRepository implements JournalRepository {
@@ -365,13 +367,15 @@ class DriftTodoRepository implements TodoRepository {
 
     final unstarred = active.where((t) => !t.starred).toList();
     if (unstarred.isEmpty) {
-      return active.map((t) => t.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
+      return unstarredSortOrderBase;
     }
 
     final minUnstarred = unstarred
-        .map((t) => t.sortOrder)
+        .map((t) => normalizeUnstarredSortOrder(t.sortOrder))
         .reduce((a, b) => a < b ? a : b);
-    return minUnstarred - 1;
+    return minUnstarred > unstarredSortOrderBase
+        ? minUnstarred - 1
+        : unstarredSortOrderBase;
   }
 
   TodoTask _mapTask(TodoTasksTableData r) => TodoTask(
@@ -491,6 +495,7 @@ class DriftCalendarRepository implements CalendarRepository {
             notes: Value(event.notes),
             source: Value(event.source.name),
             externalId: Value(event.externalId),
+            recurrence: Value(event.recurrence.name),
             createdAt: Value(event.createdAt),
             updatedAt: Value(event.updatedAt),
             deletedAt: Value(event.deletedAt),
@@ -508,6 +513,11 @@ class DriftCalendarRepository implements CalendarRepository {
         updatedAt: Value(utcNow()),
       ),
     );
+  }
+
+  @override
+  Future<void> deleteAllEvents() async {
+    await _db.delete(_db.calendarEventsTable).go();
   }
 
   @override
@@ -542,6 +552,8 @@ class DriftCalendarRepository implements CalendarRepository {
     notes: row.notes,
     source: EventSource.values.byName(row.source),
     externalId: row.externalId,
+    recurrence:
+        recurrenceFromStorage(row.recurrence),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
@@ -803,6 +815,7 @@ class DriftSettingsRepository implements SettingsRepository {
       hideCompletedTasks: row.hideCompletedTasks,
       deviceId: row.deviceId,
       lastViewedJournalId: row.lastViewedJournalId,
+      lastViewedTodoListId: row.lastViewedTodoListId,
       weatherLocationLabel: row.weatherLocationLabel,
       weatherLat: row.weatherLat,
       weatherLon: row.weatherLon,
@@ -851,6 +864,7 @@ class DriftSettingsRepository implements SettingsRepository {
             hideCompletedTasks: Value(settings.hideCompletedTasks),
             deviceId: Value(settings.deviceId),
             lastViewedJournalId: Value(settings.lastViewedJournalId),
+            lastViewedTodoListId: Value(settings.lastViewedTodoListId),
             weatherLocationLabel: Value(settings.weatherLocationLabel),
             weatherLat: Value(settings.weatherLat),
             weatherLon: Value(settings.weatherLon),

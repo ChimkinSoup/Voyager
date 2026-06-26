@@ -255,7 +255,7 @@ void main() {
       ),
     );
 
-    expect(await todoRepo.nextSortOrder(list.id), 0);
+    expect(await todoRepo.nextSortOrder(list.id), 1000);
   });
 
   test('tracker repository persists tracker values', () async {

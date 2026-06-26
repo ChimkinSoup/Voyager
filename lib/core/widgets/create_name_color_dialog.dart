@@ -69,7 +69,7 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
     return AlertDialog(
       title: Text(widget.title),
       content: SizedBox(
-        width: 420,
+        width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

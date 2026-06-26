@@ -1,34 +1,32 @@
 # FEEDBACK
 Here is some feedback, implement fixes in the best way you see fit. If there is any unclarity, ask questions before proceeding. If the change is applicable to other parts of the app (Such as a universal change like changing a textbox or a repeated UI), apply the change to wherever necessary.
-- [ ] When I star a task, it should immediately be moved to the top of the list 
-- [ ] When I click a specific journal entry in the search page, I have a popup that shows the full journal, but there should be all the editing options, such as mood and weather and date created and the same bookmark to sign
-- [ ] Currently if I go into search and search for journal entries by tag, the tags are not highlighted under the search bar (Just like how they are in the text when I edit the journal), add this feature
-	- [ ] Additionally the tags should also be highlighted if I click into a specific entry to edit while still on the search page
-- [ ] Currently when I am viewing a specific journal, then delete, I am still left viewing that journal (With no entries). Change this behavior so that I am immediately moved to the "All Journals" view 
-- [ ] Currently journal has a default "Journal" that all the entries in deleted journals are moved to, and is the default journal upon starting up the app (With no previous data attached to the user). Apply this same feature but for the to-do list, calling it "To-do" and also add the same features so if a list is deleted all the tasks (Completed and non-completed) are moved into this list, and the user cannot delete this list but they can rename it and recolor it
-	- [ ] Additionally, apply this to BOTH journals and todo lists: If the user tries to delete an entire journal or a list, a popup appears that prompts them if they really want to delete it. Currently there is one cancel button and one filled in "Yes" button, add a new button that is "Yes (Delete all entries)" or something along those lines, that is RED. Then if the user clicks that button, do not move the journal entries or the tasks from that deleted list to the default list, just delete them all out right (But again keep EVERYTHING deleted, including the list itself, as a soft delete)
-- [ ] When you go to edit a quote, the textbox extends horizontally if the quote is too long. Change this behavior so that the text wraps around, and make the horizontal length of the popup fixed
-- [ ] Ensure that tasks with a due date appear above tasks without a due date (Assuming both are unstarred), and make the tasks with a due date sorted in chronological order, where the earlier due dates come first
-- [ ] Instead of using two buttons to add a due date to a task, either with a time or without a time, instead add another "Add date " button below the calendar, to the left of the clock. If the user clicks this button, then only add the date and ignore the time selected, but if the user clicks the "OK" button then it should add both the date and the time
-- [ ] Add back in the clear due date button next to the date button when editing a task
-- [ ] At the very top of the to-do list page where it has the dropdown menu with each list, there is still a triangular flag that appears just like the old flag for journal entries. Get rid of that
-- [ ] Currently when I close the right bar when editing a task in the to-do list, it is animated and moves right, but only once the animation is done is the actual to-do list returned back to it's original state (Like each individual task box instantly lengthens to take up the whole screen). Can you animate the actual list itself so that it extends right with the task editing box
-- [ ] The small calendar to the left of the main calendar still has too much vertical spacing. Just reuse the same calendar that is present in the yearly view.
-	- [ ] Additionally if you click a date on the small calendar you see the daily entry, but at the top it still marks the old viewing format that you were on (So for example if i was in monthly view then clicked a date, then i would see the daily view but at the top it would still show as if I was in a monthly view), and additionally if i try to click monthly view again, nothing happens and I am left looking at the daily view. Make it so that the current viewing format is unchecked and by clicking on a viewing format the daily view is changed to that viewing format
-	- [ ] Additionally if I click a daily view, i can still see the UI to change the previous monthly view, like if I was in the weekly view, then clicked on a day to see the daily view, i can still see the UI to change the week (And this does in fact change the day I'm viewing), fix this so the UI disappears
-- [ ] If I go into the yearly view of the calendar then click on a month, i am taken to that month but there is no animation zooming into the month on the yearly screen until it takes up my whole screen and becomes the monthly screen. Implement this
-- [ ] Add journal flag colors to the journal dropdown menu when selecting the journal you want to view (Like the dropdown menu with "All journals" and every journal) 
-- [ ] Make font color of the weather icon, "Mood" and the mood slider color, and the font color of the date icons the same as the color of the journal 
-- [ ] When setting the journal color, when you select a color it has a checkmark in the middle. Can you make the checkmark thicker, and also it should highlight the color in another circle (If the color has already been picked and already has a grey color outline, it should just replace the outline)
-- [ ] Subtasks in a to-do list do not animate their strikethrough animation like a regular task, so implement that. 
-	- [ ] Make sure the animation speed is the same as the main task speed
-- [ ] Currently the set date font color is the same color as the to-do list color. Can you also make "reset due date", the add button (in the main list), and the 'save' button when editing a task to be the list color. Also change the "Subtasks" text to be the journal color too
-- [ ] When you try to delete a task and confirm to delete, then the deletion is saved locally, then reflected in the UI. Make the change reflect in the UI first, then save locally and remotely, so that there is no pause between deleting and seeing it visually
-- [ ] When I edit the name of a task and press enter, it is saved locally first, then the change is reflected in the UI. Make the change reflect on UI first, then save locally and remotely.
-- [ ] When a user enters notes into a task and saves them, add the "note" icon under the task, in the same section where the dates and subtask counter are (In the main task). The order of all the subscripts should be date, subtask, notes
-- [ ] There is still a triangle that floats next to the list selector menu in the to-do list page, remove this.
-- [ ] When editing a journal entry, the user should be able to edit the title, then press tab to automatically be moved to the journal entry 
-- [ ] When you make a new journal, it is saved first, then the UI opens up a new page. Make the UI reflect the new journal immediately, then save locally and remotely.
-- [ ] When I type in a journal and change the body i cannot see the change reflected in the left bar where all journal entries are shown. Ensure that the UI for the small journal entry overview is updated live. 
-- [ ] Now when I star a task in the to-do list, it does not move to the top. Fix this.
-- [ ] When i change the color of a to-do list it is not saved, ensure it is saved remotely and locally
+- [ ] If I star a task, then move it around, then unstar it, it does NOT go back to it's original position, fix this.
+- [ ] If i star a task, then move it below other starred tasks (but still keeping the same number of starred tasks in a row at the top of the list), then add a new task, it does not get entered right below the last starred task in the first chunk, make it so that a new task will be added at the top of the list, below all starred tasks (Below the first chunk of starred tasks)
+- [ ] If i try to edit a journal in the search page, the little bookmark icon is too far to the right and clips out of the title textbox, ensure this does not happen
+	- [ ] Additionally the mood bar does not have the gradient that is present in the main journal page
+	- [ ] If you switch the journal an entry is in, it will close the popup, ensure the popup remains open. Same thing occurs when I change the date of the entry
+	- [ ] The text in the body is invisible and starts very far to the right, fix this
+- [ ] Text is invisible when trying to search for some keywords in the search page
+	- [ ] Ensure that tags are highlighted in the body editor in the search page (Like they are in the main journal page)
+	- [ ] Also ensure the tags are highlighted when i search for a journal entry and see them. This is in the main search page, not when i click on a specific entry to edit it
+- [ ] Currently when I am viewing a specific journal, then delete, i am switched to the next journal in the list. Instead make it default to "All journals"
+- [ ] Typing in the notes section or title section of a task is super slow, fix this
+- [ ] When you delete a list you are left viewing the list still, change the view immediately to show the default list (To-do)
+- [ ] Make the popup page for editing the quote larger overall
+- [ ] Sometimes when I edit a task a certani way or add a due date to another task, some of the tasks in a list disappear until i add another task and then they come back, ensure this does not happen
+- [ ] When editing a task, add the same bookmark icon in the title textbox as the one implemented in journals. This should allow the user to switch which list a task is stored in
+- [ ] Make the list and journal selector in their main pages use larger and bolded font, and make the text color the same as the journal/list color
+- [ ] Make the animation of the right bar sliding to the left and right (When editing a task) 50% longer 
+- [ ] Add flags in the dropdown menu when selecting the current to-do list you are on. The flag should be the bookmark icon from phosphor (Just like how journals shows the icon in the journal's color, lists should show the list next to the icon that is colored with the list's color)
+- [ ] Currently when you select the text box to edit a journal entry's title or it's text body, the border is highlighted with the accent color of the whole app. Instead make it the journal color (The journal where the entry is located in). If the entry has no journal, it should be the default accent color. Apply same logic to to-do lists too. This should include the text boxes that light up when editing the details of a task
+- [ ] Make the "choose color screen" a lot larger and each icon bigger. Also make the grey circle that indicates that a color is already being used by another journal more noticeable
+- [ ] When you check off a subtask, the strikethrough animation does not stop at the end of the text and instead continues until the end of the page. Ensure this does not happen
+	- [ ] Also if the subtask extends multiple times, the strike through should extend through each line in order from top to bottom, currently it just strikes through directly in the middle of the text
+- [ ] When you click a text box when editing a task the borders light up. Make sure they light up the same color as the list
+- [ ] Add more padding in the to-do list between the title, date entry, and the notes section
+- [ ] If you try to add an event in a calendar and you don't type anything into the title but save it, the popup disappear as if something was added, but nothing has been added. Make it so that if you try to press enter or save without a title then make sure that the pop up does not disappear and then a red error message pops up that says you can't have an empty title
+- [ ] If you enter a single event in the calendar, then it takes up the whole date (in the monthly view), make it only take up one line (Same format as if there are 5 events added)
+- [ ] Allow users to press enter to save an event in the calendar
+- [ ] When adding an event, allow the user to add repeating events that repeat every day, week, month, and year. 
+- [ ] Save the last to-do list viewed by the user, so if i have list A opened, then close the app (Or restart it), then list A should be open again. Apply the same thing for journals. 
+- [ ] In the settings page, you can add accent colors to pick from. Currently they are all bordered by an outline, make that outline less bright

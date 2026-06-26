@@ -19,6 +19,7 @@ Future<String?> showTodoListManageSheet(
     builder: (context) => const _TodoListManageDialog(),
   );
   ref.invalidate(todoListsProvider);
+  ref.invalidate(todoTasksProvider);
   return createdId;
 }
 
@@ -179,6 +180,10 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
             .firstWhere((item) => item.id == list.id);
     remoteSync.pushTodoList(deleted);
     ref.invalidate(todoListsProvider);
+    ref.invalidate(todoTasksProvider(list.id));
+    if (choice == DeleteContainerChoice.moveToDefault && total > 0) {
+      ref.invalidate(todoTasksProvider(legacyTodoListId));
+    }
     await _reload();
   }
 

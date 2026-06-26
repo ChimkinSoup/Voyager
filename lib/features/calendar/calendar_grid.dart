@@ -25,6 +25,7 @@ export 'calendar_day_grid.dart'
         calendarAdjacentMonthBorderOpacity,
         calendarAdjacentMonthColor,
         calendarSameDay,
+        calendarEventOnDay,
         calendarTitleAccentColor,
         calendarWeekdayAccentColor,
         calendarWeekdayFontSizeScale,
@@ -141,7 +142,7 @@ class DayHourGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dayEvents =
-        events.where((e) => calendarSameDay(e.start, day)).toList()
+        events.where((e) => calendarEventOnDay(e, day)).toList()
           ..sort((a, b) => a.start.compareTo(b.start));
     final fullDayEvents = dayEvents.where((e) => e.isFullDay).toList();
     final timedEvents = dayEvents.where((e) => !e.isFullDay).toList();
@@ -674,7 +675,7 @@ class _WeekGrid extends StatelessWidget {
               children: List.generate(7, (i) {
               final date = start.add(Duration(days: i));
               final dayEvents = events
-                  .where((e) => calendarSameDay(e.start, date))
+                  .where((e) => calendarEventOnDay(e, date))
                   .toList();
               final dayIndicators = indicators
                   .where((indicator) => calendarSameDay(indicator.day, date))
@@ -849,8 +850,9 @@ class _DayEventTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Color(event.colorValue).withValues(alpha: 0.35),
+      decoration: calendarEventFillDecoration(
+        Color(event.colorValue),
+        alpha: calendarDayEventTileFillAlpha,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

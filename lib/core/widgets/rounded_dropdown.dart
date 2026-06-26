@@ -28,12 +28,16 @@ class RoundedDropdown<T> extends StatelessWidget {
     this.variant = useBorderedDropdowns
         ? RoundedDropdownVariant.bordered
         : RoundedDropdownVariant.flat,
+    this.labelColor,
+    this.labelStyle,
   });
 
   final T value;
   final List<RoundedDropdownItem<T>> items;
   final ValueChanged<T>? onChanged;
   final RoundedDropdownVariant variant;
+  final Color? labelColor;
+  final TextStyle? labelStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +45,10 @@ class RoundedDropdown<T> extends StatelessWidget {
     final selected = items.where((item) => item.value == value).firstOrNull;
     final enabled = onChanged != null && items.isNotEmpty;
     final flat = variant == RoundedDropdownVariant.flat;
+    final textStyle = (labelStyle ?? theme.textTheme.titleMedium)?.copyWith(
+      color: labelColor ?? labelStyle?.color ?? theme.colorScheme.onSurface,
+      fontWeight: FontWeight.bold,
+    );
 
     return Builder(
       builder: (context) {
@@ -74,6 +82,7 @@ class RoundedDropdown<T> extends StatelessWidget {
                       selected?.label ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: textStyle,
                     ),
                   ),
                   const SizedBox(width: 8),

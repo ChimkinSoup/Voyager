@@ -18,6 +18,7 @@ class AppSettings {
     this.hideCompletedTasks = false,
     this.deviceId,
     this.lastViewedJournalId,
+    this.lastViewedTodoListId,
     this.weatherLocationLabel,
     this.weatherLat,
     this.weatherLon,
@@ -58,6 +59,7 @@ class AppSettings {
   final bool hideCompletedTasks;
   final String? deviceId;
   final String? lastViewedJournalId;
+  final String? lastViewedTodoListId;
   final String? weatherLocationLabel;
   final double? weatherLat;
   final double? weatherLon;
@@ -94,6 +96,7 @@ class AppSettings {
     bool? hideCompletedTasks,
     String? deviceId,
     String? lastViewedJournalId,
+    String? lastViewedTodoListId,
     String? weatherLocationLabel,
     double? weatherLat,
     double? weatherLon,
@@ -127,6 +130,7 @@ class AppSettings {
     bool clearDevOpenWeatherApiKey = false,
     bool clearWeatherForecastJson = false,
     bool clearLastViewedJournalId = false,
+    bool clearLastViewedTodoListId = false,
     bool clearJournalEntryListWidth = false,
   }) {
     return AppSettings(
@@ -150,6 +154,9 @@ class AppSettings {
       lastViewedJournalId: clearLastViewedJournalId
           ? null
           : (lastViewedJournalId ?? this.lastViewedJournalId),
+      lastViewedTodoListId: clearLastViewedTodoListId
+          ? null
+          : (lastViewedTodoListId ?? this.lastViewedTodoListId),
       weatherLocationLabel: clearWeatherLocationLabel
           ? null
           : (weatherLocationLabel ?? this.weatherLocationLabel),
