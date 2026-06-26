@@ -5837,6 +5837,30 @@ class $SettingsTableTable extends SettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(defaultTodoHotkey),
   );
+  static const VerificationMeta _calendarNavigateLeftKeyMeta =
+      const VerificationMeta('calendarNavigateLeftKey');
+  @override
+  late final GeneratedColumn<String> calendarNavigateLeftKey =
+      GeneratedColumn<String>(
+        'calendar_navigate_left_key',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(defaultCalendarNavigateLeftKey),
+      );
+  static const VerificationMeta _calendarNavigateRightKeyMeta =
+      const VerificationMeta('calendarNavigateRightKey');
+  @override
+  late final GeneratedColumn<String> calendarNavigateRightKey =
+      GeneratedColumn<String>(
+        'calendar_navigate_right_key',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(defaultCalendarNavigateRightKey),
+      );
   static const VerificationMeta _rankingColorStartMeta = const VerificationMeta(
     'rankingColorStart',
   );
@@ -6223,6 +6247,8 @@ class $SettingsTableTable extends SettingsTable
     showQuotes,
     journalHotkey,
     todoHotkey,
+    calendarNavigateLeftKey,
+    calendarNavigateRightKey,
     rankingColorStart,
     rankingColorEnd,
     timelineModeYearZero,
@@ -6307,6 +6333,24 @@ class $SettingsTableTable extends SettingsTable
       context.handle(
         _todoHotkeyMeta,
         todoHotkey.isAcceptableOrUnknown(data['todo_hotkey']!, _todoHotkeyMeta),
+      );
+    }
+    if (data.containsKey('calendar_navigate_left_key')) {
+      context.handle(
+        _calendarNavigateLeftKeyMeta,
+        calendarNavigateLeftKey.isAcceptableOrUnknown(
+          data['calendar_navigate_left_key']!,
+          _calendarNavigateLeftKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('calendar_navigate_right_key')) {
+      context.handle(
+        _calendarNavigateRightKeyMeta,
+        calendarNavigateRightKey.isAcceptableOrUnknown(
+          data['calendar_navigate_right_key']!,
+          _calendarNavigateRightKeyMeta,
+        ),
       );
     }
     if (data.containsKey('ranking_color_start')) {
@@ -6609,6 +6653,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}todo_hotkey'],
       )!,
+      calendarNavigateLeftKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}calendar_navigate_left_key'],
+      )!,
+      calendarNavigateRightKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}calendar_navigate_right_key'],
+      )!,
       rankingColorStart: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}ranking_color_start'],
@@ -6750,6 +6802,8 @@ class SettingsTableData extends DataClass
   final bool showQuotes;
   final String journalHotkey;
   final String todoHotkey;
+  final String calendarNavigateLeftKey;
+  final String calendarNavigateRightKey;
   final int rankingColorStart;
   final int rankingColorEnd;
   final bool timelineModeYearZero;
@@ -6788,6 +6842,8 @@ class SettingsTableData extends DataClass
     required this.showQuotes,
     required this.journalHotkey,
     required this.todoHotkey,
+    required this.calendarNavigateLeftKey,
+    required this.calendarNavigateRightKey,
     required this.rankingColorStart,
     required this.rankingColorEnd,
     required this.timelineModeYearZero,
@@ -6829,6 +6885,12 @@ class SettingsTableData extends DataClass
     map['show_quotes'] = Variable<bool>(showQuotes);
     map['journal_hotkey'] = Variable<String>(journalHotkey);
     map['todo_hotkey'] = Variable<String>(todoHotkey);
+    map['calendar_navigate_left_key'] = Variable<String>(
+      calendarNavigateLeftKey,
+    );
+    map['calendar_navigate_right_key'] = Variable<String>(
+      calendarNavigateRightKey,
+    );
     map['ranking_color_start'] = Variable<int>(rankingColorStart);
     map['ranking_color_end'] = Variable<int>(rankingColorEnd);
     map['timeline_mode_year_zero'] = Variable<bool>(timelineModeYearZero);
@@ -6915,6 +6977,8 @@ class SettingsTableData extends DataClass
       showQuotes: Value(showQuotes),
       journalHotkey: Value(journalHotkey),
       todoHotkey: Value(todoHotkey),
+      calendarNavigateLeftKey: Value(calendarNavigateLeftKey),
+      calendarNavigateRightKey: Value(calendarNavigateRightKey),
       rankingColorStart: Value(rankingColorStart),
       rankingColorEnd: Value(rankingColorEnd),
       timelineModeYearZero: Value(timelineModeYearZero),
@@ -6995,6 +7059,12 @@ class SettingsTableData extends DataClass
       showQuotes: serializer.fromJson<bool>(json['showQuotes']),
       journalHotkey: serializer.fromJson<String>(json['journalHotkey']),
       todoHotkey: serializer.fromJson<String>(json['todoHotkey']),
+      calendarNavigateLeftKey: serializer.fromJson<String>(
+        json['calendarNavigateLeftKey'],
+      ),
+      calendarNavigateRightKey: serializer.fromJson<String>(
+        json['calendarNavigateRightKey'],
+      ),
       rankingColorStart: serializer.fromJson<int>(json['rankingColorStart']),
       rankingColorEnd: serializer.fromJson<int>(json['rankingColorEnd']),
       timelineModeYearZero: serializer.fromJson<bool>(
@@ -7074,6 +7144,12 @@ class SettingsTableData extends DataClass
       'showQuotes': serializer.toJson<bool>(showQuotes),
       'journalHotkey': serializer.toJson<String>(journalHotkey),
       'todoHotkey': serializer.toJson<String>(todoHotkey),
+      'calendarNavigateLeftKey': serializer.toJson<String>(
+        calendarNavigateLeftKey,
+      ),
+      'calendarNavigateRightKey': serializer.toJson<String>(
+        calendarNavigateRightKey,
+      ),
       'rankingColorStart': serializer.toJson<int>(rankingColorStart),
       'rankingColorEnd': serializer.toJson<int>(rankingColorEnd),
       'timelineModeYearZero': serializer.toJson<bool>(timelineModeYearZero),
@@ -7127,6 +7203,8 @@ class SettingsTableData extends DataClass
     bool? showQuotes,
     String? journalHotkey,
     String? todoHotkey,
+    String? calendarNavigateLeftKey,
+    String? calendarNavigateRightKey,
     int? rankingColorStart,
     int? rankingColorEnd,
     bool? timelineModeYearZero,
@@ -7165,6 +7243,10 @@ class SettingsTableData extends DataClass
     showQuotes: showQuotes ?? this.showQuotes,
     journalHotkey: journalHotkey ?? this.journalHotkey,
     todoHotkey: todoHotkey ?? this.todoHotkey,
+    calendarNavigateLeftKey:
+        calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
+    calendarNavigateRightKey:
+        calendarNavigateRightKey ?? this.calendarNavigateRightKey,
     rankingColorStart: rankingColorStart ?? this.rankingColorStart,
     rankingColorEnd: rankingColorEnd ?? this.rankingColorEnd,
     timelineModeYearZero: timelineModeYearZero ?? this.timelineModeYearZero,
@@ -7243,6 +7325,12 @@ class SettingsTableData extends DataClass
       todoHotkey: data.todoHotkey.present
           ? data.todoHotkey.value
           : this.todoHotkey,
+      calendarNavigateLeftKey: data.calendarNavigateLeftKey.present
+          ? data.calendarNavigateLeftKey.value
+          : this.calendarNavigateLeftKey,
+      calendarNavigateRightKey: data.calendarNavigateRightKey.present
+          ? data.calendarNavigateRightKey.value
+          : this.calendarNavigateRightKey,
       rankingColorStart: data.rankingColorStart.present
           ? data.rankingColorStart.value
           : this.rankingColorStart,
@@ -7345,6 +7433,8 @@ class SettingsTableData extends DataClass
           ..write('showQuotes: $showQuotes, ')
           ..write('journalHotkey: $journalHotkey, ')
           ..write('todoHotkey: $todoHotkey, ')
+          ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
+          ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('rankingColorStart: $rankingColorStart, ')
           ..write('rankingColorEnd: $rankingColorEnd, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
@@ -7390,6 +7480,8 @@ class SettingsTableData extends DataClass
     showQuotes,
     journalHotkey,
     todoHotkey,
+    calendarNavigateLeftKey,
+    calendarNavigateRightKey,
     rankingColorStart,
     rankingColorEnd,
     timelineModeYearZero,
@@ -7432,6 +7524,8 @@ class SettingsTableData extends DataClass
           other.showQuotes == this.showQuotes &&
           other.journalHotkey == this.journalHotkey &&
           other.todoHotkey == this.todoHotkey &&
+          other.calendarNavigateLeftKey == this.calendarNavigateLeftKey &&
+          other.calendarNavigateRightKey == this.calendarNavigateRightKey &&
           other.rankingColorStart == this.rankingColorStart &&
           other.rankingColorEnd == this.rankingColorEnd &&
           other.timelineModeYearZero == this.timelineModeYearZero &&
@@ -7473,6 +7567,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> showQuotes;
   final Value<String> journalHotkey;
   final Value<String> todoHotkey;
+  final Value<String> calendarNavigateLeftKey;
+  final Value<String> calendarNavigateRightKey;
   final Value<int> rankingColorStart;
   final Value<int> rankingColorEnd;
   final Value<bool> timelineModeYearZero;
@@ -7511,6 +7607,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showQuotes = const Value.absent(),
     this.journalHotkey = const Value.absent(),
     this.todoHotkey = const Value.absent(),
+    this.calendarNavigateLeftKey = const Value.absent(),
+    this.calendarNavigateRightKey = const Value.absent(),
     this.rankingColorStart = const Value.absent(),
     this.rankingColorEnd = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
@@ -7550,6 +7648,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showQuotes = const Value.absent(),
     this.journalHotkey = const Value.absent(),
     this.todoHotkey = const Value.absent(),
+    this.calendarNavigateLeftKey = const Value.absent(),
+    this.calendarNavigateRightKey = const Value.absent(),
     this.rankingColorStart = const Value.absent(),
     this.rankingColorEnd = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
@@ -7589,6 +7689,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? showQuotes,
     Expression<String>? journalHotkey,
     Expression<String>? todoHotkey,
+    Expression<String>? calendarNavigateLeftKey,
+    Expression<String>? calendarNavigateRightKey,
     Expression<int>? rankingColorStart,
     Expression<int>? rankingColorEnd,
     Expression<bool>? timelineModeYearZero,
@@ -7629,6 +7731,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (showQuotes != null) 'show_quotes': showQuotes,
       if (journalHotkey != null) 'journal_hotkey': journalHotkey,
       if (todoHotkey != null) 'todo_hotkey': todoHotkey,
+      if (calendarNavigateLeftKey != null)
+        'calendar_navigate_left_key': calendarNavigateLeftKey,
+      if (calendarNavigateRightKey != null)
+        'calendar_navigate_right_key': calendarNavigateRightKey,
       if (rankingColorStart != null) 'ranking_color_start': rankingColorStart,
       if (rankingColorEnd != null) 'ranking_color_end': rankingColorEnd,
       if (timelineModeYearZero != null)
@@ -7691,6 +7797,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? showQuotes,
     Value<String>? journalHotkey,
     Value<String>? todoHotkey,
+    Value<String>? calendarNavigateLeftKey,
+    Value<String>? calendarNavigateRightKey,
     Value<int>? rankingColorStart,
     Value<int>? rankingColorEnd,
     Value<bool>? timelineModeYearZero,
@@ -7730,6 +7838,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       showQuotes: showQuotes ?? this.showQuotes,
       journalHotkey: journalHotkey ?? this.journalHotkey,
       todoHotkey: todoHotkey ?? this.todoHotkey,
+      calendarNavigateLeftKey:
+          calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
+      calendarNavigateRightKey:
+          calendarNavigateRightKey ?? this.calendarNavigateRightKey,
       rankingColorStart: rankingColorStart ?? this.rankingColorStart,
       rankingColorEnd: rankingColorEnd ?? this.rankingColorEnd,
       timelineModeYearZero: timelineModeYearZero ?? this.timelineModeYearZero,
@@ -7795,6 +7907,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (todoHotkey.present) {
       map['todo_hotkey'] = Variable<String>(todoHotkey.value);
+    }
+    if (calendarNavigateLeftKey.present) {
+      map['calendar_navigate_left_key'] = Variable<String>(
+        calendarNavigateLeftKey.value,
+      );
+    }
+    if (calendarNavigateRightKey.present) {
+      map['calendar_navigate_right_key'] = Variable<String>(
+        calendarNavigateRightKey.value,
+      );
     }
     if (rankingColorStart.present) {
       map['ranking_color_start'] = Variable<int>(rankingColorStart.value);
@@ -7933,6 +8055,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('showQuotes: $showQuotes, ')
           ..write('journalHotkey: $journalHotkey, ')
           ..write('todoHotkey: $todoHotkey, ')
+          ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
+          ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('rankingColorStart: $rankingColorStart, ')
           ..write('rankingColorEnd: $rankingColorEnd, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
@@ -11105,6 +11229,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> showQuotes,
       Value<String> journalHotkey,
       Value<String> todoHotkey,
+      Value<String> calendarNavigateLeftKey,
+      Value<String> calendarNavigateRightKey,
       Value<int> rankingColorStart,
       Value<int> rankingColorEnd,
       Value<bool> timelineModeYearZero,
@@ -11145,6 +11271,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> showQuotes,
       Value<String> journalHotkey,
       Value<String> todoHotkey,
+      Value<String> calendarNavigateLeftKey,
+      Value<String> calendarNavigateRightKey,
       Value<int> rankingColorStart,
       Value<int> rankingColorEnd,
       Value<bool> timelineModeYearZero,
@@ -11214,6 +11342,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get todoHotkey => $composableBuilder(
     column: $table.todoHotkey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get calendarNavigateLeftKey => $composableBuilder(
+    column: $table.calendarNavigateLeftKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get calendarNavigateRightKey => $composableBuilder(
+    column: $table.calendarNavigateRightKey,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11413,6 +11551,16 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get calendarNavigateLeftKey => $composableBuilder(
+    column: $table.calendarNavigateLeftKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get calendarNavigateRightKey => $composableBuilder(
+    column: $table.calendarNavigateRightKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get rankingColorStart => $composableBuilder(
     column: $table.rankingColorStart,
     builder: (column) => ColumnOrderings(column),
@@ -11604,6 +11752,16 @@ class $$SettingsTableTableAnnotationComposer
 
   GeneratedColumn<String> get todoHotkey => $composableBuilder(
     column: $table.todoHotkey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get calendarNavigateLeftKey => $composableBuilder(
+    column: $table.calendarNavigateLeftKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get calendarNavigateRightKey => $composableBuilder(
+    column: $table.calendarNavigateRightKey,
     builder: (column) => column,
   );
 
@@ -11801,6 +11959,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> showQuotes = const Value.absent(),
                 Value<String> journalHotkey = const Value.absent(),
                 Value<String> todoHotkey = const Value.absent(),
+                Value<String> calendarNavigateLeftKey = const Value.absent(),
+                Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<int> rankingColorStart = const Value.absent(),
                 Value<int> rankingColorEnd = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
@@ -11841,6 +12001,8 @@ class $$SettingsTableTableTableManager
                 showQuotes: showQuotes,
                 journalHotkey: journalHotkey,
                 todoHotkey: todoHotkey,
+                calendarNavigateLeftKey: calendarNavigateLeftKey,
+                calendarNavigateRightKey: calendarNavigateRightKey,
                 rankingColorStart: rankingColorStart,
                 rankingColorEnd: rankingColorEnd,
                 timelineModeYearZero: timelineModeYearZero,
@@ -11882,6 +12044,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> showQuotes = const Value.absent(),
                 Value<String> journalHotkey = const Value.absent(),
                 Value<String> todoHotkey = const Value.absent(),
+                Value<String> calendarNavigateLeftKey = const Value.absent(),
+                Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<int> rankingColorStart = const Value.absent(),
                 Value<int> rankingColorEnd = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
@@ -11922,6 +12086,8 @@ class $$SettingsTableTableTableManager
                 showQuotes: showQuotes,
                 journalHotkey: journalHotkey,
                 todoHotkey: todoHotkey,
+                calendarNavigateLeftKey: calendarNavigateLeftKey,
+                calendarNavigateRightKey: calendarNavigateRightKey,
                 rankingColorStart: rankingColorStart,
                 rankingColorEnd: rankingColorEnd,
                 timelineModeYearZero: timelineModeYearZero,

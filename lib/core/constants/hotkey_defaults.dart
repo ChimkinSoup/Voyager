@@ -4,3 +4,6 @@ const defaultTodoHotkey = 'Ctrl+Alt+T';
 
 const legacyJournalHotkey = 'Ctrl+Shift+J';
 const legacyTodoHotkey = 'Ctrl+Shift+T';
+
+const defaultCalendarNavigateLeftKey = 'H';
+const defaultCalendarNavigateRightKey = 'L';

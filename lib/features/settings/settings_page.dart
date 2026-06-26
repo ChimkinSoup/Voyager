@@ -5,9 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/platform/platform_info.dart';
+import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
+import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
 import 'package:voyager/features/settings/weather_location_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
@@ -45,6 +47,38 @@ class SettingsPage extends ConsumerWidget {
             value: settings.weekStartsOnMonday,
             onChanged: (v) =>
                 _save(ref, settings.copyWith(weekStartsOnMonday: v)),
+          ),
+          ListTile(
+            title: const Text('Calendar: previous period'),
+            subtitle: Text(
+              '${formatKeyBinding(settings.calendarNavigateLeftKey)} '
+              '(also Left arrow)',
+            ),
+            onTap: () => _pickCalendarKey(
+              context,
+              ref,
+              settings,
+              title: 'Previous period key',
+              current: settings.calendarNavigateLeftKey,
+              onSelected: (key) =>
+                  settings.copyWith(calendarNavigateLeftKey: key),
+            ),
+          ),
+          ListTile(
+            title: const Text('Calendar: next period'),
+            subtitle: Text(
+              '${formatKeyBinding(settings.calendarNavigateRightKey)} '
+              '(also Right arrow)',
+            ),
+            onTap: () => _pickCalendarKey(
+              context,
+              ref,
+              settings,
+              title: 'Next period key',
+              current: settings.calendarNavigateRightKey,
+              onSelected: (key) =>
+                  settings.copyWith(calendarNavigateRightKey: key),
+            ),
           ),
           SwitchListTile(
             title: const Text('Hide completed tasks'),
@@ -104,5 +138,22 @@ class SettingsPage extends ConsumerWidget {
   Future<void> _save(WidgetRef ref, AppSettings settings) async {
     await ref.read(settingsRepositoryProvider).saveSettings(settings);
     ref.invalidate(settingsProvider);
+  }
+
+  Future<void> _pickCalendarKey(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings, {
+    required String title,
+    required String current,
+    required AppSettings Function(String key) onSelected,
+  }) async {
+    final picked = await showKeyBindingDialog(
+      context,
+      title: title,
+      current: current,
+    );
+    if (picked == null || picked == current) return;
+    await _save(ref, onSelected(picked));
   }
 }

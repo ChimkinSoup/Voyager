@@ -7,6 +7,8 @@ class AppSettings {
     this.showQuotes = true,
     this.journalHotkey = defaultJournalHotkey,
     this.todoHotkey = defaultTodoHotkey,
+    this.calendarNavigateLeftKey = defaultCalendarNavigateLeftKey,
+    this.calendarNavigateRightKey = defaultCalendarNavigateRightKey,
     this.rankingColorStart = 0xFF4CAF50,
     this.rankingColorEnd = 0xFFF44336,
     this.timelineModeYearZero = true,
@@ -45,6 +47,8 @@ class AppSettings {
   final bool showQuotes;
   final String journalHotkey;
   final String todoHotkey;
+  final String calendarNavigateLeftKey;
+  final String calendarNavigateRightKey;
   final int rankingColorStart;
   final int rankingColorEnd;
   final bool timelineModeYearZero;
@@ -85,6 +89,8 @@ class AppSettings {
     bool? showQuotes,
     String? journalHotkey,
     String? todoHotkey,
+    String? calendarNavigateLeftKey,
+    String? calendarNavigateRightKey,
     bool? hideCompletedTasks,
     String? deviceId,
     String? lastViewedJournalId,
@@ -129,6 +135,10 @@ class AppSettings {
       showQuotes: showQuotes ?? this.showQuotes,
       journalHotkey: journalHotkey ?? this.journalHotkey,
       todoHotkey: todoHotkey ?? this.todoHotkey,
+      calendarNavigateLeftKey:
+          calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
+      calendarNavigateRightKey:
+          calendarNavigateRightKey ?? this.calendarNavigateRightKey,
       rankingColorStart: rankingColorStart,
       rankingColorEnd: rankingColorEnd,
       timelineModeYearZero: timelineModeYearZero,

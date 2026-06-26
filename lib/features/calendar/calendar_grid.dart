@@ -11,8 +11,10 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart';
 export 'calendar_day_grid.dart'
     show
         CalendarDayCell,
+        CalendarDayEventDots,
         CalendarDayIndicator,
         CalendarDayNumber,
+        MorphDayEventStack,
         MorphWeekdayHeader,
         MonthDayCellStyle,
         MonthDayGrid,

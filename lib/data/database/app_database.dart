@@ -174,6 +174,10 @@ class SettingsTable extends Table {
       text().withDefault(const Constant(defaultJournalHotkey))();
   TextColumn get todoHotkey =>
       text().withDefault(const Constant(defaultTodoHotkey))();
+  TextColumn get calendarNavigateLeftKey =>
+      text().withDefault(const Constant(defaultCalendarNavigateLeftKey))();
+  TextColumn get calendarNavigateRightKey =>
+      text().withDefault(const Constant(defaultCalendarNavigateRightKey))();
   IntColumn get rankingColorStart =>
       integer().withDefault(const Constant(0xFF4CAF50))();
   IntColumn get rankingColorEnd =>
@@ -250,7 +254,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -411,6 +415,16 @@ class AppDatabase extends _$AppDatabase {
         } on Exception catch (_) {
           // Column already exists — safe to proceed.
         }
+      }
+      if (from < 21) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.calendarNavigateLeftKey,
+        );
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.calendarNavigateRightKey,
+        );
       }
     },
   );

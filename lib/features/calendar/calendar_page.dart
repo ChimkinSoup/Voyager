@@ -9,8 +9,10 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
+import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/event_editor_dialog.dart';
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
@@ -81,7 +83,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarDayIndicator>? _weekMorphIndicators;
 
   static const _sidebarWidth = 350.0;
-  static const _zoomDuration = Duration(milliseconds: 600);
+  static const _zoomDuration = Duration(milliseconds: 6000);
   static const _weekMorphDuration = Duration(milliseconds: 600);
   static const _chainedMorphDuration = Duration(milliseconds: 400);
 
@@ -326,6 +328,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             focused: DateTime(morphMonth.year, 1, 1),
             hiddenMonth: morphMonth,
           ),
+          events: events,
         ),
       ),
     );
@@ -1437,6 +1440,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           focused: DateTime(morphMonth.year, 1, 1),
           hiddenMonth: morphMonth,
         ),
+        events: activeEvents,
       );
 
       if (!_morphReverse) {
@@ -1505,8 +1509,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(calendarEventsProvider);
-    final weekStartsMonday =
-        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
+    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final weekStartsMonday = settings.weekStartsOnMonday;
     final showInstantViewSwitch = ref
         .watch(devSettingsProvider)
         .showCalendarInstantViewSwitch;
@@ -1526,109 +1530,114 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       indicators = _buildCalendarIndicators(calendarTrackers, analytics);
     }
 
-    return Stack(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  _buildViewModeSelector(weekStartsMonday),
-                  const Spacer(),
-                  if (_isWeekMorphing)
-                    _buildMorphFocusHeader(context, weekStartsMonday)
-                  else if (_mode != CalendarViewMode.month)
-                    _buildFocusHeader(context, weekStartsMonday),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: _syncGoogle,
-                    child: const Text('Sync Google'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () => _openEditor(day: _focused),
-                    child: const Text('Add event'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: eventsAsync.when(
-                  data: (events) {
-                    final calendarEvents =
-                        _isWeekMorphing && _weekMorphEvents != null
-                        ? _weekMorphEvents!
-                        : _isZooming && _morphEvents != null
-                        ? _morphEvents!
-                        : events;
-                    if (!_isZooming && !_isWeekMorphing) {
-                      _latestEvents = events;
-                      _latestIndicators = indicators;
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: _sidebarWidth,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const Spacer(),
-                              if (showInstantViewSwitch) ...[
-                                OutlinedButton(
-                                  onPressed: _instantSwitchToMonthView,
-                                  child: const Text('Month'),
-                                ),
-                                const SizedBox(height: 4),
-                                OutlinedButton(
-                                  onPressed: _instantSwitchToYearView,
-                                  child: const Text('Year'),
-                                ),
+    return CalendarKeyboardShortcuts(
+      navigateLeftKey: settings.calendarNavigateLeftKey,
+      navigateRightKey: settings.calendarNavigateRightKey,
+      onNavigate: (delta) => _shiftFocus(delta, weekStartsMonday: weekStartsMonday),
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    _buildViewModeSelector(weekStartsMonday),
+                    const Spacer(),
+                    if (_isWeekMorphing)
+                      _buildMorphFocusHeader(context, weekStartsMonday)
+                    else if (_mode != CalendarViewMode.month)
+                      _buildFocusHeader(context, weekStartsMonday),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: _syncGoogle,
+                      child: const Text('Sync Google'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => _openEditor(day: _focused),
+                      child: const Text('Add event'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: eventsAsync.when(
+                    data: (events) {
+                      final calendarEvents =
+                          _isWeekMorphing && _weekMorphEvents != null
+                          ? _weekMorphEvents!
+                          : _isZooming && _morphEvents != null
+                          ? _morphEvents!
+                          : events;
+                      if (!_isZooming && !_isWeekMorphing) {
+                        _latestEvents = events;
+                        _latestIndicators = indicators;
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: _sidebarWidth,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Spacer(),
+                                if (showInstantViewSwitch) ...[
+                                  OutlinedButton(
+                                    onPressed: _instantSwitchToMonthView,
+                                    child: const Text('Month'),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  OutlinedButton(
+                                    onPressed: _instantSwitchToYearView,
+                                    child: const Text('Year'),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              _refreshLayoutCache(constraints.biggest);
-                              return KeyedSubtree(
-                                key: _calendarAreaKey,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    _buildMainCalendar(
-                                      events: calendarEvents,
-                                      indicators: indicators,
-                                      weekStartsMonday: weekStartsMonday,
-                                    ),
-                                    if (_reverseMorphWarmupActive)
-                                      _buildReverseMorphGpuWarmupLayer(
-                                        weekStartsMonday: weekStartsMonday,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                _refreshLayoutCache(constraints.biggest);
+                                return KeyedSubtree(
+                                  key: _calendarAreaKey,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      _buildMainCalendar(
                                         events: calendarEvents,
                                         indicators: indicators,
+                                        weekStartsMonday: weekStartsMonday,
                                       ),
-                                  ],
-                                ),
-                              );
-                            },
+                                      if (_reverseMorphWarmupActive)
+                                        _buildReverseMorphGpuWarmupLayer(
+                                          weekStartsMonday: weekStartsMonday,
+                                          events: calendarEvents,
+                                          indicators: indicators,
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  },
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text('$e')),
+                        ],
+                      );
+                    },
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('$e')),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1989,6 +1998,7 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
                 onMonthTap: (_) {},
                 hiddenMonth: _morphReverse ? morphMonth : null,
               ),
+              events: const [],
             ),
           ),
         ),
@@ -2009,6 +2019,7 @@ class _MorphProgress extends InheritedWidget {
   const _MorphProgress({
     required this.t,
     required this.styleT,
+    required this.morphReverse,
     required this.dividerColor,
     required this.adjacentColor,
     required super.child,
@@ -2016,6 +2027,7 @@ class _MorphProgress extends InheritedWidget {
 
   final double t;
   final double styleT;
+  final bool morphReverse;
 
   /// Pre-computed once per frame so the 42 [_MorphCell]s don't each call
   /// [Theme.of] / allocate a new [Color] on every animation tick.
@@ -2027,7 +2039,7 @@ class _MorphProgress extends InheritedWidget {
 
   @override
   bool updateShouldNotify(_MorphProgress old) =>
-      old.t != t || old.styleT != styleT;
+      old.t != t || old.styleT != styleT || old.morphReverse != morphReverse;
 }
 
 /// Bifurcated morph stack — isolated from parent rebuilds during the animation.
@@ -2049,6 +2061,7 @@ class _MorphAnimationLayer extends StatefulWidget {
     required this.yearMonthNameStyle,
     required this.monthTitleStyle,
     required this.yearGrid,
+    required this.events,
   });
 
   final AnimationController controller;
@@ -2066,6 +2079,7 @@ class _MorphAnimationLayer extends StatefulWidget {
   final TextStyle yearMonthNameStyle;
   final TextStyle monthTitleStyle;
   final Widget yearGrid;
+  final List<CalendarEvent> events;
 
   @override
   State<_MorphAnimationLayer> createState() => _MorphAnimationLayerState();
@@ -2165,6 +2179,9 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             key: ValueKey(widget.dates[i]),
             date: widget.dates[i],
             month: widget.morphMonth,
+            events: widget.events
+                .where((e) => calendarSameDay(e.start, widget.dates[i]))
+                .toList(),
           ),
         ),
     ];
@@ -2206,6 +2223,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             return _MorphProgress(
               t: t,
               styleT: styleT,
+              morphReverse: widget.morphReverse,
               dividerColor: Theme.of(context).dividerColor,
               adjacentColor: calendarAdjacentMonthColor(context),
               child: Stack(
@@ -2303,10 +2321,16 @@ class _MorphLayoutDelegate extends MultiChildLayoutDelegate {
 /// Visual properties use [styleT] from [_MorphProgress] so month→year reverse
 /// starts at full-month styling and ends at compact year styling.
 class _MorphCell extends StatelessWidget {
-  const _MorphCell({super.key, required this.date, required this.month});
+  const _MorphCell({
+    super.key,
+    required this.date,
+    required this.month,
+    required this.events,
+  });
 
   final DateTime date;
   final DateTime month;
+  final List<CalendarEvent> events;
 
   // Compact year-tile font size → full month-view font size.
   static const _compactFontSize = 7.0;
@@ -2331,7 +2355,6 @@ class _MorphCell extends StatelessWidget {
         _compactCellMargin + (_fullCellMargin - _compactCellMargin) * styleT;
 
     // Compact year tiles centre the day number; full month cells top-align it.
-    // Both content and scale share the same alignment interpolation.
     final cellAlignment = Alignment.lerp(
       Alignment.center,
       Alignment.topCenter,
@@ -2372,21 +2395,98 @@ class _MorphCell extends StatelessWidget {
             _fullCellPadding,
             styleT,
           )!,
-          child: Align(
-            alignment: cellAlignment,
-            child: Transform.scale(
-              scale: textScale,
-              alignment: cellAlignment,
-              child: SizedBox.square(
-                dimension: _diameter,
-                child: CalendarDayNumber(
-                  date: date,
-                  month: month,
-                  fontSize: _fullFontSize,
-                  mutedWhenAdjacent: true,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final dayLayoutSize =
+                  (_diameter * textScale).clamp(0.0, constraints.maxHeight);
+              final showEvents =
+                  events.isNotEmpty && (inMonth || styleT > 0);
+              final yearDotsSettled = progress.morphReverse &&
+                  (events.isEmpty
+                      ? styleT < 0.02
+                      : MorphDayEventStack.reverseDotMoveT(
+                          count: events.length.clamp(
+                            0,
+                            MorphDayEventStack.maxMonthEvents,
+                          ),
+                          styleT: styleT,
+                        ) >=
+                          1.0);
+              final layoutDayLayoutSize = progress.morphReverse
+                  ? (_diameter *
+                            (_startScale +
+                                (1.0 - _startScale) *
+                                    MorphDayEventStack.shrinkAnchorStyleT(
+                                      events.length,
+                                    )))
+                        .clamp(0.0, constraints.maxHeight)
+                  : null;
+
+              if (yearDotsSettled) {
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: CalendarDayNumber(
+                        date: date,
+                        month: month,
+                        fontSize: MonthDayCellStyle.compact.fontSize,
+                        mutedWhenAdjacent: !inMonth,
+                      ),
+                    ),
+                    if (inMonth && events.isNotEmpty) ...[
+                      const SizedBox(height: 1),
+                      CalendarDayEventDots(
+                        events: events,
+                        dotSize: MonthDayCellStyle.compact.eventDotSize,
+                        maxDots: MonthDayCellStyle.compact.maxEventLines,
+                      ),
+                    ],
+                  ],
+                );
+              }
+
+              return ClipRect(
+                child: Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    Align(
+                      alignment: cellAlignment,
+                      child: SizedBox(
+                        width: dayLayoutSize,
+                        height: dayLayoutSize,
+                        child: FittedBox(
+                          child: SizedBox.square(
+                            dimension: _diameter,
+                            child: CalendarDayNumber(
+                              date: date,
+                              month: month,
+                              fontSize: _fullFontSize,
+                              mutedWhenAdjacent: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (showEvents)
+                      Positioned.fill(
+                        child: MorphDayEventStack(
+                          events: events,
+                          styleT: styleT,
+                          inMonth: inMonth,
+                          maxWidth: constraints.maxWidth,
+                          cellHeight: constraints.maxHeight,
+                          dayLayoutSize: dayLayoutSize,
+                          layoutDayLayoutSize: layoutDayLayoutSize,
+                          morphReverse: progress.morphReverse,
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
