@@ -86,6 +86,7 @@ class MonthDayCellStyle {
     required this.maxEventLines,
     required this.dotSize,
     required this.eventFontSize,
+    this.eventDotSize = 2.5,
     this.borderOpacity = 1,
   });
 
@@ -96,6 +97,7 @@ class MonthDayCellStyle {
   final int maxEventLines;
   final double dotSize;
   final double eventFontSize;
+  final double eventDotSize;
   final double borderOpacity;
 
   static const compact = MonthDayCellStyle(
@@ -103,9 +105,10 @@ class MonthDayCellStyle {
     borderRadius: 4,
     cellPadding: EdgeInsets.all(1),
     cellMargin: EdgeInsets.all(0.5),
-    maxEventLines: 1,
+    maxEventLines: 3,
     dotSize: 3.5,
     eventFontSize: 5.5,
+    eventDotSize: 2,
     borderOpacity: 0,
   );
 
@@ -114,13 +117,13 @@ class MonthDayCellStyle {
     borderRadius: 10,
     cellPadding: EdgeInsets.fromLTRB(3, 5, 3, 3),
     cellMargin: EdgeInsets.all(1),
-    maxEventLines: 2,
+    maxEventLines: 6,
     dotSize: 7,
     eventFontSize: 9,
   );
 
   /// Year mini-month tiles use adaptive shrink-to-fit; month/week fill their slot.
-  bool get isCompactLayout => maxEventLines == 1 && eventFontSize < 8;
+  bool get isCompactLayout => fontSize <= 9 && eventFontSize < 8;
 }
 
 /// Bordered day square shared by year mini-months and the full month grid.
@@ -199,7 +202,7 @@ class CalendarDayCell extends StatelessWidget {
               style.isCompactLayout || constraints.maxHeight < 28;
           return useCompact
               ? _buildCompactCellContent(inMonth)
-              : _buildFullCellContent(inMonth);
+              : _buildFullCellContent(inMonth, constraints.maxHeight);
         },
       ),
     );
@@ -212,7 +215,28 @@ class CalendarDayCell extends StatelessWidget {
     );
   }
 
-  Widget _buildFullCellContent(bool inMonth) {
+  int _visibleEventCount(double cellHeight) {
+    if (events.isEmpty || style.maxEventLines <= 0) return 0;
+
+    final dayNumberHeight = style.fontSize + 8;
+    var used = dayNumberHeight;
+
+    if (indicators.isNotEmpty) {
+      used += 2 + style.dotSize;
+    }
+
+    const eventGap = 2.0;
+    final barStride = CalendarDayEventBar.heightFor(style.eventFontSize) + 1;
+    final available = cellHeight - used - eventGap;
+    if (available < barStride) return 0;
+
+    final fit = (available / barStride).floor();
+    return fit.clamp(0, style.maxEventLines).clamp(0, events.length);
+  }
+
+  Widget _buildFullCellContent(bool inMonth, double cellHeight) {
+    final visibleEvents = _visibleEventCount(cellHeight);
+
     return ClipRect(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,59 +250,53 @@ class CalendarDayCell extends StatelessWidget {
             isSelected: isSelected,
           ),
           if (indicators.isNotEmpty) ...[
-            SizedBox(height: style.maxEventLines > 1 ? 2 : 1),
+            const SizedBox(height: 2),
             CalendarDayIndicatorDots(
               indicators: indicators,
               dotSize: style.dotSize,
             ),
           ],
-          if (events.isNotEmpty && style.maxEventLines > 0)
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final event in events.take(style.maxEventLines))
-                    Flexible(
-                      child: Container(
-                        margin: const EdgeInsets.only(top: 1),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: style.maxEventLines > 1 ? 2 : 1,
-                        ),
-                        color: Color(event.colorValue).withValues(alpha: 0.45),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            event.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppFonts.style(
-                              fontSize: style.eventFontSize,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+          if (visibleEvents > 0) ...[
+            const SizedBox(height: 2),
+            for (final event in events.take(visibleEvents))
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: CalendarDayEventBar(
+                  event: event,
+                  fontSize: style.eventFontSize,
+                ),
               ),
-            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildCompactCellContent(bool inMonth) {
-    return Center(
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: CalendarDayNumber(
-          date: date,
-          month: month,
-          fontSize: style.fontSize,
-          mutedWhenAdjacent: !inMonth,
-          adjacentTextT: adjacentTextT,
-          isSelected: isSelected,
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: CalendarDayNumber(
+            date: date,
+            month: month,
+            fontSize: style.fontSize,
+            mutedWhenAdjacent: !inMonth,
+            adjacentTextT: adjacentTextT,
+            isSelected: isSelected,
+          ),
         ),
-      ),
+        if (events.isNotEmpty) ...[
+          const SizedBox(height: 1),
+          CalendarDayEventDots(
+            events: events,
+            dotSize: style.eventDotSize,
+            maxDots: style.maxEventLines,
+          ),
+        ],
+      ],
     );
   }
 }
@@ -310,7 +328,8 @@ class CalendarDayNumber extends StatelessWidget {
     final muted = mutedWhenAdjacent && date.month != month.month;
     final mutedColor = calendarAdjacentMonthColor(context);
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    final diameter = fontSize + (fontSize <= 9 ? 3 : 8);
+    final isCompact = fontSize <= 9;
+    final diameter = fontSize + (isCompact ? 5 : 8);
     final showSelection = isSelected && !isToday && !muted;
 
     Color textColor;
@@ -324,35 +343,110 @@ class CalendarDayNumber extends StatelessWidget {
       textColor = onSurface;
     }
 
-    return Center(
-      child: Container(
-        width: diameter,
-        height: diameter,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isToday
-              ? accent
-              : showSelection
-              ? accent.withValues(alpha: 0.2)
-              : null,
-          shape: BoxShape.circle,
-          border: showSelection ? Border.all(color: accent) : null,
+    final dayNumber = Container(
+      width: diameter,
+      height: diameter,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isToday
+            ? accent
+            : showSelection
+            ? accent.withValues(alpha: 0.2)
+            : null,
+        shape: BoxShape.circle,
+        border: showSelection ? Border.all(color: accent) : null,
+      ),
+      child: Text(
+        '${date.day}',
+        textAlign: TextAlign.center,
+        textHeightBehavior: const TextHeightBehavior(
+          applyHeightToFirstAscent: false,
+          applyHeightToLastDescent: false,
         ),
-        child: Text(
-          '${date.day}',
-          textAlign: TextAlign.center,
-          textHeightBehavior: const TextHeightBehavior(
-            applyHeightToFirstAscent: false,
-            applyHeightToLastDescent: false,
-          ),
-          style: AppFonts.style(
-            fontSize: fontSize,
-            fontWeight: isToday ? FontWeight.w600 : FontWeight.w500,
-            height: 1,
-            color: textColor,
-          ),
+        style: AppFonts.style(
+          fontSize: fontSize,
+          fontWeight: isToday ? FontWeight.w600 : FontWeight.w500,
+          height: 1,
+          color: textColor,
         ),
       ),
+    );
+
+    return Center(
+      child: isCompact && isToday
+          ? Transform.translate(
+              offset: const Offset(0, -0.5),
+              child: dayNumber,
+            )
+          : dayNumber,
+    );
+  }
+}
+
+/// Single-line event pill for month-view day cells.
+class CalendarDayEventBar extends StatelessWidget {
+  const CalendarDayEventBar({
+    super.key,
+    required this.event,
+    required this.fontSize,
+  });
+
+  final CalendarEvent event;
+  final double fontSize;
+
+  static double heightFor(double fontSize) => fontSize + 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = heightFor(fontSize);
+    return Container(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: Color(event.colorValue).withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(height / 2),
+      ),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        event.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppFonts.style(fontSize: fontSize, height: 1),
+      ),
+    );
+  }
+}
+
+/// Tiny event markers for year-view day cells.
+class CalendarDayEventDots extends StatelessWidget {
+  const CalendarDayEventDots({
+    super.key,
+    required this.events,
+    required this.dotSize,
+    this.maxDots = 3,
+  });
+
+  final List<CalendarEvent> events;
+  final double dotSize;
+  final int maxDots;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (final event in events.take(maxDots))
+          Container(
+            width: dotSize,
+            height: dotSize,
+            margin: const EdgeInsets.symmetric(horizontal: 0.5),
+            decoration: BoxDecoration(
+              color: Color(event.colorValue),
+              shape: BoxShape.circle,
+            ),
+          ),
+      ],
     );
   }
 }

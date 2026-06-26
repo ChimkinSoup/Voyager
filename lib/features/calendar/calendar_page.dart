@@ -2312,7 +2312,7 @@ class _MorphCell extends StatelessWidget {
   static const _compactFontSize = 7.0;
   static const _fullFontSize = 15.0;
   static const _startScale = _compactFontSize / _fullFontSize;
-  // Matches CalendarDayNumber's diameter formula: fontSize + (fontSize <= 9 ? 3 : 8).
+  // Matches CalendarDayNumber's diameter formula: fontSize + (fontSize <= 9 ? 5 : 8).
   static const _diameter = _fullFontSize + 8.0;
   // Cell margin (creates the gap between adjacent cells).
   static const _compactCellMargin = 0.5; // compact.cellMargin.top
