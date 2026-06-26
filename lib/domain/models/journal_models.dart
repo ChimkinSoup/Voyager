@@ -113,6 +113,19 @@ class TagColor {
   final int colorValue;
 }
 
+int compareJournalEntriesNewestFirst(JournalEntry a, JournalEntry b) {
+  final byDate = b.entryDate.compareTo(a.entryDate);
+  if (byDate != 0) return byDate;
+  final byCreated = b.createdAt.compareTo(a.createdAt);
+  if (byCreated != 0) return byCreated;
+  return b.id.compareTo(a.id);
+}
+
+List<JournalEntry> sortJournalEntriesNewestFirst(Iterable<JournalEntry> entries) {
+  final sorted = entries.toList()..sort(compareJournalEntriesNewestFirst);
+  return sorted;
+}
+
 String firstSentencePreview(String body) {
   final trimmed = body.trim();
   if (trimmed.isEmpty) return '';

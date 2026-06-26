@@ -300,7 +300,7 @@ void main() {
     debouncedEngine.dispose();
   });
 
-  test('saveLocalThenScheduleUpload serializes local saves', () async {
+  test('saveLocalThenScheduleUpload coalesces superseded local saves', () async {
     final writes = <String>[];
 
     unawaited(
@@ -317,6 +317,29 @@ void main() {
     await deviceA.saveLocalThenScheduleUpload(
       collection: FirestoreCollections.journalEntries,
       documentId: 'entry-1',
+      saveLocal: () async {
+        writes.add('second');
+      },
+      saveRemote: () async {},
+    );
+
+    expect(writes, ['second']);
+  });
+
+  test('saveLocalThenScheduleUpload runs local saves in order when not superseded', () async {
+    final writes = <String>[];
+
+    await deviceA.saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.journalEntries,
+      documentId: 'entry-2',
+      saveLocal: () async {
+        writes.add('first');
+      },
+      saveRemote: () async {},
+    );
+    await deviceA.saveLocalThenScheduleUpload(
+      collection: FirestoreCollections.journalEntries,
+      documentId: 'entry-2',
       saveLocal: () async {
         writes.add('second');
       },

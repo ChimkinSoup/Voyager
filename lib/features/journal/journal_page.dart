@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -39,17 +40,23 @@ class JournalPage extends ConsumerStatefulWidget {
 
 class _JournalPageState extends ConsumerState<JournalPage> {
   static const _allJournals = '__all__';
+  static const _localSaveDebounce = Duration(milliseconds: 400);
 
   String _journalFilter = _allJournals;
   String? _lastViewedJournalId;
   Journal? _pendingJournal;
+  final _pendingEntries = <String, JournalEntry>{};
+  final _pendingEntryIds = <String>[];
+  final _entryListScrollController = ScrollController();
   String? _selectedEntryId;
   JournalEntry? _selectedEntry;
   final _titleController = TextEditingController();
   final _titleFocusNode = FocusNode();
   final _bodyFocusNode = FocusNode();
+  final _listTitlePreview = ValueNotifier<String>('');
+  final _listBodyPreview = ValueNotifier<String>('');
   final _entryBodyDrafts = <String, String>{};
-  Timer? _metadataListRefreshTimer;
+  Timer? _metadataSaveTimer;
   var _metadataDirty = false;
   var _suppressAutoSelect = false;
   int? _mood;
@@ -57,6 +64,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   RemoteSyncService? _remoteSync;
   double? _entryListWidth;
   double? _entryListDragStartWidth;
+  DateTime? _lastEntryCreatedAt;
 
   @override
   void initState() {
@@ -71,7 +79,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   @override
   void dispose() {
-    _metadataListRefreshTimer?.cancel();
+    _metadataSaveTimer?.cancel();
+    _listTitlePreview.dispose();
+    _listBodyPreview.dispose();
     final entryId = _selectedEntryId;
     final remoteSync = _remoteSync;
     if (entryId != null && remoteSync != null) {
@@ -82,6 +92,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _titleController.dispose();
     _titleFocusNode.dispose();
     _bodyFocusNode.dispose();
+    _entryListScrollController.dispose();
     super.dispose();
   }
 
@@ -235,37 +246,85 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     });
   }
 
+  DateTime _nextEntryTimestamp() {
+    final now = utcNow();
+    final last = _lastEntryCreatedAt;
+    final next = last != null && !now.isAfter(last)
+        ? last.add(const Duration(milliseconds: 1))
+        : now;
+    _lastEntryCreatedAt = next;
+    return next;
+  }
+
+  void _registerPendingEntry(JournalEntry entry) {
+    _pendingEntries[entry.id] = entry;
+    _pendingEntryIds.remove(entry.id);
+    _pendingEntryIds.insert(0, entry.id);
+  }
+
+  void _removePendingEntry(String id) {
+    _pendingEntries.remove(id);
+    _pendingEntryIds.remove(id);
+  }
+
+  void _writeEntryListScrollStorage(double offset) {
+    if (!mounted) return;
+    PageStorage.of(context).writeState(
+      context,
+      offset,
+      identifier: ShellPageStorageKeys.journalEntryList,
+    );
+  }
+
+  List<JournalEntry> _buildDisplayEntries(List<JournalEntry> entries) {
+    final persisted = sortJournalEntriesNewestFirst(
+      entries.where((entry) => !_pendingEntries.containsKey(entry.id)),
+    );
+    final pending = [
+      for (final id in _pendingEntryIds)
+        if (_pendingEntries.containsKey(id)) _pendingEntries[id]!,
+    ];
+    return [...pending, ...persisted];
+  }
+
+  void _scrollEntryListToTop() {
+    if (!_entryListScrollController.hasClients) return;
+    _entryListScrollController.jumpTo(0);
+  }
+
   Future<void> _createEntry() async {
     if (!mounted) return;
-    final journalRepo = ref.read(journalRepositoryProvider);
-    final settingsRepo = ref.read(settingsRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    final weatherService = ref.read(weatherServiceProvider);
-    final quotesFuture = ref.read(quotesLoadedProvider.future);
-    final quoteBank = ref.read(quoteBankProvider);
 
+    final journals = ref.read(journalsProvider).value;
+    if (journals == null) {
+      await _createEntryWhenReady();
+      return;
+    }
+    _createEntryOptimistic(journals);
+  }
+
+  Future<void> _createEntryWhenReady() async {
     await _ensureDefaultJournal();
     if (!mounted) return;
-
-    final journals = await journalRepo.listJournals();
+    final journals = await ref.read(journalRepositoryProvider).listJournals();
     if (!mounted || journals.isEmpty) return;
+    _createEntryOptimistic(journals);
+  }
 
-    final journalId = _journalIdForNewEntry(journals);
-    final now = utcNow();
-    final settings = await settingsRepo.getSettings();
+  void _createEntryOptimistic(List<Journal> journals) {
     if (!mounted) return;
 
-    Quote? assignedQuote;
-    if (settings.showQuotes) {
-      await quotesFuture;
-      if (!mounted) return;
-      assignedQuote = quoteBank.nextQuote();
+    final settings =
+        ref.read(settingsProvider).value ?? const AppSettings();
+    final weatherService = ref.read(weatherServiceProvider);
+    final weather = weatherService.readCachedSnapshot(settings);
+    final journalId = journals.isEmpty
+        ? legacyJournalId
+        : _journalIdForNewEntry(journals);
+    if (journals.isEmpty) {
+      unawaited(_ensureDefaultJournal());
     }
-
-    final weather =
-        await weatherService.refreshIfNeeded() ??
-        weatherService.readCachedSnapshot(settings);
-    if (!mounted) return;
+    final now = _nextEntryTimestamp();
 
     final entry = JournalEntry(
       id: newId(),
@@ -274,26 +333,68 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       body: '',
       entryDate: now,
       timestamp: now,
-      quoteId: assignedQuote?.id,
-      customQuote: assignedQuote?.text,
       weatherIcon: weather?.icon,
       createdAt: now,
       updatedAt: now,
     );
+
+    _registerPendingEntry(entry);
     _suppressAutoSelect = true;
+    _writeEntryListScrollStorage(0);
     _loadEntry(entry);
-    _invalidateJournalEntriesIfMounted();
-    unawaited(() async {
-      await journalRepo.upsertEntry(entry);
-      remoteSync.pushJournalEntryNow(entry);
-    }());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _writeEntryListScrollStorage(0);
+      _scrollEntryListToTop();
+      _bodyFocusNode.requestFocus();
+    });
+
+    unawaited(_finalizeNewEntry(entry, settings));
+  }
+
+  Future<void> _finalizeNewEntry(
+    JournalEntry entry,
+    AppSettings settings,
+  ) async {
+    final journalRepo = ref.read(journalRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final weatherService = ref.read(weatherServiceProvider);
+
+    Quote? assignedQuote;
+    if (settings.showQuotes) {
+      await ref.read(quotesLoadedProvider.future);
+      if (!mounted) return;
+      assignedQuote = ref.read(quoteBankProvider).nextQuote();
+    }
+
+    final weather =
+        await weatherService.refreshIfNeeded() ??
+        weatherService.readCachedSnapshot(settings);
+    if (!mounted) return;
+
+    final finalized = entry.copyWith(
+      quoteId: assignedQuote?.id,
+      customQuote: assignedQuote?.text,
+      weatherIcon: weather?.icon ?? entry.weatherIcon,
+    );
+
+    await journalRepo.upsertEntry(finalized);
+    remoteSync.pushJournalEntryNow(finalized);
+    if (!mounted) return;
+
+    if (_pendingEntries.containsKey(finalized.id)) {
+      _pendingEntries[finalized.id] = finalized;
+    }
+    if (_selectedEntryId == finalized.id) {
+      setState(() => _selectedEntry = finalized);
+    }
   }
 
   void _loadEntry(JournalEntry entry) {
     if (_selectedEntryId != null && _selectedEntryId != entry.id) {
       final previousEntryId = _selectedEntryId!;
       final remoteSync = ref.read(remoteSyncServiceProvider);
-      _metadataListRefreshTimer?.cancel();
+      _metadataSaveTimer?.cancel();
       if (_metadataDirty) {
         unawaited(
           _saveMetadata(refreshList: true).then(
@@ -313,6 +414,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       }
     }
     final displayEntry = _entryWithDraftBody(entry);
+    final draftBody = _entryBodyDrafts[displayEntry.id] ?? displayEntry.body;
+    _listTitlePreview.value = displayEntry.title;
+    _listBodyPreview.value = draftBody;
     setState(() {
       _selectedEntryId = displayEntry.id;
       _selectedEntry = displayEntry;
@@ -327,7 +431,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   void _updateBodyDraft(String entryId, String body) {
     _entryBodyDrafts[entryId] = body;
     if (entryId == _selectedEntryId) {
-      setState(() {});
+      _listBodyPreview.value = body;
     }
   }
 
@@ -356,10 +460,25 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   Future<void> _saveMetadata({bool refreshList = false}) async {
     final entryId = _selectedEntryId;
-    if (entryId == null) return;
+    final entry = _selectedEntry;
+    if (entryId == null || entry == null || entry.id != entryId) return;
+
     final title = _titleController.text;
     final mood = _mood;
     final weatherIcon = _weatherIcon;
+
+    if (entry.title == title &&
+        entry.mood == mood &&
+        entry.weatherIcon == weatherIcon) {
+      _metadataDirty = false;
+      return;
+    }
+
+    final updated = entry.copyWith(
+      title: title,
+      mood: mood,
+      weatherIcon: weatherIcon,
+    );
 
     final repo = ref.read(journalRepositoryProvider);
     await ref
@@ -367,23 +486,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         .saveJournalEntryThenScheduleUpload(
           entryId: entryId,
           saveLocal: () async {
-            final existing = await repo.getEntry(entryId);
-            if (existing == null) return;
-            if (existing.title == title &&
-                existing.mood == mood &&
-                existing.weatherIcon == weatherIcon) {
-              if (_selectedEntryId == entryId) {
-                _metadataDirty = false;
-              }
-              return;
-            }
-            final updated = existing.copyWith(
-              title: title,
-              mood: mood,
-              weatherIcon: weatherIcon,
-            );
             await repo.upsertEntry(updated);
-            if (_selectedEntryId == updated.id) {
+            if (_selectedEntryId == entryId && mounted) {
               _selectedEntry = updated;
               _metadataDirty = false;
             }
@@ -392,19 +496,30 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (refreshList) _invalidateJournalEntriesIfMounted();
   }
 
-  void _scheduleMetadataListRefresh() {
-    _metadataListRefreshTimer?.cancel();
-    _metadataListRefreshTimer = Timer(const Duration(milliseconds: 500), () {
-      _invalidateJournalEntriesIfMounted();
+  void _scheduleMetadataSave() {
+    _metadataSaveTimer?.cancel();
+    _metadataSaveTimer = Timer(_localSaveDebounce, () {
+      unawaited(_saveMetadata());
     });
+  }
+
+  Future<void> _flushMetadataSave({bool refreshList = false}) {
+    _metadataSaveTimer?.cancel();
+    return _saveMetadata(refreshList: refreshList);
+  }
+
+  void _submitTitleAndFocusBody() {
+    _metadataDirty = true;
+    unawaited(_flushMetadataSave());
+    _bodyFocusNode.requestFocus();
   }
 
   Future<void> _changeEntryDate() async {
     final entry = _selectedEntry;
     if (entry == null) return;
 
-    _metadataListRefreshTimer?.cancel();
-    await _saveMetadata();
+    _metadataSaveTimer?.cancel();
+    await _flushMetadataSave();
     if (!mounted) return;
 
     final nextLocal = await showDateTimePickerDialog(
@@ -453,6 +568,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _titleController.clear();
       _journalFilter = _allJournals;
     });
+    _removePendingEntry(entry.id);
     _invalidateJournalEntriesIfMounted();
   }
 
@@ -566,16 +682,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final settings = ref.watch(settingsProvider).value;
 
     return journalsAsync.when(
+        skipLoadingOnReload: true,
         data: (journals) => entriesAsync.when(
+        skipLoadingOnReload: true,
         data: (entries) {
           _reconcilePendingJournal(journals);
+          final displayEntries = _buildDisplayEntries(entries);
           final displayJournals = _pendingJournal != null &&
                   !journals.any((j) => j.id == _pendingJournal!.id)
               ? [...journals, _pendingJournal!]
               : journals;
           final filtered = _journalFilter == _allJournals
-              ? entries
-              : entries.where((e) => e.journalId == _journalFilter).toList();
+              ? displayEntries
+              : displayEntries
+                  .where((e) => e.journalId == _journalFilter)
+                  .toList();
           final accentJournal = _selectedEntry == null
               ? null
               : displayJournals.cast<Journal?>().firstWhere(
@@ -597,7 +718,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
               }
             });
           }
-          if (selectedVisible) {
+          if (selectedVisible &&
+              (_selectedEntryId == null ||
+                  !_pendingEntries.containsKey(_selectedEntryId))) {
             _suppressAutoSelect = false;
           }
 
@@ -673,83 +796,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                         Expanded(
                           child: KeepAliveScrollList(
                             storageKey: ShellPageStorageKeys.journalEntryList,
+                            controller: _entryListScrollController,
                             itemCount: filtered.length,
                             itemBuilder: (_, i) {
                               final entry = filtered[i];
-                              final displayEntry = entry.id == _selectedEntryId
-                                  ? _entryWithDraftBody(
-                                      entry.copyWith(
-                                        title: _titleController.text,
-                                      ),
-                                    )
-                                  : _entryWithDraftBody(entry);
-                              final local = entry.entryDate.toLocal();
-                              final dateLabel = MaterialLocalizations.of(
-                                context,
-                              ).formatShortDate(local);
-                              final timeLabel = formatTime12Hour(local);
-                              final preview = firstSentencePreview(
-                                displayEntry.body,
-                              );
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: VoyagerSpacing.sm,
-                                  vertical: VoyagerSpacing.xxs,
-                                ),
-                                child: ListTile(
-                                  dense: true,
-                                  visualDensity: const VisualDensity(
-                                    vertical: VoyagerSpacing
-                                        .compactListVerticalDensity,
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: VoyagerSpacing.md,
-                                    vertical: VoyagerSpacing.xs,
-                                  ),
-                                  selected: entry.id == _selectedEntryId,
-                                  title: Text(
-                                    displayEntry.title.isEmpty
-                                        ? 'Untitled'
-                                        : displayEntry.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleSmall,
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      if (preview.isNotEmpty)
-                                        Text(
-                                          preview,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurface
-                                                    .withValues(alpha: 0.78),
-                                              ),
-                                        ),
-                                      Text(
-                                        '$dateLabel · $timeLabel',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurface
-                                                  .withValues(alpha: 0.65),
-                                            ),
-                                      ),
-                                    ],
-                                  ),
+                              final isSelected = entry.id == _selectedEntryId;
+                              return KeyedSubtree(
+                                key: ValueKey(entry.id),
+                                child: _JournalEntryListTile(
+                                  entry: entry,
+                                  isSelected: isSelected,
+                                  titlePreview: _listTitlePreview,
+                                  bodyPreview: _listBodyPreview,
                                   onTap: () => _loadEntry(entry),
                                 ),
                               );
@@ -788,28 +846,41 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               clipBehavior: Clip.none,
                               alignment: Alignment.centerRight,
                               children: [
-                                LabeledTextField(
-                                  label: 'Title',
-                                  showLabel: false,
-                                  controller: _titleController,
-                                  focusNode: _titleFocusNode,
-                                  textInputAction: TextInputAction.next,
-                                  contentPadding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    16,
-                                    56,
-                                    16,
+                                Focus(
+                                  onKeyEvent: (node, event) {
+                                    if (event is! KeyDownEvent) {
+                                      return KeyEventResult.ignored;
+                                    }
+                                    if (event.logicalKey ==
+                                            LogicalKeyboardKey.tab &&
+                                        !HardwareKeyboard
+                                            .instance
+                                            .isShiftPressed) {
+                                      _submitTitleAndFocusBody();
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: LabeledTextField(
+                                    label: 'Title',
+                                    showLabel: false,
+                                    controller: _titleController,
+                                    focusNode: _titleFocusNode,
+                                    textInputAction: TextInputAction.next,
+                                    contentPadding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      16,
+                                      56,
+                                      16,
+                                    ),
+                                    onChanged: (value) {
+                                      _metadataDirty = true;
+                                      _listTitlePreview.value = value;
+                                      _scheduleMetadataSave();
+                                    },
+                                    onSubmitted: (_) =>
+                                        _submitTitleAndFocusBody(),
                                   ),
-                                  onChanged: (_) {
-                                    _metadataDirty = true;
-                                    unawaited(_saveMetadata());
-                                    _scheduleMetadataListRefresh();
-                                  },
-                                  onSubmitted: (_) {
-                                    _metadataDirty = true;
-                                    unawaited(_saveMetadata(refreshList: true));
-                                    _bodyFocusNode.requestFocus();
-                                  },
                                 ),
                                 if (_selectedEntry != null)
                                   Positioned(
@@ -840,8 +911,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                         _mood = value;
                                         _metadataDirty = true;
                                       });
-                                      unawaited(_saveMetadata());
-                                      _scheduleMetadataListRefresh();
+                                      _scheduleMetadataSave();
                                     },
                                   ),
                                 ),
@@ -861,7 +931,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       _weatherIcon = entry.weatherIconValue;
                                       _metadataDirty = true;
                                     });
-                                    _saveMetadata(refreshList: true);
+                                    _scheduleMetadataSave();
                                   },
                                   itemBuilder: (context) => buildCatalogMenu(
                                     context,
@@ -911,6 +981,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               entry: _selectedEntry,
                               focusNode: _bodyFocusNode,
                               onDraftChanged: _updateBodyDraft,
+                              onEntryPersisted: (updated) =>
+                                  setState(() => _selectedEntry = updated),
                             ),
                           ),
                           if (settings?.showQuotes == true &&
@@ -942,11 +1014,13 @@ class _PlainJournalEditor extends ConsumerStatefulWidget {
     required this.entry,
     required this.focusNode,
     required this.onDraftChanged,
+    this.onEntryPersisted,
   });
 
   final JournalEntry? entry;
   final FocusNode focusNode;
   final void Function(String entryId, String body) onDraftChanged;
+  final ValueChanged<JournalEntry>? onEntryPersisted;
 
   @override
   ConsumerState<_PlainJournalEditor> createState() =>
@@ -993,8 +1067,11 @@ class _EntryQuote extends StatelessWidget {
 }
 
 class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
+  static const _localSaveDebounce = Duration(milliseconds: 400);
+
   late final TextEditingController _controller;
   Timer? _tagTimer;
+  Timer? _persistDraftTimer;
   var _tags = const <String>[];
   var _lastText = '';
   String? _lastPersistedEntryId;
@@ -1034,7 +1111,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     final oldEntry = oldWidget.entry;
     final remoteSync = ref.read(remoteSyncServiceProvider);
     unawaited(
-      _persistDraft(oldEntry, refreshList: true).then((_) async {
+      _flushPersistDraft(oldEntry, refreshList: true).then((_) async {
         if (oldEntry != null) {
           await remoteSync.flushDocument(
             FirestoreCollections.journalEntries,
@@ -1045,6 +1122,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     );
     _setEditingFlag(oldWidget.entry, false);
     _tagTimer?.cancel();
+    _persistDraftTimer?.cancel();
     _controller.text = widget.entry?.body ?? '';
     _lastText = _controller.text;
     _lastPersistedEntryId = widget.entry?.id;
@@ -1052,11 +1130,13 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _dirty = false;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
     _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _tagTimer?.cancel();
+    _persistDraftTimer?.cancel();
     final entry = widget.entry;
     final remoteSync = _remoteSync;
     if (entry != null && remoteSync != null) {
@@ -1067,7 +1147,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       );
     }
     unawaited(
-      _persistDraft(entry, refreshList: false).then((_) async {
+      _flushPersistDraft(entry, refreshList: false).then((_) async {
         if (entry != null && remoteSync != null) {
           await remoteSync.flushDocument(
             FirestoreCollections.journalEntries,
@@ -1109,34 +1189,48 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         plainBody == _lastPersistedText) {
       return;
     }
-    final tags = extractTags(plainBody);
 
     final repo = _journalRepo;
     final remoteSync = _remoteSync;
     if (repo == null || remoteSync == null) return;
+
     await remoteSync.saveJournalEntryThenScheduleUpload(
       entryId: entry.id,
       saveLocal: () async {
-        final existing = await repo.getEntry(entry.id);
-        if (existing == null) return;
-        final updated = existing.copyWith(
-          body: plainBody,
-          richBodyJson: null,
-          tags: tags,
-        );
+        final base = widget.entry;
+        if (base == null || base.id != entry.id) return;
+        final body = _controller.text.trimRight();
+        final tags = extractTags(body);
+        final updated = base.copyWith(body: body, tags: tags);
         await repo.upsertEntry(updated);
         _lastPersistedEntryId = entry.id;
-        _lastPersistedText = plainBody;
+        _lastPersistedText = body;
         if (mounted &&
             widget.entry?.id == entry.id &&
-            _controller.text.trimRight() == plainBody) {
+            _controller.text.trimRight() == body) {
           _dirty = false;
+          widget.onEntryPersisted?.call(updated);
         }
       },
     );
     if (refreshList && mounted) {
       ref.invalidate(journalEntriesProvider);
     }
+  }
+
+  void _schedulePersistDraft() {
+    _persistDraftTimer?.cancel();
+    _persistDraftTimer = Timer(_localSaveDebounce, () {
+      unawaited(_persistDraft(widget.entry, refreshList: false));
+    });
+  }
+
+  Future<void> _flushPersistDraft(
+    JournalEntry? entry, {
+    required bool refreshList,
+  }) {
+    _persistDraftTimer?.cancel();
+    return _persistDraft(entry, refreshList: refreshList);
   }
 
   Future<void> _persistTagColors(List<String> tags) async {
@@ -1161,7 +1255,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       widget.onDraftChanged(entryId, _controller.text);
     }
     _dirty = true;
-    unawaited(_persistDraft(widget.entry, refreshList: false));
+    _schedulePersistDraft();
 
     _tagTimer?.cancel();
     _tagTimer = Timer(const Duration(milliseconds: 250), () {
@@ -1274,6 +1368,107 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+}
+
+class _JournalEntryListTile extends StatelessWidget {
+  const _JournalEntryListTile({
+    required this.entry,
+    required this.isSelected,
+    required this.titlePreview,
+    required this.bodyPreview,
+    required this.onTap,
+  });
+
+  final JournalEntry entry;
+  final bool isSelected;
+  final ValueNotifier<String> titlePreview;
+  final ValueNotifier<String> bodyPreview;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final local = entry.entryDate.toLocal();
+    final dateLabel = MaterialLocalizations.of(context).formatShortDate(local);
+    final timeLabel = formatTime12Hour(local);
+    final titleStyle = Theme.of(context).textTheme.titleSmall;
+    final previewStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.78),
+    );
+    final dateStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: VoyagerSpacing.sm,
+        vertical: VoyagerSpacing.xxs,
+      ),
+      child: ListTile(
+        dense: true,
+        visualDensity: const VisualDensity(
+          vertical: VoyagerSpacing.compactListVerticalDensity,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: VoyagerSpacing.md,
+          vertical: VoyagerSpacing.xs,
+        ),
+        selected: isSelected,
+        title: isSelected
+            ? ValueListenableBuilder<String>(
+                valueListenable: titlePreview,
+                builder: (context, title, _) {
+                  return Text(
+                    title.isEmpty ? 'Untitled' : title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  );
+                },
+              )
+            : Text(
+                entry.title.isEmpty ? 'Untitled' : entry.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isSelected)
+              ValueListenableBuilder<String>(
+                valueListenable: bodyPreview,
+                builder: (context, body, _) {
+                  final preview = firstSentencePreview(body);
+                  if (preview.isEmpty) return const SizedBox.shrink();
+                  return Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: previewStyle,
+                  );
+                },
+              )
+            else ...[
+              Builder(
+                builder: (context) {
+                  final preview = firstSentencePreview(entry.body);
+                  if (preview.isEmpty) return const SizedBox.shrink();
+                  return Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: previewStyle,
+                  );
+                },
+              ),
+            ],
+            Text('$dateLabel · $timeLabel', style: dateStyle),
+          ],
+        ),
+        onTap: onTap,
+      ),
+    );
   }
 }
 

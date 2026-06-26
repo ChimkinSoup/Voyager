@@ -40,11 +40,13 @@ class KeepAliveScrollList extends StatefulWidget {
     required this.storageKey,
     required this.itemCount,
     required this.itemBuilder,
+    this.controller,
   });
 
   final PageStorageKey<String> storageKey;
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
+  final ScrollController? controller;
 
   @override
   State<KeepAliveScrollList> createState() => _KeepAliveScrollListState();
@@ -60,6 +62,7 @@ class _KeepAliveScrollListState extends State<KeepAliveScrollList>
     super.build(context);
     return ListView.builder(
       key: widget.storageKey,
+      controller: widget.controller,
       itemCount: widget.itemCount,
       itemBuilder: widget.itemBuilder,
     );

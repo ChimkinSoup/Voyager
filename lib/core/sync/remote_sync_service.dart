@@ -71,6 +71,9 @@ class RemoteSyncService {
           // reports async failures at call sites that await this future.
         })
         .then((_) async {
+          if (_localSaveGenerations[key] != generation) {
+            return;
+          }
           await saveLocal();
           if (_localSaveGenerations[key] == generation) {
             _scheduleRemoteUpload(key, saveRemote);
