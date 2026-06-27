@@ -4,6 +4,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -146,4 +147,41 @@ Future<bool> deleteTodoList(
   ref.invalidate(allTodoTasksProvider);
   ref.invalidate(todoListStatsProvider);
   return true;
+}
+
+Future<TodoListModel?> createTodoList(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final allLists = ref.read(todoListsProvider).valueOrNull ?? [];
+  final palette = ref.read(colorPaletteProvider);
+  final assigner = paletteFromItems(
+    allLists.map((l) => l.colorValue),
+    palette,
+  );
+  final result = await showCreateNameColorDialog(
+    context,
+    title: 'New list',
+    palette: palette,
+    initialColor: assigner.nextColor(),
+    usedColors: allLists
+        .where((list) => list.colorValue != null)
+        .map((list) => list.colorValue!)
+        .toSet(),
+  );
+  if (result == null) return null;
+
+  final now = utcNow();
+  final list = TodoListModel(
+    id: newId(),
+    name: result.name,
+    colorValue: result.color,
+    createdAt: now,
+    updatedAt: now,
+  );
+  await ref.read(todoRepositoryProvider).upsertList(list);
+  ref.read(remoteSyncServiceProvider).pushTodoList(list);
+  ref.invalidate(todoListsProvider);
+  ref.invalidate(todoListStatsProvider);
+  return list;
 }

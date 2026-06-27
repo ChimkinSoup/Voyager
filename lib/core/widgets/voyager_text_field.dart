@@ -83,6 +83,8 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       disabledBorder: InputBorder.none,
       errorBorder: InputBorder.none,
       focusedErrorBorder: InputBorder.none,
+      contentPadding: widget.decoration?.contentPadding ??
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       labelStyle: (widget.decoration?.labelStyle ?? baseDecoration.labelStyle)
           ?.copyWith(color: accent.withValues(alpha: 0.85)),
       floatingLabelStyle:

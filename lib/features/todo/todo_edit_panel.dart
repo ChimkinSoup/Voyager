@@ -7,11 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
+import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
@@ -26,8 +28,9 @@ class TodoEditPanel extends ConsumerStatefulWidget {
     required this.onClose,
     required this.onChanged,
     required this.onDeleted,
-    required this.onToggleStar,
+    required     this.onToggleStar,
     this.onTaskOptimistic,
+    this.onSortBatchApplied,
     this.listColor,
     this.lists = const [],
   });
@@ -38,6 +41,7 @@ class TodoEditPanel extends ConsumerStatefulWidget {
   final VoidCallback onDeleted;
   final VoidCallback onToggleStar;
   final ValueChanged<TodoTask>? onTaskOptimistic;
+  final ValueChanged<TodoSortBatch>? onSortBatchApplied;
   final int? listColor;
   final List<TodoListModel> lists;
 
@@ -51,6 +55,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final TextEditingController _subtaskController;
+  late final FocusNode _titleFocusNode;
   late final FocusNode _notesFocusNode;
   late final FocusNode _subtaskFocusNode;
   DateTime? _dueDate;
@@ -66,6 +71,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _lastNonEmptyTitle = widget.task.title;
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
+    _titleFocusNode = FocusNode();
+    _titleFocusNode.onKeyEvent = _handleTitleKey;
     _notesFocusNode = FocusNode();
     _notesFocusNode.onKeyEvent = _handleNotesKey;
     _subtaskController = TextEditingController();
@@ -108,14 +115,46 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     }
     _titleController.dispose();
     _notesController.dispose();
+    _titleFocusNode.dispose();
     _notesFocusNode.dispose();
     _subtaskController.dispose();
     _subtaskFocusNode.dispose();
     super.dispose();
   }
 
-  Color? get _accentColor =>
-      widget.listColor == null ? null : Color(widget.listColor!);
+  Color get _listAccentColor {
+    final theme = Theme.of(context);
+    return widget.listColor == null
+        ? theme.colorScheme.primary
+        : Color(widget.listColor!);
+  }
+
+  KeyEventResult _handleTitleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.tab &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _notesFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleNotesKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.tab &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _subtaskFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.enter) {
+      return KeyEventResult.ignored;
+    }
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored;
+    }
+    _saveNotesAndUnfocus();
+    return KeyEventResult.handled;
+  }
 
   Future<void> _save({
     String? title,
@@ -123,6 +162,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     DateTime? dueDate,
     bool clearDueDate = false,
     String? listId,
+    bool reorderDueDate = false,
   }) async {
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
@@ -133,20 +173,105 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _titleController.text = titleText;
     }
 
-    final updated = widget.task.copyWith(
+    final effectiveDue = clearDueDate ? null : (dueDate ?? _dueDate);
+    final listMoved = listId != null && listId != widget.task.listId;
+    final dueSortChanged = !widget.task.isSubtask &&
+        (reorderDueDate ||
+            clearDueDate ||
+            effectiveDue != widget.task.dueDate);
+
+    final baseUpdate = widget.task.copyWith(
       title: titleText,
       listId: listId,
       notes: notesText.isEmpty ? null : notesText,
       clearNotes: notesText.isEmpty,
-      dueDate: clearDueDate ? null : (dueDate ?? _dueDate),
+      dueDate: effectiveDue,
       clearDueDate: clearDueDate,
     );
-    await repo.upsertTask(updated);
-    await remoteSync.flushDocument(
-      FirestoreCollections.todoTasks,
-      widget.task.id,
-    );
-    await remoteSync.pushTodoTaskNow(updated);
+
+    if (listMoved) {
+      final sourceListId = widget.task.listId;
+      final destSiblings = await repo.listTasks(listId);
+      final destActive = activeTopLevelTasks(destSiblings);
+      final batch = applyTaskListMove(baseUpdate, destActive);
+      TodoTask? savedTask;
+      for (final task in batch.tasks) {
+        final toSave = task.id == widget.task.id
+            ? task.copyWith(
+                title: baseUpdate.title,
+                listId: baseUpdate.listId,
+                notes: baseUpdate.notes,
+                clearNotes: baseUpdate.notes == null,
+                dueDate: baseUpdate.dueDate,
+                clearDueDate: clearDueDate,
+                dueDateSetAt: baseUpdate.dueDateSetAt,
+                clearDueDateSetAt: clearDueDate,
+              )
+            : task;
+        if (toSave.id == widget.task.id) {
+          savedTask = toSave;
+        }
+        await repo.upsertTask(toSave);
+        remoteSync.pushTodoTaskNow(toSave);
+      }
+      ref.invalidate(todoTasksProvider);
+      ref.invalidate(todoTasksProvider(sourceListId));
+      ref.invalidate(todoTasksProvider(listId));
+      ref.invalidate(allTodoTasksProvider);
+      if (savedTask != null) {
+        widget.onTaskOptimistic?.call(savedTask);
+      }
+      widget.onSortBatchApplied?.call(batch);
+      logTodoSortDebug(
+        ref.read(todoSortDebugLoggerProvider),
+        'LIST_MOVE',
+        task: savedTask,
+        details: 'from $sourceListId to $listId',
+      );
+    } else if (dueSortChanged) {
+      final siblings = await repo.listTasks(widget.task.listId);
+      final active = activeTopLevelTasks(siblings);
+      final batch = applyDueDateChange(
+        widget.task,
+        active,
+        dueDate: effectiveDue,
+        clearDueDate: clearDueDate,
+      );
+      TodoTask? savedTask;
+      for (final task in batch.tasks) {
+        final toSave = task.id == widget.task.id
+            ? task.copyWith(
+                title: baseUpdate.title,
+                listId: baseUpdate.listId,
+                notes: baseUpdate.notes,
+                clearNotes: baseUpdate.notes == null,
+              )
+            : task;
+        if (toSave.id == widget.task.id) {
+          savedTask = toSave;
+        }
+        await repo.upsertTask(toSave);
+        remoteSync.pushTodoTaskNow(toSave);
+      }
+      widget.onSortBatchApplied?.call(batch);
+      logTodoSortDebug(
+        ref.read(todoSortDebugLoggerProvider),
+        clearDueDate ? 'DUE_DATE_CLEARED' : 'DUE_DATE_CHANGED',
+        task: savedTask ?? baseUpdate,
+        details: _dueDateChangeDetails(
+          previous: widget.task,
+          next: savedTask ?? baseUpdate,
+          clearDueDate: clearDueDate,
+        ),
+      );
+    } else {
+      await repo.upsertTask(baseUpdate);
+      await remoteSync.flushDocument(
+        FirestoreCollections.todoTasks,
+        widget.task.id,
+      );
+      await remoteSync.pushTodoTaskNow(baseUpdate);
+    }
     widget.onChanged();
   }
 
@@ -210,18 +335,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     unawaited(_save(listId: listId));
   }
 
-  KeyEventResult _handleNotesKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey != LogicalKeyboardKey.enter) {
-      return KeyEventResult.ignored;
-    }
-    if (HardwareKeyboard.instance.isShiftPressed) {
-      return KeyEventResult.ignored;
-    }
-    _saveNotesAndUnfocus();
-    return KeyEventResult.handled;
-  }
-
   void _saveNotesAndUnfocus() {
     _notesSaveTimer?.cancel();
     FocusManager.instance.primaryFocus?.unfocus();
@@ -237,19 +350,21 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final due = picked.hour == 0 && picked.minute == 0
         ? DateUtils.dateOnly(picked).toUtc()
         : picked.toUtc();
+    final previousDue = widget.task.dueDate;
     setState(() => _dueDate = due);
     widget.onTaskOptimistic?.call(
-      widget.task.copyWith(dueDate: due),
+      widget.task.copyWith(dueDate: due, dueDateSetAt: utcNow()),
     );
-    unawaited(_save(dueDate: due));
+    unawaited(_save(dueDate: due, reorderDueDate: previousDue != due));
   }
 
   Future<void> _clearDueDate() async {
+    final hadDueDate = widget.task.dueDate != null;
     setState(() => _dueDate = null);
     widget.onTaskOptimistic?.call(
       widget.task.copyWith(clearDueDate: true),
     );
-    unawaited(_save(clearDueDate: true));
+    unawaited(_save(clearDueDate: true, reorderDueDate: hadDueDate));
   }
 
   Future<void> _addSubtask() async {
@@ -279,6 +394,70 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
     await _loadSubtasks();
     widget.onChanged();
+  }
+
+  Future<void> _renameSubtask(TodoTask subtask, String title) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty || trimmed == subtask.title) return;
+    final updated = subtask.copyWith(title: trimmed);
+    await ref.read(todoRepositoryProvider).upsertTask(updated);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+    await _loadSubtasks();
+    widget.onChanged();
+  }
+
+  Future<void> _deleteSubtask(TodoTask subtask) async {
+    final deleted = subtask.copyWith(deletedAt: utcNow());
+    await ref.read(todoRepositoryProvider).upsertTask(deleted);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    await _loadSubtasks();
+    widget.onChanged();
+  }
+
+  Future<void> _promoteSubtask(TodoTask subtask) async {
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final now = utcNow();
+    final task = TodoTask(
+      id: newId(),
+      listId: widget.task.listId,
+      title: subtask.title,
+      completed: subtask.completed,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final siblings = await repo.listTasks(widget.task.listId);
+    final active = activeTopLevelTasks(siblings);
+    final batch = applyNewUndatedTask(task, active);
+    for (final updated in batch.tasks) {
+      await repo.upsertTask(updated);
+      remoteSync.pushTodoTaskNow(updated);
+    }
+    await _deleteSubtask(subtask);
+    widget.onChanged();
+    final placed = batch.tasks.firstWhere((t) => t.id == task.id);
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'PROMOTE_SUBTASK',
+      task: placed,
+      details:
+          'promoted subtask "${subtask.title}" (${subtask.id}) '
+          'from parent ${widget.task.id} (${widget.task.title})',
+    );
+  }
+
+  String _dueDateChangeDetails({
+    required TodoTask previous,
+    required TodoTask next,
+    required bool clearDueDate,
+  }) {
+    if (clearDueDate) {
+      final was = previous.dueDate?.toUtc().toIso8601String() ?? 'null';
+      return 'cleared due date (was $was), sortOrder: ${previous.sortOrder} → ${next.sortOrder}';
+    }
+    final before = previous.dueDate?.toUtc().toIso8601String() ?? 'null';
+    final after = next.dueDate?.toUtc().toIso8601String() ?? 'null';
+    return 'due date: $before → $after, sortOrder: ${previous.sortOrder} → ${next.sortOrder}';
   }
 
   Future<void> _deleteTask() async {
@@ -315,7 +494,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     fixedSize: WidgetStatePropertyAll(Size(32, 32)),
   );
 
-  Widget _buildHeader(BuildContext context, ThemeData theme, Color? listColor) {
+  Widget _buildHeader(BuildContext context, ThemeData theme, Color listColor) {
     Widget starButton() => IconButton(
       style: _compactIconButtonStyle,
       onPressed: widget.onToggleStar,
@@ -324,9 +503,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             ? PhosphorIconsFill.star
             : PhosphorIconsRegular.star,
       ),
-      color: widget.task.starred
-          ? listColor ?? theme.colorScheme.primary
-          : null,
+      color: widget.task.starred ? listColor : null,
       tooltip: widget.task.starred ? 'Unstar task' : 'Star task',
     );
 
@@ -408,7 +585,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
     final theme = Theme.of(context);
-    final listColor = _accentColor;
+    final listColor = _listAccentColor;
     return Material(
       elevation: 0,
       color: theme.colorScheme.surface,
@@ -429,7 +606,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 LabeledTextField(
                   label: 'Title',
                   controller: _titleController,
-                  textInputAction: TextInputAction.done,
+                  focusNode: _titleFocusNode,
+                  textInputAction: TextInputAction.next,
                   onSubmitted: _onTitleSubmitted,
                   onChanged: _scheduleTitleSave,
                   accentColor: listColor,
@@ -437,7 +615,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 ),
                 if (widget.lists.isNotEmpty)
                   Positioned(
-                    top: 10,
+                    top: 0,
                     right: 10,
                     child: JournalTitleCornerFlag(
                       colorValue: widget.listColor ??
@@ -484,9 +662,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   icon: const Icon(VoyagerIcons.calendar, size: 18),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: listColor,
-                    side: listColor == null
-                        ? null
-                        : BorderSide(color: listColor.withValues(alpha: 0.7)),
+                    side: BorderSide(color: listColor.withValues(alpha: 0.7)),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 12,
@@ -561,6 +737,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                         listColor: listColor,
                         onToggle: (completed) =>
                             _toggleSubtask(subtask, completed),
+                        onRename: (title) => _renameSubtask(subtask, title),
+                        onDelete: () => _deleteSubtask(subtask),
+                        onPromote: () => _promoteSubtask(subtask),
                       ),
                     )
                     .toList(),
@@ -578,7 +757,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               onPressed: _close,
               style: FilledButton.styleFrom(
                 backgroundColor: listColor,
-                foregroundColor: listColor == null ? null : Colors.white,
+                foregroundColor: Colors.white,
               ),
               child: const Text('Save'),
             ),
@@ -593,12 +772,18 @@ class _SubtaskRow extends StatefulWidget {
   const _SubtaskRow({
     required this.subtask,
     required this.onToggle,
-    this.listColor,
+    required this.onRename,
+    required this.onDelete,
+    required this.onPromote,
+    required this.listColor,
   });
 
   final TodoTask subtask;
   final ValueChanged<bool> onToggle;
-  final Color? listColor;
+  final ValueChanged<String> onRename;
+  final VoidCallback onDelete;
+  final VoidCallback onPromote;
+  final Color listColor;
 
   @override
   State<_SubtaskRow> createState() => _SubtaskRowState();
@@ -608,15 +793,19 @@ class _SubtaskRowState extends State<_SubtaskRow>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _strikeProgress;
+  late final TextEditingController _editController;
+  late final FocusNode _editFocusNode;
   var _displayCompleted = false;
   var _animating = false;
-  double _textWidth = 0;
-  double _textHeight = 0;
+  var _editing = false;
 
   @override
   void initState() {
     super.initState();
     _displayCompleted = widget.subtask.completed;
+    _editController = TextEditingController(text: widget.subtask.title);
+    _editFocusNode = FocusNode();
+    _editFocusNode.addListener(_handleEditFocusChanged);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
@@ -631,7 +820,10 @@ class _SubtaskRowState extends State<_SubtaskRow>
   @override
   void didUpdateWidget(covariant _SubtaskRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_animating) return;
+    if (_animating || _editing) return;
+    if (oldWidget.subtask.title != widget.subtask.title) {
+      _editController.text = widget.subtask.title;
+    }
     if (oldWidget.subtask.completed != widget.subtask.completed) {
       _displayCompleted = widget.subtask.completed;
       _controller.value = widget.subtask.completed ? 1.0 : 0.0;
@@ -640,19 +832,31 @@ class _SubtaskRowState extends State<_SubtaskRow>
 
   @override
   void dispose() {
+    _editFocusNode.removeListener(_handleEditFocusChanged);
+    _editFocusNode.dispose();
+    _editController.dispose();
     _controller.dispose();
     super.dispose();
   }
 
-  void _measureText(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyMedium;
-    final painter = TextPainter(
-      text: TextSpan(text: widget.subtask.title, style: style),
-      textDirection: Directionality.of(context),
-      maxLines: null,
-    )..layout(maxWidth: MediaQuery.sizeOf(context).width - 120);
-    _textWidth = painter.size.width;
-    _textHeight = painter.size.height;
+  void _handleEditFocusChanged() {
+    if (!_editFocusNode.hasFocus && _editing) {
+      _finishEditing();
+    }
+  }
+
+  void _startEditing() {
+    setState(() {
+      _editing = true;
+      _editController.text = widget.subtask.title;
+    });
+    _editFocusNode.requestFocus();
+  }
+
+  void _finishEditing() {
+    if (!_editing) return;
+    setState(() => _editing = false);
+    widget.onRename(_editController.text);
   }
 
   Future<void> _handleToggle(bool? value) async {
@@ -678,7 +882,6 @@ class _SubtaskRowState extends State<_SubtaskRow>
 
   @override
   Widget build(BuildContext context) {
-    _measureText(context);
     final strikeColor = Theme.of(
       context,
     ).colorScheme.onSurface.withValues(alpha: 0.55);
@@ -686,42 +889,114 @@ class _SubtaskRowState extends State<_SubtaskRow>
       color: _displayCompleted ? strikeColor : null,
     );
 
-    return CheckboxListTile(
-      contentPadding: EdgeInsets.zero,
-      controlAffinity: ListTileControlAffinity.leading,
-      activeColor: widget.listColor,
-      value: _displayCompleted,
-      onChanged: _handleToggle,
-      title: Stack(
-        clipBehavior: Clip.none,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.subtask.title, style: textStyle),
-          if (_displayCompleted)
-            Positioned(
-              left: 0,
-              top: 0,
-              width: _textWidth,
-              height: _textHeight,
-              child: AnimatedBuilder(
-                animation: _strikeProgress,
-                builder: (context, _) {
-                  return CustomPaint(
-                    painter: _MultilineStrikePainter(
-                      text: widget.subtask.title,
-                      style: textStyle ?? const TextStyle(),
-                      progress: _strikeProgress.value.clamp(0.0, 1.0),
-                      color: strikeColor,
-                      textDirection: Directionality.of(context),
-                    ),
-                  );
-                },
-              ),
+          Checkbox(
+            value: _displayCompleted,
+            activeColor: widget.listColor,
+            onChanged: _handleToggle,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (_editing)
+                      TextField(
+                        controller: _editController,
+                        focusNode: _editFocusNode,
+                        style: textStyle,
+                        maxLines: null,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          border: InputBorder.none,
+                        ),
+                        onSubmitted: (_) => _finishEditing(),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: _startEditing,
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            widget.subtask.title,
+                            style: textStyle,
+                          ),
+                        ),
+                      ),
+                    if (_displayCompleted)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: AnimatedBuilder(
+                            animation: _strikeProgress,
+                            builder: (context, _) {
+                              return CustomPaint(
+                                painter: _MultilineStrikePainter(
+                                  text: widget.subtask.title,
+                                  style: textStyle ?? const TextStyle(),
+                                  progress:
+                                      _strikeProgress.value.clamp(0.0, 1.0),
+                                  color: strikeColor,
+                                  textDirection: Directionality.of(context),
+                                  maxWidth: constraints.maxWidth,
+                                  textPadding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
+          ),
+          PopupMenuButton<_SubtaskAction>(
+            padding: EdgeInsets.zero,
+            icon: Icon(
+              PhosphorIconsBold.dotsThreeVertical,
+              size: 18,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.72),
+            ),
+            onSelected: (action) {
+              switch (action) {
+                case _SubtaskAction.promote:
+                  widget.onPromote();
+                case _SubtaskAction.delete:
+                  widget.onDelete();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _SubtaskAction.promote,
+                child: Text('Promote to task'),
+              ),
+              PopupMenuItem(
+                value: _SubtaskAction.delete,
+                child: Text('Delete subtask'),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
+
+enum _SubtaskAction { promote, delete }
 
 enum _HeaderAction { star, delete, close }
 
@@ -732,6 +1007,8 @@ class _MultilineStrikePainter extends CustomPainter {
     required this.progress,
     required this.color,
     required this.textDirection,
+    required this.maxWidth,
+    this.textPadding = EdgeInsets.zero,
   });
 
   final String text;
@@ -739,6 +1016,8 @@ class _MultilineStrikePainter extends CustomPainter {
   final double progress;
   final Color color;
   final TextDirection textDirection;
+  final double maxWidth;
+  final EdgeInsets textPadding;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -747,7 +1026,7 @@ class _MultilineStrikePainter extends CustomPainter {
       text: TextSpan(text: text, style: style),
       textDirection: textDirection,
       maxLines: null,
-    )..layout(maxWidth: size.width);
+    )..layout(maxWidth: maxWidth);
 
     final metrics = painter.computeLineMetrics();
     if (metrics.isEmpty) return;
@@ -764,10 +1043,13 @@ class _MultilineStrikePainter extends CustomPainter {
     for (final line in metrics) {
       if (remaining <= 0) break;
       final drawWidth = remaining < line.width ? remaining : line.width;
-      final y = line.baseline - (line.ascent * 0.35);
+      final y = textPadding.top +
+          line.baseline -
+          line.ascent +
+          line.height / 2;
       canvas.drawLine(
-        Offset(0, y),
-        Offset(drawWidth, y),
+        Offset(line.left, y),
+        Offset(line.left + drawWidth, y),
         paint,
       );
       remaining -= line.width;
@@ -778,6 +1060,7 @@ class _MultilineStrikePainter extends CustomPainter {
   bool shouldRepaint(covariant _MultilineStrikePainter oldDelegate) {
     return oldDelegate.progress != progress ||
         oldDelegate.text != text ||
-        oldDelegate.color != color;
+        oldDelegate.color != color ||
+        oldDelegate.maxWidth != maxWidth;
   }
 }

@@ -39,6 +39,7 @@ class TodoTask extends SoftDeletable {
     this.starred = false,
     this.sortOrder = 0,
     this.preStarSortOrder,
+    this.dueDateSetAt,
     this.parentTaskId,
   });
 
@@ -50,6 +51,7 @@ class TodoTask extends SoftDeletable {
   final bool starred;
   final int sortOrder;
   final int? preStarSortOrder;
+  final DateTime? dueDateSetAt;
   final String? parentTaskId;
 
   bool get isSubtask => parentTaskId != null;
@@ -66,6 +68,8 @@ class TodoTask extends SoftDeletable {
     int? sortOrder,
     int? preStarSortOrder,
     bool clearPreStarSortOrder = false,
+    DateTime? dueDateSetAt,
+    bool clearDueDateSetAt = false,
     DateTime? deletedAt,
   }) {
     return TodoTask(
@@ -83,29 +87,10 @@ class TodoTask extends SoftDeletable {
       preStarSortOrder: clearPreStarSortOrder
           ? null
           : (preStarSortOrder ?? this.preStarSortOrder),
+      dueDateSetAt: clearDueDateSetAt
+          ? null
+          : (dueDateSetAt ?? this.dueDateSetAt),
       parentTaskId: parentTaskId,
     );
   }
-}
-
-int compareTodoTasks(TodoTask a, TodoTask b) {
-  if (a.starred != b.starred) return a.starred ? -1 : 1;
-
-  if (!a.starred && !b.starred) {
-    if (a.dueDate != null || b.dueDate != null) {
-      if (a.dueDate == null) return 1;
-      if (b.dueDate == null) return -1;
-      final dueOrder = a.dueDate!.compareTo(b.dueDate!);
-      if (dueOrder != 0) return dueOrder;
-    }
-  }
-
-  final order = a.sortOrder.compareTo(b.sortOrder);
-  if (order != 0) return order;
-  return a.createdAt.compareTo(b.createdAt);
-}
-
-List<TodoTask> sortTodoTasks(Iterable<TodoTask> tasks) {
-  final sorted = tasks.toList()..sort(compareTodoTasks);
-  return sorted;
 }

@@ -1976,6 +1976,17 @@ class $TodoTasksTableTable extends TodoTasksTable
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _dueDateSetAtMeta = const VerificationMeta(
+    'dueDateSetAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dueDateSetAt = GeneratedColumn<DateTime>(
+    'due_date_set_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2021,6 +2032,7 @@ class $TodoTasksTableTable extends TodoTasksTable
     starred,
     sortOrder,
     preStarSortOrder,
+    dueDateSetAt,
     createdAt,
     updatedAt,
     deletedAt,
@@ -2106,6 +2118,15 @@ class $TodoTasksTableTable extends TodoTasksTable
         ),
       );
     }
+    if (data.containsKey('due_date_set_at')) {
+      context.handle(
+        _dueDateSetAtMeta,
+        dueDateSetAt.isAcceptableOrUnknown(
+          data['due_date_set_at']!,
+          _dueDateSetAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2177,6 +2198,10 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.int,
         data['${effectivePrefix}pre_star_sort_order'],
       ),
+      dueDateSetAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due_date_set_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2210,6 +2235,7 @@ class TodoTasksTableData extends DataClass
   final bool starred;
   final int sortOrder;
   final int? preStarSortOrder;
+  final DateTime? dueDateSetAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -2224,6 +2250,7 @@ class TodoTasksTableData extends DataClass
     required this.starred,
     required this.sortOrder,
     this.preStarSortOrder,
+    this.dueDateSetAt,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -2248,6 +2275,9 @@ class TodoTasksTableData extends DataClass
     map['sort_order'] = Variable<int>(sortOrder);
     if (!nullToAbsent || preStarSortOrder != null) {
       map['pre_star_sort_order'] = Variable<int>(preStarSortOrder);
+    }
+    if (!nullToAbsent || dueDateSetAt != null) {
+      map['due_date_set_at'] = Variable<DateTime>(dueDateSetAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -2277,6 +2307,9 @@ class TodoTasksTableData extends DataClass
       preStarSortOrder: preStarSortOrder == null && nullToAbsent
           ? const Value.absent()
           : Value(preStarSortOrder),
+      dueDateSetAt: dueDateSetAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dueDateSetAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -2301,6 +2334,7 @@ class TodoTasksTableData extends DataClass
       starred: serializer.fromJson<bool>(json['starred']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       preStarSortOrder: serializer.fromJson<int?>(json['preStarSortOrder']),
+      dueDateSetAt: serializer.fromJson<DateTime?>(json['dueDateSetAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -2320,6 +2354,7 @@ class TodoTasksTableData extends DataClass
       'starred': serializer.toJson<bool>(starred),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'preStarSortOrder': serializer.toJson<int?>(preStarSortOrder),
+      'dueDateSetAt': serializer.toJson<DateTime?>(dueDateSetAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -2337,6 +2372,7 @@ class TodoTasksTableData extends DataClass
     bool? starred,
     int? sortOrder,
     Value<int?> preStarSortOrder = const Value.absent(),
+    Value<DateTime?> dueDateSetAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -2353,6 +2389,7 @@ class TodoTasksTableData extends DataClass
     preStarSortOrder: preStarSortOrder.present
         ? preStarSortOrder.value
         : this.preStarSortOrder,
+    dueDateSetAt: dueDateSetAt.present ? dueDateSetAt.value : this.dueDateSetAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -2373,6 +2410,9 @@ class TodoTasksTableData extends DataClass
       preStarSortOrder: data.preStarSortOrder.present
           ? data.preStarSortOrder.value
           : this.preStarSortOrder,
+      dueDateSetAt: data.dueDateSetAt.present
+          ? data.dueDateSetAt.value
+          : this.dueDateSetAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -2392,6 +2432,7 @@ class TodoTasksTableData extends DataClass
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('preStarSortOrder: $preStarSortOrder, ')
+          ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -2411,6 +2452,7 @@ class TodoTasksTableData extends DataClass
     starred,
     sortOrder,
     preStarSortOrder,
+    dueDateSetAt,
     createdAt,
     updatedAt,
     deletedAt,
@@ -2429,6 +2471,7 @@ class TodoTasksTableData extends DataClass
           other.starred == this.starred &&
           other.sortOrder == this.sortOrder &&
           other.preStarSortOrder == this.preStarSortOrder &&
+          other.dueDateSetAt == this.dueDateSetAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -2445,6 +2488,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<bool> starred;
   final Value<int> sortOrder;
   final Value<int?> preStarSortOrder;
+  final Value<DateTime?> dueDateSetAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -2460,6 +2504,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.preStarSortOrder = const Value.absent(),
+    this.dueDateSetAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2476,6 +2521,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.preStarSortOrder = const Value.absent(),
+    this.dueDateSetAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
@@ -2496,6 +2542,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<bool>? starred,
     Expression<int>? sortOrder,
     Expression<int>? preStarSortOrder,
+    Expression<DateTime>? dueDateSetAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -2512,6 +2559,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (starred != null) 'starred': starred,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (preStarSortOrder != null) 'pre_star_sort_order': preStarSortOrder,
+      if (dueDateSetAt != null) 'due_date_set_at': dueDateSetAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2530,6 +2578,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<bool>? starred,
     Value<int>? sortOrder,
     Value<int?>? preStarSortOrder,
+    Value<DateTime?>? dueDateSetAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -2546,6 +2595,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       preStarSortOrder: preStarSortOrder ?? this.preStarSortOrder,
+      dueDateSetAt: dueDateSetAt ?? this.dueDateSetAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -2586,6 +2636,9 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     if (preStarSortOrder.present) {
       map['pre_star_sort_order'] = Variable<int>(preStarSortOrder.value);
     }
+    if (dueDateSetAt.present) {
+      map['due_date_set_at'] = Variable<DateTime>(dueDateSetAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2614,6 +2667,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('preStarSortOrder: $preStarSortOrder, ')
+          ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -6233,6 +6287,20 @@ class $SettingsTableTable extends SettingsTable
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _devTodoSortDebugLogMeta =
+      const VerificationMeta('devTodoSortDebugLog');
+  @override
+  late final GeneratedColumn<bool> devTodoSortDebugLog = GeneratedColumn<bool>(
+    'dev_todo_sort_debug_log',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_todo_sort_debug_log" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _weatherForecastJsonMeta =
       const VerificationMeta('weatherForecastJson');
   @override
@@ -6334,6 +6402,7 @@ class $SettingsTableTable extends SettingsTable
     devShowCacheStatus,
     devShowCalendarZoomPrewarm,
     devShowCalendarInstantViewSwitch,
+    devTodoSortDebugLog,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -6635,6 +6704,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('dev_todo_sort_debug_log')) {
+      context.handle(
+        _devTodoSortDebugLogMeta,
+        devTodoSortDebugLog.isAcceptableOrUnknown(
+          data['dev_todo_sort_debug_log']!,
+          _devTodoSortDebugLogMeta,
+        ),
+      );
+    }
     if (data.containsKey('weather_forecast_json')) {
       context.handle(
         _weatherForecastJsonMeta,
@@ -6834,6 +6912,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}dev_show_calendar_instant_view_switch'],
       )!,
+      devTodoSortDebugLog: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_todo_sort_debug_log'],
+      )!,
       weatherForecastJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_forecast_json'],
@@ -6903,6 +6985,7 @@ class SettingsTableData extends DataClass
   final bool devShowCacheStatus;
   final bool devShowCalendarZoomPrewarm;
   final bool devShowCalendarInstantViewSwitch;
+  final bool devTodoSortDebugLog;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -6944,6 +7027,7 @@ class SettingsTableData extends DataClass
     required this.devShowCacheStatus,
     required this.devShowCalendarZoomPrewarm,
     required this.devShowCalendarInstantViewSwitch,
+    required this.devTodoSortDebugLog,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -7026,6 +7110,7 @@ class SettingsTableData extends DataClass
     map['dev_show_calendar_instant_view_switch'] = Variable<bool>(
       devShowCalendarInstantViewSwitch,
     );
+    map['dev_todo_sort_debug_log'] = Variable<bool>(devTodoSortDebugLog);
     if (!nullToAbsent || weatherForecastJson != null) {
       map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
     }
@@ -7109,6 +7194,7 @@ class SettingsTableData extends DataClass
       devShowCacheStatus: Value(devShowCacheStatus),
       devShowCalendarZoomPrewarm: Value(devShowCalendarZoomPrewarm),
       devShowCalendarInstantViewSwitch: Value(devShowCalendarInstantViewSwitch),
+      devTodoSortDebugLog: Value(devTodoSortDebugLog),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherForecastJson),
@@ -7200,6 +7286,9 @@ class SettingsTableData extends DataClass
       devShowCalendarInstantViewSwitch: serializer.fromJson<bool>(
         json['devShowCalendarInstantViewSwitch'],
       ),
+      devTodoSortDebugLog: serializer.fromJson<bool>(
+        json['devTodoSortDebugLog'],
+      ),
       weatherForecastJson: serializer.fromJson<String?>(
         json['weatherForecastJson'],
       ),
@@ -7268,6 +7357,7 @@ class SettingsTableData extends DataClass
       'devShowCalendarInstantViewSwitch': serializer.toJson<bool>(
         devShowCalendarInstantViewSwitch,
       ),
+      'devTodoSortDebugLog': serializer.toJson<bool>(devTodoSortDebugLog),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
@@ -7316,6 +7406,7 @@ class SettingsTableData extends DataClass
     bool? devShowCacheStatus,
     bool? devShowCalendarZoomPrewarm,
     bool? devShowCalendarInstantViewSwitch,
+    bool? devTodoSortDebugLog,
     Value<String?> weatherForecastJson = const Value.absent(),
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
@@ -7378,6 +7469,7 @@ class SettingsTableData extends DataClass
     devShowCalendarInstantViewSwitch:
         devShowCalendarInstantViewSwitch ??
         this.devShowCalendarInstantViewSwitch,
+    devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
     weatherForecastJson: weatherForecastJson.present
         ? weatherForecastJson.value
         : this.weatherForecastJson,
@@ -7495,6 +7587,9 @@ class SettingsTableData extends DataClass
           data.devShowCalendarInstantViewSwitch.present
           ? data.devShowCalendarInstantViewSwitch.value
           : this.devShowCalendarInstantViewSwitch,
+      devTodoSortDebugLog: data.devTodoSortDebugLog.present
+          ? data.devTodoSortDebugLog.value
+          : this.devTodoSortDebugLog,
       weatherForecastJson: data.weatherForecastJson.present
           ? data.weatherForecastJson.value
           : this.weatherForecastJson,
@@ -7555,6 +7650,7 @@ class SettingsTableData extends DataClass
           ..write(
             'devShowCalendarInstantViewSwitch: $devShowCalendarInstantViewSwitch, ',
           )
+          ..write('devTodoSortDebugLog: $devTodoSortDebugLog, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -7601,6 +7697,7 @@ class SettingsTableData extends DataClass
     devShowCacheStatus,
     devShowCalendarZoomPrewarm,
     devShowCalendarInstantViewSwitch,
+    devTodoSortDebugLog,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -7647,6 +7744,7 @@ class SettingsTableData extends DataClass
           other.devShowCalendarZoomPrewarm == this.devShowCalendarZoomPrewarm &&
           other.devShowCalendarInstantViewSwitch ==
               this.devShowCalendarInstantViewSwitch &&
+          other.devTodoSortDebugLog == this.devTodoSortDebugLog &&
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
@@ -7690,6 +7788,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> devShowCacheStatus;
   final Value<bool> devShowCalendarZoomPrewarm;
   final Value<bool> devShowCalendarInstantViewSwitch;
+  final Value<bool> devTodoSortDebugLog;
   final Value<String?> weatherForecastJson;
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
@@ -7731,6 +7830,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowCacheStatus = const Value.absent(),
     this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.devShowCalendarInstantViewSwitch = const Value.absent(),
+    this.devTodoSortDebugLog = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7773,6 +7873,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowCacheStatus = const Value.absent(),
     this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.devShowCalendarInstantViewSwitch = const Value.absent(),
+    this.devTodoSortDebugLog = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7815,6 +7916,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? devShowCacheStatus,
     Expression<bool>? devShowCalendarZoomPrewarm,
     Expression<bool>? devShowCalendarInstantViewSwitch,
+    Expression<bool>? devTodoSortDebugLog,
     Expression<String>? weatherForecastJson,
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
@@ -7877,6 +7979,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (devShowCalendarInstantViewSwitch != null)
         'dev_show_calendar_instant_view_switch':
             devShowCalendarInstantViewSwitch,
+      if (devTodoSortDebugLog != null)
+        'dev_todo_sort_debug_log': devTodoSortDebugLog,
       if (weatherForecastJson != null)
         'weather_forecast_json': weatherForecastJson,
       if (weatherChartTempColor != null)
@@ -7926,6 +8030,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? devShowCacheStatus,
     Value<bool>? devShowCalendarZoomPrewarm,
     Value<bool>? devShowCalendarInstantViewSwitch,
+    Value<bool>? devTodoSortDebugLog,
     Value<String?>? weatherForecastJson,
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
@@ -7977,6 +8082,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       devShowCalendarInstantViewSwitch:
           devShowCalendarInstantViewSwitch ??
           this.devShowCalendarInstantViewSwitch,
+      devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
       weatherChartTempColor:
           weatherChartTempColor ?? this.weatherChartTempColor,
@@ -8123,6 +8229,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         devShowCalendarInstantViewSwitch.value,
       );
     }
+    if (devTodoSortDebugLog.present) {
+      map['dev_todo_sort_debug_log'] = Variable<bool>(
+        devTodoSortDebugLog.value,
+      );
+    }
     if (weatherForecastJson.present) {
       map['weather_forecast_json'] = Variable<String>(
         weatherForecastJson.value,
@@ -8193,6 +8304,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write(
             'devShowCalendarInstantViewSwitch: $devShowCalendarInstantViewSwitch, ',
           )
+          ..write('devTodoSortDebugLog: $devTodoSortDebugLog, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -9400,6 +9512,7 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       Value<bool> starred,
       Value<int> sortOrder,
       Value<int?> preStarSortOrder,
+      Value<DateTime?> dueDateSetAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
@@ -9417,6 +9530,7 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<bool> starred,
       Value<int> sortOrder,
       Value<int?> preStarSortOrder,
+      Value<DateTime?> dueDateSetAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -9479,6 +9593,11 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<int> get preStarSortOrder => $composableBuilder(
     column: $table.preStarSortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dueDateSetAt => $composableBuilder(
+    column: $table.dueDateSetAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9557,6 +9676,11 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get dueDateSetAt => $composableBuilder(
+    column: $table.dueDateSetAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9613,6 +9737,11 @@ class $$TodoTasksTableTableAnnotationComposer
 
   GeneratedColumn<int> get preStarSortOrder => $composableBuilder(
     column: $table.preStarSortOrder,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get dueDateSetAt => $composableBuilder(
+    column: $table.dueDateSetAt,
     builder: (column) => column,
   );
 
@@ -9673,6 +9802,7 @@ class $$TodoTasksTableTableTableManager
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int?> preStarSortOrder = const Value.absent(),
+                Value<DateTime?> dueDateSetAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9688,6 +9818,7 @@ class $$TodoTasksTableTableTableManager
                 starred: starred,
                 sortOrder: sortOrder,
                 preStarSortOrder: preStarSortOrder,
+                dueDateSetAt: dueDateSetAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -9705,6 +9836,7 @@ class $$TodoTasksTableTableTableManager
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<int?> preStarSortOrder = const Value.absent(),
+                Value<DateTime?> dueDateSetAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9720,6 +9852,7 @@ class $$TodoTasksTableTableTableManager
                 starred: starred,
                 sortOrder: sortOrder,
                 preStarSortOrder: preStarSortOrder,
+                dueDateSetAt: dueDateSetAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -11387,6 +11520,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> devShowCacheStatus,
       Value<bool> devShowCalendarZoomPrewarm,
       Value<bool> devShowCalendarInstantViewSwitch,
+      Value<bool> devTodoSortDebugLog,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -11430,6 +11564,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> devShowCacheStatus,
       Value<bool> devShowCalendarZoomPrewarm,
       Value<bool> devShowCalendarInstantViewSwitch,
+      Value<bool> devTodoSortDebugLog,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -11617,6 +11752,11 @@ class $$SettingsTableTableFilterComposer
         column: $table.devShowCalendarInstantViewSwitch,
         builder: (column) => ColumnFilters(column),
       );
+
+  ColumnFilters<bool> get devTodoSortDebugLog => $composableBuilder(
+    column: $table.devTodoSortDebugLog,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
@@ -11829,6 +11969,11 @@ class $$SettingsTableTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<bool> get devTodoSortDebugLog => $composableBuilder(
+    column: $table.devTodoSortDebugLog,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => ColumnOrderings(column),
@@ -12034,6 +12179,11 @@ class $$SettingsTableTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<bool> get devTodoSortDebugLog => $composableBuilder(
+    column: $table.devTodoSortDebugLog,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => column,
@@ -12136,6 +12286,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowCalendarZoomPrewarm = const Value.absent(),
                 Value<bool> devShowCalendarInstantViewSwitch =
                     const Value.absent(),
+                Value<bool> devTodoSortDebugLog = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -12178,6 +12329,7 @@ class $$SettingsTableTableTableManager
                 devShowCalendarZoomPrewarm: devShowCalendarZoomPrewarm,
                 devShowCalendarInstantViewSwitch:
                     devShowCalendarInstantViewSwitch,
+                devTodoSortDebugLog: devTodoSortDebugLog,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -12223,6 +12375,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowCalendarZoomPrewarm = const Value.absent(),
                 Value<bool> devShowCalendarInstantViewSwitch =
                     const Value.absent(),
+                Value<bool> devTodoSortDebugLog = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -12265,6 +12418,7 @@ class $$SettingsTableTableTableManager
                 devShowCalendarZoomPrewarm: devShowCalendarZoomPrewarm,
                 devShowCalendarInstantViewSwitch:
                     devShowCalendarInstantViewSwitch,
+                devTodoSortDebugLog: devTodoSortDebugLog,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,

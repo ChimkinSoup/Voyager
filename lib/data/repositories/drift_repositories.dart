@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:voyager/core/constants/todo_sort_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -13,6 +12,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -358,24 +358,8 @@ class DriftTodoRepository implements TodoRepository {
   @override
   Future<int> nextSortOrder(String listId) async {
     final tasks = await listTasks(listId);
-    if (tasks.isEmpty) return 0;
-
-    final active = tasks.where((t) => !t.completed).toList();
-    if (active.isEmpty) {
-      return tasks.map((t) => t.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
-    }
-
-    final unstarred = active.where((t) => !t.starred).toList();
-    if (unstarred.isEmpty) {
-      return unstarredSortOrderBase;
-    }
-
-    final minUnstarred = unstarred
-        .map((t) => normalizeUnstarredSortOrder(t.sortOrder))
-        .reduce((a, b) => a < b ? a : b);
-    return minUnstarred > unstarredSortOrderBase
-        ? minUnstarred - 1
-        : unstarredSortOrderBase;
+    final active = activeTopLevelTasks(tasks.where((t) => !t.completed));
+    return nextNewTaskSortOrder(active);
   }
 
   TodoTask _mapTask(TodoTasksTableData r) => TodoTask(
@@ -388,6 +372,7 @@ class DriftTodoRepository implements TodoRepository {
     starred: r.starred,
     sortOrder: r.sortOrder,
     preStarSortOrder: r.preStarSortOrder,
+    dueDateSetAt: r.dueDateSetAt,
     parentTaskId: r.parentTaskId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -413,6 +398,7 @@ class DriftTodoRepository implements TodoRepository {
             starred: Value(task.starred),
             sortOrder: Value(task.sortOrder),
             preStarSortOrder: Value(task.preStarSortOrder),
+            dueDateSetAt: Value(task.dueDateSetAt),
             createdAt: Value(task.createdAt),
             updatedAt: Value(task.updatedAt),
             deletedAt: Value(task.deletedAt),
@@ -832,6 +818,7 @@ class DriftSettingsRepository implements SettingsRepository {
       devShowCacheStatus: row.devShowCacheStatus,
       devShowCalendarZoomPrewarm: row.devShowCalendarZoomPrewarm,
       devShowCalendarInstantViewSwitch: row.devShowCalendarInstantViewSwitch,
+      devTodoSortDebugLog: row.devTodoSortDebugLog,
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
@@ -882,6 +869,7 @@ class DriftSettingsRepository implements SettingsRepository {
             devShowCalendarZoomPrewarm: Value(settings.devShowCalendarZoomPrewarm),
             devShowCalendarInstantViewSwitch:
                 Value(settings.devShowCalendarInstantViewSwitch),
+            devTodoSortDebugLog: Value(settings.devTodoSortDebugLog),
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),

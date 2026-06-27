@@ -96,8 +96,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
               : null,
           hintText: widget.hintText ?? (widget.showLabel ? null : widget.label),
           floatingLabelBehavior: FloatingLabelBehavior.auto,
-          contentPadding: widget.contentPadding ?? const EdgeInsets.all(16),
+          contentPadding: widget.contentPadding ??
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           labelStyle: TextStyle(color: accent.withValues(alpha: 0.85)),
+          floatingLabelStyle: TextStyle(color: accent.withValues(alpha: 0.85)),
           filled: false,
           border: InputBorder.none,
           enabledBorder: InputBorder.none,

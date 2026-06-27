@@ -70,6 +70,7 @@ class TodoTasksTable extends Table {
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   IntColumn get preStarSortOrder => integer().nullable()();
+  DateTimeColumn get dueDateSetAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -218,6 +219,8 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowCalendarInstantViewSwitch =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get devTodoSortDebugLog =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
   IntColumn get weatherChartRainColor => integer().nullable()();
@@ -257,7 +260,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -437,6 +440,18 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           calendarEventsTable,
           calendarEventsTable.recurrence,
+        );
+      }
+      if (from < 23) {
+        await migrator.addColumn(
+          todoTasksTable,
+          todoTasksTable.dueDateSetAt,
+        );
+      }
+      if (from < 24) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devTodoSortDebugLog,
         );
       }
     },

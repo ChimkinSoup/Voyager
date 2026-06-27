@@ -181,6 +181,7 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'starred': task.starred,
   'sortOrder': task.sortOrder,
   'preStarSortOrder': task.preStarSortOrder,
+  'dueDateSetAt': _dateToFirestore(task.dueDateSetAt),
   'parentTaskId': task.parentTaskId,
   'createdAt': task.createdAt.toIso8601String(),
   'updatedAt': task.updatedAt.toIso8601String(),
@@ -218,6 +219,9 @@ TodoTask mergeTodoTaskFromRemote(
     preStarSortOrder: data.containsKey('preStarSortOrder')
         ? (data['preStarSortOrder'] as num?)?.toInt()
         : local?.preStarSortOrder,
+    dueDateSetAt: data.containsKey('dueDateSetAt')
+        ? parseFirestoreDate(data['dueDateSetAt'])
+        : local?.dueDateSetAt,
     parentTaskId: data.containsKey('parentTaskId')
         ? data['parentTaskId'] as String?
         : local?.parentTaskId,

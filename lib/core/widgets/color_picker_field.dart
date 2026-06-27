@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -9,8 +9,28 @@ import 'package:voyager/domain/services/color_palette_codec.dart';
 const _paletteAspect = 4 / 3;
 const _paletteSpacing = 8.0;
 
+/// Visual swatch size relative to grid pitch radius ([swatchRadius]).
+const _swatchVisualScale = 1.15;
+
+double _swatchVisualRadius(double layoutRadius) =>
+    layoutRadius * _swatchVisualScale;
+
+/// Height for a palette grid showing [visibleRows] of swatches.
+double paletteViewportHeight(double swatchRadius, {int visibleRows = 3}) {
+  if (visibleRows <= 0) return 0;
+  final cell = swatchRadius * 2 + _paletteSpacing;
+  return visibleRows * cell - _paletteSpacing;
+}
+
 /// Sizes a palette grid inside a 4:3 box that grows with color count.
-({double width, double height, int columns, bool scrollable})
+({
+  double width,
+  double height,
+  int columns,
+  bool scrollable,
+  double contentWidth,
+  double contentHeight,
+})
 computeColorPaletteLayout({
   required int colorCount,
   required double maxWidth,
@@ -18,7 +38,14 @@ computeColorPaletteLayout({
   double swatchRadius = 26,
 }) {
   if (colorCount == 0) {
-    return (width: 200, height: 150, columns: 1, scrollable: false);
+    return (
+      width: 200,
+      height: 150,
+      columns: 1,
+      scrollable: false,
+      contentWidth: 200,
+      contentHeight: 150,
+    );
   }
 
   final cell = swatchRadius * 2 + _paletteSpacing;
@@ -69,7 +96,14 @@ computeColorPaletteLayout({
     scrollable = intrinsicH > boxH;
   }
 
-  return (width: boxW, height: boxH, columns: columns, scrollable: scrollable);
+  return (
+    width: boxW,
+    height: boxH,
+    columns: columns,
+    scrollable: scrollable,
+    contentWidth: intrinsicW,
+    contentHeight: intrinsicH,
+  );
 }
 
 bool _paletteContains(List<int> palette, int color) =>
@@ -86,6 +120,7 @@ class ColorPaletteGrid extends StatelessWidget {
     this.swatchRadius = 18,
     this.maxWidth,
     this.maxHeight,
+    this.tightLayout = false,
   });
 
   final List<int> palette;
@@ -95,6 +130,9 @@ class ColorPaletteGrid extends StatelessWidget {
   final double swatchRadius;
   final double? maxWidth;
   final double? maxHeight;
+
+  /// When true, sizes the grid to its content instead of a fixed 4:3 box.
+  final bool tightLayout;
 
   @override
   Widget build(BuildContext context) {
@@ -117,9 +155,26 @@ class ColorPaletteGrid extends StatelessWidget {
         ? null
         : normalizeColorValue(selected!);
 
+    final maxViewportHeight = maxHeight ?? media.height * 0.45;
+    final scrollable =
+        layout.scrollable || layout.contentHeight > maxViewportHeight;
+
+    final width = tightLayout
+        ? math.min(
+            layout.contentWidth,
+            maxWidth ?? layout.contentWidth,
+          )
+        : layout.width;
+    final height = scrollable
+        ? (tightLayout
+            ? maxViewportHeight
+            : layout.height)
+        : (tightLayout ? layout.contentHeight : layout.height);
+
     final grid = GridView.builder(
-      shrinkWrap: true,
-      physics: layout.scrollable
+      padding: EdgeInsets.zero,
+      shrinkWrap: !scrollable,
+      physics: scrollable
           ? const ClampingScrollPhysics()
           : const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -137,14 +192,18 @@ class ColorPaletteGrid extends StatelessWidget {
             colorValue: colorValue,
             selected: normalized == normalizedSelected,
             used: usedColors.map(normalizeColorValue).contains(normalized),
-            radius: swatchRadius,
+            radius: _swatchVisualRadius(swatchRadius),
             onTap: () => onSelected(normalized),
           ),
         );
       },
     );
 
-    return SizedBox(width: layout.width, height: layout.height, child: grid);
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRect(child: grid),
+    );
   }
 }
 
@@ -217,6 +276,8 @@ class _ColorPickerFieldState extends ConsumerState<ColorPickerField> {
   }
 }
 
+const _palettePickDialogHeightScale = 1.17;
+
 Future<int?> pickColorFromPalette(
   BuildContext context, {
   required List<int> palette,
@@ -270,28 +331,50 @@ class _PalettePickDialogState extends State<_PalettePickDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 520,
-        child: ColorPaletteGrid(
-          palette: widget.palette,
-          selected: _picked,
-          usedColors: widget.usedColors,
-          onSelected: (color) => setState(() => _picked = color),
-          swatchRadius: 26,
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+      },
+      child: Actions(
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              Navigator.pop(context, _picked);
+              return null;
+            },
+          ),
+        },
+        child: AlertDialog(
+          title: Text(widget.title),
+          titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+          content: SizedBox(
+            width: 520,
+            child: ColorPaletteGrid(
+              palette: widget.palette,
+              selected: _picked,
+              usedColors: widget.usedColors,
+              onSelected: (color) => setState(() => _picked = color),
+              swatchRadius: 22,
+              maxWidth: 520,
+              maxHeight:
+                  paletteViewportHeight(22, visibleRows: 3) *
+                  _palettePickDialogHeightScale,
+              tightLayout: true,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, _picked),
+              child: const Text('Save'),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _picked),
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 }
@@ -314,36 +397,23 @@ class _ColorSwatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-  final ringColor = theme.colorScheme.onSurface.withValues(alpha: 0.28);
+    final ringColor = theme.colorScheme.onSurface.withValues(alpha: 0.28);
+    final usedRingColor = theme.colorScheme.onSurface.withValues(alpha: 0.65);
+    final diameter = radius * 2;
+
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(radius + 3),
+      customBorder: const CircleBorder(),
       child: Container(
-        width: radius * 2 + 6,
-        height: radius * 2 + 6,
+        width: diameter,
+        height: diameter,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
+          color: Color(colorValue),
           border: selected
               ? Border.all(color: ringColor, width: 2.5)
-              : (used
-                    ? Border.all(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.65,
-                        ),
-                        width: 3,
-                      )
-                    : null),
-        ),
-        alignment: Alignment.center,
-        child: CircleAvatar(
-          radius: radius,
-          backgroundColor: Color(colorValue),
-          child: selected
-              ? const Icon(
-                  PhosphorIconsBold.check,
-                  size: 20,
-                  color: Colors.white,
-                )
+              : used
+              ? Border.all(color: usedRingColor, width: 2.5)
               : null,
         ),
       ),

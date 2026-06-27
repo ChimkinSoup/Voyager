@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -7,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
-import 'package:voyager/core/constants/todo_sort_constants.dart';
+import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
@@ -17,6 +16,7 @@ import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
@@ -162,18 +162,33 @@ class _TodoPageState extends ConsumerState<TodoPage>
     if (_taskController.text.trim().isEmpty) return;
     await _ensureDefaultList();
     final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
     final now = utcNow();
-    final sortOrder = await repo.nextSortOrder(_selectedListId!);
     final task = TodoTask(
       id: newId(),
       listId: _selectedListId!,
       title: _taskController.text.trim(),
-      sortOrder: sortOrder,
       createdAt: now,
       updatedAt: now,
     );
-    await repo.upsertTask(task);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(task);
+    final siblings = await repo.listTasks(_selectedListId!);
+    final active = activeTopLevelTasks(siblings);
+    final batch = applyNewUndatedTask(task, active);
+    for (final updated in batch.tasks) {
+      await repo.upsertTask(updated);
+      remoteSync.pushTodoTaskNow(updated);
+    }
+    final placed = batch.tasks.firstWhere((t) => t.id == task.id);
+    setState(() {
+      _applySortBatchOptimistic(batch, [...active, task]);
+    });
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'NEW_TASK',
+      task: placed,
+      details:
+          'listId=${task.listId} sortOrder: 0 → ${placed.sortOrder}',
+    );
     _taskController.clear();
     _taskFocusNode.requestFocus();
     ref.invalidate(todoTasksProvider(task.listId));
@@ -195,22 +210,82 @@ class _TodoPageState extends ConsumerState<TodoPage>
   }
 
   Future<void> _persistTaskCompletion(TodoTask updated) async {
-    await ref.read(todoRepositoryProvider).upsertTask(updated);
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+
+    if (!updated.completed) {
+      final siblings = await repo.listTasks(updated.listId);
+      final activeOthers = activeTopLevelTasks(
+        siblings.where((t) => t.id != updated.id),
+      );
+      final batch = applyTaskUncomplete(updated, activeOthers);
+      for (final task in batch.tasks) {
+        final toSave =
+            task.id == updated.id ? task.copyWith(completed: false) : task;
+        await repo.upsertTask(toSave);
+        remoteSync.pushTodoTaskNow(toSave);
+      }
+    } else {
+      await repo.upsertTask(updated);
+      remoteSync.pushTodoTaskNow(updated);
+    }
+
     if (!mounted) return;
     ref.invalidate(todoTasksProvider(updated.listId));
     _invalidateTodoListData();
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
   }
 
-  List<TodoTask> _tasksWithOverrides(List<TodoTask> tasks) {
-    if (_completionOverrides.isEmpty && _taskOverrides.isEmpty) return tasks;
+  void _maybeNormalizeListSort(List<TodoTask> tasks, String listId) {
+    if (_showAllTasks) return;
+    final active = activeTopLevelTasks(
+      _tasksWithOverrides(tasks, viewingListId: listId),
+    );
+    final batch = applyNormalizeUnstarredIfNeeded(active);
+    if (batch == null) return;
+    unawaited(_persistSortBatch(batch, listId));
+  }
+
+  List<TodoTask> _tasksWithOverrides(
+    List<TodoTask> tasks, {
+    String? viewingListId,
+    bool showAllTasks = false,
+  }) {
+    if (_completionOverrides.isEmpty && _taskOverrides.isEmpty) {
+      return tasks;
+    }
+
+    final byId = <String, TodoTask>{for (final task in tasks) task.id: task};
+
+    for (final entry in _taskOverrides.entries) {
+      if (byId.containsKey(entry.key)) {
+        byId[entry.key] = entry.value;
+      }
+    }
+
+    if (!showAllTasks && viewingListId != null) {
+      byId.removeWhere((_, task) => task.listId != viewingListId);
+
+      for (final override in _taskOverrides.values) {
+        if (byId.containsKey(override.id)) continue;
+        if (override.isSubtask) continue;
+        if (override.listId == viewingListId) {
+          byId[override.id] = override;
+        }
+      }
+    } else if (showAllTasks) {
+      for (final override in _taskOverrides.values) {
+        if (byId.containsKey(override.id)) continue;
+        if (override.isSubtask) continue;
+        byId[override.id] = override;
+      }
+    }
+
     return [
-      for (final task in tasks)
-        _taskOverrides[task.id] ??
-            switch (_completionOverrides[task.id]) {
-              null => task,
-              final completed => task.copyWith(completed: completed),
-            },
+      for (final task in byId.values)
+        switch (_completionOverrides[task.id]) {
+          null => task,
+          final completed => task.copyWith(completed: completed),
+        },
     ];
   }
 
@@ -254,6 +329,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     return persisted.title == override.title &&
         persisted.notes == override.notes &&
         persisted.dueDate == override.dueDate &&
+        persisted.dueDateSetAt == override.dueDateSetAt &&
         persisted.completed == override.completed &&
         persisted.starred == override.starred &&
         persisted.sortOrder == override.sortOrder &&
@@ -261,58 +337,111 @@ class _TodoPageState extends ConsumerState<TodoPage>
         persisted.listId == override.listId;
   }
 
-  Future<void> _toggleStar(TodoTask task, List<TodoTask> activeTasks) async {
-    final starring = !task.starred;
-    final TodoTask updated;
-    if (starring) {
-      final orders = activeTasks
-          .where((t) => t.starred && t.id != task.id)
-          .map((t) => _taskOverrides[t.id]?.sortOrder ?? t.sortOrder);
-      final minOrder = orders.isEmpty
-          ? (activeTasks.isEmpty
-                ? task.sortOrder - 1
-                : activeTasks
-                      .map((t) => _taskOverrides[t.id]?.sortOrder ?? t.sortOrder)
-                      .reduce(math.min))
-          : orders.reduce(math.min);
-      updated = task.copyWith(
-        starred: true,
-        sortOrder: minOrder - 1,
-        preStarSortOrder: normalizeUnstarredSortOrder(task.sortOrder),
-      );
-    } else {
-      updated = task.copyWith(
-        starred: false,
-        sortOrder: normalizeUnstarredSortOrder(
-          task.preStarSortOrder ?? task.sortOrder,
-        ),
-        clearPreStarSortOrder: true,
-      );
+  Future<void> _persistSortBatch(TodoSortBatch batch, String listId) async {
+    if (batch.tasks.isEmpty) return;
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    for (final task in batch.tasks) {
+      await repo.upsertTask(task);
+      remoteSync.pushTodoTaskNow(task);
     }
+    if (!mounted) return;
+    ref.invalidate(todoTasksProvider(listId));
+    _invalidateTodoListData();
+  }
+
+  void _applySortBatchOptimistic(TodoSortBatch batch, List<TodoTask> activeTasks) {
+    final byId = {for (final task in activeTasks) task.id: task};
+    for (final task in batch.tasks) {
+      byId[task.id] = task;
+      _taskOverrides[task.id] = task;
+    }
+    _optimisticActiveTaskOrder =
+        sortTodoTasks(byId.values).map((task) => task.id).toList();
+  }
+
+  Future<void> _applyPersistedSortBatchToUi(
+    TodoSortBatch batch, {
+    required String reason,
+    TodoTask? focusTask,
+  }) async {
+    if (batch.tasks.isEmpty) return;
+    final listId = batch.tasks.first.listId;
+    final repo = ref.read(todoRepositoryProvider);
+    final siblings = await repo.listTasks(listId);
+    final active = activeTopLevelTasks(siblings);
+    if (!mounted) return;
+
+    final naturalOrder = sortTodoTasks(active).map((task) => task.id).toList();
+    final staleOrder = _optimisticActiveTaskOrder;
+    final hadStaleForcedOrder = staleOrder != null &&
+        staleOrder.length == active.length &&
+        staleOrder.every(naturalOrder.contains) &&
+        !_orderIdsMatchSortOrder(staleOrder, active);
 
     setState(() {
-      _taskOverrides[task.id] = updated;
-      if (starring) {
-        _optimisticActiveTaskOrder = [
-          task.id,
-          ...activeTasks
-              .where((t) => t.id != task.id)
-              .map((t) => t.id),
-        ];
-      } else {
-        _optimisticActiveTaskOrder = null;
+      _optimisticActiveTaskOrder = null;
+      _applySortBatchOptimistic(batch, active);
+      if (focusTask != null) {
+        final updated = batch.tasks.cast<TodoTask?>().firstWhere(
+          (task) => task!.id == focusTask.id,
+          orElse: () => null,
+        );
+        if (updated != null) {
+          _editPanelTask = updated.copyWith(
+            title: focusTask.title,
+            notes: focusTask.notes,
+          );
+        }
       }
     });
 
-    unawaited(_persistTaskUpdate(updated));
+    if (hadStaleForcedOrder) {
+      logTodoSortDebug(
+        ref.read(todoSortDebugLoggerProvider),
+        'UI_ORDER_MISMATCH',
+        task: focusTask,
+        details:
+            '$reason: cleared stale forced order '
+            '(was ${staleOrder.join(", ")}, '
+            'natural ${naturalOrder.join(", ")})',
+      );
+    }
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'UI_SORT_APPLIED',
+      task: focusTask,
+      details: '$reason listId=$listId',
+    );
   }
 
-  Future<void> _persistTaskUpdate(TodoTask updated) async {
-    await ref.read(todoRepositoryProvider).upsertTask(updated);
-    if (!mounted) return;
-    ref.invalidate(todoTasksProvider(updated.listId));
-    _invalidateTodoListData();
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+  bool _orderIdsMatchSortOrder(List<String> order, List<TodoTask> tasks) {
+    final natural = sortTodoTasks(tasks).map((task) => task.id).toList();
+    if (order.length != natural.length) return false;
+    for (var i = 0; i < order.length; i++) {
+      if (order[i] != natural[i]) return false;
+    }
+    return true;
+  }
+
+  Future<void> _toggleStar(TodoTask task, List<TodoTask> activeTasks) async {
+    final batch = applyStarToggle(task, activeTasks);
+    setState(() {
+      _applySortBatchOptimistic(batch, activeTasks);
+    });
+    final updated = batch.tasks.firstWhere(
+      (t) => t.id == task.id,
+      orElse: () => task,
+    );
+    await _persistSortBatch(batch, task.listId);
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'STAR_TOGGLE',
+      task: updated,
+      details:
+          'starred: ${task.starred} → ${updated.starred}, '
+          'sortOrder: ${task.sortOrder} → ${updated.sortOrder}',
+    );
   }
 
   Future<({int completed, int total})> _subtaskStats(String taskId) async {
@@ -326,6 +455,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   }
 
   void _invalidateTodoListData({String? listId}) {
+    ref.invalidate(todoTasksProvider);
     if (listId != null) {
       ref.invalidate(todoTasksProvider(listId));
     }
@@ -355,6 +485,17 @@ class _TodoPageState extends ConsumerState<TodoPage>
       return (active: activeCount, completed: completedCount);
     }
     return stats?[listId] ?? (active: 0, completed: 0);
+  }
+
+  Future<void> _createListFromDropdown() async {
+    final created = await createTodoList(context, ref);
+    if (!mounted || created == null) return;
+    setState(() {
+      _selectedListId = created.id;
+      _showAllTasks = false;
+    });
+    _closeEditPanel();
+    _markListViewed(created.id);
   }
 
   Future<void> _handleListManage(
@@ -408,31 +549,70 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
   }
 
+  Future<void> _applyListMoveOptimistic({
+    required TodoTask task,
+    required TodoTask panelTask,
+    required List<TodoTask> active,
+  }) async {
+    final repo = ref.read(todoRepositoryProvider);
+    final destSiblings = await repo.listTasks(task.listId);
+    final destActive = activeTopLevelTasks(destSiblings);
+    if (!mounted) return;
+
+    final batch = applyTaskListMove(
+      panelTask.copyWith(
+        listId: task.listId,
+        dueDate: task.dueDate ?? panelTask.dueDate,
+        dueDateSetAt: task.dueDateSetAt ?? panelTask.dueDateSetAt,
+        starred: task.starred,
+      ),
+      destActive,
+    );
+    final sortedTask = batch.tasks.firstWhere(
+      (updated) => updated.id == task.id,
+      orElse: () => task,
+    );
+    final merged = sortedTask.copyWith(
+      title: task.title,
+      notes: task.notes,
+      listId: task.listId,
+    );
+    setState(() {
+      _optimisticActiveTaskOrder = null;
+      _applySortBatchOptimistic(batch, [...destActive, panelTask]);
+      _taskOverrides[task.id] = merged;
+      _editPanelTask = merged;
+      _selectedListId = task.listId;
+      _selectedTaskId = task.id;
+    });
+    _markListViewed(task.listId);
+  }
+
   Future<void> _reorderActiveTasks(
     List<TodoTask> active,
     int oldIndex,
     int newIndex,
   ) async {
-    final items = List<TodoTask>.from(active);
-    final moved = items.removeAt(oldIndex);
-    items.insert(newIndex, moved);
+    final batch = applyReorder(active, oldIndex, newIndex);
+    if (batch == null) return;
+
+    final moved = active[oldIndex];
     setState(() {
-      _optimisticActiveTaskOrder = items.map((task) => task.id).toList();
+      _applySortBatchOptimistic(batch, active);
     });
-    final repo = ref.read(todoRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    var starredIndex = 0;
-    var unstarredIndex = unstarredSortOrderBase;
-    for (var i = 0; i < items.length; i++) {
-      final newOrder =
-          items[i].starred ? starredIndex++ : unstarredIndex++;
-      if (items[i].sortOrder == newOrder) continue;
-      final updated = items[i].copyWith(sortOrder: newOrder);
-      await repo.upsertTask(updated);
-      remoteSync.pushTodoTaskNow(updated);
-    }
-    ref.invalidate(todoTasksProvider(_selectedListId!));
-    _invalidateTodoListData();
+    await _persistSortBatch(batch, _selectedListId!);
+    final updated = batch.tasks.firstWhere(
+      (t) => t.id == moved.id,
+      orElse: () => moved,
+    );
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'MANUAL_REORDER',
+      task: updated,
+      details:
+          'listId=${_selectedListId!} oldIndex=$oldIndex newIndex=$newIndex, '
+          'sortOrder: ${moved.sortOrder} → ${updated.sortOrder}',
+    );
   }
 
   List<TodoTask> _applyOptimisticActiveOrder(List<TodoTask> active) {
@@ -481,7 +661,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
           data: (tasks) {
             _reconcileCompletionOverrides(tasks);
             _reconcileTaskOverrides(tasks);
-            final sorted = sortTodoTasks(_tasksWithOverrides(tasks));
+            _maybeNormalizeListSort(tasks, listId);
+            final sorted = sortTodoTasks(
+              _tasksWithOverrides(
+                tasks,
+                viewingListId: listId,
+                showAllTasks: _showAllTasks,
+              ),
+            );
             final active = _applyOptimisticActiveOrder(
               sorted.where((t) => !t.completed).toList(),
             );
@@ -512,11 +699,23 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                 value: listId,
                                 displayLabel:
                                     _showAllTasks ? 'All tasks' : null,
-                                labelColor: _showAllTasks
-                                    ? Theme.of(context).colorScheme.primary
-                                    : currentList?.colorValue == null
-                                        ? null
-                                        : Color(currentList!.colorValue!),
+                                labelColor: Color(
+                                  _showAllTasks
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .toARGB32()
+                                      : currentList?.colorValue ??
+                                          Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                              .toARGB32(),
+                                ),
+                                closedTrailing: _showAllTasks
+                                    ? null
+                                    : '${active.length} | ${completed.length}',
+                                onAddList: () =>
+                                    unawaited(_createListFromDropdown()),
                                 manageMenuEntriesFor: (listId) =>
                                     listId == legacyTodoListId
                                         ? defaultEntityManageMenuEntries
@@ -537,22 +736,35 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                 },
                                 items: lists
                                     .map(
-                                      (l) => RoundedDropdownItem(
-                                        value: l.id,
-                                        label: l.name,
-                                        leading: JournalBookmarkFlag(
-                                          colorValue: l.colorValue ??
-                                              Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .toARGB32(),
-                                          size: 12,
-                                        ),
-                                      ),
+                                      (l) {
+                                        final stat = _statsForList(
+                                          l.id,
+                                          stats,
+                                          activeCount: active.length,
+                                          completedCount: completed.length,
+                                        );
+                                        return RoundedDropdownItem(
+                                          value: l.id,
+                                          label: l.name,
+                                          trailing:
+                                              '${stat.active} | ${stat.completed}',
+                                          leading: JournalBookmarkFlag(
+                                            colorValue: l.colorValue ??
+                                                Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    .toARGB32(),
+                                            size: 12,
+                                          ),
+                                        );
+                                      },
                                     )
                                     .toList(),
                                 onChanged: (v) {
-                                  setState(() => _selectedListId = v);
+                                  setState(() {
+                                    _selectedListId = v;
+                                    _optimisticActiveTaskOrder = null;
+                                  });
                                   _closeEditPanel();
                                   _markListViewed(v);
                                 },
@@ -722,8 +934,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
                               child: LabeledTextField(
                                 label: '',
                                 showLabel: false,
+                                hintText: 'Add task',
                                 controller: _taskController,
                                 focusNode: _taskFocusNode,
+                                accentColor: Color(
+                                  currentList?.colorValue ??
+                                      Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .toARGB32(),
+                                ),
                                 onSubmitted: (_) => _addTask(),
                               ),
                             ),
@@ -777,9 +997,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                 _closeEditPanel();
                               },
                               onChanged: () {
-                                _invalidateTodoListData(
-                                  listId: panelTask.listId,
-                                );
+                                _invalidateTodoListData();
                               },
                               onDeleted: () {
                                 _invalidateTodoListData(
@@ -791,17 +1009,74 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                 panelTask,
                                 sorted.where((t) => !t.completed).toList(),
                               ),
+                              onSortBatchApplied: (batch) {
+                                unawaited(
+                                  _applyPersistedSortBatchToUi(
+                                    batch,
+                                    reason: 'persisted_sort_batch',
+                                    focusTask: panelTask,
+                                  ),
+                                );
+                              },
                               onTaskOptimistic: (task) {
+                                final active =
+                                    sorted.where((t) => !t.completed).toList();
+                                final dueDateChanged =
+                                    task.dueDate != panelTask.dueDate ||
+                                    task.dueDateSetAt !=
+                                        panelTask.dueDateSetAt;
+                                final movedList =
+                                    task.listId != panelTask.listId;
+
+                                if (movedList && !task.isSubtask) {
+                                  unawaited(
+                                    _applyListMoveOptimistic(
+                                      task: task,
+                                      panelTask: panelTask,
+                                      active: active,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                if (dueDateChanged && !task.isSubtask) {
+                                  final batch = applyDueDateChange(
+                                    panelTask,
+                                    active,
+                                    dueDate: task.dueDate,
+                                    clearDueDate: task.dueDate == null &&
+                                        panelTask.dueDate != null,
+                                  );
+                                  final sortedTask = batch.tasks.firstWhere(
+                                    (updated) => updated.id == task.id,
+                                    orElse: () => task,
+                                  );
+                                  final merged = sortedTask.copyWith(
+                                    title: task.title,
+                                    notes: task.notes,
+                                    listId: task.listId,
+                                  );
+                                  setState(() {
+                                    _applySortBatchOptimistic(batch, active);
+                                    _taskOverrides[task.id] = merged;
+                                    _editPanelTask = merged;
+                                    if (movedList) {
+                                      _selectedListId = task.listId;
+                                      _selectedTaskId = task.id;
+                                    }
+                                  });
+                                  if (movedList) {
+                                    _markListViewed(task.listId);
+                                  }
+                                  return;
+                                }
+
                                 _taskOverrides[task.id] = task;
                                 final affectsSort =
-                                    task.dueDate != panelTask.dueDate ||
                                     task.starred != panelTask.starred ||
                                     task.sortOrder != panelTask.sortOrder ||
-                                    task.listId != panelTask.listId;
-                                if (affectsSort ||
-                                    task.listId != _selectedListId) {
-                                  final movedList =
-                                      task.listId != _selectedListId;
+                                    movedList;
+                                if (affectsSort || movedList) {
                                   setState(() {
                                     _editPanelTask = task;
                                     if (movedList) {
@@ -948,15 +1223,31 @@ class _TaskRowState extends State<_TaskRow>
     return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dueDate)}';
   }
 
+  bool _isDueDatePast(DateTime dueDate) {
+    final local = dueDate.toLocal();
+    final now = DateTime.now();
+    if (local.hour == 0 && local.minute == 0) {
+      return DateUtils.dateOnly(local).isBefore(DateUtils.dateOnly(now));
+    }
+    return local.isBefore(now);
+  }
+
   List<Widget> _metadataWidgets(
     String? dueLabel,
+    bool dueDatePast,
     ({int completed, int total})? stats,
     bool hasNotes,
     Color? metadataColor,
+    Color overdueColor,
   ) {
     final widgets = <Widget>[];
     if (dueLabel != null) {
-      widgets.add(Text(dueLabel));
+      widgets.add(
+        Text(
+          dueLabel,
+          style: dueDatePast ? TextStyle(color: overdueColor) : null,
+        ),
+      );
     }
     if (stats != null && stats.total > 0) {
       if (widgets.isNotEmpty) widgets.add(const Text(' · '));
@@ -978,6 +1269,8 @@ class _TaskRowState extends State<_TaskRow>
   @override
   Widget build(BuildContext context) {
     final dueLabel = _formatDue(widget.task.dueDate);
+    final dueDatePast =
+        widget.task.dueDate != null && _isDueDatePast(widget.task.dueDate!);
     final listColor = widget.listColor == null
         ? null
         : Color(widget.listColor!);
@@ -1058,9 +1351,11 @@ class _TaskRowState extends State<_TaskRow>
                             .withValues(alpha: 0.72);
                         final metadata = _metadataWidgets(
                           dueLabel,
+                          dueDatePast,
                           snapshot.data,
                           widget.task.notes?.trim().isNotEmpty == true,
                           metadataColor,
+                          Theme.of(context).colorScheme.error,
                         );
                         if (metadata.isEmpty) return const SizedBox.shrink();
                         return Padding(

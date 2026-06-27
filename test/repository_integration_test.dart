@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/constants/todo_sort_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -249,13 +250,63 @@ void main() {
         id: newId(),
         listId: list.id,
         title: 'Unstarred',
-        sortOrder: 1,
+        sortOrder: unstarredSortOrderBase,
         createdAt: now,
         updatedAt: now,
       ),
     );
 
-    expect(await todoRepo.nextSortOrder(list.id), 1000);
+    expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
+  });
+
+  test('todo repository nextSortOrder inserts above existing unstarred tasks',
+      () async {
+    final now = utcNow();
+    final list = TodoListModel(
+      id: newId(),
+      name: 'Inbox',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await todoRepo.upsertList(list);
+
+    await todoRepo.upsertTask(
+      TodoTask(
+        id: newId(),
+        listId: list.id,
+        title: 'Existing',
+        sortOrder: unstarredSortOrderBase,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
+  });
+
+  test('todo repository nextSortOrder places new task at top of undated section',
+      () async {
+    final now = utcNow();
+    final list = TodoListModel(
+      id: newId(),
+      name: 'Inbox',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await todoRepo.upsertList(list);
+
+    await todoRepo.upsertTask(
+      TodoTask(
+        id: newId(),
+        listId: list.id,
+        title: 'Legacy',
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
   });
 
   test('tracker repository persists tracker values', () async {

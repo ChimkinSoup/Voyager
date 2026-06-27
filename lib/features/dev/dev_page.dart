@@ -9,6 +9,7 @@ import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/dev/dev_calendar_debug_tile.dart';
+import 'package:voyager/features/dev/dev_todo_sort_debug_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
@@ -86,6 +87,8 @@ class DevPage extends ConsumerWidget {
         const DevCalendarDebugSection(),
         const Divider(height: 32),
         DevWeatherApiTile(settings: settings),
+        const Divider(height: 32),
+        const DevTodoSortDebugSection(),
         const Divider(height: 32),
         ListTile(
           title: const Text('Force reload local data'),

@@ -7,7 +7,7 @@ import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 export 'package:voyager/core/widgets/color_picker_field.dart'
-    show ColorPaletteGrid, pickColorFromPalette;
+    show ColorPaletteGrid, paletteViewportHeight, pickColorFromPalette;
 
 Future<int?> pickPaletteColorWithRef(
   WidgetRef ref,

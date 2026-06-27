@@ -56,7 +56,9 @@ class AppShell extends ConsumerWidget {
                   ),
                 ),
                 const VerticalDivider(width: 12),
-                Expanded(child: child),
+                Expanded(
+                  child: child,
+                ),
               ],
             ),
           ),

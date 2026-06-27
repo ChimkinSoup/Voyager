@@ -280,7 +280,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                     onSubmitted: (_) => _bodyFocusNode.requestFocus(),
                   ),
                   Positioned(
-                    top: 10,
+                    top: 0,
                     right: 10,
                     child: JournalTitleCornerFlag(
                       colorValue: _accentColor.toARGB32(),

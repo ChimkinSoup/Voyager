@@ -4,6 +4,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -77,6 +78,60 @@ Future<void> changeJournalListColor(
   await ref.read(journalRepositoryProvider).upsertJournal(updated);
   ref.read(remoteSyncServiceProvider).pushJournal(updated);
   ref.invalidate(journalsProvider);
+}
+
+Future<Journal?> createJournalList(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final allJournals = ref.read(journalsProvider).valueOrNull ?? [];
+  final palette = ref.read(colorPaletteProvider);
+  final defaultColor = Theme.of(context).colorScheme.primary.toARGB32();
+  final assigner = paletteFromItems(
+    allJournals.map((j) => j.colorValue),
+    palette,
+  );
+  final result = await showCreateNameColorDialog(
+    context,
+    title: 'New journal',
+    palette: palette,
+    initialColor: assigner.nextColor(),
+    usedColors: allJournals
+        .where((j) => j.colorValue != null)
+        .map((j) => j.colorValue!)
+        .toSet(),
+  );
+  if (result == null) return null;
+
+  final now = utcNow();
+  final repo = ref.read(journalRepositoryProvider);
+  final remoteSync = ref.read(remoteSyncServiceProvider);
+  final created = Journal(
+    id: newId(),
+    name: result.name,
+    colorValue: result.color,
+    createdAt: now,
+    updatedAt: now,
+  );
+
+  if (allJournals.isEmpty) {
+    final legacy = Journal(
+      id: legacyJournalId,
+      name: 'Journal',
+      colorValue: defaultColor,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await repo.upsertJournal(legacy);
+    remoteSync.pushJournal(legacy);
+  }
+
+  await repo.upsertJournal(created);
+  remoteSync.pushJournal(created);
+  ref.invalidate(journalEntriesProvider);
+  ref.invalidate(journalListEntriesProvider);
+  ref.invalidate(journalsProvider);
+  return created;
 }
 
 Future<bool> deleteJournalList(

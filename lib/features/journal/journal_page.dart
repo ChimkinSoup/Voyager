@@ -230,6 +230,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     unawaited(_persistEntryListWidth(width));
   }
 
+  Future<void> _createJournalFromDropdown() async {
+    final created = await createJournalList(context, ref);
+    if (!mounted || created == null) return;
+    setState(() {
+      _journalFilter = created.id;
+      _lastViewedJournalId = created.id;
+      _viewAllJournals = false;
+    });
+    unawaited(_persistLastViewedJournal(created.id));
+  }
+
   Future<void> _handleJournalManage(
     String journalId,
     VoyagerMenuCatalogEntry action,
@@ -615,13 +626,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       builder: (context) => AlertDialog(
         title: const Text('Edit quote'),
         content: SizedBox(
-          width: 560,
+          width: 720,
           child: LabeledTextField(
             label: 'Quote',
             controller: controller,
             autofocus: true,
-            minLines: 5,
-            maxLines: 12,
+            minLines: 8,
+            maxLines: 16,
             onSubmitted: (_) => Navigator.pop(context, controller.text),
           ),
         ),
@@ -831,15 +842,27 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   displayLabel: _viewAllJournals
                                       ? 'All journals'
                                       : null,
-                                  labelColor: _viewAllJournals
-                                      ? Theme.of(context).colorScheme.primary
-                                      : selectedJournal == null
-                                          ? null
-                                          : Color(
-                                              _journalFlagColor(
+                                  labelColor: Color(
+                                    _viewAllJournals
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .toARGB32()
+                                        : selectedJournal == null
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .toARGB32()
+                                            : _journalFlagColor(
                                                 selectedJournal,
                                               ),
-                                            ),
+                                  ),
+                                  closedTrailing: _viewAllJournals
+                                      ? null
+                                      : '${entryCounts[journalFilter] ?? 0}',
+                                  onAddList: () => unawaited(
+                                    _createJournalFromDropdown(),
+                                  ),
                                   manageMenuEntriesFor: (journalId) =>
                                       journalId == legacyJournalId
                                           ? defaultEntityManageMenuEntries
@@ -856,6 +879,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                         (j) => RoundedDropdownItem(
                                           value: j.id,
                                           label: j.name,
+                                          trailing:
+                                              '${entryCounts[j.id] ?? 0}',
                                           leading: JournalBookmarkFlag(
                                             colorValue: _journalFlagColor(j),
                                             size: 12,

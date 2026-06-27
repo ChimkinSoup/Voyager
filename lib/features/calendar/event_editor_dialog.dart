@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 
@@ -65,6 +66,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       setState(() => _titleError = 'Title cannot be empty');
+      _titleFocusNode.requestFocus();
       return;
     }
     Navigator.pop(context, {
@@ -86,6 +88,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             LabeledTextField(
               label: 'Title',
@@ -101,26 +104,24 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
             ),
             if (_titleError != null) ...[
               const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _titleError!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+              Text(
+                _titleError!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
                 ),
               ),
             ],
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Full day'),
               value: _isFullDay,
               onChanged: (v) => setState(() => _isFullDay = v),
             ),
-            DropdownButtonFormField<EventRecurrence>(
-              initialValue: _recurrence,
+            const SizedBox(height: 16),
+            VoyagerDropdownButtonFormField<EventRecurrence>(
               decoration: const InputDecoration(labelText: 'Repeat'),
+              initialValue: _recurrence,
               items: EventRecurrence.values
                   .map(
                     (value) => DropdownMenuItem(
@@ -134,16 +135,17 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
                 setState(() => _recurrence = value);
               },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             LabeledTextField(
               label: 'Notes',
               controller: _notesController,
               maxLines: 3,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             ColorPickerField(
               label: 'Event color',
               value: _colorValue,
+              maxWidth: 420,
               onChanged: (value) => setState(() => _colorValue = value),
             ),
           ],

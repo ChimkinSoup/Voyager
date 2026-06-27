@@ -80,23 +80,34 @@ List<TextSpan> _keywordSpans(
     return [TextSpan(text: text, style: style)];
   }
 
+  final patterns = <String>[
+    if (keywords.length > 1) keywords.join(' '),
+    ...keywords,
+  ]..sort((a, b) => b.length.compareTo(a.length));
+
   final spans = <TextSpan>[];
   var index = 0;
   final lower = text.toLowerCase();
 
+  TextStyle highlightedStyle() => style.copyWith(
+    backgroundColor: style.color?.withValues(alpha: 0.18),
+    fontWeight: FontWeight.w600,
+  );
+
   while (index < text.length) {
     int? hitAt;
     int? hitLen;
-    for (final keyword in keywords) {
-      if (lower.startsWith(keyword, index)) {
+    for (final pattern in patterns) {
+      if (pattern.isEmpty) continue;
+      if (lower.startsWith(pattern, index)) {
         hitAt = index;
-        hitLen = keyword.length;
+        hitLen = pattern.length;
         break;
       }
     }
 
     if (hitAt == null) {
-      final next = _nextKeywordIndex(lower, keywords, index);
+      final next = _nextPatternIndex(lower, patterns, index);
       if (next == null) {
         spans.add(TextSpan(text: text.substring(index), style: style));
         break;
@@ -109,10 +120,7 @@ List<TextSpan> _keywordSpans(
     spans.add(
       TextSpan(
         text: text.substring(hitAt, hitAt + hitLen!),
-        style: style.copyWith(
-          backgroundColor: style.color?.withValues(alpha: 0.18),
-          fontWeight: FontWeight.w600,
-        ),
+        style: highlightedStyle(),
       ),
     );
     index = hitAt + hitLen;
@@ -121,10 +129,11 @@ List<TextSpan> _keywordSpans(
   return spans.isEmpty ? [TextSpan(text: text, style: style)] : spans;
 }
 
-int? _nextKeywordIndex(String lower, List<String> keywords, int from) {
+int? _nextPatternIndex(String lower, List<String> patterns, int from) {
   int? best;
-  for (final keyword in keywords) {
-    final i = lower.indexOf(keyword, from);
+  for (final pattern in patterns) {
+    if (pattern.isEmpty) continue;
+    final i = lower.indexOf(pattern, from);
     if (i >= 0 && (best == null || i < best)) best = i;
   }
   return best;

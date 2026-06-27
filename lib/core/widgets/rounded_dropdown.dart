@@ -12,6 +12,7 @@ class RoundedDropdownItem<T> {
     required this.label,
     this.subtitle,
     this.leading,
+    this.trailing,
     this.manageable = true,
   });
 
@@ -19,6 +20,9 @@ class RoundedDropdownItem<T> {
   final String label;
   final String? subtitle;
   final Widget? leading;
+
+  /// Minimal count shown on the right (e.g. entry count or "3 | 5").
+  final String? trailing;
 
   /// When false, the row can be selected but has no ⋮ menu (e.g. "All journals").
   final bool manageable;
@@ -29,7 +33,14 @@ const useBorderedDropdowns = false;
 
 enum RoundedDropdownVariant { bordered, flat }
 
-class RoundedDropdown<T> extends StatelessWidget {
+/// Sentinel value for the accent "Add list" row in [RoundedDropdown].
+class AddListDropdownValue {
+  const AddListDropdownValue();
+}
+
+const _addListSentinel = AddListDropdownValue();
+
+class RoundedDropdown<T> extends StatefulWidget {
   const RoundedDropdown({
     super.key,
     required this.value,
@@ -37,12 +48,15 @@ class RoundedDropdown<T> extends StatelessWidget {
     required this.onChanged,
     this.onManage,
     this.manageMenuEntriesFor,
+    this.onAddList,
+    this.addListLabel = 'Add list',
     this.variant = useBorderedDropdowns
         ? RoundedDropdownVariant.bordered
         : RoundedDropdownVariant.flat,
     this.labelColor,
     this.labelStyle,
     this.displayLabel,
+    this.closedTrailing,
   });
 
   static const menuTopPadding = 8.0;
@@ -54,6 +68,8 @@ class RoundedDropdown<T> extends StatelessWidget {
   final Future<void> Function(T value, VoyagerMenuCatalogEntry action)? onManage;
   final Iterable<VoyagerMenuCatalogEntry> Function(T value)?
       manageMenuEntriesFor;
+  final VoidCallback? onAddList;
+  final String addListLabel;
   final RoundedDropdownVariant variant;
   final Color? labelColor;
   final TextStyle? labelStyle;
@@ -61,108 +77,154 @@ class RoundedDropdown<T> extends StatelessWidget {
   /// Overrides the closed-state label without adding a menu item.
   final String? displayLabel;
 
+  /// Count shown in the closed selector (to the left of the caret).
+  final String? closedTrailing;
+
+  @override
+  State<RoundedDropdown<T>> createState() => _RoundedDropdownState<T>();
+}
+
+class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
+  var _menuDepth = 0;
+
   Iterable<VoyagerMenuCatalogEntry> _manageEntriesFor(T itemValue) {
-    return manageMenuEntriesFor?.call(itemValue) ?? entityManageMenuEntries;
+    return widget.manageMenuEntriesFor?.call(itemValue) ??
+        entityManageMenuEntries;
   }
 
   bool _showsManageButton(RoundedDropdownItem<T> item) {
-    return onManage != null &&
+    return widget.onManage != null &&
         item.manageable &&
         _manageEntriesFor(item.value).isNotEmpty;
   }
 
   TextStyle _subtitleStyle(ThemeData theme) {
     return theme.textTheme.labelSmall?.copyWith(
-          fontSize: subtitleFontSize,
+          fontSize: RoundedDropdown.subtitleFontSize,
           color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
         ) ??
         TextStyle(
-          fontSize: subtitleFontSize,
+          fontSize: RoundedDropdown.subtitleFontSize,
           color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
         );
+  }
+
+  TextStyle _trailingStyle(ThemeData theme) {
+    return theme.textTheme.labelSmall?.copyWith(
+          fontSize: RoundedDropdown.subtitleFontSize,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.52),
+        ) ??
+        TextStyle(
+          fontSize: RoundedDropdown.subtitleFontSize,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.52),
+        );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!TickerMode.valuesOf(context).enabled && _menuDepth > 0) {
+      _popOpenMenus();
+    }
+  }
+
+  void _popOpenMenus({int? count}) {
+    if (!mounted) return;
+    final navigator = Navigator.of(context);
+    final pops = count ?? _menuDepth;
+    for (var i = 0; i < pops && navigator.canPop(); i++) {
+      navigator.pop();
+    }
+    _menuDepth = 0;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final selected = items.where((item) => item.value == value).firstOrNull;
-    final enabled = onChanged != null && items.isNotEmpty;
-    final flat = variant == RoundedDropdownVariant.flat;
-    final titleStyle = (labelStyle ?? theme.textTheme.titleMedium)?.copyWith(
-      color: labelColor ?? labelStyle?.color ?? theme.colorScheme.onSurface,
+    final selected =
+        widget.items.where((item) => item.value == widget.value).firstOrNull;
+    final enabled = widget.onChanged != null && widget.items.isNotEmpty;
+    final flat = widget.variant == RoundedDropdownVariant.flat;
+    final titleStyle = (widget.labelStyle ?? theme.textTheme.titleMedium)
+        ?.copyWith(
+      color:
+          widget.labelColor ??
+          widget.labelStyle?.color ??
+          theme.colorScheme.onSurface,
       fontWeight: FontWeight.bold,
     );
     final subtitleStyle = _subtitleStyle(theme);
+    final trailingStyle = _trailingStyle(theme);
     final hasSubtitle = selected?.subtitle != null;
-    final closedLabel = displayLabel ?? selected?.label ?? '';
+    final closedLabel = widget.displayLabel ?? selected?.label ?? '';
+    final closedTrailing =
+        widget.closedTrailing ?? selected?.trailing;
 
-    return Builder(
-      builder: (context) {
-        return Material(
-          color: flat
-              ? Colors.transparent
-              : theme.inputDecorationTheme.fillColor,
-          borderRadius: BorderRadius.circular(18),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: enabled ? () => _openMenu(context) : null,
+    return Material(
+      color: flat ? Colors.transparent : theme.inputDecorationTheme.fillColor,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? _openMenu : null,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: hasSubtitle ? 52 : 48,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: flat ? Colors.transparent : null,
+            border: flat
+                ? null
+                : Border.all(color: theme.colorScheme.outline),
             borderRadius: BorderRadius.circular(18),
-            child: Container(
-              height: hasSubtitle ? 52 : 48,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: flat ? Colors.transparent : null,
-                border: flat
-                    ? null
-                    : Border.all(color: theme.colorScheme.outline),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                children: [
-                  if (displayLabel == null && selected?.leading != null) ...[
-                    selected!.leading!,
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          closedLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: titleStyle,
-                        ),
-                        if (hasSubtitle) ...[
-                          const SizedBox(height: 1),
-                          Text(
-                            selected!.subtitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: subtitleStyle,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    PhosphorIconsRegular.caretDown,
-                    color: theme.colorScheme.onSurface.withValues(
-                      alpha: enabled ? 0.8 : 0.38,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-        );
-      },
+          child: Row(
+            children: [
+              if (widget.displayLabel == null && selected?.leading != null) ...[
+                selected!.leading!,
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      closedLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    ),
+                    if (hasSubtitle) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        selected!.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: subtitleStyle,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (closedTrailing != null) ...[
+                const SizedBox(width: 8),
+                Text(closedTrailing, style: trailingStyle),
+              ],
+              const SizedBox(width: 8),
+              Icon(
+                PhosphorIconsRegular.caretDown,
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: enabled ? 0.8 : 0.38,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Future<void> _openMenu(BuildContext context) async {
+  Future<void> _openMenu() async {
     final button = context.findRenderObject()! as RenderBox;
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
@@ -176,28 +238,41 @@ class RoundedDropdown<T> extends StatelessWidget {
     );
     final theme = Theme.of(context);
     final subtitleStyle = _subtitleStyle(theme);
+    final trailingStyle = _trailingStyle(theme);
+    final addList = widget.onAddList;
 
-    final menuItems = <PopupMenuEntry<T>>[
-      for (var i = 0; i < items.length; i++)
+    final menuItems = <PopupMenuEntry<Object?>>[
+      for (var i = 0; i < widget.items.length; i++)
         _RoundedDropdownMenuItem<T>(
-          itemValue: items[i].value,
-          position: VoyagerMenuTheme.positionFor(i, items.length),
-          item: items[i],
-          selected: items[i].value == value,
+          itemValue: widget.items[i].value,
+          position: VoyagerMenuTheme.positionFor(i, widget.items.length),
+          item: widget.items[i],
+          selected: widget.items[i].value == widget.value,
           subtitleStyle: subtitleStyle,
-          showManageButton: _showsManageButton(items[i]),
-          onSelect: () => Navigator.pop<T>(context, items[i].value),
-          onManagePressed: _showsManageButton(items[i])
+          trailingStyle: trailingStyle,
+          showManageButton: _showsManageButton(widget.items[i]),
+          onSelect: () => Navigator.pop<Object?>(context, widget.items[i].value),
+          onManagePressed: _showsManageButton(widget.items[i])
               ? (buttonContext) => _openItemManageMenu(
                     buttonContext,
-                    items[i].value,
-                    _manageEntriesFor(items[i].value),
+                    widget.items[i].value,
+                    _manageEntriesFor(widget.items[i].value),
                   )
               : null,
         ),
+      if (addList != null)
+        _AddListMenuItem(
+          label: widget.addListLabel,
+          position: VoyagerMenuItemPosition.last,
+          onSelect: () {
+            Navigator.pop<Object?>(context);
+            addList();
+          },
+        ),
     ];
 
-    final picked = await showVoyagerMenu<T>(
+    _menuDepth = 1;
+    final picked = await showVoyagerMenu<Object?>(
       context: context,
       position: RelativeRect.fromRect(menuRect, Offset.zero & overlay.size),
       constraints: BoxConstraints(
@@ -206,7 +281,10 @@ class RoundedDropdown<T> extends StatelessWidget {
       ),
       items: menuItems,
     );
-    if (picked != null) onChanged?.call(picked);
+    _menuDepth = 0;
+    if (picked is T) {
+      widget.onChanged?.call(picked);
+    }
   }
 
   Future<void> _openItemManageMenu(
@@ -214,7 +292,7 @@ class RoundedDropdown<T> extends StatelessWidget {
     T itemValue,
     Iterable<VoyagerMenuCatalogEntry> entries,
   ) async {
-    final onManage = this.onManage;
+    final onManage = widget.onManage;
     if (onManage == null) return;
 
     final button = context.findRenderObject()! as RenderBox;
@@ -229,26 +307,91 @@ class RoundedDropdown<T> extends StatelessWidget {
       0,
     );
 
+    _menuDepth = 2;
     final action = await showVoyagerMenu<VoyagerMenuCatalogEntry>(
       context: context,
       position: RelativeRect.fromRect(menuRect, Offset.zero & overlay.size),
       items: buildCatalogMenu(context, from: entries),
     );
-    if (action == null) return;
-    await onManage(itemValue, action);
+    if (action != null) {
+      await onManage(itemValue, action);
+    }
+    if (mounted) {
+      _popOpenMenus(count: 2);
+    }
   }
 }
 
-class _RoundedDropdownMenuItem<T> extends PopupMenuEntry<T> {
+class _AddListMenuItem extends PopupMenuEntry<Object?> {
+  const _AddListMenuItem({
+    required this.label,
+    required this.position,
+    required this.onSelect,
+  });
+
+  final String label;
+  final VoyagerMenuItemPosition position;
+  final VoidCallback onSelect;
+
+  @override
+  double get height => 48 + RoundedDropdown.menuTopPadding;
+
+  @override
+  bool represents(Object? value) => identical(value, _addListSentinel);
+
+  @override
+  State<_AddListMenuItem> createState() => _AddListMenuItemState();
+}
+
+class _AddListMenuItemState extends State<_AddListMenuItem> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final itemPadding = VoyagerMenuTheme.itemPadding(theme);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        itemPadding.left,
+        RoundedDropdown.menuTopPadding,
+        itemPadding.right,
+        4,
+      ),
+      child: Material(
+        color: accent,
+        borderRadius: BorderRadius.circular(VoyagerMenuTheme.radius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onSelect,
+          child: SizedBox(
+            height: 40,
+            child: Center(
+              child: Text(
+                widget.label,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoundedDropdownMenuItem<T> extends PopupMenuEntry<Object?> {
   const _RoundedDropdownMenuItem({
     required this.itemValue,
     required this.position,
     required this.item,
     required this.selected,
     required this.subtitleStyle,
+    required this.trailingStyle,
     required this.showManageButton,
     required this.onSelect,
-    required this.onManagePressed,
+    this.onManagePressed,
   });
 
   final T itemValue;
@@ -256,6 +399,7 @@ class _RoundedDropdownMenuItem<T> extends PopupMenuEntry<T> {
   final RoundedDropdownItem<T> item;
   final bool selected;
   final TextStyle subtitleStyle;
+  final TextStyle trailingStyle;
   final bool showManageButton;
   final VoidCallback onSelect;
   final Future<void> Function(BuildContext buttonContext)? onManagePressed;
@@ -271,7 +415,7 @@ class _RoundedDropdownMenuItem<T> extends PopupMenuEntry<T> {
   }
 
   @override
-  bool represents(T? value) => value == itemValue;
+  bool represents(Object? value) => value == itemValue;
 
   @override
   State<_RoundedDropdownMenuItem<T>> createState() =>
@@ -305,7 +449,7 @@ class _RoundedDropdownMenuItemState<T>
                   padding: EdgeInsets.fromLTRB(
                     itemPadding.left,
                     topInset + 6,
-                    widget.showManageButton ? 4 : itemPadding.right,
+                    4,
                     6,
                   ),
                   child: Align(
@@ -314,12 +458,24 @@ class _RoundedDropdownMenuItemState<T>
                       item: widget.item,
                       selected: widget.selected,
                       subtitleStyle: widget.subtitleStyle,
+                      trailingStyle: widget.trailingStyle,
                     ),
                   ),
                 ),
               ),
             ),
           ),
+          if (widget.item.trailing != null)
+            Padding(
+              padding: EdgeInsets.only(top: topInset + 6, right: 4),
+              child: Align(
+                alignment: Alignment.center,
+                child: Text(
+                  widget.item.trailing!,
+                  style: widget.trailingStyle,
+                ),
+              ),
+            ),
           if (widget.showManageButton && widget.onManagePressed != null)
             Padding(
               padding: EdgeInsets.only(
@@ -362,11 +518,13 @@ class _RoundedDropdownRow<T> extends StatelessWidget {
     required this.item,
     required this.selected,
     required this.subtitleStyle,
+    required this.trailingStyle,
   });
 
   final RoundedDropdownItem<T> item;
   final bool selected;
   final TextStyle subtitleStyle;
+  final TextStyle trailingStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -420,5 +578,6 @@ class BorderedRoundedDropdown<T> extends RoundedDropdown<T> {
     required super.onChanged,
     super.onManage,
     super.manageMenuEntriesFor,
+    super.onAddList,
   }) : super(variant: RoundedDropdownVariant.bordered);
 }

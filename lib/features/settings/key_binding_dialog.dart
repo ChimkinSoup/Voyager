@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/utils/key_binding.dart';
-
 Future<String?> showKeyBindingDialog(
   BuildContext context, {
   required String title,

@@ -9,6 +9,7 @@ import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/dev/cache_status.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
+import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -392,6 +393,20 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
       );
     }),
   ]);
+});
+
+final todoSortDebugLoggerProvider = ChangeNotifierProvider<TodoSortDebugLogger>((
+  ref,
+) {
+  final controller = TodoSortDebugLogger(
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+    todoRepository: ref.watch(todoRepositoryProvider),
+  );
+  unawaited(controller.loadFromSettings());
+  ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+    next.whenData(controller.applySettings);
+  });
+  return controller;
 });
 
 final devSettingsProvider = ChangeNotifierProvider<DevSettingsController>((

@@ -1,32 +1,13 @@
 # FEEDBACK
-Here is some feedback, implement fixes in the best way you see fit. If there is any unclarity, ask questions before proceeding. If the change is applicable to other parts of the app (Such as a universal change like changing a textbox or a repeated UI), apply the change to wherever necessary.
-- [ ] If I star a task, then move it around, then unstar it, it does NOT go back to it's original position, fix this.
-- [ ] If i star a task, then move it below other starred tasks (but still keeping the same number of starred tasks in a row at the top of the list), then add a new task, it does not get entered right below the last starred task in the first chunk, make it so that a new task will be added at the top of the list, below all starred tasks (Below the first chunk of starred tasks)
-- [ ] If i try to edit a journal in the search page, the little bookmark icon is too far to the right and clips out of the title textbox, ensure this does not happen
-	- [ ] Additionally the mood bar does not have the gradient that is present in the main journal page
-	- [ ] If you switch the journal an entry is in, it will close the popup, ensure the popup remains open. Same thing occurs when I change the date of the entry
-	- [ ] The text in the body is invisible and starts very far to the right, fix this
-- [ ] Text is invisible when trying to search for some keywords in the search page
-	- [ ] Ensure that tags are highlighted in the body editor in the search page (Like they are in the main journal page)
-	- [ ] Also ensure the tags are highlighted when i search for a journal entry and see them. This is in the main search page, not when i click on a specific entry to edit it
-- [ ] Currently when I am viewing a specific journal, then delete, i am switched to the next journal in the list. Instead make it default to "All journals"
-- [ ] Typing in the notes section or title section of a task is super slow, fix this
-- [ ] When you delete a list you are left viewing the list still, change the view immediately to show the default list (To-do)
-- [ ] Make the popup page for editing the quote larger overall
-- [ ] Sometimes when I edit a task a certani way or add a due date to another task, some of the tasks in a list disappear until i add another task and then they come back, ensure this does not happen
-- [ ] When editing a task, add the same bookmark icon in the title textbox as the one implemented in journals. This should allow the user to switch which list a task is stored in
-- [ ] Make the list and journal selector in their main pages use larger and bolded font, and make the text color the same as the journal/list color
-- [ ] Make the animation of the right bar sliding to the left and right (When editing a task) 50% longer 
-- [ ] Add flags in the dropdown menu when selecting the current to-do list you are on. The flag should be the bookmark icon from phosphor (Just like how journals shows the icon in the journal's color, lists should show the list next to the icon that is colored with the list's color)
-- [ ] Currently when you select the text box to edit a journal entry's title or it's text body, the border is highlighted with the accent color of the whole app. Instead make it the journal color (The journal where the entry is located in). If the entry has no journal, it should be the default accent color. Apply same logic to to-do lists too. This should include the text boxes that light up when editing the details of a task
-- [ ] Make the "choose color screen" a lot larger and each icon bigger. Also make the grey circle that indicates that a color is already being used by another journal more noticeable
-- [ ] When you check off a subtask, the strikethrough animation does not stop at the end of the text and instead continues until the end of the page. Ensure this does not happen
-	- [ ] Also if the subtask extends multiple times, the strike through should extend through each line in order from top to bottom, currently it just strikes through directly in the middle of the text
-- [ ] When you click a text box when editing a task the borders light up. Make sure they light up the same color as the list
-- [ ] Add more padding in the to-do list between the title, date entry, and the notes section
-- [ ] If you try to add an event in a calendar and you don't type anything into the title but save it, the popup disappear as if something was added, but nothing has been added. Make it so that if you try to press enter or save without a title then make sure that the pop up does not disappear and then a red error message pops up that says you can't have an empty title
-- [ ] If you enter a single event in the calendar, then it takes up the whole date (in the monthly view), make it only take up one line (Same format as if there are 5 events added)
-- [ ] Allow users to press enter to save an event in the calendar
-- [ ] When adding an event, allow the user to add repeating events that repeat every day, week, month, and year. 
-- [ ] Save the last to-do list viewed by the user, so if i have list A opened, then close the app (Or restart it), then list A should be open again. Apply the same thing for journals. 
-- [ ] In the settings page, you can add accent colors to pick from. Currently they are all bordered by an outline, make that outline less bright
+`Here is some feedback, implement fixes in the best way you see fit. If there is any unclarity, ask questions before proceeding. If the change is applicable to other parts of the app (Such as a universal change like changing a textbox or a repeated UI), apply the change to wherever necessary.
+
+
+1. If a task is starred and has a due date then ti should be moved to the top of the starred tasks and then if there are other starred + due date tasks, they should be arranged in chronological order too, where earliest due date is first. Again however, if the user moves these due date tasks around, they should be able to freely (But they should NOT be able to move the starred + dated task outside of the starred task "group")
+2. Yes if you unstar it should move back to it's saved pre-star position even if it was inside of the due-date section (Assuming it still has that due date. If it has no due date, then move it to the top of the unstarred section)
+3. Unstarred tasks with no due date are strictly below all starred tasks, but due date tasks are able to be moved freely. If the user NEVER moves due date tasks, then yes the algorithm should maintain all non due dated tasks strictly below due dated tasks (Since the second a task has a due date it is moved to the top and sorted chronologically, and again this depends on whether the task is unstarred which then causes it to move to the top of the unstarred section or starred where it moves to the very top). Within the unstarred section, new tasks come first (new tasks are inputted under starr + date, star, and unstarred + date, but after these, a task a user has just created will be at the top), and the user is able to freely move the tasks around at will, and you should store that new ordering.
+4.  Clearing a due date should shift all other tasks WITH a due date to move above the task who's due date was reset. Effectively this means that this task is now at the top of the non-due date group.
+5. B, always move the task back to chronological position if the date has been changed or added
+6. Yes an undated task can be dragged into a due-dated section and vice versa. Only the starred Vs unstarred groups are fixed and can only be reorderable within themselves
+7. Yes confirmed. If you star a due dated task, you should order it chronologically within all the starrred tasks, but mark it's current location (before being starred) as the place you should return it to once it has been unstarred
+8. It should go at the top of the undated section (In the unstarred group)
+9. If two tasks share the same due date, they should be ordered by which one was tasked first. So if i create task A and task B, and first I mark A due at 9:00 today, then mark B due at 9:00 today, then it would be B on top (Since it was dated last), and then A
