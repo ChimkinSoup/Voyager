@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
+import 'package:voyager/core/widgets/accent_focus_border.dart';
 
 class TagHighlightedTextField extends StatefulWidget {
   const TagHighlightedTextField({
@@ -18,6 +19,8 @@ class TagHighlightedTextField extends StatefulWidget {
     this.keyboardType,
     this.tagColorFor,
     this.decoration = const InputDecoration(),
+    this.cursorColor,
+    this.useFocusGlow = true,
     this.highlightDebounce = const Duration(milliseconds: 200),
   });
 
@@ -33,6 +36,8 @@ class TagHighlightedTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final int Function(String tag)? tagColorFor;
   final InputDecoration decoration;
+  final Color? cursorColor;
+  final bool useFocusGlow;
   final Duration highlightDebounce;
 
   @override
@@ -109,9 +114,18 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         theme.textTheme.bodyLarge ??
         DefaultTextStyle.of(context).style;
     final strutStyle = StrutStyle.fromTextStyle(baseStyle);
+    final accent = widget.cursorColor ?? theme.colorScheme.primary;
     final decoration = widget.decoration.copyWith(
       hintText: widget.hintText,
       contentPadding: widget.contentPadding,
+      filled: widget.useFocusGlow ? false : widget.decoration.filled,
+      border: widget.useFocusGlow ? InputBorder.none : widget.decoration.border,
+      enabledBorder: widget.useFocusGlow
+          ? InputBorder.none
+          : widget.decoration.enabledBorder,
+      focusedBorder: widget.useFocusGlow
+          ? InputBorder.none
+          : widget.decoration.focusedBorder,
     );
     final padding = widget.contentPadding.resolve(Directionality.of(context));
     final textDirection = Directionality.of(context);
@@ -120,7 +134,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         DefaultTextHeightBehavior.maybeOf(context) ?? _textHeightBehavior;
     final locale = Localizations.maybeLocaleOf(context);
 
-    return Stack(
+    final field = Stack(
       fit: widget.expands ? StackFit.expand : StackFit.loose,
       textDirection: textDirection,
       children: [
@@ -170,12 +184,20 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
             textAlignVertical: TextAlignVertical.top,
             strutStyle: strutStyle,
             style: baseStyle,
-            cursorColor: theme.colorScheme.primary,
+            cursorColor: accent,
             onChanged: widget.onChanged,
             decoration: decoration,
           ),
         ),
       ],
+    );
+
+    if (!widget.useFocusGlow) return field;
+
+    return AccentFocusBorder(
+      focusNode: widget.focusNode,
+      accentColor: accent,
+      child: field,
     );
   }
 }

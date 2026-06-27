@@ -12,7 +12,6 @@ import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
-import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
@@ -24,12 +23,13 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/mood_gradient_slider.dart';
 import 'package:voyager/core/widgets/resizable_pane_divider.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
+import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
-import 'package:voyager/features/journal/journal_manage_sheet.dart';
+import 'package:voyager/features/journal/journal_list_actions.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
@@ -40,10 +40,10 @@ class JournalPage extends ConsumerStatefulWidget {
 }
 
 class _JournalPageState extends ConsumerState<JournalPage> {
-  static const _allJournals = '__all__';
   static const _localSaveDebounce = Duration(milliseconds: 400);
 
-  String _journalFilter = _allJournals;
+  String _journalFilter = legacyJournalId;
+  var _viewAllJournals = false;
   String? _lastViewedJournalId;
   Journal? _pendingJournal;
   final _pendingEntries = <String, JournalEntry>{};
@@ -60,6 +60,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Timer? _metadataSaveTimer;
   var _metadataDirty = false;
   var _suppressAutoSelect = false;
+  var _appliedSavedPreferences = false;
   int? _mood;
   String? _weatherIcon;
   RemoteSyncService? _remoteSync;
@@ -70,11 +71,44 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   @override
   void initState() {
     super.initState();
+    _restoreFromSettings(ref.read(settingsProvider).valueOrNull);
+  }
+
+  void _restoreFromSettings(AppSettings? settings) {
+    final savedId = settings?.lastViewedJournalId;
+    if (savedId != null) {
+      _journalFilter = savedId;
+      _lastViewedJournalId = savedId;
+    }
+    _entryListWidth ??= settings?.journalEntryListWidth;
+  }
+
+  void _applySavedPreferencesIfReady(
+    AppSettings? settings,
+    List<Journal> journals,
+  ) {
+    if (_appliedSavedPreferences || settings == null) return;
+    _appliedSavedPreferences = true;
+
+    final savedId = settings.lastViewedJournalId;
+    final restoredJournalId = savedId != null &&
+            journals.any((journal) => journal.id == savedId)
+        ? savedId
+        : null;
+    if (restoredJournalId == null &&
+        settings.journalEntryListWidth == null) {
+      return;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final settingsRepo = ref.read(settingsRepositoryProvider);
-      final journalRepo = ref.read(journalRepositoryProvider);
-      unawaited(_restoreJournalPreferences(settingsRepo, journalRepo));
+      setState(() {
+        if (restoredJournalId != null) {
+          _journalFilter = restoredJournalId;
+          _lastViewedJournalId = restoredJournalId;
+        }
+        _entryListWidth ??= settings.journalEntryListWidth;
+      });
     });
   }
 
@@ -104,10 +138,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   String _entryListScope(List<Journal>? journals) {
-    if (_journalFilter == _allJournals) return allJournalEntriesScope;
+    if (_viewAllJournals) return allJournalEntriesScope;
     if (journals != null &&
         !journals.any((journal) => journal.id == _journalFilter)) {
-      return allJournalEntriesScope;
+      if (journals.isEmpty) return allJournalEntriesScope;
+      return journals.first.id;
     }
     return _journalFilter;
   }
@@ -131,7 +166,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   String _journalIdForNewEntry(List<Journal> journals) {
-    if (_journalFilter != _allJournals) return _journalFilter;
+    if (journals.any((j) => j.id == _journalFilter)) return _journalFilter;
 
     if (_lastViewedJournalId != null &&
         journals.any((j) => j.id == _lastViewedJournalId)) {
@@ -147,31 +182,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return journals.first.id;
   }
 
-  Future<void> _restoreJournalPreferences(
-    SettingsRepository settingsRepo,
-    JournalRepository journalRepo,
-  ) async {
+  Future<void> _persistLastViewedJournal(String journalId) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
     final settings = await settingsRepo.getSettings();
-    if (!mounted) return;
-
-    final savedId = settings.lastViewedJournalId;
-    String? restoredJournalId;
-    if (savedId != null) {
-      final journals = await journalRepo.listJournals();
-      if (!mounted) return;
-      if (journals.any((j) => j.id == savedId)) {
-        restoredJournalId = savedId;
-      }
-    }
-
-    setState(() {
-      if (restoredJournalId != null) {
-        _lastViewedJournalId = restoredJournalId;
-        _journalFilter = restoredJournalId;
-      }
-      _entryListWidth = settings.journalEntryListWidth;
-    });
+    if (settings.lastViewedJournalId == journalId) return;
+    await settingsRepo.saveSettings(
+      settings.copyWith(lastViewedJournalId: journalId),
+    );
   }
+
 
   Future<void> _persistEntryListWidth(double? width) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
@@ -211,40 +230,43 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     unawaited(_persistEntryListWidth(width));
   }
 
-  Future<void> _persistLastViewedJournal(
+  Future<void> _handleJournalManage(
     String journalId,
-    SettingsRepository settingsRepo,
+    VoyagerMenuCatalogEntry action,
+    List<Journal> allJournals,
+    Map<String, int> entryCounts,
   ) async {
-    final settings = await settingsRepo.getSettings();
-    if (settings.lastViewedJournalId == journalId) return;
-    await settingsRepo.saveSettings(
-      settings.copyWith(lastViewedJournalId: journalId),
-    );
-  }
-
-  Future<void> _rememberViewedJournal(String journalId) async {
-    if (!mounted) return;
-    final journalRepo = ref.read(journalRepositoryProvider);
-    final settingsRepo = ref.read(settingsRepositoryProvider);
-
-    final journals = await journalRepo.listJournals();
-    if (!journals.any((j) => j.id == journalId)) return;
-    if (_lastViewedJournalId == journalId) return;
-    if (!mounted) return;
-    setState(() => _lastViewedJournalId = journalId);
-    await _persistLastViewedJournal(journalId, settingsRepo);
-  }
-
-  Future<void> _createJournal() async {
-    final created = await showJournalManageSheet(context, ref);
-    if (created != null && mounted) {
-      setState(() {
-        _pendingJournal = created;
-        _journalFilter = created.id;
-        _selectedEntryId = null;
-        _selectedEntry = null;
-      });
-      unawaited(_rememberViewedJournal(created.id));
+    final journal = allJournals.firstWhere((j) => j.id == journalId);
+    switch (action) {
+      case VoyagerMenuCatalogEntry.rename:
+        await renameJournalList(context, ref, journal);
+      case VoyagerMenuCatalogEntry.changeColor:
+        await changeJournalListColor(context, ref, journal, allJournals);
+      case VoyagerMenuCatalogEntry.delete:
+        final deleted = await deleteJournalList(
+          context,
+          ref,
+          journal: journal,
+          allJournals: allJournals,
+          entryCount: entryCounts[journalId] ?? 0,
+        );
+        if (deleted && mounted) {
+          final remaining = allJournals.where((j) => j.id != journalId).toList();
+          setState(() {
+            _viewAllJournals = true;
+            _journalFilter = remaining
+                .cast<Journal?>()
+                .firstWhere(
+                  (j) => j!.id == legacyJournalId,
+                  orElse: () => remaining.isNotEmpty ? remaining.first : null,
+                )
+                ?.id ?? legacyJournalId;
+            _selectedEntryId = null;
+            _selectedEntry = null;
+          });
+        }
+      default:
+        break;
     }
   }
 
@@ -436,8 +458,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _mood = displayEntry.mood;
       _weatherIcon = displayEntry.weatherIcon ?? 'sunny';
       _metadataDirty = false;
+      _lastViewedJournalId = displayEntry.journalId;
     });
-    unawaited(_rememberViewedJournal(displayEntry.journalId));
+    unawaited(_persistLastViewedJournal(displayEntry.journalId));
   }
 
   void _updateBodyDraft(String entryId, String body) {
@@ -578,7 +601,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _selectedEntryId = null;
       _selectedEntry = null;
       _titleController.clear();
-      _journalFilter = _allJournals;
     });
     _removePendingEntry(entry.id);
     _invalidateJournalEntriesIfMounted();
@@ -594,12 +616,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         title: const Text('Edit quote'),
         content: SizedBox(
           width: 560,
-          child: TextField(
+          child: LabeledTextField(
+            label: 'Quote',
             controller: controller,
             autofocus: true,
             minLines: 5,
             maxLines: 12,
-            decoration: const InputDecoration(labelText: 'Quote'),
             onSubmitted: (_) => Navigator.pop(context, controller.text),
           ),
         ),
@@ -690,13 +712,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
     final journalsAsync = ref.watch(journalsProvider);
+    final settings = ref.watch(settingsProvider).valueOrNull;
     final entryListScope = _entryListScope(journalsAsync.valueOrNull);
-    final entriesAsync = ref.watch(journalListEntriesProvider(entryListScope));
-    final settings = ref.watch(settingsProvider).value;
+    final entriesAsync = entryListScope == allJournalEntriesScope
+        ? ref.watch(journalEntriesProvider)
+        : ref.watch(journalListEntriesProvider(entryListScope));
 
     return journalsAsync.when(
         skipLoadingOnReload: true,
-        data: (journals) => entriesAsync.when(
+        data: (journals) {
+          _applySavedPreferencesIfReady(settings, journals);
+          return entriesAsync.when(
         skipLoadingOnReload: true,
         data: (entries) {
           _reconcilePendingJournal(journals);
@@ -705,22 +731,33 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                   !journals.any((j) => j.id == _pendingJournal!.id)
               ? [...journals, _pendingJournal!]
               : journals;
-          final journalFilter =
-              _journalFilter == _allJournals ||
-                  displayJournals.any((j) => j.id == _journalFilter)
+          final journalFilter = displayJournals.any((j) => j.id == _journalFilter)
               ? _journalFilter
-              : _allJournals;
+              : displayJournals.isNotEmpty
+                  ? displayJournals.first.id
+                  : legacyJournalId;
           if (journalFilter != _journalFilter) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
-              setState(() => _journalFilter = _allJournals);
+              setState(() => _journalFilter = journalFilter);
             });
           }
-          final filtered = entryListScope == allJournalEntriesScope
+          var filtered = entryListScope == allJournalEntriesScope
               ? displayEntries
               : displayEntries
                   .where((e) => e.journalId == entryListScope)
                   .toList();
+          final selectedId = _selectedEntryId;
+          final selected = _selectedEntry;
+          if (_viewAllJournals &&
+              selectedId != null &&
+              selected != null &&
+              !filtered.any((entry) => entry.id == selectedId)) {
+            filtered = sortJournalEntriesNewestFirst([
+              _entryWithDraftBody(selected),
+              ...filtered,
+            ]);
+          }
           final accentJournal = _selectedEntry == null
               ? null
               : displayJournals.cast<Journal?>().firstWhere(
@@ -735,10 +772,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           final selectedVisible = filtered.any(
             (entry) => entry.id == _selectedEntryId,
           );
-          if (!selectedVisible && filtered.isNotEmpty && !_suppressAutoSelect) {
+          final shouldSelectLatest = filtered.isNotEmpty &&
+              !_suppressAutoSelect &&
+              (_selectedEntryId == null ||
+                  (!_viewAllJournals &&
+                      (_selectedEntry?.journalId != entryListScope ||
+                          !selectedVisible)));
+          if (shouldSelectLatest) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _selectedEntryId != filtered.first.id) {
-                _loadEntry(filtered.first);
+              if (!mounted || filtered.isEmpty) return;
+              final latest = filtered.first;
+              if (_selectedEntryId != latest.id) {
+                _loadEntry(latest);
               }
             });
           }
@@ -747,6 +792,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                   !_pendingEntries.containsKey(_selectedEntryId))) {
             _suppressAutoSelect = false;
           }
+
+          final entryCounts = {
+            for (final journal in displayJournals)
+              journal.id: displayEntries
+                  .where((entry) => entry.journalId == journal.id)
+                  .length,
+          };
+          final selectedJournal = displayJournals.cast<Journal?>().firstWhere(
+                (j) => j!.id == journalFilter,
+                orElse: () => null,
+              );
 
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -772,48 +828,107 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               Expanded(
                                 child: RoundedDropdown<String>(
                                   value: journalFilter,
-                                  labelColor: journalFilter == _allJournals
-                                      ? null
-                                      : Color(
-                                          _journalFlagColor(
-                                            displayJournals.firstWhere(
-                                              (j) => j.id == journalFilter,
+                                  displayLabel: _viewAllJournals
+                                      ? 'All journals'
+                                      : null,
+                                  labelColor: _viewAllJournals
+                                      ? Theme.of(context).colorScheme.primary
+                                      : selectedJournal == null
+                                          ? null
+                                          : Color(
+                                              _journalFlagColor(
+                                                selectedJournal,
+                                              ),
                                             ),
+                                  manageMenuEntriesFor: (journalId) =>
+                                      journalId == legacyJournalId
+                                          ? defaultEntityManageMenuEntries
+                                          : entityManageMenuEntries,
+                                  onManage: (journalId, action) =>
+                                      _handleJournalManage(
+                                        journalId,
+                                        action,
+                                        displayJournals,
+                                        entryCounts,
+                                      ),
+                                  items: displayJournals
+                                      .map(
+                                        (j) => RoundedDropdownItem(
+                                          value: j.id,
+                                          label: j.name,
+                                          leading: JournalBookmarkFlag(
+                                            colorValue: _journalFlagColor(j),
+                                            size: 12,
                                           ),
                                         ),
-                                  items: [
-                                    if (displayJournals.length > 1)
-                                      const RoundedDropdownItem(
-                                        value: _allJournals,
-                                        label: 'All journals',
-                                      ),
-                                    ...displayJournals.map(
-                                      (j) => RoundedDropdownItem(
-                                        value: j.id,
-                                        label: j.name,
-                                        leading: JournalBookmarkFlag(
-                                          colorValue: _journalFlagColor(j),
-                                          size: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                      )
+                                      .toList(),
                                   onChanged: displayJournals.isEmpty
                                       ? null
-                                      : (v) => setState(() {
-                                          _journalFilter = v;
-                                          if (v != _allJournals) {
-                                            unawaited(
-                                              _rememberViewedJournal(v),
-                                            );
-                                          }
-                                        }),
+                                      : (v) {
+                                          setState(() {
+                                            _journalFilter = v;
+                                            _lastViewedJournalId = v;
+                                          });
+                                          unawaited(
+                                            _persistLastViewedJournal(v),
+                                          );
+                                        },
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               IconButton(
-                                tooltip: 'Manage journals',
-                                onPressed: _createJournal,
-                                icon: const Icon(VoyagerIcons.manage),
+                                tooltip: _viewAllJournals
+                                    ? 'Show selected journal only'
+                                    : 'Show all journals',
+                                onPressed: displayJournals.isEmpty
+                                    ? null
+                                    : () {
+                                        if (_viewAllJournals) {
+                                          final journalId =
+                                              _selectedEntry?.journalId;
+                                          setState(() {
+                                            if (journalId != null &&
+                                                displayJournals.any(
+                                                  (j) => j.id == journalId,
+                                                )) {
+                                              _journalFilter = journalId;
+                                              _lastViewedJournalId = journalId;
+                                            }
+                                            _viewAllJournals = false;
+                                          });
+                                          if (journalId != null) {
+                                            unawaited(
+                                              _persistLastViewedJournal(
+                                                journalId,
+                                              ),
+                                            );
+                                          }
+                                        } else {
+                                          setState(
+                                            () => _viewAllJournals = true,
+                                          );
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) {
+                                            if (!mounted) return;
+                                            _writeEntryListScrollStorage(0);
+                                            _scrollEntryListToTop();
+                                          });
+                                        }
+                                      },
+                                icon: Icon(
+                                  PhosphorIconsRegular.listMagnifyingGlass,
+                                  color: _viewAllJournals
+                                      ? Colors.black
+                                      : null,
+                                ),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: _viewAllJournals
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                      : null,
+                                ),
                               ),
                             ],
                           ),
@@ -1029,7 +1144,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
-      ),
+      );
+        },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('$e')),
     );
@@ -1107,7 +1223,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   var _lastPersistedText = '';
   var _dirty = false;
   var _applyingListShortcut = false;
-  var _editorFocused = false;
   RemoteSyncService? _remoteSync;
   JournalRepository? _journalRepo;
   SettingsRepository? _settingsRepo;
@@ -1193,7 +1308,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   void _handleFocusChanged() {
     if (!mounted) return;
     _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
-    setState(() => _editorFocused = widget.focusNode.hasFocus);
   }
 
   void _setEditingFlag(JournalEntry? entry, bool isEditing) {
@@ -1351,43 +1465,19 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _journalRepo = ref.read(journalRepositoryProvider);
     _settingsRepo = ref.read(settingsRepositoryProvider);
 
-    final theme = Theme.of(context);
-    final fillColor =
-        theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: fillColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: _editorFocused
-              ? widget.accentColor.withValues(alpha: 0.95)
-              : theme.dividerColor,
-          width: 1.8,
-        ),
-        boxShadow: [
-          if (_editorFocused)
-            BoxShadow(
-              color: widget.accentColor.withValues(alpha: 0.14),
-              blurRadius: 14,
-              spreadRadius: 1,
-            ),
-        ],
-      ),
-      child: TagHighlightedTextField(
-        controller: _controller,
-        focusNode: widget.focusNode,
-        expands: true,
-        keyboardType: TextInputType.multiline,
-        onChanged: _handleChanged,
-        hintText: 'Start writing...',
-        decoration: const InputDecoration(
-          filled: false,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
+    return TagHighlightedTextField(
+      controller: _controller,
+      focusNode: widget.focusNode,
+      expands: true,
+      keyboardType: TextInputType.multiline,
+      cursorColor: widget.accentColor,
+      onChanged: _handleChanged,
+      hintText: 'Start writing...',
+      decoration: const InputDecoration(
+        filled: false,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
       ),
     );
   }

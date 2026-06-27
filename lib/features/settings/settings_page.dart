@@ -20,6 +20,15 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(settingsProvider);
+    final journalsAsync = ref.watch(journalsProvider);
+    final todoStatsAsync = ref.watch(todoListStatsProvider);
+    final journalCount = journalsAsync.valueOrNull?.length;
+    final todoStats = todoStatsAsync.valueOrNull;
+    final openTaskCount = todoStats?.values
+        .fold<int>(0, (sum, stat) => sum + stat.active);
+    final completedTaskCount = todoStats?.values
+        .fold<int>(0, (sum, stat) => sum + stat.completed);
+
     return settingsAsync.when(
       data: (settings) => KeepAliveScrollView(
         storageKey: ShellPageStorageKeys.settingsList,
@@ -35,6 +44,21 @@ class SettingsPage extends ConsumerWidget {
           SettingsColorPaletteSection(
             settings: settings,
             onSave: (s) => _save(ref, s),
+          ),
+          const SizedBox(height: 16),
+          Text('Statistics', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Total journals'),
+            trailing: Text(_statCountLabel(journalCount)),
+          ),
+          ListTile(
+            title: const Text('Non-completed tasks'),
+            trailing: Text(_statCountLabel(openTaskCount)),
+          ),
+          ListTile(
+            title: const Text('Completed tasks'),
+            trailing: Text(_statCountLabel(completedTaskCount)),
           ),
           const SizedBox(height: 16),
           SwitchListTile(
@@ -138,6 +162,11 @@ class SettingsPage extends ConsumerWidget {
   Future<void> _save(WidgetRef ref, AppSettings settings) async {
     await ref.read(settingsRepositoryProvider).saveSettings(settings);
     ref.invalidate(settingsProvider);
+  }
+
+  String _statCountLabel(int? count) {
+    if (count == null) return '—';
+    return count.toString();
   }
 
   Future<void> _pickCalendarKey(

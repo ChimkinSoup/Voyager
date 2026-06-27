@@ -175,6 +175,8 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
       ref.invalidate(journalsProvider);
       ref.invalidate(todoListsProvider);
       ref.invalidate(todoTasksProvider);
+      ref.invalidate(allTodoTasksProvider);
+      ref.invalidate(todoListStatsProvider);
     },
   );
   ref.onDispose(controller.dispose);
@@ -292,7 +294,8 @@ final journalListEntriesProvider = FutureProvider.family<
     List<JournalEntry>, String>((ref, scope) {
   ref.keepAlive();
   if (scope == allJournalEntriesScope) {
-    return ref.watch(lazyLoadProvider).loadRecentEntries();
+    // Reuse warmed recent-entries cache (same data as [journalEntriesProvider]).
+    return ref.watch(journalEntriesProvider.future);
   }
   return ref.watch(journalRepositoryProvider).listEntries(journalId: scope);
 });
@@ -315,6 +318,33 @@ final todoTasksProvider = FutureProvider.family<List<TodoTask>, String>((
 ) {
   ref.keepAlive();
   return ref.watch(todoRepositoryProvider).listTasks(listId);
+});
+
+final allTodoTasksProvider = FutureProvider<List<TodoTask>>((ref) async {
+  ref.keepAlive();
+  final repo = ref.watch(todoRepositoryProvider);
+  final lists = await ref.watch(todoListsProvider.future);
+  final all = <TodoTask>[];
+  for (final list in lists) {
+    all.addAll(await repo.listTasks(list.id));
+  }
+  return all;
+});
+
+final todoListStatsProvider =
+    FutureProvider<Map<String, ({int active, int completed})>>((ref) async {
+  ref.keepAlive();
+  final repo = ref.watch(todoRepositoryProvider);
+  final lists = await ref.watch(todoListsProvider.future);
+  final stats = <String, ({int active, int completed})>{};
+  for (final list in lists) {
+    final tasks = await repo.listTasks(list.id);
+    stats[list.id] = (
+      active: tasks.where((t) => !t.completed).length,
+      completed: tasks.where((t) => t.completed).length,
+    );
+  }
+  return stats;
 });
 
 final calendarEventsProvider = FutureProvider((ref) {

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -42,6 +44,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final journalsAsync = ref.watch(journalsProvider);
     final search = ref.watch(searchServiceProvider);
     final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider).valueOrNull;
+    final accentColor = Color(
+      settings?.accentColor ?? theme.colorScheme.primary.toARGB32(),
+    );
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -50,16 +56,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           TagHighlightedTextField(
             controller: _queryController,
             focusNode: _queryFocusNode,
+            cursorColor: accentColor,
             hintText: 'Search keywords or #tag',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
-            tagColorFor: colorForTag,
-            decoration: const InputDecoration(
-              labelText: 'Search keywords or #tag',
-              filled: true,
-            ),
             onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              filled: false,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
           ),
           const SizedBox(height: 16),
           Expanded(
@@ -248,10 +253,16 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final dialogWidth = math.min(
+      920.0,
+      MediaQuery.sizeOf(context).width - 48,
+    );
+
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       title: const Text('Journal entry'),
       content: SizedBox(
-        width: 640,
+        width: dialogWidth,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -354,23 +365,18 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
               ),
               const SizedBox(height: 12),
               SizedBox(
-                height: 320,
+                height: 480,
                 child: TagHighlightedTextField(
                   controller: _bodyController,
                   focusNode: _bodyFocusNode,
+                  cursorColor: _accentColor,
                   expands: true,
-                  keyboardType: TextInputType.multiline,
-                  tagColorFor: colorForTag,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
+                  hintText: 'Start writing...',
                   decoration: const InputDecoration(
-                    hintText: 'Start writing...',
                     filled: false,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.all(16),
                   ),
                 ),
               ),

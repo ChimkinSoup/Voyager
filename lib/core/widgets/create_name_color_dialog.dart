@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 
 /// Prompts for a name and palette color when creating journals/lists.
@@ -74,10 +75,10 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            LabeledTextField(
+              label: 'Name',
               controller: _nameController,
               autofocus: true,
-              decoration: const InputDecoration(labelText: 'Name'),
               onChanged: (_) {
                 if (_showEmptyNameError) {
                   setState(() => _showEmptyNameError = false);

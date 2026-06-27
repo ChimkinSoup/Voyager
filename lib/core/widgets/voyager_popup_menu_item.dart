@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 
-/// Opens a Voyager-styled popup menu with no outer padding.
+/// Opens a Voyager-styled popup menu with no outer padding by default.
 Future<T?> showVoyagerMenu<T>({
   required BuildContext context,
   required RelativeRect position,
   required List<PopupMenuEntry<T>> items,
   BoxConstraints? constraints,
+  EdgeInsetsGeometry menuPadding = EdgeInsets.zero,
 }) {
   final menuStyle = VoyagerMenuTheme.showMenuStyle(Theme.of(context));
   return showMenu<T>(
@@ -19,7 +20,7 @@ Future<T?> showVoyagerMenu<T>({
     elevation: menuStyle.elevation,
     shadowColor: menuStyle.shadowColor,
     surfaceTintColor: menuStyle.surfaceTintColor,
-    menuPadding: EdgeInsets.zero,
+    menuPadding: menuPadding,
     clipBehavior: Clip.antiAlias,
     items: items,
   );

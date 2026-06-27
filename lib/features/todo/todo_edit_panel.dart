@@ -307,6 +307,103 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   int _listFlagColor(TodoListModel list) =>
       list.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32();
 
+  static const _compactIconButtonStyle = ButtonStyle(
+    visualDensity: VisualDensity.compact,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    padding: WidgetStatePropertyAll(EdgeInsets.zero),
+    minimumSize: WidgetStatePropertyAll(Size(32, 32)),
+    fixedSize: WidgetStatePropertyAll(Size(32, 32)),
+  );
+
+  Widget _buildHeader(BuildContext context, ThemeData theme, Color? listColor) {
+    Widget starButton() => IconButton(
+      style: _compactIconButtonStyle,
+      onPressed: widget.onToggleStar,
+      icon: Icon(
+        widget.task.starred
+            ? PhosphorIconsFill.star
+            : PhosphorIconsRegular.star,
+      ),
+      color: widget.task.starred
+          ? listColor ?? theme.colorScheme.primary
+          : null,
+      tooltip: widget.task.starred ? 'Unstar task' : 'Star task',
+    );
+
+    Widget deleteButton() => IconButton(
+      style: _compactIconButtonStyle,
+      onPressed: _deleteTask,
+      icon: const Icon(PhosphorIconsRegular.trash),
+      tooltip: 'Delete task',
+    );
+
+    Widget closeButton() => IconButton(
+      style: _compactIconButtonStyle,
+      onPressed: _close,
+      icon: const Icon(PhosphorIconsRegular.x),
+      tooltip: 'Close',
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final title = Text(
+          'Edit task',
+          style: theme.textTheme.titleMedium,
+          overflow: TextOverflow.ellipsis,
+        );
+        final useOverflowMenu = constraints.maxWidth < 128;
+
+        if (useOverflowMenu) {
+          return Row(
+            children: [
+              Expanded(child: title),
+              PopupMenuButton<_HeaderAction>(
+                padding: EdgeInsets.zero,
+                iconSize: 20,
+                tooltip: 'Task actions',
+                onSelected: (action) {
+                  switch (action) {
+                    case _HeaderAction.star:
+                      widget.onToggleStar();
+                    case _HeaderAction.delete:
+                      _deleteTask();
+                    case _HeaderAction.close:
+                      _close();
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: _HeaderAction.star,
+                    child: Text(
+                      widget.task.starred ? 'Unstar task' : 'Star task',
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: _HeaderAction.delete,
+                    child: Text('Delete task'),
+                  ),
+                  const PopupMenuItem(
+                    value: _HeaderAction.close,
+                    child: Text('Close'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: title),
+            starButton(),
+            deleteButton(),
+            closeButton(),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
@@ -324,34 +421,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Edit task', style: theme.textTheme.titleMedium),
-                ),
-                IconButton(
-                  onPressed: widget.onToggleStar,
-                  icon: Icon(
-                    widget.task.starred
-                        ? PhosphorIconsFill.star
-                        : PhosphorIconsRegular.star,
-                  ),
-                  color: widget.task.starred
-                      ? listColor ?? theme.colorScheme.primary
-                      : null,
-                  tooltip: widget.task.starred ? 'Unstar task' : 'Star task',
-                ),
-                IconButton(
-                  onPressed: _deleteTask,
-                  icon: const Icon(PhosphorIconsRegular.trash),
-                  tooltip: 'Delete task',
-                ),
-                IconButton(
-                  onPressed: _close,
-                  icon: const Icon(PhosphorIconsRegular.x),
-                ),
-              ],
-            ),
+            _buildHeader(context, theme, listColor),
             const SizedBox(height: 12),
             Stack(
               clipBehavior: Clip.none,
@@ -465,18 +535,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: LabeledTextField(
+                    label: '',
+                    showLabel: false,
+                    hintText: 'Add subtask',
                     controller: _subtaskController,
                     focusNode: _subtaskFocusNode,
-                    decoration: InputDecoration(
-                      hintText: 'Add subtask',
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: listColor ?? theme.colorScheme.primary,
-                          width: 2,
-                        ),
-                      ),
-                    ),
+                    accentColor: listColor,
                     onSubmitted: (_) => _addSubtask(),
                   ),
                 ),
@@ -657,6 +722,8 @@ class _SubtaskRowState extends State<_SubtaskRow>
     );
   }
 }
+
+enum _HeaderAction { star, delete, close }
 
 class _MultilineStrikePainter extends CustomPainter {
   _MultilineStrikePainter({

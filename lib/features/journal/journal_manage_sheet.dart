@@ -8,6 +8,7 @@ import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -245,10 +246,10 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: TextField(
+        content: LabeledTextField(
+          label: title,
           controller: controller,
           autofocus: true,
-          decoration: InputDecoration(labelText: title),
           onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [

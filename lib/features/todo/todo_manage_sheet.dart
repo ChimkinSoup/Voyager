@@ -5,6 +5,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
@@ -20,6 +21,7 @@ Future<String?> showTodoListManageSheet(
   );
   ref.invalidate(todoListsProvider);
   ref.invalidate(todoTasksProvider);
+  ref.invalidate(allTodoTasksProvider);
   return createdId;
 }
 
@@ -184,6 +186,7 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
     if (choice == DeleteContainerChoice.moveToDefault && total > 0) {
       ref.invalidate(todoTasksProvider(legacyTodoListId));
     }
+    ref.invalidate(allTodoTasksProvider);
     await _reload();
   }
 
@@ -193,10 +196,10 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: TextField(
+        content: LabeledTextField(
+          label: title,
           controller: controller,
           autofocus: true,
-          decoration: InputDecoration(labelText: title),
           onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [

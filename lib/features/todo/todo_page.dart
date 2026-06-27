@@ -8,17 +8,22 @@ import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/constants/todo_sort_constants.dart';
-import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
+import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
+import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/todo/todo_manage_sheet.dart';
+
+const _todoEditPanelWidth = 420.0;
+const _todoEditPanelDuration = Duration(milliseconds: 270);
 
 class TodoPage extends ConsumerStatefulWidget {
   const TodoPage({super.key});
@@ -27,38 +32,48 @@ class TodoPage extends ConsumerStatefulWidget {
   ConsumerState<TodoPage> createState() => _TodoPageState();
 }
 
-class _TodoPageState extends ConsumerState<TodoPage> {
+class _TodoPageState extends ConsumerState<TodoPage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _panelController;
+  late final CurvedAnimation _panelAnimation;
   String? _selectedListId;
   String? _selectedTaskId;
+  TodoTask? _editPanelTask;
   final _taskController = TextEditingController();
   final _taskFocusNode = FocusNode();
   List<String>? _optimisticActiveTaskOrder;
   final _completionOverrides = <String, bool>{};
   final _taskOverrides = <String, TodoTask>{};
   var _completedExpanded = true;
+  var _showAllTasks = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      unawaited(_restoreListPreference());
+    _panelController = AnimationController(
+      vsync: this,
+      duration: _todoEditPanelDuration,
+    );
+    _panelAnimation = CurvedAnimation(
+      parent: _panelController,
+      curve: Curves.easeOutCubic,
+    );
+    _panelController.addStatusListener((status) {
+      if (status == AnimationStatus.dismissed && mounted) {
+        setState(() {
+          _editPanelTask = null;
+          _selectedTaskId = null;
+        });
+      }
     });
-  }
-
-  Future<void> _restoreListPreference() async {
-    final settings = await ref.read(settingsRepositoryProvider).getSettings();
-    if (!mounted) return;
-    final savedId = settings.lastViewedTodoListId;
-    if (savedId == null) return;
-    final lists = await ref.read(todoRepositoryProvider).listLists();
-    if (!mounted) return;
-    if (lists.any((list) => list.id == savedId)) {
-      setState(() => _selectedListId = savedId);
+    final savedId =
+        ref.read(settingsProvider).valueOrNull?.lastViewedTodoListId;
+    if (savedId != null) {
+      _selectedListId = savedId;
     }
   }
 
-  Future<void> _rememberViewedList(String listId) async {
+  Future<void> _persistLastViewedList(String listId) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final settings = await settingsRepo.getSettings();
     if (settings.lastViewedTodoListId == listId) return;
@@ -67,8 +82,53 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     );
   }
 
+  void _markListViewed(String listId) {
+    unawaited(_persistLastViewedList(listId));
+  }
+
+  TodoTask? _panelTaskFor(List<TodoTask> sorted) {
+    final panelTask = _editPanelTask;
+    if (panelTask == null) return null;
+    return sorted.cast<TodoTask?>().firstWhere(
+      (task) => task!.id == panelTask.id,
+      orElse: () => panelTask,
+    );
+  }
+
+  void _openEditPanel(TodoTask task) {
+    setState(() {
+      _editPanelTask = task;
+      _selectedTaskId = task.id;
+    });
+    _panelController.forward();
+  }
+
+  void _closeEditPanel() {
+    _panelController.reverse();
+  }
+
+  String _resolveListId(List<TodoListModel> lists, AppSettings? settings) {
+    if (_selectedListId != null &&
+        lists.any((list) => list.id == _selectedListId)) {
+      return _selectedListId!;
+    }
+    final savedId = settings?.lastViewedTodoListId;
+    if (savedId != null && lists.any((list) => list.id == savedId)) {
+      return savedId;
+    }
+    return lists
+        .cast<TodoListModel?>()
+        .firstWhere(
+          (l) => l!.id == legacyTodoListId,
+          orElse: () => lists.first,
+        )!
+        .id;
+  }
+
   @override
   void dispose() {
+    _panelAnimation.dispose();
+    _panelController.dispose();
     _taskController.dispose();
     _taskFocusNode.dispose();
     super.dispose();
@@ -117,7 +177,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     _taskController.clear();
     _taskFocusNode.requestFocus();
     ref.invalidate(todoTasksProvider(task.listId));
-    ref.invalidate(todoListsProvider);
+    _invalidateTodoListData();
   }
 
   Future<void> _toggleTask(TodoTask task, bool? completed) async {
@@ -138,7 +198,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     await ref.read(todoRepositoryProvider).upsertTask(updated);
     if (!mounted) return;
     ref.invalidate(todoTasksProvider(updated.listId));
-    ref.invalidate(todoListsProvider);
+    _invalidateTodoListData();
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
   }
 
@@ -251,7 +311,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
     await ref.read(todoRepositoryProvider).upsertTask(updated);
     if (!mounted) return;
     ref.invalidate(todoTasksProvider(updated.listId));
-    ref.invalidate(todoListsProvider);
+    _invalidateTodoListData();
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
   }
 
@@ -263,6 +323,81 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       completed: subtasks.where((s) => s.completed).length,
       total: subtasks.length,
     );
+  }
+
+  void _invalidateTodoListData({String? listId}) {
+    if (listId != null) {
+      ref.invalidate(todoTasksProvider(listId));
+    }
+    ref.invalidate(allTodoTasksProvider);
+    ref.invalidate(todoListsProvider);
+    ref.invalidate(todoListStatsProvider);
+  }
+
+  int? _listColorFor(String listId, List<TodoListModel> lists) {
+    for (final list in lists) {
+      if (list.id == listId) return list.colorValue;
+    }
+    return null;
+  }
+
+  List<TodoTask> _activeInList(List<TodoTask> active, String listId) {
+    return active.where((task) => task.listId == listId).toList();
+  }
+
+  ({int active, int completed}) _statsForList(
+    String listId,
+    Map<String, ({int active, int completed})>? stats, {
+    required int activeCount,
+    required int completedCount,
+  }) {
+    if (!_showAllTasks && listId == _selectedListId) {
+      return (active: activeCount, completed: completedCount);
+    }
+    return stats?[listId] ?? (active: 0, completed: 0);
+  }
+
+  Future<void> _handleListManage(
+    String listId,
+    VoyagerMenuCatalogEntry action,
+    List<TodoListModel> allLists,
+    ({int active, int completed}) stat,
+  ) async {
+    final list = allLists.firstWhere((l) => l.id == listId);
+    switch (action) {
+      case VoyagerMenuCatalogEntry.rename:
+        await renameTodoList(context, ref, list);
+      case VoyagerMenuCatalogEntry.changeColor:
+        await changeTodoListColor(context, ref, list, allLists);
+      case VoyagerMenuCatalogEntry.delete:
+        final deleted = await deleteTodoList(
+          context,
+          ref,
+          list: list,
+          allLists: allLists,
+          activeCount: stat.active,
+          completedCount: stat.completed,
+        );
+        if (deleted && mounted) {
+          final updatedLists =
+              ref.read(todoListsProvider).valueOrNull ?? allLists;
+          setState(() {
+            _selectedListId = updatedLists
+                .cast<TodoListModel?>()
+                .firstWhere(
+                  (l) => l!.id == legacyTodoListId,
+                  orElse: () => updatedLists.isNotEmpty
+                      ? updatedLists.first
+                      : null,
+                )
+                ?.id;
+            _optimisticActiveTaskOrder = null;
+          });
+          _closeEditPanel();
+        }
+      default:
+        break;
+    }
   }
 
   TodoListModel? _selectedList(List<TodoListModel> lists) {
@@ -297,6 +432,7 @@ class _TodoPageState extends ConsumerState<TodoPage> {
       remoteSync.pushTodoTaskNow(updated);
     }
     ref.invalidate(todoTasksProvider(_selectedListId!));
+    _invalidateTodoListData();
   }
 
   List<TodoTask> _applyOptimisticActiveOrder(List<TodoTask> active) {
@@ -310,11 +446,14 @@ class _TodoPageState extends ConsumerState<TodoPage> {
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
+    final settings = settingsAsync.valueOrNull;
     final hideCompleted = settingsAsync.maybeWhen(
       data: (settings) => settings.hideCompletedTasks,
       orElse: () => false,
     );
+    final effectiveHideCompleted = hideCompleted && !_showAllTasks;
     final listsAsync = ref.watch(todoListsProvider);
+    final statsAsync = ref.watch(todoListStatsProvider);
 
     return listsAsync.when(
       skipLoadingOnReload: true,
@@ -327,19 +466,16 @@ class _TodoPageState extends ConsumerState<TodoPage> {
             ),
           );
         }
-        if (_selectedListId == null ||
-            !lists.any((list) => list.id == _selectedListId)) {
-          _selectedListId = lists
-              .cast<TodoListModel?>()
-              .firstWhere(
-                (l) => l!.id == legacyTodoListId,
-                orElse: () => lists.first,
-              )
-              ?.id;
+        final listId = _resolveListId(lists, settings);
+        if (_selectedListId != listId) {
+          _selectedListId = listId;
         }
         final currentList = _selectedList(lists);
+        final stats = statsAsync.valueOrNull;
 
-        final tasksAsync = ref.watch(todoTasksProvider(_selectedListId!));
+        final tasksAsync = _showAllTasks
+            ? ref.watch(allTodoTasksProvider)
+            : ref.watch(todoTasksProvider(listId));
         return tasksAsync.when(
           skipLoadingOnReload: true,
           data: (tasks) {
@@ -357,6 +493,9 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                     orElse: () => null,
                   );
 
+
+            final panelTask = _panelTaskFor(sorted);
+
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -370,10 +509,32 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                           children: [
                             Expanded(
                               child: RoundedDropdown<String>(
-                                value: _selectedListId!,
-                                labelColor: currentList?.colorValue == null
-                                    ? null
-                                    : Color(currentList!.colorValue!),
+                                value: listId,
+                                displayLabel:
+                                    _showAllTasks ? 'All tasks' : null,
+                                labelColor: _showAllTasks
+                                    ? Theme.of(context).colorScheme.primary
+                                    : currentList?.colorValue == null
+                                        ? null
+                                        : Color(currentList!.colorValue!),
+                                manageMenuEntriesFor: (listId) =>
+                                    listId == legacyTodoListId
+                                        ? defaultEntityManageMenuEntries
+                                        : entityManageMenuEntries,
+                                onManage: (listId, action) {
+                                  final stat = _statsForList(
+                                    listId,
+                                    stats,
+                                    activeCount: active.length,
+                                    completedCount: completed.length,
+                                  );
+                                  return _handleListManage(
+                                    listId,
+                                    action,
+                                    lists,
+                                    stat,
+                                  );
+                                },
                                 items: lists
                                     .map(
                                       (l) => RoundedDropdownItem(
@@ -391,47 +552,43 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                     )
                                     .toList(),
                                 onChanged: (v) {
-                                  setState(() {
-                                    _selectedListId = v;
-                                    _selectedTaskId = null;
-                                  });
-                                  unawaited(_rememberViewedList(v));
+                                  setState(() => _selectedListId = v);
+                                  _closeEditPanel();
+                                  _markListViewed(v);
                                 },
                               ),
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              onPressed: () async {
-                                final createdId = await showTodoListManageSheet(
-                                  context,
-                                  ref,
-                                );
-                                if (!mounted) return;
-                                final lists =
-                                    ref.read(todoListsProvider).valueOrNull;
-                                setState(() {
-                                  if (createdId != null) {
-                                    _selectedListId = createdId;
-                                  } else if (lists != null &&
-                                      (_selectedListId == null ||
-                                          !lists.any(
-                                            (list) =>
-                                                list.id == _selectedListId,
-                                          ))) {
-                                    _selectedListId = lists
-                                        .cast<TodoListModel?>()
-                                        .firstWhere(
-                                          (l) => l!.id == legacyTodoListId,
-                                          orElse: () => lists.first,
-                                        )
-                                        ?.id;
+                              tooltip: _showAllTasks
+                                  ? 'Show selected list only'
+                                  : 'Show all tasks',
+                              onPressed: () {
+                                if (_showAllTasks) {
+                                  final listId = selectedTask?.listId;
+                                  setState(() {
+                                    if (listId != null &&
+                                        lists.any((l) => l.id == listId)) {
+                                      _selectedListId = listId;
+                                    }
+                                    _showAllTasks = false;
+                                  });
+                                  if (listId != null) {
+                                    _markListViewed(listId);
                                   }
-                                  _selectedTaskId = null;
-                                  _optimisticActiveTaskOrder = null;
-                                });
+                                } else {
+                                  setState(() => _showAllTasks = true);
+                                }
                               },
-                              icon: const Icon(VoyagerIcons.manage),
-                              tooltip: 'Manage lists',
+                              icon: Icon(
+                                PhosphorIconsRegular.listMagnifyingGlass,
+                                color: _showAllTasks ? Colors.black : null,
+                              ),
+                              style: IconButton.styleFrom(
+                                backgroundColor: _showAllTasks
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
                             ),
                           ],
                         ),
@@ -443,41 +600,63 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 if (active.isNotEmpty)
-                                  ReorderableListView(
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    buildDefaultDragHandles: false,
-                                    onReorderItem: (oldIndex, newIndex) =>
-                                        _reorderActiveTasks(
-                                          active,
-                                          oldIndex,
-                                          newIndex,
+                                  if (_showAllTasks)
+                                    ...active.map(
+                                      (task) => _TaskRow(
+                                        key: ValueKey(task.id),
+                                        task: task,
+                                        listColor: _listColorFor(
+                                          task.listId,
+                                          lists,
                                         ),
-                                    children: [
-                                      for (var i = 0; i < active.length; i++)
-                                        ReorderableDragStartListener(
-                                          key: ValueKey(active[i].id),
-                                          index: i,
-                                          child: _TaskRow(
-                                            task: active[i],
-                                            listColor: currentList?.colorValue,
-                                            subtaskStats: _subtaskStats(
-                                              active[i].id,
-                                            ),
-                                            onToggle: (v) =>
-                                                _toggleTask(active[i], v),
-                                            onStar: () =>
-                                                _toggleStar(active[i], active),
-                                            onEdit: () => setState(
-                                              () => _selectedTaskId =
-                                                  active[i].id,
+                                        subtaskStats: _subtaskStats(task.id),
+                                        onToggle: (v) => _toggleTask(task, v),
+                                        onStar: () => _toggleStar(
+                                          task,
+                                          _activeInList(active, task.listId),
+                                        ),
+                                        onEdit: () => _openEditPanel(task),
+                                      ),
+                                    )
+                                  else
+                                    ReorderableListView(
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      buildDefaultDragHandles: false,
+                                      onReorderItem: (oldIndex, newIndex) =>
+                                          _reorderActiveTasks(
+                                            active,
+                                            oldIndex,
+                                            newIndex,
+                                          ),
+                                      children: [
+                                        for (var i = 0; i < active.length; i++)
+                                          ReorderableDragStartListener(
+                                            key: ValueKey(active[i].id),
+                                            index: i,
+                                            child: _TaskRow(
+                                              task: active[i],
+                                              listColor:
+                                                  currentList?.colorValue,
+                                              subtaskStats: _subtaskStats(
+                                                active[i].id,
+                                              ),
+                                              onToggle: (v) => _toggleTask(
+                                                active[i],
+                                                v,
+                                              ),
+                                              onStar: () => _toggleStar(
+                                                active[i],
+                                                active,
+                                              ),
+                                              onEdit: () => _openEditPanel(active[i]),
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                if (!hideCompleted && completed.isNotEmpty) ...[
+                                      ],
+                                    ),
+                                if (!effectiveHideCompleted &&
+                                    completed.isNotEmpty) ...[
                                   const Divider(height: 32),
                                   InkWell(
                                     onTap: () => setState(
@@ -517,14 +696,17 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                                       (task) => _TaskRow(
                                         key: ValueKey(task.id),
                                         task: task,
-                                        listColor: currentList?.colorValue,
+                                        listColor: _listColorFor(
+                                          task.listId,
+                                          lists,
+                                        ),
                                         subtaskStats: _subtaskStats(task.id),
                                         onToggle: (v) => _toggleTask(task, v),
-                                        onStar: () =>
-                                            _toggleStar(task, active),
-                                        onEdit: () => setState(
-                                          () => _selectedTaskId = task.id,
+                                        onStar: () => _toggleStar(
+                                          task,
+                                          _activeInList(active, task.listId),
                                         ),
+                                        onEdit: () => _openEditPanel(task),
                                       ),
                                     ),
                                 ],
@@ -570,61 +752,70 @@ class _TodoPageState extends ConsumerState<TodoPage> {
                   ),
                 ),
                 ClipRect(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 270),
-                    curve: Curves.easeOutCubic,
-                    width: selectedTask == null ? 0 : 420,
-                    child: selectedTask == null
-                        ? const SizedBox.shrink()
-                        : TodoEditPanel(
-                          key: ValueKey(selectedTask.id),
-                          task: selectedTask,
-                          listColor: currentList?.colorValue,
-                          lists: lists,
-                          onClose: () {
-                            ref.invalidate(
-                              todoTasksProvider(selectedTask.listId),
-                            );
-                            ref.invalidate(todoListsProvider);
-                            setState(() => _selectedTaskId = null);
-                          },
-                          onChanged: () {
-                            ref.invalidate(
-                              todoTasksProvider(selectedTask.listId),
-                            );
-                            ref.invalidate(todoListsProvider);
-                          },
-                          onDeleted: () {
-                            setState(() => _selectedTaskId = null);
-                            ref.invalidate(
-                              todoTasksProvider(selectedTask.listId),
-                            );
-                            ref.invalidate(todoListsProvider);
-                          },
-                          onToggleStar: () => _toggleStar(
-                            selectedTask,
-                            sorted.where((t) => !t.completed).toList(),
-                          ),
-                          onTaskOptimistic: (task) {
-                            _taskOverrides[task.id] = task;
-                            final affectsSort =
-                                task.dueDate != selectedTask.dueDate ||
-                                task.starred != selectedTask.starred ||
-                                task.sortOrder != selectedTask.sortOrder ||
-                                task.listId != selectedTask.listId;
-                            if (affectsSort || task.listId != _selectedListId) {
-                              setState(() {
-                                if (task.listId != _selectedListId) {
-                                  _selectedListId = task.listId;
-                                  _selectedTaskId = task.id;
+                  child: AnimatedBuilder(
+                    animation: _panelAnimation,
+                    builder: (context, child) {
+                      return Align(
+                        alignment: Alignment.centerRight,
+                        widthFactor: _panelAnimation.value,
+                        child: child,
+                      );
+                    },
+                    child: SizedBox(
+                      width: _todoEditPanelWidth,
+                      child: panelTask == null
+                          ? const SizedBox.shrink()
+                          : TodoEditPanel(
+                              key: ValueKey(panelTask.id),
+                              task: panelTask,
+                              listColor: _listColorFor(panelTask.listId, lists),
+                              lists: lists,
+                              onClose: () {
+                                _invalidateTodoListData(
+                                  listId: panelTask.listId,
+                                );
+                                _closeEditPanel();
+                              },
+                              onChanged: () {
+                                _invalidateTodoListData(
+                                  listId: panelTask.listId,
+                                );
+                              },
+                              onDeleted: () {
+                                _invalidateTodoListData(
+                                  listId: panelTask.listId,
+                                );
+                                _closeEditPanel();
+                              },
+                              onToggleStar: () => _toggleStar(
+                                panelTask,
+                                sorted.where((t) => !t.completed).toList(),
+                              ),
+                              onTaskOptimistic: (task) {
+                                _taskOverrides[task.id] = task;
+                                final affectsSort =
+                                    task.dueDate != panelTask.dueDate ||
+                                    task.starred != panelTask.starred ||
+                                    task.sortOrder != panelTask.sortOrder ||
+                                    task.listId != panelTask.listId;
+                                if (affectsSort ||
+                                    task.listId != _selectedListId) {
+                                  final movedList =
+                                      task.listId != _selectedListId;
+                                  setState(() {
+                                    _editPanelTask = task;
+                                    if (movedList) {
+                                      _selectedListId = task.listId;
+                                      _selectedTaskId = task.id;
+                                    }
+                                  });
+                                  if (movedList) {
+                                    _markListViewed(task.listId);
+                                  }
                                 }
-                              });
-                              if (task.listId != _selectedListId) {
-                                unawaited(_rememberViewedList(task.listId));
-                              }
-                            }
-                          },
-                        ),
+                              },
+                            ),
+                    ),
                   ),
                 ),
               ],

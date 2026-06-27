@@ -13,6 +13,12 @@ enum VoyagerMenuCatalogEntry {
   weatherSnow,
 }
 
+/// Default entries for built-in default journal/list (rename + color only).
+const defaultEntityManageMenuEntries = [
+  VoyagerMenuCatalogEntry.rename,
+  VoyagerMenuCatalogEntry.changeColor,
+];
+
 /// Default entries and order for journal/list manage menus (⋮ popup).
 const entityManageMenuEntries = [
   VoyagerMenuCatalogEntry.rename,

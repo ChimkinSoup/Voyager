@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -355,7 +356,7 @@ class _RankingDialogState extends ConsumerState<_RankingDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
+            VoyagerTextField(
               controller: _nameController,
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Name'),
@@ -377,7 +378,7 @@ class _RankingDialogState extends ConsumerState<_RankingDialog> {
                   setState(() => _cadence = value ?? _cadence),
             ),
             const SizedBox(height: 12),
-            TextField(
+            VoyagerTextField(
               controller: _maxController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'Max value'),
@@ -590,7 +591,7 @@ class _TrackerCardState extends ConsumerState<_TrackerCard> {
               children: [
                 SizedBox(
                   width: 160,
-                  child: TextField(
+                  child: VoyagerTextField(
                     controller: _intController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
@@ -794,7 +795,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
+              VoyagerTextField(
                 controller: _nameController,
                 autofocus: true,
                 decoration: const InputDecoration(labelText: 'Name'),
@@ -842,7 +843,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 onChanged: (value) => setState(() => _showOnCalendar = value),
               ),
               if (_type == TrackerType.integer) ...[
-                TextField(
+                VoyagerTextField(
                   controller: _defaultIntController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Default value'),
@@ -854,7 +855,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   onChanged: (value) => setState(() => _hasCap = value),
                 ),
                 if (_hasCap)
-                  TextField(
+                  VoyagerTextField(
                     controller: _capController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Cap'),
@@ -868,7 +869,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   onChanged: (value) => setState(() => _defaultBool = value),
                 ),
               if (_type == TrackerType.enumType) ...[
-                TextField(
+                VoyagerTextField(
                   controller: _optionsController,
                   decoration: const InputDecoration(
                     labelText: 'Options',

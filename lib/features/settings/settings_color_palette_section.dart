@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
@@ -101,7 +102,7 @@ class _SettingsColorPaletteSectionState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: TextField(
+              child: VoyagerTextField(
                 controller: _hexController,
                 maxLength: 6,
                 buildCounter: (

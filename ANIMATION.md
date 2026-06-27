@@ -1,15 +1,138 @@
-1. Move Event Metrics to the Global Cache (CPU Fix)
-The Issue: During the Month → Year morph, MorphDayEventStack calculates its frozen metrics (bar height, stride, text size) for all 42 cells on the very first frame of the animation. This causes a tiny CPU spike right when the animation needs to start smoothly.
-The Fix: Event bar height, stride, and font sizes are identical across all cells and determined purely by the screen area size. Move these calculations into CalendarLayoutCache.compute(). Read them globally during the morph instead of calculating them 42 times on frame 1.
+To eliminate the frame-by-frame rebuilds of your main task list and keep Voyager running at a strict 60fps, we will replace the implicit layout animation with an explicit `AnimationController` driving an `AnimatedBuilder`.
 
-2. Flatten the Inactive Rows (GPU Fix)
-The Issue: In the Month ↔ Week morph, you fade out the 5 inactive rows using an Opacity layer over a MonthDayGrid. Fading 35 individual cells (each with text, borders, and events) is expensive.
-The Fix: Wrap the inactive MonthDayGrid in a RepaintBoundary. This forces the graphics processor to take a single snapshot of the 5 rows and simply fade that single flat image to zero, drastically reducing render times.
+Here is the Low-Level Design (LLD) and exact code replacements to isolate the panel's render box.
 
-3. Remove the Redundant Reverse Warmup (Memory Fix)
-The Issue: You have a GPU warmup at login (which covers morphReverse=true) and a second reverse GPU warmup when the month view first opens.
-The Fix: Delete the second warmup. Shader compilation is resolution-independent. Because your login warmup already compiled the instructions for the inverted lerps and reverse styles, doing it again at "real size" does nothing but waste layout processing power. The login warmup is sufficient.
+### 1. State Mixin & Controller Initialization
 
-4. Zero-Allocation Matrix Updates (Memory Fix)
-The Issue: Inside _MorphAnimationLayer, _applyYearTransform(t) interpolates 16 floats. If this creates a new Matrix4 object every frame, it will trigger the garbage collector during the 600ms flight.
-The Fix: Ensure you instantiate a single final Matrix4 _yearTransform = Matrix4.zero(); in your initState. During the animation tick, use _yearTransform.setValues(...) to update the numbers in place. Passing this single mutated object to the Transform widget ensures zero memory allocation during the animation.
+Update your `_TodoPageState` definition to include the `SingleTickerProviderStateMixin` and initialize the explicit controller.
+
+```dart
+class _TodoPageState extends ConsumerState<TodoPage> with SingleTickerProviderStateMixin {
+  late final AnimationController _panelController;
+  late final Animation<double> _panelAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _panelController = AnimationController(
+      vsync: this,
+      duration: _todoEditPanelDuration,
+    );
+    
+    _panelAnimation = CurvedAnimation(
+      parent: _panelController,
+      curve: Curves.easeOutCubic,
+    );
+
+    // Replaces the brittle _editPanelCloseTimer
+    _panelController.addStatusListener((status) {
+      if (status == AnimationStatus.dismissed) {
+        setState(() {
+          _editPanelTask = null;
+          _selectedTaskId = null;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _panelController.dispose();
+    super.dispose();
+  }
+  // ... existing state variables
+
+```
+
+### 2. Update the Triggers
+
+Remove `_editPanelOpen` and the manual timer logic from your trigger methods. Let the controller handle the open/close state.
+
+```dart
+void _openEditPanel(TodoTask task) {
+  setState(() {
+    _editPanelTask = task;
+    _selectedTaskId = task.id;
+  });
+  _panelController.forward();
+}
+
+void _closeEditPanel() {
+  // Safe to call even if already closing/closed
+  _panelController.reverse(); 
+}
+
+```
+
+### 3. Widget Tree Injection (`build` method)
+
+In your `build` method, locate the `ClipRect` near the bottom of the `Row`. Replace the `AnimatedAlign` with an `AnimatedBuilder`.
+
+The critical optimization here is the `child` parameter of the `AnimatedBuilder`. We pass the heavily nested `TodoEditPanel` into the `child` parameter so it is strictly built **once** when opened, and the builder only recalculates the `Align`'s `widthFactor` on every frame.
+
+**Replace your existing `ClipRect` block (lines 752-814) with this:**
+
+```dart
+              ClipRect(
+                child: AnimatedBuilder(
+                  animation: _panelAnimation,
+                  builder: (context, child) {
+                    return Align(
+                      alignment: Alignment.centerRight,
+                      widthFactor: _panelAnimation.value,
+                      child: child,
+                    );
+                  },
+                  // The 'child' is cached by the AnimatedBuilder during the animation ticks.
+                  // It will not rebuild the TodoEditPanel itself unless the outer build() runs.
+                  child: SizedBox(
+                    width: _todoEditPanelWidth,
+                    child: panelTask == null
+                        ? const SizedBox.shrink()
+                        : TodoEditPanel(
+                            key: ValueKey(panelTask.id),
+                            task: panelTask,
+                            listColor: _listColorFor(panelTask.listId, lists),
+                            lists: lists,
+                            onClose: () {
+                              _invalidateTodoListData(listId: panelTask.listId);
+                              _closeEditPanel();
+                            },
+                            onChanged: () {
+                              _invalidateTodoListData(listId: panelTask.listId);
+                            },
+                            onDeleted: () {
+                              _invalidateTodoListData(listId: panelTask.listId);
+                              _closeEditPanel();
+                            },
+                            onToggleStar: () => _toggleStar(
+                              panelTask,
+                              sorted.where((t) => !t.completed).toList(),
+                            ),
+                            onTaskOptimistic: (task) {
+                              _taskOverrides[task.id] = task;
+                              final affectsSort =
+                                  task.dueDate != panelTask.dueDate ||
+                                  task.starred != panelTask.starred ||
+                                  task.sortOrder != panelTask.sortOrder ||
+                                  task.listId != panelTask.listId;
+                              if (affectsSort || task.listId != _selectedListId) {
+                                final movedList = task.listId != _selectedListId;
+                                setState(() {
+                                  _editPanelTask = task;
+                                  if (movedList) {
+                                    _selectedListId = task.listId;
+                                    _selectedTaskId = task.id;
+                                  }
+                                });
+                                if (movedList) {
+                                  _markListViewed(task.listId);
+                                }
+                              }
+                            },
+                          ),
+                  ),
+                ),
+              ),
+
+```
