@@ -56,6 +56,7 @@ Future<void> renameJournalList(
   await ref.read(journalRepositoryProvider).upsertJournal(updated);
   ref.read(remoteSyncServiceProvider).pushJournal(updated);
   ref.invalidate(journalsProvider);
+  await ref.read(journalsProvider.future);
 }
 
 Future<void> changeJournalListColor(
@@ -78,6 +79,7 @@ Future<void> changeJournalListColor(
   await ref.read(journalRepositoryProvider).upsertJournal(updated);
   ref.read(remoteSyncServiceProvider).pushJournal(updated);
   ref.invalidate(journalsProvider);
+  await ref.read(journalsProvider.future);
 }
 
 Future<Journal?> createJournalList(

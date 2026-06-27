@@ -490,6 +490,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Future<void> _createListFromDropdown() async {
     final created = await createTodoList(context, ref);
     if (!mounted || created == null) return;
+    await ref.read(todoListsProvider.future);
+    if (!mounted) return;
     setState(() {
       _selectedListId = created.id;
       _showAllTasks = false;
@@ -582,10 +584,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
       _applySortBatchOptimistic(batch, [...destActive, panelTask]);
       _taskOverrides[task.id] = merged;
       _editPanelTask = merged;
-      _selectedListId = task.listId;
       _selectedTaskId = task.id;
     });
-    _markListViewed(task.listId);
   }
 
   Future<void> _reorderActiveTasks(
@@ -1060,14 +1060,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                     _applySortBatchOptimistic(batch, active);
                                     _taskOverrides[task.id] = merged;
                                     _editPanelTask = merged;
-                                    if (movedList) {
-                                      _selectedListId = task.listId;
-                                      _selectedTaskId = task.id;
-                                    }
                                   });
-                                  if (movedList) {
-                                    _markListViewed(task.listId);
-                                  }
                                   return;
                                 }
 
@@ -1251,7 +1244,7 @@ class _TaskRowState extends State<_TaskRow>
     }
     if (stats != null && stats.total > 0) {
       if (widgets.isNotEmpty) widgets.add(const Text(' · '));
-      widgets.add(Text('${stats.completed} : ${stats.total}'));
+      widgets.add(Text('${stats.completed} | ${stats.total}'));
     }
     if (hasNotes) {
       if (widgets.isNotEmpty) widgets.add(const Text(' · '));

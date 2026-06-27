@@ -315,6 +315,10 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
                     child: MouseRegion(
                       onHover: (event) {
                         final hour = curve.hourAtPixelX(event.localPosition.dx);
+                        if (hour == _hoveredHour &&
+                            event.localPosition == _hoverPosition) {
+                          return;
+                        }
                         setState(() {
                           _hoveredHour = hour;
                           _hoverPosition = event.localPosition;
@@ -1147,32 +1151,34 @@ class _HoverTooltip extends StatelessWidget {
     return Positioned(
       left: left,
       top: top,
-      child: Material(
-        elevation: 3,
-        borderRadius: BorderRadius.circular(8),
-        color: colorScheme.surfaceContainerHighest,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _formatBucketTime(bucket.hour),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
+      child: IgnorePointer(
+        child: Material(
+          elevation: 3,
+          borderRadius: BorderRadius.circular(8),
+          color: colorScheme.surfaceContainerHighest,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _formatBucketTime(bucket.hour),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${bucket.tempC.round()}°C',
-                style: theme.textTheme.titleSmall?.copyWith(color: tempColor),
-              ),
-              Text(
-                '${bucket.rainPercent.round()}% rain',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  '${bucket.tempC.round()}°C',
+                  style: theme.textTheme.titleSmall?.copyWith(color: tempColor),
+                ),
+                Text(
+                  '${bucket.rainPercent.round()}% rain',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
         ),
       ),

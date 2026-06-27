@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
@@ -52,6 +53,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
         );
     _colorValue = e?.colorValue ?? 0xFF7C9EFF;
     _recurrence = e?.recurrence ?? EventRecurrence.none;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _titleFocusNode.requestFocus();
+    });
   }
 
   @override
@@ -82,7 +86,9 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return EnterToSubmitScope(
+      onSubmit: _submit,
+      child: AlertDialog(
       title: Text(widget.event == null ? 'New event' : 'Edit event'),
       content: SizedBox(
         width: 420,
@@ -94,6 +100,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
               label: 'Title',
               controller: _titleController,
               focusNode: _titleFocusNode,
+              autofocus: true,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _submit(),
               onChanged: (_) {
@@ -145,7 +152,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
             ColorPickerField(
               label: 'Event color',
               value: _colorValue,
-              maxWidth: 420,
+              swatchRadius: 24,
               onChanged: (value) => setState(() => _colorValue = value),
             ),
           ],
@@ -161,6 +168,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           child: const Text('Save'),
         ),
       ],
+    ),
     );
   }
 }

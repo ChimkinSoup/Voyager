@@ -17,6 +17,7 @@ import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -414,6 +415,20 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     widget.onChanged();
   }
 
+  Future<void> _reorderSubtasks(int oldIndex, int newIndex) async {
+    final batch = applyReorder(_subtasks, oldIndex, newIndex);
+    if (batch == null) return;
+
+    setState(() => _subtasks = batch.tasks);
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    for (final task in batch.tasks) {
+      await repo.upsertTask(task);
+      remoteSync.pushTodoTaskNow(task);
+    }
+    widget.onChanged();
+  }
+
   Future<void> _promoteSubtask(TodoTask subtask) async {
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
@@ -586,7 +601,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _remoteSync = ref.read(remoteSyncServiceProvider);
     final theme = Theme.of(context);
     final listColor = _listAccentColor;
-    return Material(
+    return EnterToSubmitScope(
+      onSubmit: () => unawaited(_close()),
+      child: Material(
       elevation: 0,
       color: theme.colorScheme.surface,
       child: Container(
@@ -729,20 +746,26 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             ),
             const SizedBox(height: 4),
             Expanded(
-              child: ListView(
-                children: _subtasks
-                    .map(
-                      (subtask) => _SubtaskRow(
-                        subtask: subtask,
+              child: ReorderableListView(
+                buildDefaultDragHandles: false,
+                onReorderItem: _reorderSubtasks,
+                children: [
+                  for (var i = 0; i < _subtasks.length; i++)
+                    ReorderableDragStartListener(
+                      key: ValueKey(_subtasks[i].id),
+                      index: i,
+                      child: _SubtaskRow(
+                        subtask: _subtasks[i],
                         listColor: listColor,
                         onToggle: (completed) =>
-                            _toggleSubtask(subtask, completed),
-                        onRename: (title) => _renameSubtask(subtask, title),
-                        onDelete: () => _deleteSubtask(subtask),
-                        onPromote: () => _promoteSubtask(subtask),
+                            _toggleSubtask(_subtasks[i], completed),
+                        onRename: (title) =>
+                            _renameSubtask(_subtasks[i], title),
+                        onDelete: () => _deleteSubtask(_subtasks[i]),
+                        onPromote: () => _promoteSubtask(_subtasks[i]),
                       ),
-                    )
-                    .toList(),
+                    ),
+                ],
               ),
             ),
             const Divider(height: 24),
@@ -764,6 +787,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -892,7 +916,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Checkbox(
             value: _displayCompleted,
@@ -904,6 +928,10 @@ class _SubtaskRowState extends State<_SubtaskRow>
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final hoverColor = Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.06);
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -915,20 +943,33 @@ class _SubtaskRowState extends State<_SubtaskRow>
                         maxLines: null,
                         decoration: const InputDecoration(
                           isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 12,
+                          ),
                           border: InputBorder.none,
                         ),
                         onSubmitted: (_) => _finishEditing(),
                       )
                     else
-                      GestureDetector(
-                        onTap: _startEditing,
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text(
-                            widget.subtask.title,
-                            style: textStyle,
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _startEditing,
+                          borderRadius: BorderRadius.circular(14),
+                          hoverColor: hoverColor,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 12,
+                            ),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                widget.subtask.title,
+                                style: textStyle,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -948,7 +989,8 @@ class _SubtaskRowState extends State<_SubtaskRow>
                                   textDirection: Directionality.of(context),
                                   maxWidth: constraints.maxWidth,
                                   textPadding: const EdgeInsets.symmetric(
-                                    vertical: 8,
+                                    vertical: 12,
+                                    horizontal: 12,
                                   ),
                                 ),
                               );

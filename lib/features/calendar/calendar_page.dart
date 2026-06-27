@@ -67,7 +67,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   bool _weekMorphForward = true;
   int _weekMorphWeekRow = 0;
   DateTime? _weekMorphAnchor;
-  DateTime? _monthViewMonth;
   DateTime? _lastViewedMonth;
   DateTime? _lastViewedWeekStart;
   int _weekMorphGeneration = 0;
@@ -144,10 +143,23 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _weekMorphAnchor = null;
   }
 
-  /// Month grid month to restore when leaving week view (may differ from week
-  /// start when the week spans a month boundary).
-  DateTime _visibleMonthForWeekReturn() {
-    return _monthViewMonth ?? DateTime(_focused.year, _focused.month, 1);
+  /// Month grid month to restore when leaving week view (latest month in the
+  /// currently focused week when it spans a month boundary).
+  DateTime _visibleMonthForWeekReturn(bool weekStartsMonday) {
+    return _latestMonthInWeek(_focused, weekStartsMonday);
+  }
+
+  DateTime _latestMonthInWeek(DateTime weekAnchor, bool weekStartsMonday) {
+    final weekStart = _weekStart(weekAnchor, weekStartsMonday);
+    var latest = DateTime(weekStart.year, weekStart.month);
+    for (var i = 1; i < 7; i++) {
+      final day = weekStart.add(Duration(days: i));
+      final candidate = DateTime(day.year, day.month);
+      if (candidate.isAfter(latest)) {
+        latest = candidate;
+      }
+    }
+    return DateTime(latest.year, latest.month, 1);
   }
 
   void _rememberViewedMonth(DateTime month) {
@@ -472,7 +484,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _weekMorphForward = true;
       _weekMorphWeekRow = weekRow;
       _weekMorphAnchor = anchor;
-      _monthViewMonth = morphMonth;
       _rememberViewedMonth(morphMonth);
       _weekMorphEvents = List<CalendarEvent>.from(_latestEvents);
       _weekMorphIndicators = List<CalendarDayIndicator>.from(
@@ -501,8 +512,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _rememberViewedWeek(_focused, weekStartsMonday);
       setState(() {
         _mode = CalendarViewMode.month;
-        _focused = _visibleMonthForWeekReturn();
-        _monthViewMonth = null;
+        _focused = _visibleMonthForWeekReturn(weekStartsMonday);
       });
       return;
     }
@@ -517,7 +527,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           _clearWeekMorphCache();
           _mode = CalendarViewMode.month;
           _focused = morphMonth;
-          _monthViewMonth = null;
           _rememberViewedMonth(morphMonth);
           _weekMorphController.duration = _weekMorphDuration;
         });
@@ -536,7 +545,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final cache = _layoutCache;
     if (cache == null) return false;
 
-    final morphMonth = _visibleMonthForWeekReturn();
+    final morphMonth = _visibleMonthForWeekReturn(weekStartsMonday);
     _rememberViewedWeek(_focused, weekStartsMonday);
     final anchor = _focused;
     final weekRow = _weekRowForDate(morphMonth, anchor, weekStartsMonday);
@@ -629,7 +638,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _weekMorphForward = true;
       _clearWeekMorphCache();
       _focused = morphMonth;
-      _monthViewMonth = null;
       _rememberViewedMonth(morphMonth);
       _mode = CalendarViewMode.month;
       _isZooming = true;
@@ -919,9 +927,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         _focused = DateTime(_focused.year, 1, 1);
       } else if (next == CalendarViewMode.month) {
         _focused = _mode == CalendarViewMode.week
-            ? _visibleMonthForWeekReturn()
+            ? _visibleMonthForWeekReturn(weekStartsMonday)
             : _monthTargetForYear(_focused.year);
-        _monthViewMonth = null;
       }
     });
   }
@@ -1030,14 +1037,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _clearWeekMorphCache();
       _mode = CalendarViewMode.week;
       _focused = weekStart;
-      _monthViewMonth = morphMonth;
       _rememberViewedMonth(morphMonth);
       _rememberViewedWeek(weekStart, weekStartsMonday);
       _dayViewDate = null;
     });
   }
 
-  void _instantSwitchToMonthView() {
+  void _instantSwitchToMonthView(bool weekStartsMonday) {
     _abortMorphAnimation();
     final fromYear = _mode == CalendarViewMode.year;
     setState(() {
@@ -1050,11 +1056,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _mode = CalendarViewMode.month;
       _focused = fromYear
           ? _monthTargetForYear(_focused.year)
-          : _visibleMonthForWeekReturn();
+          : _visibleMonthForWeekReturn(weekStartsMonday);
       if (fromYear) {
         _rememberViewedMonth(_focused);
       }
-      _monthViewMonth = null;
       _dayViewDate = null;
     });
   }
@@ -1279,7 +1284,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       final cache = _layoutCache!;
       final morphMonth = _weekMorphForward
           ? DateTime(_focused.year, _focused.month, 1)
-          : _visibleMonthForWeekReturn();
+          : _visibleMonthForWeekReturn(weekStartsMonday);
       final weekRow = _weekMorphWeekRow;
       final anchor = _weekMorphAnchor!;
       final monthRowRects = cache.monthCellRects.sublist(
@@ -1515,7 +1520,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                                 const Spacer(),
                                 if (showInstantViewSwitch) ...[
                                   OutlinedButton(
-                                    onPressed: _instantSwitchToMonthView,
+                                    onPressed: () =>
+                                        _instantSwitchToMonthView(
+                                          weekStartsMonday,
+                                        ),
                                     child: const Text('Month'),
                                   ),
                                   const SizedBox(height: 4),

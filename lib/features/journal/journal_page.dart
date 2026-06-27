@@ -18,6 +18,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
+import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/mood_gradient_slider.dart';
@@ -233,6 +234,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Future<void> _createJournalFromDropdown() async {
     final created = await createJournalList(context, ref);
     if (!mounted || created == null) return;
+    await ref.read(journalsProvider.future);
+    if (!mounted) return;
     setState(() {
       _journalFilter = created.id;
       _lastViewedJournalId = created.id;
@@ -251,8 +254,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     switch (action) {
       case VoyagerMenuCatalogEntry.rename:
         await renameJournalList(context, ref, journal);
+        await _refreshPendingJournal(journalId);
       case VoyagerMenuCatalogEntry.changeColor:
         await changeJournalListColor(context, ref, journal, allJournals);
+        await _refreshPendingJournal(journalId);
       case VoyagerMenuCatalogEntry.delete:
         final deleted = await deleteJournalList(
           context,
@@ -279,6 +284,30 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       default:
         break;
     }
+  }
+
+  Future<void> _refreshPendingJournal(String journalId) async {
+    if (!mounted) return;
+    final journals = await ref.read(journalsProvider.future);
+    if (!mounted) return;
+    final updated = journals.cast<Journal?>().firstWhere(
+          (j) => j!.id == journalId,
+          orElse: () => null,
+        );
+    if (updated == null) return;
+    setState(() => _pendingJournal = updated);
+  }
+
+  List<Journal> _displayJournals(List<Journal> journals) {
+    final pending = _pendingJournal;
+    if (pending == null) return journals;
+    if (!journals.any((journal) => journal.id == pending.id)) {
+      return [...journals, pending];
+    }
+    return [
+      for (final journal in journals)
+        journal.id == pending.id ? pending : journal,
+    ];
   }
 
   void _reconcilePendingJournal(List<Journal> journals) {
@@ -433,6 +462,35 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (_selectedEntryId == finalized.id) {
       setState(() => _selectedEntry = finalized);
     }
+  }
+
+  void _reconcileSelectedEntryFromProvider(List<JournalEntry> entries) {
+    final id = _selectedEntryId;
+    if (id == null || _pendingEntries.containsKey(id)) return;
+    if (_metadataDirty || _entryBodyDrafts.containsKey(id)) return;
+
+    final fresh = entries.cast<JournalEntry?>().firstWhere(
+          (entry) => entry!.id == id,
+          orElse: () => null,
+        );
+    if (fresh == null) return;
+
+    final current = _selectedEntry;
+    if (current == null ||
+        (current.title == fresh.title &&
+            current.body == fresh.body &&
+            current.journalId == fresh.journalId &&
+            current.mood == fresh.mood &&
+            current.customQuote == fresh.customQuote &&
+            current.weatherIcon == fresh.weatherIcon &&
+            current.entryDate == fresh.entryDate)) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _selectedEntryId != id) return;
+      _loadEntry(fresh);
+    });
   }
 
   void _loadEntry(JournalEntry entry) {
@@ -623,7 +681,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final controller = TextEditingController(text: entry.customQuote ?? '');
     final quote = await showDialog<String?>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => EnterToSubmitScope(
+        onSubmit: () => Navigator.pop(context, controller.text),
+        child: AlertDialog(
         title: const Text('Edit quote'),
         content: SizedBox(
           width: 720,
@@ -633,7 +693,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             autofocus: true,
             minLines: 8,
             maxLines: 16,
-            onSubmitted: (_) => Navigator.pop(context, controller.text),
+            onSubmitted: (_) =>
+                Navigator.pop(context, controller.text),
           ),
         ),
         actions: [
@@ -646,6 +707,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             child: const Text('Save'),
           ),
         ],
+      ),
       ),
     );
     controller.dispose();
@@ -725,8 +787,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final journalsAsync = ref.watch(journalsProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
     final entryListScope = _entryListScope(journalsAsync.valueOrNull);
+    final allEntriesAsync = ref.watch(journalEntriesProvider);
     final entriesAsync = entryListScope == allJournalEntriesScope
-        ? ref.watch(journalEntriesProvider)
+        ? allEntriesAsync
         : ref.watch(journalListEntriesProvider(entryListScope));
 
     return journalsAsync.when(
@@ -738,10 +801,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         data: (entries) {
           _reconcilePendingJournal(journals);
           final displayEntries = _buildDisplayEntries(entries);
-          final displayJournals = _pendingJournal != null &&
-                  !journals.any((j) => j.id == _pendingJournal!.id)
-              ? [...journals, _pendingJournal!]
-              : journals;
+          _reconcileSelectedEntryFromProvider(entries);
+          final displayJournals = _displayJournals(journals);
           final journalFilter = displayJournals.any((j) => j.id == _journalFilter)
               ? _journalFilter
               : displayJournals.isNotEmpty
@@ -804,12 +865,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             _suppressAutoSelect = false;
           }
 
-          final entryCounts = {
-            for (final journal in displayJournals)
-              journal.id: displayEntries
-                  .where((entry) => entry.journalId == journal.id)
-                  .length,
-          };
+          final entryCounts = allEntriesAsync.maybeWhen(
+            data: (allEntries) => {
+              for (final journal in displayJournals)
+                journal.id: allEntries
+                    .where((entry) => entry.journalId == journal.id)
+                    .length,
+            },
+            orElse: () => {
+              for (final journal in displayJournals)
+                journal.id: displayEntries
+                    .where((entry) => entry.journalId == journal.id)
+                    .length,
+            },
+          );
           final selectedJournal = displayJournals.cast<Journal?>().firstWhere(
                 (j) => j!.id == journalFilter,
                 orElse: () => null,
@@ -863,6 +932,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   onAddList: () => unawaited(
                                     _createJournalFromDropdown(),
                                   ),
+                                  addListLabel: 'Add journal',
                                   manageMenuEntriesFor: (journalId) =>
                                       journalId == legacyJournalId
                                           ? defaultEntityManageMenuEntries
@@ -894,6 +964,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                           setState(() {
                                             _journalFilter = v;
                                             _lastViewedJournalId = v;
+                                            _viewAllJournals = false;
                                           });
                                           unawaited(
                                             _persistLastViewedJournal(v),

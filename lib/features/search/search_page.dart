@@ -9,6 +9,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/mood_gradient_slider.dart';
@@ -116,6 +117,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                               journals: journals,
                               onSaved: () {
                                 ref.invalidate(journalEntriesProvider);
+                                ref.invalidate(journalListEntriesProvider);
                               },
                             ),
                           );
@@ -258,7 +260,12 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       MediaQuery.sizeOf(context).width - 48,
     );
 
-    return AlertDialog(
+    return EnterToSubmitScope(
+      onSubmit: () async {
+        await _save();
+        if (context.mounted) Navigator.pop(context);
+      },
+      child: AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       title: const Text('Journal entry'),
       content: SizedBox(
@@ -398,6 +405,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
           child: const Text('Save'),
         ),
       ],
+    ),
     );
   }
 }

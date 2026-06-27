@@ -217,6 +217,7 @@ class ColorPickerField extends ConsumerStatefulWidget {
     this.usedColors = const {},
     this.maxWidth,
     this.maxHeight,
+    this.swatchRadius = 18,
   });
 
   final String label;
@@ -225,6 +226,7 @@ class ColorPickerField extends ConsumerStatefulWidget {
   final Set<int> usedColors;
   final double? maxWidth;
   final double? maxHeight;
+  final double swatchRadius;
 
   @override
   ConsumerState<ColorPickerField> createState() => _ColorPickerFieldState();
@@ -256,9 +258,10 @@ class _ColorPickerFieldState extends ConsumerState<ColorPickerField> {
   @override
   Widget build(BuildContext context) {
     final palette = ref.watch(colorPaletteProvider);
+    final media = MediaQuery.sizeOf(context);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(widget.label, style: Theme.of(context).textTheme.labelMedium),
@@ -268,7 +271,8 @@ class _ColorPickerFieldState extends ConsumerState<ColorPickerField> {
           selected: _selected,
           onSelected: _select,
           usedColors: widget.usedColors,
-          maxWidth: widget.maxWidth,
+          swatchRadius: widget.swatchRadius,
+          maxWidth: widget.maxWidth ?? media.width,
           maxHeight: widget.maxHeight,
         ),
       ],
@@ -398,7 +402,7 @@ class _ColorSwatch extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final ringColor = theme.colorScheme.onSurface.withValues(alpha: 0.28);
-    final usedRingColor = theme.colorScheme.onSurface.withValues(alpha: 0.65);
+    final usedRingColor = theme.colorScheme.onSurface.withValues(alpha: 0.88);
     final diameter = radius * 2;
 
     return InkWell(
@@ -413,7 +417,7 @@ class _ColorSwatch extends StatelessWidget {
           border: selected
               ? Border.all(color: ringColor, width: 2.5)
               : used
-              ? Border.all(color: usedRingColor, width: 2.5)
+              ? Border.all(color: usedRingColor, width: 3)
               : null,
         ),
       ),

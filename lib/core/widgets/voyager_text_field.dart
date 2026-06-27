@@ -77,6 +77,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     final baseDecoration = theme.inputDecorationTheme;
     final decoration = (widget.decoration ?? const InputDecoration()).copyWith(
       filled: false,
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
       border: InputBorder.none,
       enabledBorder: InputBorder.none,
       focusedBorder: InputBorder.none,

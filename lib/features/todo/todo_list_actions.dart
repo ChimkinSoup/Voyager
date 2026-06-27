@@ -54,6 +54,7 @@ Future<void> renameTodoList(
   await ref.read(todoRepositoryProvider).upsertList(updated);
   ref.read(remoteSyncServiceProvider).pushTodoList(updated);
   ref.invalidate(todoListsProvider);
+  await ref.read(todoListsProvider.future);
 }
 
 Future<void> changeTodoListColor(
@@ -76,6 +77,7 @@ Future<void> changeTodoListColor(
   await ref.read(todoRepositoryProvider).upsertList(updated);
   ref.read(remoteSyncServiceProvider).pushTodoList(updated);
   ref.invalidate(todoListsProvider);
+  await ref.read(todoListsProvider.future);
 }
 
 Future<bool> deleteTodoList(

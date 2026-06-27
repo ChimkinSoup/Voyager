@@ -128,6 +128,12 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
     }
   }
 
+  @override
+  void deactivate() {
+    _popOpenMenus();
+    super.deactivate();
+  }
+
   void _popOpenMenus({int? count}) {
     if (!mounted) return;
     final navigator = Navigator.of(context);
@@ -314,10 +320,10 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
       items: buildCatalogMenu(context, from: entries),
     );
     if (action != null) {
+      if (mounted) {
+        _popOpenMenus(count: 2);
+      }
       await onManage(itemValue, action);
-    }
-    if (mounted) {
-      _popOpenMenus(count: 2);
     }
   }
 }
@@ -344,6 +350,8 @@ class _AddListMenuItem extends PopupMenuEntry<Object?> {
 }
 
 class _AddListMenuItemState extends State<_AddListMenuItem> {
+  var _hovered = false;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -357,20 +365,38 @@ class _AddListMenuItemState extends State<_AddListMenuItem> {
         itemPadding.right,
         4,
       ),
-      child: Material(
-        color: accent,
-        borderRadius: BorderRadius.circular(VoyagerMenuTheme.radius),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: widget.onSelect,
-          child: SizedBox(
-            height: 40,
-            child: Center(
-              child: Text(
-                widget.label,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.onPrimary,
-                  fontWeight: FontWeight.w600,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Material(
+          color: _hovered
+              ? accent.withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(VoyagerMenuTheme.radius),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onSelect,
+            borderRadius: BorderRadius.circular(VoyagerMenuTheme.radius),
+            child: SizedBox(
+              height: 40,
+              child: Center(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      widget.label,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -433,6 +459,9 @@ class _RoundedDropdownMenuItemState<T>
     );
     final topInset =
         widget._isFirst ? RoundedDropdown.menuTopPadding : 0.0;
+    final selectionBorder = widget.selected
+        ? Border.all(color: theme.colorScheme.primary, width: 1.5)
+        : null;
 
     return SizedBox(
       height: widget.height,
@@ -440,46 +469,45 @@ class _RoundedDropdownMenuItemState<T>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: ClipRRect(
-              borderRadius: highlightRadius,
-              child: InkWell(
-                onTap: widget.onSelect,
-                borderRadius: highlightRadius,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    itemPadding.left,
-                    topInset + 6,
-                    4,
-                    6,
-                  ),
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: _RoundedDropdownRow(
-                      item: widget.item,
-                      selected: widget.selected,
-                      subtitleStyle: widget.subtitleStyle,
-                      trailingStyle: widget.trailingStyle,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                itemPadding.left,
+                topInset + 4,
+                widget.showManageButton ? 2 : itemPadding.right,
+                4,
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: selectionBorder,
+                  borderRadius: highlightRadius,
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  clipBehavior: Clip.antiAlias,
+                  borderRadius: highlightRadius,
+                  child: InkWell(
+                    onTap: widget.onSelect,
+                    borderRadius: highlightRadius,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: _RoundedDropdownRow(
+                        item: widget.item,
+                        subtitleStyle: widget.subtitleStyle,
+                        trailingStyle: widget.trailingStyle,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          if (widget.item.trailing != null)
-            Padding(
-              padding: EdgeInsets.only(top: topInset + 6, right: 4),
-              child: Align(
-                alignment: Alignment.center,
-                child: Text(
-                  widget.item.trailing!,
-                  style: widget.trailingStyle,
-                ),
-              ),
-            ),
           if (widget.showManageButton && widget.onManagePressed != null)
             Padding(
               padding: EdgeInsets.only(
-                right: itemPadding.right,
+                right: 4,
                 top: topInset,
               ),
               child: Builder(
@@ -516,21 +544,18 @@ class _RoundedDropdownMenuItemState<T>
 class _RoundedDropdownRow<T> extends StatelessWidget {
   const _RoundedDropdownRow({
     required this.item,
-    required this.selected,
     required this.subtitleStyle,
     required this.trailingStyle,
   });
 
   final RoundedDropdownItem<T> item;
-  final bool selected;
   final TextStyle subtitleStyle;
   final TextStyle trailingStyle;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (item.leading != null) ...[
           item.leading!,
@@ -556,12 +581,11 @@ class _RoundedDropdownRow<T> extends StatelessWidget {
             ],
           ),
         ),
-        if (selected) ...[
-          const SizedBox(width: 8),
-          Icon(
-            PhosphorIconsRegular.check,
-            size: 18,
-            color: theme.colorScheme.primary,
+        if (item.trailing != null) ...[
+          const SizedBox(width: 16),
+          Text(
+            item.trailing!,
+            style: trailingStyle,
           ),
         ],
       ],
