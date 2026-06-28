@@ -75,12 +75,13 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   @override
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
-    final settings = ref.watch(settingsProvider).value;
+    final accent = Color(
+      ref.watch(
+        settingsProvider.select((s) => s.value?.accentColor ?? 0xFF7C9EFF),
+      ),
+    );
     final router = ref.watch(routerProvider);
-    final accent = Color(settings?.accentColor ?? 0xFF7C9EFF);
     final theme = VoyagerTheme.dark(accent: accent);
-    final geometricProgram = ref.watch(geometricShaderProvider).valueOrNull;
-    final geometricParams = ref.watch(geometricTextureParamsProvider);
 
     return MaterialApp.router(
       title: 'Voyager',
@@ -89,14 +90,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       builder: (context, child) {
         return Stack(
           children: [
-            Positioned.fill(
-              child: GeometricTexture(
-                program: geometricProgram,
-                baseColor: theme.scaffoldBackgroundColor,
-                accentColor: accent,
-                params: geometricParams,
-              ),
-            ),
+            const _GeometricBackground(),
             RepaintBoundary(
               child: DefaultTextStyle(
                 style: AppFonts.style(color: theme.colorScheme.onSurface),
@@ -107,6 +101,33 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         );
       },
       routerConfig: router,
+    );
+  }
+}
+
+/// Watches shader/params providers independently so texture updates do not
+/// rebuild [MaterialApp.router] or the navigation shell.
+class _GeometricBackground extends ConsumerWidget {
+  const _GeometricBackground();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accent = Color(
+      ref.watch(
+        settingsProvider.select((s) => s.value?.accentColor ?? 0xFF7C9EFF),
+      ),
+    );
+    final program = ref.watch(geometricShaderProvider).valueOrNull;
+    final params = ref.watch(geometricTextureParamsProvider);
+    final baseColor = Theme.of(context).scaffoldBackgroundColor;
+
+    return Positioned.fill(
+      child: GeometricTexture(
+        program: program,
+        baseColor: baseColor,
+        accentColor: accent,
+        params: params,
+      ),
     );
   }
 }
