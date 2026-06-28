@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
 class CalendarDayIndicator {
   const CalendarDayIndicator({
@@ -162,7 +163,7 @@ class MonthDayCellStyle {
     borderRadius: 10,
     cellPadding: EdgeInsets.fromLTRB(3, 5, 3, 3),
     cellMargin: EdgeInsets.all(1),
-    maxEventLines: 5,
+    maxEventLines: 4,
     dotSize: 7,
     eventFontSize: 9,
   );
@@ -180,6 +181,8 @@ class CalendarDayCell extends StatelessWidget {
     required this.events,
     required this.indicators,
     required this.style,
+    this.todoMarkers = const [],
+    this.showTodoIcons = true,
     this.onTap,
     this.isSelected = false,
     this.adjacentTextT,
@@ -190,9 +193,13 @@ class CalendarDayCell extends StatelessWidget {
   final DateTime month;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
+  final List<CalendarTodoMarker> todoMarkers;
   final MonthDayCellStyle style;
   final VoidCallback? onTap;
   final bool isSelected;
+
+  /// When false, todo icons are hidden (e.g. during view morph animations).
+  final bool showTodoIcons;
 
   /// When set, adjacent-month day numbers lerp from muted (0) to active (1).
   final double? adjacentTextT;
@@ -284,55 +291,69 @@ class CalendarDayCell extends StatelessWidget {
           )
         : 0.0;
 
+    final showTodos =
+        inMonth && showTodoIcons && todoMarkers.isNotEmpty;
+
     return ClipRect(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
         children: [
-          CalendarDayNumber(
-            date: date,
-            month: month,
-            fontSize: style.fontSize,
-            mutedWhenAdjacent: !inMonth,
-            adjacentTextT: adjacentTextT,
-            isSelected: isSelected,
-          ),
-          if (indicators.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            CalendarDayIndicatorDots(
-              indicators: indicators,
-              dotSize: style.dotSize,
-            ),
-          ],
-          if (inMonth && visibleEvents > 0) ...[
-            const SizedBox(height: 2),
-            SizedBox(
-              height: eventAreaHeight,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < visibleEvents; i++) ...[
-                    if (i > 0) const SizedBox(height: 1),
-                    SizedBox(
-                      height: barHeight,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final eventFontSize = calendarMonthEventFontSize(
-                            barHeight: barHeight,
-                            style: style,
-                          );
-                          return CalendarDayEventBar(
-                            event: events[i],
-                            fontSize: eventFontSize,
-                            height: barHeight,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ],
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CalendarDayNumber(
+                date: date,
+                month: month,
+                fontSize: style.fontSize,
+                mutedWhenAdjacent: !inMonth,
+                adjacentTextT: adjacentTextT,
+                isSelected: isSelected,
               ),
+              if (indicators.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                CalendarDayIndicatorDots(
+                  indicators: indicators,
+                  dotSize: style.dotSize,
+                ),
+              ],
+              if (inMonth && visibleEvents > 0) ...[
+                const SizedBox(height: 2),
+                SizedBox(
+                  height: eventAreaHeight,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < visibleEvents; i++) ...[
+                        if (i > 0) const SizedBox(height: 1),
+                        SizedBox(
+                          height: barHeight,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final eventFontSize = calendarMonthEventFontSize(
+                                barHeight: barHeight,
+                                style: style,
+                              );
+                              return CalendarDayEventBar(
+                                event: events[i],
+                                fontSize: eventFontSize,
+                                height: barHeight,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (showTodos)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: CalendarDayTodoIcons(markers: todoMarkers),
             ),
-          ],
         ],
       ),
     );
@@ -637,12 +658,16 @@ class MorphDayEventStack extends StatefulWidget {
   final MorphDayEventFrozenMetrics? frozenMetrics;
 
   static const maxYearDots = 3;
-  static const maxMonthEvents = 5;
+  static const maxMonthEvents = 4;
   static const yearDotSize = 2.0; // MonthDayCellStyle.compact.eventDotSize
   /// Each event (bottom-up) shrinks/grows during this styleT span.
   static const reverseSlotSegment = 0.09;
   /// After all slots finish, dots travel between the year row and month rows.
   static const reverseMoveDuration = 0.30;
+
+  /// Month→year hands off to the static year layout only near styleT = 0 so the
+  /// day number does not jump while [cellAlignment] is still lerping.
+  static const yearLayoutHandoffStyleT = 0.02;
 
   /// Whether [_MorphCell] should hand off to the static compact year layout.
   static bool yearDotsSettled({
@@ -651,7 +676,8 @@ class MorphDayEventStack extends StatefulWidget {
     required double styleT,
   }) {
     if (!morphReverse) return false;
-    if (eventCount == 0) return styleT < 0.02;
+    if (styleT >= yearLayoutHandoffStyleT) return false;
+    if (eventCount == 0) return true;
     final capped = eventCount.clamp(0, maxMonthEvents);
     return reverseDotMoveT(count: capped, styleT: styleT) >= 1.0;
   }
@@ -1398,6 +1424,8 @@ class MonthDayGrid extends StatelessWidget {
     required this.indicators,
     required this.weekStartsMonday,
     required this.style,
+    this.todoMarkers = const [],
+    this.showTodoIcons = true,
     this.onDayTap,
     this.showWeekdayHeader = false,
     this.weekdayHeaderOpacity = 1,
@@ -1409,6 +1437,7 @@ class MonthDayGrid extends StatelessWidget {
   final DateTime month;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
+  final List<CalendarTodoMarker> todoMarkers;
   final bool weekStartsMonday;
   final MonthDayCellStyle style;
   final void Function(DateTime day)? onDayTap;
@@ -1416,6 +1445,9 @@ class MonthDayGrid extends StatelessWidget {
   final double weekdayHeaderOpacity;
   final bool useSingleLetterWeekdays;
   final DateTime? selectedDay;
+
+  /// When false, todo icons are hidden (e.g. during view morph animations).
+  final bool showTodoIcons;
 
   /// Row index (0–5) whose cells are omitted — used during month↔week morph.
   final int? hiddenWeekRow;
@@ -1456,6 +1488,9 @@ class MonthDayGrid extends StatelessWidget {
                         .where((i) => calendarSameDay(i.day, date))
                         .take(3)
                         .toList();
+                    final dayTodos = inMonth
+                        ? calendarTodoMarkersForDay(todoMarkers, date)
+                        : const <CalendarTodoMarker>[];
 
                     final isSelected =
                         selectedDay != null &&
@@ -1467,6 +1502,8 @@ class MonthDayGrid extends StatelessWidget {
                         month: month,
                         events: dayEvents,
                         indicators: dayIndicators,
+                        todoMarkers: dayTodos,
+                        showTodoIcons: showTodoIcons,
                         style: style,
                         isSelected: isSelected,
                         onTap: onDayTap == null ? null : () => onDayTap!(date),

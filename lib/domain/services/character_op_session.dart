@@ -110,7 +110,7 @@ class CharacterOpSession {
           ? FractionalIndex.first()
           : FractionalIndex.after(prevPos);
       prevPos = pos;
-      final id = '${clientId}_seed_$i';
+      final id = '${clientId}_${_logicalClock}_$pos';
       _opsById[id] = CharacterOperation(
         id: id,
         clientId: clientId,

@@ -44,6 +44,7 @@ import 'package:voyager/domain/services/periodic_prompt_service.dart';
 import 'package:voyager/domain/services/quote_bank.dart';
 import 'package:voyager/domain/services/search_service.dart';
 import 'package:voyager/domain/services/weather_service.dart';
+import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
 const _fallbackDeviceId = 'local-device';
 const _useCloudFunctions = bool.fromEnvironment(
@@ -395,6 +396,20 @@ final todoListStatsProvider =
 final calendarEventsProvider = FutureProvider((ref) {
   ref.keepAlive();
   return ref.watch(calendarRepositoryProvider).listEvents();
+});
+
+final calendarTodoMarkersProvider =
+    FutureProvider<List<CalendarTodoMarker>>((ref) async {
+  ref.keepAlive();
+  final tasks = await ref.watch(allTodoTasksProvider.future);
+  final lists = await ref.watch(todoListsProvider.future);
+  final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+  final listColors = {for (final list in lists) list.id: list.colorValue};
+  return buildCalendarTodoMarkers(
+    tasks,
+    listColors,
+    fallbackColorValue: settings.accentColor,
+  );
 });
 
 final trackersProvider = FutureProvider((ref) {

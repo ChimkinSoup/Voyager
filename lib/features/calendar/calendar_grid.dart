@@ -7,7 +7,17 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
+import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
+export 'calendar_todo_markers.dart'
+    show
+        CalendarDayTodoIcons,
+        CalendarDayTodoTile,
+        CalendarTodoMarker,
+        buildCalendarTodoMarkers,
+        calendarTodoMarkersForDay,
+        calendarTodoOnDay,
+        calendarMorphTodoIconProgress;
 export 'calendar_day_grid.dart'
     show
         CalendarDayCell,
@@ -47,6 +57,8 @@ class CalendarGrid extends StatelessWidget {
     required this.onDayTap,
     required this.onMonthTap,
     this.indicators = const [],
+    this.todoMarkers = const [],
+    this.showTodoIcons = true,
     this.weekStartsMonday = true,
     this.monthTileKeyBuilder,
     this.yearTileDayGridKeyBuilder,
@@ -62,8 +74,10 @@ class CalendarGrid extends StatelessWidget {
   final DateTime focused;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
+  final List<CalendarTodoMarker> todoMarkers;
   final void Function(DateTime day) onDayTap;
   final void Function(DateTime month) onMonthTap;
+  final bool showTodoIcons;
   final bool weekStartsMonday;
   final GlobalKey Function(DateTime month)? monthTileKeyBuilder;
 
@@ -94,6 +108,8 @@ class CalendarGrid extends StatelessWidget {
         focused: focused,
         events: events,
         indicators: indicators,
+        todoMarkers: todoMarkers,
+        showTodoIcons: showTodoIcons,
         onDayTap: onDayTap,
         weekStartsMonday: weekStartsMonday,
       ),
@@ -101,6 +117,8 @@ class CalendarGrid extends StatelessWidget {
         focused: focused,
         events: events,
         indicators: indicators,
+        todoMarkers: todoMarkers,
+        showTodoIcons: showTodoIcons,
         onDayTap: onDayTap,
         weekStartsMonday: weekStartsMonday,
         dayGridKey: monthDayGridKey,
@@ -131,11 +149,13 @@ class DayHourGrid extends StatelessWidget {
     required this.day,
     required this.events,
     required this.onHourTap,
+    this.todoMarkers = const [],
     this.onDayChanged,
   });
 
   final DateTime day;
   final List<CalendarEvent> events;
+  final List<CalendarTodoMarker> todoMarkers;
   final void Function(DateTime hour) onHourTap;
   final ValueChanged<DateTime>? onDayChanged;
 
@@ -146,6 +166,7 @@ class DayHourGrid extends StatelessWidget {
           ..sort((a, b) => a.start.compareTo(b.start));
     final fullDayEvents = dayEvents.where((e) => e.isFullDay).toList();
     final timedEvents = dayEvents.where((e) => !e.isFullDay).toList();
+    final dayTodos = calendarTodoMarkersForDay(todoMarkers, day);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -179,6 +200,10 @@ class DayHourGrid extends StatelessWidget {
             ],
           ),
         ),
+        if (dayTodos.isNotEmpty) ...[
+          ...dayTodos.map((marker) => CalendarDayTodoTile(marker: marker)),
+          const SizedBox(height: 8),
+        ],
         if (fullDayEvents.isNotEmpty) ...[
           ...fullDayEvents.map(
             (event) => _DayEventTile(event: event, allDay: true),
@@ -567,6 +592,8 @@ class _MonthGrid extends StatelessWidget {
     required this.focused,
     required this.events,
     required this.indicators,
+    required this.todoMarkers,
+    required this.showTodoIcons,
     required this.onDayTap,
     required this.weekStartsMonday,
     this.dayGridKey,
@@ -579,6 +606,8 @@ class _MonthGrid extends StatelessWidget {
   final DateTime focused;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
+  final List<CalendarTodoMarker> todoMarkers;
+  final bool showTodoIcons;
   final void Function(DateTime day) onDayTap;
   final bool weekStartsMonday;
 
@@ -625,6 +654,8 @@ class _MonthGrid extends StatelessWidget {
                 month: focused,
                 events: events,
                 indicators: indicators,
+                todoMarkers: todoMarkers,
+                showTodoIcons: showTodoIcons,
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
                 onDayTap: onDayTap,
@@ -643,6 +674,8 @@ class _WeekGrid extends StatelessWidget {
     required this.focused,
     required this.events,
     required this.indicators,
+    required this.todoMarkers,
+    required this.showTodoIcons,
     required this.onDayTap,
     required this.weekStartsMonday,
   });
@@ -650,6 +683,8 @@ class _WeekGrid extends StatelessWidget {
   final DateTime focused;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
+  final List<CalendarTodoMarker> todoMarkers;
+  final bool showTodoIcons;
   final void Function(DateTime day) onDayTap;
   final bool weekStartsMonday;
 
@@ -681,12 +716,15 @@ class _WeekGrid extends StatelessWidget {
                   .where((indicator) => calendarSameDay(indicator.day, date))
                   .take(4)
                   .toList();
+              final dayTodos = calendarTodoMarkersForDay(todoMarkers, date);
               return Expanded(
                 child: CalendarDayCell(
                   date: date,
                   month: date,
                   events: dayEvents,
                   indicators: dayIndicators,
+                  todoMarkers: dayTodos,
+                  showTodoIcons: showTodoIcons,
                   style: weekViewDayCellStyle,
                   onTap: () => onDayTap(date),
                 ),
