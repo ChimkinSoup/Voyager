@@ -79,6 +79,7 @@ class _GeometricTextureWarmupState
             child: GeometricTexture(
               program: program,
               baseColor: Theme.of(context).scaffoldBackgroundColor,
+              accentColor: Theme.of(context).colorScheme.primary,
             ),
           ),
         ),

@@ -2,43 +2,53 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-/// Tunable parameters for the low-poly geometric texture shader.
+/// Tunable parameters for the equilateral-triangle gradient texture shader.
 class GeometricTextureParams {
   const GeometricTextureParams({
-    this.scale = 8.0,
-    this.intensity = 0.3,
-    this.randomness = 0.9,
-    this.shapeComplexity = 1.0,
+    this.scale = 10.0,
+    this.intensity = 0.85,
+    this.focalSpread = 1.0,
+    this.focalPointX = 1.0,
+    this.focalPointY = 0.5,
+    this.variationFloor = 0.75,
   });
 
-  /// Triangle density. Higher = smaller, more numerous facets.
+  /// Triangle density. Higher = smaller, more numerous triangles.
   final double scale;
 
-  /// Contrast between the brightest and darkest facets (0–1).
-  /// 0.3 means the darkest facet is 70% brightness of the base color.
+  /// Peak accent color strength at the focal point (0–1).
   final double intensity;
 
-  /// Vertex jitter amount. 0.0 = perfect grid, 1.0+ = highly irregular sizes.
-  final double randomness;
+  /// Gradient radius in aspect-corrected UV units.
+  /// Larger values spread the color further from the focal point.
+  final double focalSpread;
 
-  /// Mix of polygon shapes (0–1).
-  /// 0.0 = only standard triangles. 1.0 = full mix of quads and both
-  /// triangle orientations.
-  final double shapeComplexity;
+  /// Horizontal focal point (0 = left edge, 0.5 = center, 1 = right edge).
+  final double focalPointX;
+
+  /// Vertical focal point (0 = top edge, 0.5 = center, 1 = bottom edge).
+  final double focalPointY;
+
+  /// Minimum per-triangle shade (0–1). Higher values reduce very dark triangles.
+  final double variationFloor;
 
   static const defaults = GeometricTextureParams();
 
   GeometricTextureParams copyWith({
     double? scale,
     double? intensity,
-    double? randomness,
-    double? shapeComplexity,
+    double? focalSpread,
+    double? focalPointX,
+    double? focalPointY,
+    double? variationFloor,
   }) {
     return GeometricTextureParams(
       scale: scale ?? this.scale,
       intensity: intensity ?? this.intensity,
-      randomness: randomness ?? this.randomness,
-      shapeComplexity: shapeComplexity ?? this.shapeComplexity,
+      focalSpread: focalSpread ?? this.focalSpread,
+      focalPointX: focalPointX ?? this.focalPointX,
+      focalPointY: focalPointY ?? this.focalPointY,
+      variationFloor: variationFloor ?? this.variationFloor,
     );
   }
 
@@ -47,32 +57,45 @@ class GeometricTextureParams {
     return other is GeometricTextureParams &&
         other.scale == scale &&
         other.intensity == intensity &&
-        other.randomness == randomness &&
-        other.shapeComplexity == shapeComplexity;
+        other.focalSpread == focalSpread &&
+        other.focalPointX == focalPointX &&
+        other.focalPointY == focalPointY &&
+        other.variationFloor == variationFloor;
   }
 
   @override
-  int get hashCode => Object.hash(scale, intensity, randomness, shapeComplexity);
+  int get hashCode => Object.hash(
+    scale,
+    intensity,
+    focalSpread,
+    focalPointX,
+    focalPointY,
+    variationFloor,
+  );
 }
 
-/// Full-size geometric low-poly background texture widget.
+/// Full-size equilateral-triangle background texture with an accent gradient.
 ///
-/// Renders the compiled GLSL shader as a flat-shaded triangle grid covering
-/// its full available area. When [program] is null (still loading or failed),
-/// falls back to a flat [baseColor] fill — no jank or error states visible.
+/// Renders a uniform triangle grid where each triangle is flat-shaded with a
+/// random intensity of the [accentColor], concentrated near [params.focalPoint]
+/// and fading toward the edges.
 ///
-/// Use inside a [Positioned.fill] or [SizedBox.expand] so the painter has
-/// finite constraints to fill.
+/// When [program] is null (still loading or failed), falls back to a flat
+/// [baseColor] fill — no jank or error states visible.
+///
+/// Use inside a [Positioned.fill] so the painter has finite constraints.
 class GeometricTexture extends StatefulWidget {
   const GeometricTexture({
     super.key,
     required this.program,
     required this.baseColor,
+    required this.accentColor,
     this.params = GeometricTextureParams.defaults,
   });
 
   final FragmentProgram? program;
   final Color baseColor;
+  final Color accentColor;
   final GeometricTextureParams params;
 
   @override
@@ -116,6 +139,7 @@ class _GeometricTextureState extends State<GeometricTexture> {
       painter: GeometricTexturePainter(
         shader: shader,
         baseColor: widget.baseColor,
+        accentColor: widget.accentColor,
         params: widget.params,
       ),
     );
@@ -126,11 +150,13 @@ class GeometricTexturePainter extends CustomPainter {
   GeometricTexturePainter({
     required this.shader,
     required this.baseColor,
+    required this.accentColor,
     required this.params,
   });
 
   final FragmentShader shader;
   final Color baseColor;
+  final Color accentColor;
   final GeometricTextureParams params;
 
   @override
@@ -138,22 +164,30 @@ class GeometricTexturePainter extends CustomPainter {
     if (size.width <= 0 || size.height <= 0) return;
 
     // Uniform layout (must match shader declaration order):
-    // 0-1  vec2  u_resolution
-    // 2    float u_scale
-    // 3    float u_intensity
-    // 4    float u_randomness
-    // 5    float u_shape_complexity
-    // 6-9  vec4  u_base_color
+    // 0-1   vec2  u_resolution
+    // 2     float u_scale
+    // 3     float u_intensity
+    // 4     float u_focal_spread
+    // 5-6   vec2  u_focal_point
+    // 7     float u_variation_floor
+    // 8-11  vec4  u_base_color
+    // 12-15 vec4  u_accent_color
     shader.setFloat(0, size.width);
     shader.setFloat(1, size.height);
     shader.setFloat(2, params.scale);
     shader.setFloat(3, params.intensity);
-    shader.setFloat(4, params.randomness);
-    shader.setFloat(5, params.shapeComplexity);
-    shader.setFloat(6, baseColor.r);
-    shader.setFloat(7, baseColor.g);
-    shader.setFloat(8, baseColor.b);
-    shader.setFloat(9, baseColor.a);
+    shader.setFloat(4, params.focalSpread);
+    shader.setFloat(5, params.focalPointX);
+    shader.setFloat(6, params.focalPointY);
+    shader.setFloat(7, params.variationFloor);
+    shader.setFloat(8, baseColor.r);
+    shader.setFloat(9, baseColor.g);
+    shader.setFloat(10, baseColor.b);
+    shader.setFloat(11, baseColor.a);
+    shader.setFloat(12, accentColor.r);
+    shader.setFloat(13, accentColor.g);
+    shader.setFloat(14, accentColor.b);
+    shader.setFloat(15, accentColor.a);
 
     final paint = Paint()..shader = shader;
     canvas.drawRect(Offset.zero & size, paint);
@@ -163,6 +197,7 @@ class GeometricTexturePainter extends CustomPainter {
   bool shouldRepaint(covariant GeometricTexturePainter oldDelegate) {
     return oldDelegate.shader != shader ||
         oldDelegate.baseColor != baseColor ||
+        oldDelegate.accentColor != accentColor ||
         oldDelegate.params != params;
   }
 }

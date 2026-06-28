@@ -11,13 +11,16 @@ class DevGeometricTextureSection extends ConsumerWidget {
     final panelOpen = ref.watch(devGeometricTexturePanelOpenProvider);
     final params = ref.watch(geometricTextureParamsProvider);
 
+    void update(GeometricTextureParams next) =>
+        ref.read(geometricTextureParamsProvider.notifier).state = next;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SwitchListTile(
           title: const Text('Geometric texture tuning'),
           subtitle: const Text(
-            'Live sliders for low-poly facet shader (session only)',
+            'Live sliders for equilateral-triangle gradient shader (session only)',
           ),
           value: panelOpen,
           onChanged: (value) {
@@ -29,71 +32,159 @@ class DevGeometricTextureSection extends ConsumerWidget {
           const SizedBox(height: 8),
           _GeometricTextureSlider(
             label: 'Scale',
-            subtitle: 'Triangle density — higher = smaller, more numerous facets',
+            subtitle: 'Triangle density — higher = smaller, more numerous triangles',
             value: params.scale,
-            min: 2,
-            max: 30,
-            divisions: 28,
+            min: 4,
+            max: 24,
+            divisions: 20,
             display: params.scale.toStringAsFixed(1),
-            onChanged: (value) {
-              ref.read(geometricTextureParamsProvider.notifier).state =
-                  params.copyWith(scale: value);
-            },
+            onChanged: (v) => update(params.copyWith(scale: v)),
           ),
           _GeometricTextureSlider(
             label: 'Intensity',
             subtitle:
-                'Facet contrast — 0.2 = subtle, 0.6 = deep dramatic shadows',
+                'Peak accent strength at focal point — 0.0 = invisible, 1.0 = saturated',
             value: params.intensity,
-            min: 0.05,
-            max: 0.6,
-            divisions: 55,
-            display: params.intensity.toStringAsFixed(2),
-            onChanged: (value) {
-              ref.read(geometricTextureParamsProvider.notifier).state =
-                  params.copyWith(intensity: value);
-            },
-          ),
-          _GeometricTextureSlider(
-            label: 'Randomness',
-            subtitle:
-                'Vertex jitter — 0.0 = perfect grid, 0.9 = organic, 1.5 = chaotic',
-            value: params.randomness,
-            min: 0.0,
-            max: 1.5,
-            divisions: 150,
-            display: params.randomness.toStringAsFixed(2),
-            onChanged: (value) {
-              ref.read(geometricTextureParamsProvider.notifier).state =
-                  params.copyWith(randomness: value);
-            },
-          ),
-          _GeometricTextureSlider(
-            label: 'Shape complexity',
-            subtitle:
-                'Polygon mix — 0.0 = triangles only, 1.0 = quads + both triangle orientations',
-            value: params.shapeComplexity,
             min: 0.0,
             max: 1.0,
             divisions: 100,
-            display: params.shapeComplexity.toStringAsFixed(2),
-            onChanged: (value) {
-              ref.read(geometricTextureParamsProvider.notifier).state =
-                  params.copyWith(shapeComplexity: value);
-            },
+            display: params.intensity.toStringAsFixed(2),
+            onChanged: (v) => update(params.copyWith(intensity: v)),
+          ),
+          _GeometricTextureSlider(
+            label: 'Variation floor',
+            subtitle:
+                'Minimum triangle brightness — higher = fewer very dark triangles',
+            value: params.variationFloor,
+            min: 0.5,
+            max: 0.95,
+            divisions: 45,
+            display: params.variationFloor.toStringAsFixed(2),
+            onChanged: (v) => update(params.copyWith(variationFloor: v)),
+          ),
+          _GeometricTextureSlider(
+            label: 'Focal spread',
+            subtitle:
+                'Gradient radius — larger = color reaches further from the focal point',
+            value: params.focalSpread,
+            min: 0.1,
+            max: 2.0,
+            divisions: 190,
+            display: params.focalSpread.toStringAsFixed(2),
+            onChanged: (v) => update(params.copyWith(focalSpread: v)),
+          ),
+          // Focal point presets
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
+              'Focal point presets',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Wrap(
+              spacing: 4,
+              children: [
+                _PresetButton(
+                  label: 'Center',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 0.5, focalPointY: 0.5)),
+                ),
+                _PresetButton(
+                  label: 'Left',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 0.0, focalPointY: 0.5)),
+                ),
+                _PresetButton(
+                  label: 'Right',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 1.0, focalPointY: 0.5)),
+                ),
+                _PresetButton(
+                  label: 'Top',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 0.5, focalPointY: 0.0)),
+                ),
+                _PresetButton(
+                  label: 'Bottom',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 0.5, focalPointY: 1.0)),
+                ),
+                _PresetButton(
+                  label: 'Top-left',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 0.0, focalPointY: 0.0)),
+                ),
+                _PresetButton(
+                  label: 'Top-right',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 1.0, focalPointY: 0.0)),
+                ),
+                _PresetButton(
+                  label: 'Bottom-left',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 0.0, focalPointY: 1.0)),
+                ),
+                _PresetButton(
+                  label: 'Bottom-right',
+                  onTap: () =>
+                      update(params.copyWith(focalPointX: 1.0, focalPointY: 1.0)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          _GeometricTextureSlider(
+            label: 'Focal X',
+            subtitle: 'Horizontal position — 0.0 = left edge, 1.0 = right edge',
+            value: params.focalPointX,
+            min: 0.0,
+            max: 1.0,
+            divisions: 100,
+            display: params.focalPointX.toStringAsFixed(2),
+            onChanged: (v) => update(params.copyWith(focalPointX: v)),
+          ),
+          _GeometricTextureSlider(
+            label: 'Focal Y',
+            subtitle: 'Vertical position — 0.0 = top edge, 1.0 = bottom edge',
+            value: params.focalPointY,
+            min: 0.0,
+            max: 1.0,
+            divisions: 100,
+            display: params.focalPointY.toStringAsFixed(2),
+            onChanged: (v) => update(params.copyWith(focalPointY: v)),
           ),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () {
-                ref.read(geometricTextureParamsProvider.notifier).state =
-                    GeometricTextureParams.defaults;
-              },
+              onPressed: () => update(GeometricTextureParams.defaults),
               child: const Text('Reset to defaults'),
             ),
           ),
         ],
       ],
+    );
+  }
+}
+
+class _PresetButton extends StatelessWidget {
+  const _PresetButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: Theme.of(context).textTheme.labelSmall,
+      ),
+      onPressed: onTap,
+      child: Text(label),
     );
   }
 }

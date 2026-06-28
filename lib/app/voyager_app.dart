@@ -59,9 +59,8 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     _remoteSync = ref.read(remoteSyncServiceProvider);
     final settings = ref.watch(settingsProvider).value;
     final router = ref.watch(routerProvider);
-    final theme = VoyagerTheme.dark(
-      accent: Color(settings?.accentColor ?? 0xFF7C9EFF),
-    );
+    final accent = Color(settings?.accentColor ?? 0xFF7C9EFF);
+    final theme = VoyagerTheme.dark(accent: accent);
     final geometricProgram = ref.watch(geometricShaderProvider).valueOrNull;
     final geometricParams = ref.watch(geometricTextureParamsProvider);
 
@@ -76,6 +75,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
               child: GeometricTexture(
                 program: geometricProgram,
                 baseColor: theme.scaffoldBackgroundColor,
+                accentColor: accent,
                 params: geometricParams,
               ),
             ),
