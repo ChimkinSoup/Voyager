@@ -327,37 +327,76 @@ class _RailGlowingIcon extends StatelessWidget {
     required this.color,
     required this.glowColor,
     required this.glow,
+    this.size = 24,
+    this.glowAlpha = 0.65,
+    this.glowBlur = 10,
+    this.intenseGlow = false,
   });
 
   final IconData icon;
   final Color color;
   final Color glowColor;
   final bool glow;
+  final double size;
+  final double glowAlpha;
+  final double glowBlur;
+  final bool intenseGlow;
 
   @override
   Widget build(BuildContext context) {
-    final iconWidget = Icon(this.icon, size: 24, color: color);
+    final iconWidget = Icon(this.icon, size: size, color: color);
+    final glowTint = intenseGlow
+        ? Color.lerp(glowColor, Colors.white, 0.4)!
+        : glowColor;
+    final glowOpacity = glowAlpha.clamp(0.0, 1.0);
 
     return SizedBox(
-      width: 24,
-      height: 24,
+      width: size,
+      height: size,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
-          AnimatedOpacity(
-            opacity: glow ? 1 : 0,
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          if (glow && intenseGlow) ...[
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: glowBlur * 1.8,
+                sigmaY: glowBlur * 1.8,
+              ),
               child: Icon(
                 this.icon,
-                size: 24,
-                color: glowColor.withValues(alpha: 1.5),
+                size: size,
+                color: glowTint.withValues(alpha: glowOpacity * 0.75),
               ),
             ),
-          ),
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: glowBlur * 0.55,
+                sigmaY: glowBlur * 0.55,
+              ),
+              child: Icon(
+                this.icon,
+                size: size,
+                color: glowTint.withValues(alpha: glowOpacity),
+              ),
+            ),
+          ] else
+            AnimatedOpacity(
+              opacity: glow ? 1 : 0,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: glowBlur,
+                  sigmaY: glowBlur,
+                ),
+                child: Icon(
+                  this.icon,
+                  size: size,
+                  color: glowColor.withValues(alpha: glowOpacity),
+                ),
+              ),
+            ),
           iconWidget,
         ],
       ),
@@ -416,7 +455,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
               key: ValueKey(_time),
               style: Theme.of(
                 context,
-              ).textTheme.titleMedium?.copyWith(color: widget.accent),
+              ).textTheme.titleMedium?.copyWith(color: Colors.white),
             ),
           ),
           const SizedBox(height: 8),
@@ -449,10 +488,15 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          weatherIconData(icon),
-                          color: widget.accent,
+                        _RailGlowingIcon(
+                          icon: weatherIconData(icon),
+                          color: Colors.white,
+                          glowColor: widget.accent,
+                          glow: true,
                           size: 22,
+                          glowAlpha: 1,
+                          glowBlur: 12,
+                          intenseGlow: true,
                         ),
                         if (weather?.tempC != null) ...[
                           const SizedBox(height: 4),
@@ -460,7 +504,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
                             '${weather!.tempC!.round()}°',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
-                                  color: widget.accent,
+                                  color: Colors.white,
                                   fontSize: 10,
                                 ),
                           ),
