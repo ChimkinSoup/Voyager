@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
+import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
@@ -821,6 +822,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                       (task) => _TaskRow(
                                         key: ValueKey(task.id),
                                         task: task,
+                                        isSelected: task.id == _selectedTaskId,
                                         listColor: _listColorFor(
                                           task.listId,
                                           lists,
@@ -853,6 +855,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                             index: i,
                                             child: _TaskRow(
                                               task: active[i],
+                                              isSelected:
+                                                  active[i].id == _selectedTaskId,
                                               listColor:
                                                   currentList?.colorValue,
                                               subtaskStats: _subtaskStats(
@@ -912,6 +916,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                       (task) => _TaskRow(
                                         key: ValueKey(task.id),
                                         task: task,
+                                        isSelected: task.id == _selectedTaskId,
                                         listColor: _listColorFor(
                                           task.listId,
                                           lists,
@@ -1110,6 +1115,7 @@ class _TaskRow extends StatefulWidget {
   const _TaskRow({
     super.key,
     required this.task,
+    required this.isSelected,
     required this.onToggle,
     required this.onStar,
     required this.onEdit,
@@ -1118,6 +1124,7 @@ class _TaskRow extends StatefulWidget {
   });
 
   final TodoTask task;
+  final bool isSelected;
   final Future<void> Function(bool?) onToggle;
   final VoidCallback onStar;
   final VoidCallback onEdit;
@@ -1279,9 +1286,17 @@ class _TaskRowState extends State<_TaskRow>
     ).colorScheme.onSurface.withValues(alpha: 0.55);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        decoration: VoyagerListItemSurface.decoration(
+          context,
+          selected: widget.isSelected,
+          borderRadius: 14,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
           ScaleTransition(
             scale: _checkScale,
             child: Checkbox(
@@ -1395,6 +1410,7 @@ class _TaskRowState extends State<_TaskRow>
                 : null,
           ),
         ],
+        ),
       ),
     );
   }

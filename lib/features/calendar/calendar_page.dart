@@ -6,11 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
-import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/event_editor_dialog.dart';
@@ -1405,40 +1403,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
-  List<CalendarDayIndicator> _buildCalendarIndicators(
-    List<StatisticTracker> calendarTrackers,
-    AnalyticsService analytics,
-  ) {
-    final indicators = <CalendarDayIndicator>[];
-    for (final tracker in calendarTrackers) {
-      final values =
-          ref.watch(trackerValuesProvider(tracker.id)).value ??
-          const <TrackerValue>[];
-      final localMax = values.fold<int>(0, (m, value) {
-        final current = value.intValue ?? 0;
-        return current > m ? current : m;
-      });
-      for (final value in values) {
-        final intensity = analytics.heatmapIntensity(
-          type: tracker.type,
-          value: value,
-          tracker: tracker,
-          maxInPeriod: localMax == 0 ? 1 : localMax,
-        );
-        if (intensity <= 0) continue;
-        indicators.add(
-          CalendarDayIndicator(
-            day: value.periodStart,
-            colorValue: tracker.colorValue,
-            label: '${tracker.name}: ${_trackerValueLabel(tracker, value)}',
-            intensity: intensity,
-          ),
-        );
-      }
-    }
-    return indicators;
-  }
-
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(calendarEventsProvider);
@@ -1448,20 +1412,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         .watch(devSettingsProvider)
         .showCalendarInstantViewSwitch;
 
-    final List<CalendarDayIndicator> indicators;
-    if (_isWeekMorphing && _weekMorphIndicators != null) {
-      indicators = _weekMorphIndicators!;
-    } else if (_isZooming && _morphIndicators != null) {
-      indicators = _morphIndicators!;
-    } else {
-      final trackers =
-          ref.watch(trackersProvider).value ?? const <StatisticTracker>[];
-      final analytics = ref.watch(analyticsServiceProvider);
-      final calendarTrackers = trackers
-          .where((tracker) => tracker.showOnCalendar)
-          .toList();
-      indicators = _buildCalendarIndicators(calendarTrackers, analytics);
-    }
+    const indicators = <CalendarDayIndicator>[];
 
     return CalendarKeyboardShortcuts(
       navigateLeftKey: settings.calendarNavigateLeftKey,
@@ -2913,14 +2864,4 @@ DateTime _weekStart(DateTime focused, bool weekStartsMonday) {
     focused.month,
     focused.day,
   ).subtract(Duration(days: (weekday - firstDay) % 7));
-}
-
-String _trackerValueLabel(StatisticTracker tracker, TrackerValue value) {
-  return switch (tracker.type) {
-    TrackerType.integer => '${value.intValue ?? tracker.defaultInt}',
-    TrackerType.boolean =>
-      (value.boolValue ?? tracker.defaultBool) ? 'yes' : 'no',
-    TrackerType.enumType =>
-      value.enumValue ?? tracker.defaultEnumOption ?? 'empty',
-  };
 }

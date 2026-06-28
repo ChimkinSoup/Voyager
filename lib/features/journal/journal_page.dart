@@ -16,6 +16,7 @@ import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -2193,6 +2194,8 @@ class _JournalEntryListTile extends StatelessWidget {
           horizontal: VoyagerSpacing.md,
           vertical: VoyagerSpacing.xs,
         ),
+        tileColor: VoyagerListItemSurface.restingColor(context),
+        selectedTileColor: VoyagerListItemSurface.selectedColor(context),
         selected: isSelected,
         title: isSelected
             ? ValueListenableBuilder<String>(
