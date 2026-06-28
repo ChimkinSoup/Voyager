@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -248,8 +249,16 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final active = widget.selected || _hovered;
     final foreground = widget.selected ? widget.accent : colorScheme.onSurface;
+    final backgroundColor = widget.selected
+        ? Color.lerp(
+            colorScheme.surface,
+            Theme.of(context).scaffoldBackgroundColor,
+            0.35,
+          )!.withValues(alpha: 0.92)
+        : _hovered
+        ? colorScheme.onSurface.withValues(alpha: 0.10)
+        : Colors.transparent;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -269,27 +278,37 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
             splashColor: Colors.transparent,
             highlightColor: Colors.transparent,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 90),
+              duration: const Duration(milliseconds: 100),
+              curve: Curves.easeOut,
               width: _railItemWidth,
               height: _railItemHeight,
               decoration: BoxDecoration(
-                color: active
-                    ? colorScheme.onSurface.withValues(alpha: 0.10)
-                    : Colors.transparent,
+                color: backgroundColor,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(widget.icon, size: 24, color: foreground),
+                  _RailGlowingIcon(
+                    icon: widget.icon,
+                    color: foreground,
+                    glowColor: widget.accent,
+                    glow: widget.selected,
+                  ),
                   const SizedBox(height: 3),
-                  Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                      fontSize: 10,
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 150),
+                    curve: Curves.easeOut,
+                    style:
+                        Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: foreground,
+                          fontSize: 10,
+                        ) ??
+                        const TextStyle(),
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -297,6 +316,50 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _RailGlowingIcon extends StatelessWidget {
+  const _RailGlowingIcon({
+    required this.icon,
+    required this.color,
+    required this.glowColor,
+    required this.glow,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color glowColor;
+  final bool glow;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconWidget = Icon(this.icon, size: 24, color: color);
+
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          AnimatedOpacity(
+            opacity: glow ? 1 : 0,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Icon(
+                this.icon,
+                size: 24,
+                color: glowColor.withValues(alpha: 1.5),
+              ),
+            ),
+          ),
+          iconWidget,
+        ],
       ),
     );
   }

@@ -14,12 +14,24 @@ class ShellBranchContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IndexedStack(
-      index: currentIndex,
-      sizing: StackFit.expand,
+    return Stack(
+      fit: StackFit.expand,
       children: [
         for (var i = 0; i < children.length; i++)
-          TickerMode(enabled: i == currentIndex, child: children[i]),
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: i != currentIndex,
+              child: AnimatedOpacity(
+                opacity: i == currentIndex ? 1 : 0,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeInOut,
+                child: TickerMode(
+                  enabled: i == currentIndex,
+                  child: children[i],
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
