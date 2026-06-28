@@ -48,8 +48,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   // Snapshot taken at animation start so provider rebuilds don't interrupt ticks.
   List<CalendarEvent>? _morphEvents;
   List<CalendarDayIndicator>? _morphIndicators;
+  List<CalendarTodoMarker>? _morphTodos;
   List<CalendarEvent> _latestEvents = const [];
   List<CalendarDayIndicator> _latestIndicators = const [];
+  List<CalendarTodoMarker> _latestTodos = const [];
   int _morphGeneration = 0;
   AnimationStatusListener? _morphStatusListener;
 
@@ -71,6 +73,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   AnimationStatusListener? _weekMorphStatusListener;
   List<CalendarEvent>? _weekMorphEvents;
   List<CalendarDayIndicator>? _weekMorphIndicators;
+  List<CalendarTodoMarker>? _weekMorphTodos;
 
   static const _sidebarWidth = 350.0;
   static const _zoomDuration = Duration(milliseconds: 600);
@@ -138,6 +141,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   void _clearWeekMorphCache() {
     _weekMorphEvents = null;
     _weekMorphIndicators = null;
+    _weekMorphTodos = null;
     _weekMorphAnchor = null;
   }
 
@@ -222,6 +226,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _morphAreaSize = null;
     _morphEvents = null;
     _morphIndicators = null;
+    _morphTodos = null;
   }
 
   /// Recomputes [_layoutCache] when [areaSize] changes.
@@ -487,6 +492,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _weekMorphIndicators = List<CalendarDayIndicator>.from(
         _latestIndicators,
       );
+      _weekMorphTodos = List<CalendarTodoMarker>.from(_latestTodos);
     });
 
     _startWeekMorphAnimation(
@@ -562,6 +568,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _weekMorphIndicators = List<CalendarDayIndicator>.from(
         _latestIndicators,
       );
+      _weekMorphTodos = List<CalendarTodoMarker>.from(_latestTodos);
     });
     _weekMorphController.value = 1.0;
 
@@ -647,6 +654,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphAreaSize = areaSize;
       _morphEvents = List<CalendarEvent>.from(_latestEvents);
       _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
+      _morphTodos = List<CalendarTodoMarker>.from(_latestTodos);
     });
 
     _startMorphAnimation(
@@ -814,6 +822,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphAreaSize = areaSize;
       _morphEvents = List<CalendarEvent>.from(_latestEvents);
       _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
+      _morphTodos = List<CalendarTodoMarker>.from(_latestTodos);
     });
 
     _startMorphAnimation(generation: generation, onComplete: onComplete);
@@ -1002,6 +1011,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _morphAreaSize = areaSize;
       _morphEvents = List<CalendarEvent>.from(_latestEvents);
       _morphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
+      _morphTodos = List<CalendarTodoMarker>.from(_latestTodos);
       _focused = morphMonth;
     });
 
@@ -1170,6 +1180,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   Widget _calendarGrid({
     required List<CalendarEvent> events,
     required List<CalendarDayIndicator> indicators,
+    required List<CalendarTodoMarker> todoMarkers,
+    required bool showTodoIcons,
     required bool weekStartsMonday,
     required CalendarViewMode mode,
     required DateTime focused,
@@ -1183,6 +1195,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       focused: focused,
       events: events,
       indicators: indicators,
+      todoMarkers: mode == CalendarViewMode.year ? const [] : todoMarkers,
+      showTodoIcons: mode == CalendarViewMode.year ? false : showTodoIcons,
       weekStartsMonday: weekStartsMonday,
       onDayTap: (day) => _openEditor(day: day),
       onMonthTap: _onMonthTapped,
@@ -1203,6 +1217,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required BuildContext context,
     required List<CalendarEvent> events,
     required List<CalendarDayIndicator> indicators,
+    required List<CalendarTodoMarker> todoMarkers,
     required bool weekStartsMonday,
     required DateTime morphMonth,
     required int hiddenWeekRow,
@@ -1226,6 +1241,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 month: morphMonth,
                 events: events,
                 indicators: indicators,
+                todoMarkers: todoMarkers,
+                showTodoIcons: false,
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
                 hiddenWeekRow: hiddenWeekRow,
@@ -1261,15 +1278,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   Widget _buildMainCalendar({
     required List<CalendarEvent> events,
     required List<CalendarDayIndicator> indicators,
+    required List<CalendarTodoMarker> todoMarkers,
     required bool weekStartsMonday,
   }) {
     final activeEvents = _weekMorphEvents ?? _morphEvents ?? events;
     final activeIndicators = _weekMorphIndicators ?? _morphIndicators ?? indicators;
+    final activeTodos = _weekMorphTodos ?? _morphTodos ?? todoMarkers;
+    final showTodoIcons = !_isZooming && !_isWeekMorphing;
 
     if (_dayViewDate != null) {
       return DayHourGrid(
         day: _dayViewDate!,
         events: events,
+        todoMarkers: todoMarkers,
         onHourTap: (hour) => _openEditor(day: hour),
         onDayChanged: (day) => setState(() {
           _dayViewDate = day;
@@ -1312,10 +1333,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         monthTitleStyle: monthTitleStyle,
         events: activeEvents,
         indicators: activeIndicators,
+        todoMarkers: activeTodos,
         inactiveMonthRows: _buildInactiveMonthRows(
           context: context,
           events: activeEvents,
           indicators: activeIndicators,
+          todoMarkers: activeTodos,
           weekStartsMonday: weekStartsMonday,
           morphMonth: morphMonth,
           hiddenWeekRow: weekRow,
@@ -1365,12 +1388,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         yearGrid: _calendarGrid(
           events: activeEvents,
           indicators: activeIndicators,
+          todoMarkers: activeTodos,
+          showTodoIcons: false,
           weekStartsMonday: weekStartsMonday,
           mode: CalendarViewMode.year,
           focused: DateTime(morphMonth.year, 1, 1),
           hiddenMonth: morphMonth,
         ),
         events: activeEvents,
+        todoMarkers: activeTodos,
         monthMorphEventMetrics: _layoutCache!.monthMorphEventMetrics,
       );
 
@@ -1379,6 +1405,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           monthGrid: _calendarGrid(
             events: activeEvents,
             indicators: activeIndicators,
+            todoMarkers: activeTodos,
+            showTodoIcons: false,
             weekStartsMonday: weekStartsMonday,
             mode: CalendarViewMode.month,
             focused: morphMonth,
@@ -1394,6 +1422,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     return _calendarGrid(
       events: activeEvents,
       indicators: activeIndicators,
+      todoMarkers: activeTodos,
+      showTodoIcons: showTodoIcons,
       weekStartsMonday: weekStartsMonday,
       mode: _mode,
       focused: _mode == CalendarViewMode.year
@@ -1406,6 +1436,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(calendarEventsProvider);
+    final todosAsync = ref.watch(calendarTodoMarkersProvider);
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
     final weekStartsMonday = settings.weekStartsOnMonday;
     final showInstantViewSwitch = ref
@@ -1450,6 +1481,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 Expanded(
                   child: eventsAsync.when(
                     data: (events) {
+                      final todos = todosAsync.valueOrNull ?? const <CalendarTodoMarker>[];
                       final calendarEvents =
                           _isWeekMorphing && _weekMorphEvents != null
                           ? _weekMorphEvents!
@@ -1459,6 +1491,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                       if (!_isZooming && !_isWeekMorphing) {
                         _latestEvents = events;
                         _latestIndicators = indicators;
+                        _latestTodos = todos;
                       }
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1496,6 +1529,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                                   child: _buildMainCalendar(
                                     events: calendarEvents,
                                     indicators: indicators,
+                                    todoMarkers: todos,
                                     weekStartsMonday: weekStartsMonday,
                                   ),
                                 );
@@ -1891,6 +1925,7 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
                 hiddenMonth: _morphReverse ? morphMonth : null,
               ),
               events: const [],
+              todoMarkers: const [],
               monthMorphEventMetrics: monthMorphEventMetrics,
             ),
           ),
@@ -1959,6 +1994,7 @@ class _MorphAnimationLayer extends StatefulWidget {
     required this.monthTitleStyle,
     required this.yearGrid,
     required this.events,
+    required this.todoMarkers,
     required this.monthMorphEventMetrics,
   });
 
@@ -1978,6 +2014,7 @@ class _MorphAnimationLayer extends StatefulWidget {
   final TextStyle monthTitleStyle;
   final Widget yearGrid;
   final List<CalendarEvent> events;
+  final List<CalendarTodoMarker> todoMarkers;
   final List<MorphDayEventFrozenMetrics> monthMorphEventMetrics;
 
   @override
@@ -2086,6 +2123,14 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                     .where((e) => calendarEventOnDay(e, widget.dates[i]))
                     .toList()
                 : const <CalendarEvent>[],
+            todoMarkers:
+                widget.dates[i].month == widget.morphMonth.month &&
+                    widget.dates[i].year == widget.morphMonth.year
+                ? calendarTodoMarkersForDay(
+                    widget.todoMarkers,
+                    widget.dates[i],
+                  )
+                : const <CalendarTodoMarker>[],
           ),
         ),
     ];
@@ -2231,11 +2276,13 @@ class _MorphCell extends StatelessWidget {
     required this.date,
     required this.month,
     required this.events,
+    required this.todoMarkers,
   });
 
   final DateTime date;
   final DateTime month;
   final List<CalendarEvent> events;
+  final List<CalendarTodoMarker> todoMarkers;
 
   static const _compactFontSize = 7.0;
   static const _fullFontSize = 15.0;
@@ -2269,6 +2316,33 @@ class _MorphCell extends StatelessWidget {
   // Cell padding (inset inside the border, before the day number).
   static final _compactCellPadding = MonthDayCellStyle.compact.cellPadding;
   static final _fullCellPadding = MonthDayCellStyle.full.cellPadding;
+
+  Widget? _morphTodoOverlay({
+    required _MorphProgress progress,
+    required double styleT,
+    required bool inMonth,
+  }) {
+    if (!inMonth || todoMarkers.isEmpty) {
+      return null;
+    }
+    final iconProgress = calendarMorphTodoIconProgress(
+      morphReverse: progress.morphReverse,
+      styleT: styleT,
+    );
+    if (iconProgress <= 0) return null;
+    return Positioned(
+      right: 0,
+      bottom: 0,
+      child: Opacity(
+        opacity: iconProgress,
+        child: Transform.scale(
+          scale: iconProgress,
+          alignment: Alignment.bottomRight,
+          child: CalendarDayTodoIcons(markers: todoMarkers),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2325,42 +2399,66 @@ class _MorphCell extends StatelessWidget {
               );
               final layoutDayLayoutSize = _dayLayoutDiameter(_fullFontSize)
                   .clamp(0.0, constraints.maxHeight);
+              final compactDaySize = _dayLayoutDiameter(
+                MonthDayCellStyle.compact.fontSize,
+              ).clamp(0.0, constraints.maxHeight);
+
+              final yearAlignment = _yearDayAlignment(
+                cellHeight: constraints.maxHeight,
+                daySize: yearDotsSettled ? compactDaySize : dayLayoutSize,
+                hasEvents: showEvents,
+              );
 
               final cellAlignment = Alignment.lerp(
-                _yearDayAlignment(
-                  cellHeight: constraints.maxHeight,
-                  daySize: dayLayoutSize,
-                  hasEvents: showEvents && inMonth,
-                ),
+                yearAlignment,
                 Alignment.topCenter,
                 styleT,
               )!;
 
               if (yearDotsSettled) {
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
+                final todoOverlay = _morphTodoOverlay(
+                  progress: progress,
+                  styleT: styleT,
+                  inMonth: inMonth,
+                );
+                return Stack(
+                  clipBehavior: Clip.hardEdge,
                   children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: CalendarDayNumber(
-                        date: date,
-                        month: month,
-                        fontSize: MonthDayCellStyle.compact.fontSize,
-                        mutedWhenAdjacent: !inMonth,
+                    Align(
+                      alignment: yearAlignment,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: CalendarDayNumber(
+                              date: date,
+                              month: month,
+                              fontSize: MonthDayCellStyle.compact.fontSize,
+                              mutedWhenAdjacent: !inMonth,
+                            ),
+                          ),
+                          if (inMonth && events.isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            CalendarDayEventDots(
+                              events: events,
+                              dotSize: MonthDayCellStyle.compact.eventDotSize,
+                              maxDots: MonthDayCellStyle.compact.maxEventLines,
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    if (inMonth && events.isNotEmpty) ...[
-                      const SizedBox(height: 1),
-                      CalendarDayEventDots(
-                        events: events,
-                        dotSize: MonthDayCellStyle.compact.eventDotSize,
-                        maxDots: MonthDayCellStyle.compact.maxEventLines,
-                      ),
-                    ],
+                    ?todoOverlay,
                   ],
                 );
               }
+
+              final todoOverlay = _morphTodoOverlay(
+                progress: progress,
+                styleT: styleT,
+                inMonth: inMonth,
+              );
 
               return ClipRect(
                 child: Stack(
@@ -2394,6 +2492,7 @@ class _MorphCell extends StatelessWidget {
                                   .clamp(0, MorphDayEventStack.maxMonthEvents)],
                         ),
                       ),
+                    ?todoOverlay,
                   ],
                 ),
               );
@@ -2577,6 +2676,7 @@ class _MonthWeekMorphLayer extends StatefulWidget {
     required this.monthTitleStyle,
     required this.events,
     required this.indicators,
+    required this.todoMarkers,
     required this.inactiveMonthRows,
   });
 
@@ -2597,6 +2697,7 @@ class _MonthWeekMorphLayer extends StatefulWidget {
   final TextStyle monthTitleStyle;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
+  final List<CalendarTodoMarker> todoMarkers;
   final Widget inactiveMonthRows;
 
   @override
@@ -2635,6 +2736,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             month: widget.morphMonth,
             events: widget.events,
             indicators: widget.indicators,
+            todoMarkers: widget.todoMarkers,
           ),
         ),
     ];
@@ -2783,12 +2885,14 @@ class _MonthWeekMorphCell extends StatelessWidget {
     required this.month,
     required this.events,
     required this.indicators,
+    required this.todoMarkers,
   });
 
   final DateTime date;
   final DateTime month;
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
+  final List<CalendarTodoMarker> todoMarkers;
 
   @override
   Widget build(BuildContext context) {
@@ -2824,12 +2928,17 @@ class _MonthWeekMorphCell extends StatelessWidget {
         .where((i) => calendarSameDay(i.day, date))
         .take(3)
         .toList();
+    final dayTodos = inMonth
+        ? calendarTodoMarkersForDay(todoMarkers, date)
+        : const <CalendarTodoMarker>[];
 
     return CalendarDayCell(
       date: date,
       month: month,
       events: dayEvents,
       indicators: dayIndicators,
+      todoMarkers: dayTodos,
+      showTodoIcons: false,
       adjacentTextT: inMonth ? null : t,
       adjacentBorderT: inMonth ? null : t,
       style: MonthDayCellStyle(

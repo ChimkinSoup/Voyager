@@ -116,11 +116,39 @@ class RemoteSyncService {
     if (conflict.collection == FirestoreCollections.journalEntries) {
       final local = await _journalRepository.getEntry(conflict.documentId);
       if (local != null) {
+        await _syncRepository.deleteOperationsForDocument(conflict.documentId);
+        _charOpRegistry.resetSession(
+          collection: FirestoreCollections.journalEntries,
+          documentId: conflict.documentId,
+          clientId: deviceId,
+          text: '',
+        );
+        _charOpRegistry.recordTextChange(
+          collection: FirestoreCollections.journalEntries,
+          documentId: conflict.documentId,
+          clientId: deviceId,
+          before: '',
+          after: local.body,
+        );
         await _uploadJournalEntryNow(local, bumpVersion: true);
       }
     } else if (conflict.collection == FirestoreCollections.todoTasks) {
       final local = await _findTodoTask(conflict.documentId);
       if (local != null) {
+        await _syncRepository.deleteOperationsForDocument(conflict.documentId);
+        _charOpRegistry.resetSession(
+          collection: FirestoreCollections.todoTasks,
+          documentId: conflict.documentId,
+          clientId: deviceId,
+          text: '',
+        );
+        _charOpRegistry.recordTextChange(
+          collection: FirestoreCollections.todoTasks,
+          documentId: conflict.documentId,
+          clientId: deviceId,
+          before: '',
+          after: local.notes ?? '',
+        );
         await _uploadTodoTaskNow(local, bumpVersion: true);
       }
     }
@@ -139,6 +167,20 @@ class RemoteSyncService {
         local: local,
       );
       await _journalRepository.upsertEntry(merged, recordLocalActivity: false);
+      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
+      _charOpRegistry.resetSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: conflict.documentId,
+        clientId: deviceId,
+        text: '',
+      );
+      _charOpRegistry.recordTextChange(
+        collection: FirestoreCollections.journalEntries,
+        documentId: conflict.documentId,
+        clientId: deviceId,
+        before: '',
+        after: merged.body,
+      );
       await _uploadJournalEntryNow(merged, bumpVersion: true);
     } else if (conflict.collection == FirestoreCollections.todoTasks) {
       final local = await _findTodoTask(conflict.documentId);
@@ -148,6 +190,20 @@ class RemoteSyncService {
         local: local,
       );
       await _todoRepository.upsertTask(merged, recordLocalActivity: false);
+      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
+      _charOpRegistry.resetSession(
+        collection: FirestoreCollections.todoTasks,
+        documentId: conflict.documentId,
+        clientId: deviceId,
+        text: '',
+      );
+      _charOpRegistry.recordTextChange(
+        collection: FirestoreCollections.todoTasks,
+        documentId: conflict.documentId,
+        clientId: deviceId,
+        before: '',
+        after: merged.notes ?? '',
+      );
       await _uploadTodoTaskNow(merged, bumpVersion: true);
     }
     await repo.deleteConflict(conflict.id);
@@ -167,13 +223,21 @@ class RemoteSyncService {
         tags: extractTags(mergedText),
         bumpVersion: true,
       );
+      await _journalRepository.upsertEntry(updated, recordLocalActivity: false);
+      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
       _charOpRegistry.resetSession(
         collection: FirestoreCollections.journalEntries,
         documentId: conflict.documentId,
         clientId: deviceId,
-        text: mergedText,
+        text: '',
       );
-      await _journalRepository.upsertEntry(updated, recordLocalActivity: false);
+      _charOpRegistry.recordTextChange(
+        collection: FirestoreCollections.journalEntries,
+        documentId: conflict.documentId,
+        clientId: deviceId,
+        before: '',
+        after: mergedText,
+      );
       await _uploadJournalEntryNow(updated, bumpVersion: true);
     } else if (conflict.collection == FirestoreCollections.todoTasks) {
       final local = await _findTodoTask(conflict.documentId);
@@ -183,13 +247,21 @@ class RemoteSyncService {
         clearNotes: mergedText.isEmpty,
         bumpVersion: true,
       );
+      await _todoRepository.upsertTask(updated, recordLocalActivity: false);
+      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
       _charOpRegistry.resetSession(
         collection: FirestoreCollections.todoTasks,
         documentId: conflict.documentId,
         clientId: deviceId,
-        text: mergedText,
+        text: '',
       );
-      await _todoRepository.upsertTask(updated, recordLocalActivity: false);
+      _charOpRegistry.recordTextChange(
+        collection: FirestoreCollections.todoTasks,
+        documentId: conflict.documentId,
+        clientId: deviceId,
+        before: '',
+        after: mergedText,
+      );
       await _uploadTodoTaskNow(updated, bumpVersion: true);
     }
     await repo.deleteConflict(conflict.id);
@@ -525,6 +597,17 @@ class RemoteSyncService {
           forceConflict: force,
         );
         if (detection.isConflict) {
+          if (local == null) {
+            final fallbackEntry = mergeJournalEntryFromRemote(
+              data,
+              id,
+              local: null,
+            );
+            await _journalRepository.upsertEntry(
+              fallbackEntry,
+              recordLocalActivity: false,
+            );
+          }
           await _quarantineConflict(
             collection: FirestoreCollections.journalEntries,
             documentId: id,
