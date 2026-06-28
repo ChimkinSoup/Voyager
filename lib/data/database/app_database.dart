@@ -238,6 +238,18 @@ class SettingsTable extends Table {
       real().withDefault(const Constant(0.22))();
   TextColumn get colorPaletteJson => text().nullable()();
   RealColumn get journalEntryListWidth => real().nullable()();
+  RealColumn get geometricTextureScale =>
+      real().withDefault(const Constant(10.0))();
+  RealColumn get geometricTextureIntensity =>
+      real().withDefault(const Constant(0.85))();
+  RealColumn get geometricTextureFocalSpread =>
+      real().withDefault(const Constant(1.0))();
+  RealColumn get geometricTextureFocalPointX =>
+      real().withDefault(const Constant(1.0))();
+  RealColumn get geometricTextureFocalPointY =>
+      real().withDefault(const Constant(0.5))();
+  RealColumn get geometricTextureVariationFloor =>
+      real().withDefault(const Constant(0.75))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -287,7 +299,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -504,6 +516,32 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           settingsTable,
           settingsTable.devShowConflictDocumentIds,
+        );
+      }
+      if (from < 29) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.geometricTextureScale,
+        );
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.geometricTextureIntensity,
+        );
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.geometricTextureFocalSpread,
+        );
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.geometricTextureFocalPointX,
+        );
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.geometricTextureFocalPointY,
+        );
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.geometricTextureVariationFloor,
         );
       }
     },

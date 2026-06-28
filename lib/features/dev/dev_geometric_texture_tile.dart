@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -10,9 +12,9 @@ class DevGeometricTextureSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final panelOpen = ref.watch(devGeometricTexturePanelOpenProvider);
     final params = ref.watch(geometricTextureParamsProvider);
+    final notifier = ref.read(geometricTextureParamsProvider.notifier);
 
-    void update(GeometricTextureParams next) =>
-        ref.read(geometricTextureParamsProvider.notifier).state = next;
+    void update(GeometricTextureParams next) => notifier.update(next);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -20,7 +22,7 @@ class DevGeometricTextureSection extends ConsumerWidget {
         SwitchListTile(
           title: const Text('Geometric texture tuning'),
           subtitle: const Text(
-            'Live sliders for equilateral-triangle gradient shader (session only)',
+            'Live sliders for equilateral-triangle gradient shader (saved locally)',
           ),
           value: panelOpen,
           onChanged: (value) {
@@ -158,7 +160,7 @@ class DevGeometricTextureSection extends ConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () => update(GeometricTextureParams.defaults),
+              onPressed: () => unawaited(notifier.resetToDefaults()),
               child: const Text('Reset to defaults'),
             ),
           ),
