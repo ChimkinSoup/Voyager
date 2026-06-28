@@ -19,6 +19,8 @@ import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/features/search/search_entry_save_helper.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
@@ -41,7 +43,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final entriesAsync = ref.watch(journalEntriesProvider);
+    final entriesAsync =
+        ref.watch(journalListEntriesProvider(allJournalEntriesScope));
     final journalsAsync = ref.watch(journalsProvider);
     final search = ref.watch(searchServiceProvider);
     final theme = Theme.of(context);
@@ -118,6 +121,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                               onSaved: () {
                                 ref.invalidate(journalEntriesProvider);
                                 ref.invalidate(journalListEntriesProvider);
+                                ref.invalidate(journalEntryCountsProvider);
                               },
                             ),
                           );
@@ -210,16 +214,19 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   Future<void> _save() async {
     final body = _bodyController.text.trimRight();
-    final updated = _entry.copyWith(
+    final helper = SearchEntrySaveHelper(
+      coordinator: ref.read(journalWriteCoordinatorProvider),
+      remoteSync: ref.read(remoteSyncServiceProvider),
+    );
+    final updated = await helper.saveEntry(
+      baseline: _entry,
       title: _titleController.text.trim(),
       body: body,
-      tags: extractTags(body),
       mood: _mood,
       weatherIcon: _weatherIcon,
+      journalId: _entry.journalId,
     );
-    await ref.read(journalRepositoryProvider).upsertEntry(updated);
-    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
-    if (mounted) setState(() => _entry = updated);
+    if (updated != null && mounted) setState(() => _entry = updated);
     widget.onSaved();
   }
 
@@ -229,21 +236,38 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       initialDateTime: _entry.entryDate.toLocal(),
     );
     if (picked == null || !mounted) return;
-    final updated = _entry.copyWith(entryDate: picked.toUtc());
-    await ref.read(journalRepositoryProvider).upsertEntry(updated);
-    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
-    if (!mounted) return;
-    setState(() => _entry = updated);
+    final helper = SearchEntrySaveHelper(
+      coordinator: ref.read(journalWriteCoordinatorProvider),
+      remoteSync: ref.read(remoteSyncServiceProvider),
+    );
+    final updated = await helper.saveEntry(
+      baseline: _entry,
+      title: _titleController.text.trim(),
+      body: _bodyController.text.trimRight(),
+      mood: _mood,
+      weatherIcon: _weatherIcon,
+      journalId: _entry.journalId,
+      entryDate: picked.toUtc(),
+    );
+    if (updated != null && mounted) setState(() => _entry = updated);
     widget.onSaved();
   }
 
   Future<void> _moveToJournal(String journalId) async {
     if (journalId == _entry.journalId) return;
-    final updated = _entry.copyWith(journalId: journalId);
-    await ref.read(journalRepositoryProvider).upsertEntry(updated);
-    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
-    if (!mounted) return;
-    setState(() => _entry = updated);
+    final helper = SearchEntrySaveHelper(
+      coordinator: ref.read(journalWriteCoordinatorProvider),
+      remoteSync: ref.read(remoteSyncServiceProvider),
+    );
+    final updated = await helper.saveEntry(
+      baseline: _entry,
+      title: _titleController.text.trim(),
+      body: _bodyController.text.trimRight(),
+      mood: _mood,
+      weatherIcon: _weatherIcon,
+      journalId: journalId,
+    );
+    if (updated != null && mounted) setState(() => _entry = updated);
     widget.onSaved();
   }
 

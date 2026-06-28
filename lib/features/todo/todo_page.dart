@@ -9,7 +9,6 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
-import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
@@ -18,6 +17,7 @@ import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/todo/todo_manage_sheet.dart';
@@ -683,7 +683,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
             final panelTask = _panelTaskFor(sorted);
 
-            return Row(
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SyncConflictBanner(),
+                Expanded(
+                  child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
@@ -746,16 +751,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                         return RoundedDropdownItem(
                                           value: l.id,
                                           label: l.name,
-                                          trailing:
-                                              '${stat.active} | ${stat.completed}',
-                                          leading: JournalBookmarkFlag(
-                                            colorValue: l.colorValue ??
+                                          labelColor: Color(
+                                            l.colorValue ??
                                                 Theme.of(context)
                                                     .colorScheme
                                                     .primary
                                                     .toARGB32(),
-                                            size: 12,
                                           ),
+                                          trailing:
+                                              '${stat.active} | ${stat.completed}',
                                         );
                                       },
                                     )
@@ -1084,6 +1088,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
                               },
                             ),
                     ),
+                  ),
+                ),
+              ],
                   ),
                 ),
               ],

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/app/providers.dart';
@@ -11,6 +12,7 @@ import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
+import 'package:voyager/features/journal/geometric_texture_warmup.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
 import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
@@ -43,8 +45,10 @@ class AppShell extends ConsumerWidget {
           // Warm up calendar morph shaders immediately after login — before the
           // user navigates to the calendar — so the first transition is smooth.
           const CalendarMorphWarmup(),
+          const GeometricTextureWarmup(),
           const WeatherChartTransitionWarmup(),
           Scaffold(
+            backgroundColor: Colors.transparent,
             body: Row(
               children: [
                 Padding(
@@ -57,7 +61,10 @@ class AppShell extends ConsumerWidget {
                 ),
                 const VerticalDivider(width: 12),
                 Expanded(
-                  child: child,
+                  child: _ShellBranchChangeFlusher(
+                    branchIndex: index,
+                    child: child,
+                  ),
                 ),
               ],
             ),
@@ -67,6 +74,34 @@ class AppShell extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Flushes in-memory edits when the user switches main sections.
+class _ShellBranchChangeFlusher extends StatefulWidget {
+  const _ShellBranchChangeFlusher({
+    required this.branchIndex,
+    required this.child,
+  });
+
+  final int branchIndex;
+  final Widget child;
+
+  @override
+  State<_ShellBranchChangeFlusher> createState() =>
+      _ShellBranchChangeFlusherState();
+}
+
+class _ShellBranchChangeFlusherState extends State<_ShellBranchChangeFlusher> {
+  @override
+  void didUpdateWidget(covariant _ShellBranchChangeFlusher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.branchIndex != widget.branchIndex) {
+      unawaited(PendingFlushRegistry.instance.flushAll());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _VoyagerNavigationRail extends StatelessWidget {

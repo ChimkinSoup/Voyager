@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
@@ -7,6 +9,8 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/domain/services/periodic_prompt_service.dart';
 import 'package:voyager/domain/services/search_service.dart';
+import 'package:voyager/domain/services/character_operation.dart';
+import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
 import 'package:voyager/domain/services/sequence_crdt_merger.dart';
 
 void main() {
@@ -65,6 +69,52 @@ void main() {
       ),
     ]);
     expect(streak, 2);
+  });
+
+  test('legacy snapshot operations do not synthesize duplicate char ops', () {
+    final merger = CharacterSequenceCrdtMerger();
+    final ops = [
+      SyncOperation(
+        id: 'op-1',
+        documentId: 'entry-1',
+        sequence: 1,
+        payload: jsonEncode({'body': 'abc', 'title': 'One'}),
+        deviceId: 'd1',
+        timestamp: DateTime(2026, 1, 1),
+      ),
+      SyncOperation(
+        id: 'op-2',
+        documentId: 'entry-1',
+        sequence: 2,
+        payload: jsonEncode({'body': 'abcd', 'title': 'One'}),
+        deviceId: 'd1',
+        timestamp: DateTime(2026, 1, 2),
+      ),
+    ];
+    expect(merger.mergeOperations(const [], ops), isEmpty);
+    final resolved = jsonDecode(merger.applyMergedPayload(ops)) as Map;
+    expect(resolved['body'], 'abcd');
+  });
+
+  test('character sequence crdt merges concurrent inserts by position', () {
+    final merger = CharacterSequenceCrdtMerger();
+    final ops = [
+      CharacterOperation(
+        id: 'a',
+        clientId: 'c1',
+        logicalClock: 1,
+        position: 'a0',
+        character: 'H',
+      ),
+      CharacterOperation(
+        id: 'b',
+        clientId: 'c2',
+        logicalClock: 1,
+        position: 'a1',
+        character: 'i',
+      ),
+    ];
+    expect(merger.applyMergedText(ops), 'Hi');
   });
 
   test('sequence crdt merger orders by sequence', () {

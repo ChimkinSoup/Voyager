@@ -5,6 +5,9 @@ abstract final class ShellPageStorageKeys {
   static const journalEntryList = PageStorageKey<String>(
     'shell.journal.entryList',
   );
+  static const journalEntryListAll = PageStorageKey<String>(
+    'shell.journal.entryList.all',
+  );
   static const journalPreview = PageStorageKey<String>('shell.journal.preview');
   static const todoTaskList = PageStorageKey<String>('shell.todo.taskList');
   static const searchResults = PageStorageKey<String>('shell.search.results');

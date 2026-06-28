@@ -471,4 +471,56 @@ void main() {
 
     controller.dispose();
   });
+
+  test('permanentlyDeleteFromRemote removes document and sync operations', () async {
+    final now = utcNow();
+    final entry = JournalEntry(
+      id: 'entry-purge',
+      journalId: 'journal-1',
+      title: 'Haunted',
+      body: 'Local body',
+      entryDate: now,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await journalRepo.upsertEntry(entry);
+    await syncRepo.upsertDocument(
+      FirestoreCollections.journalEntries,
+      entry.id,
+      journalEntryToFirestore(entry),
+    );
+    await syncRepo.appendOperation(
+      SyncOperation(
+        id: 'device-a_entry-purge_1',
+        documentId: entry.id,
+        sequence: 1,
+        payload: '[]',
+        deviceId: 'device-a',
+        timestamp: now,
+      ),
+    );
+    await syncRepo.appendOperation(
+      SyncOperation(
+        id: 'device-b_entry-purge_2',
+        documentId: entry.id,
+        sequence: 2,
+        payload: '[]',
+        deviceId: 'device-b',
+        timestamp: now,
+      ),
+    );
+
+    final deletedOps = await deviceA.permanentlyDeleteFromRemote(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entry.id,
+    );
+
+    expect(deletedOps, 2);
+    final remoteDocs = await syncRepo.listCollectionDocuments(
+      FirestoreCollections.journalEntries,
+    );
+    expect(remoteDocs.any((doc) => doc.id == entry.id), isFalse);
+    expect(await syncRepo.listOperations(entry.id), isEmpty);
+    expect(await journalRepo.getEntry(entry.id), isNotNull);
+  });
 }

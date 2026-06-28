@@ -19,6 +19,9 @@ class DevSettingsController extends ChangeNotifier {
   bool showCalendarZoomPrewarm = false;
   bool showCalendarInstantViewSwitch = false;
 
+  bool devForceConflictUi = false;
+  bool showConflictDocumentIds = false;
+
   Future<void> loadFromSettings() async {
     final repo = _settingsRepository;
     if (repo == null) return;
@@ -40,6 +43,16 @@ class DevSettingsController extends ChangeNotifier {
     if (showCalendarInstantViewSwitch !=
         settings.devShowCalendarInstantViewSwitch) {
       showCalendarInstantViewSwitch = settings.devShowCalendarInstantViewSwitch;
+      changed = true;
+    }
+
+    if (devForceConflictUi != settings.devForceConflictUi) {
+      devForceConflictUi = settings.devForceConflictUi;
+      changed = true;
+    }
+
+    if (showConflictDocumentIds != settings.devShowConflictDocumentIds) {
+      showConflictDocumentIds = settings.devShowConflictDocumentIds;
       changed = true;
     }
 
@@ -67,6 +80,20 @@ class DevSettingsController extends ChangeNotifier {
     await _persist();
   }
 
+  Future<void> setDevForceConflictUi(bool value) async {
+    if (devForceConflictUi == value) return;
+    devForceConflictUi = value;
+    notifyListeners();
+    await _persist();
+  }
+
+  Future<void> setShowConflictDocumentIds(bool value) async {
+    if (showConflictDocumentIds == value) return;
+    showConflictDocumentIds = value;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> _persist() async {
     final repo = _settingsRepository;
     if (repo == null) return;
@@ -76,6 +103,8 @@ class DevSettingsController extends ChangeNotifier {
         devShowCacheStatus: showCacheStatus,
         devShowCalendarZoomPrewarm: showCalendarZoomPrewarm,
         devShowCalendarInstantViewSwitch: showCalendarInstantViewSwitch,
+        devForceConflictUi: devForceConflictUi,
+        devShowConflictDocumentIds: showConflictDocumentIds,
       ),
     );
   }

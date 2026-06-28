@@ -11,6 +11,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -57,6 +58,7 @@ class DriftJournalRepository implements JournalRepository {
             promptCycleDays: Value(journal.promptCycleDays),
             createdAt: Value(journal.createdAt),
             updatedAt: Value(journal.updatedAt),
+            version: Value(journal.version),
             deletedAt: Value(journal.deletedAt),
           ),
         );
@@ -73,6 +75,7 @@ class DriftJournalRepository implements JournalRepository {
         updatedAt: Value(utcNow()),
       ),
     );
+    _syncActivity?.recordLocalSave(FirestoreCollections.journals);
   }
 
   @override
@@ -86,6 +89,7 @@ class DriftJournalRepository implements JournalRepository {
         updatedAt: Value(now),
       ),
     );
+    _syncActivity?.recordLocalSave(FirestoreCollections.journalEntries);
   }
 
   @override
@@ -111,6 +115,7 @@ class DriftJournalRepository implements JournalRepository {
         updatedAt: Value(utcNow()),
       ),
     );
+    _syncActivity?.recordLocalSave(FirestoreCollections.journalEntries);
   }
 
   @override
@@ -148,6 +153,26 @@ class DriftJournalRepository implements JournalRepository {
   }
 
   @override
+  Future<Map<String, int>> countEntriesByJournal({
+    bool includeDeleted = false,
+  }) async {
+    final journalIdCol = _db.journalEntriesTable.journalId;
+    final countCol = _db.journalEntriesTable.id.count();
+    final query = _db.selectOnly(_db.journalEntriesTable)
+      ..addColumns([journalIdCol, countCol]);
+    if (!includeDeleted) {
+      query.where(_db.journalEntriesTable.deletedAt.isNull());
+    }
+    query.groupBy([journalIdCol]);
+
+    final rows = await query.get();
+    return {
+      for (final row in rows)
+        row.read(journalIdCol)!: row.read(countCol)!,
+    };
+  }
+
+  @override
   Future<JournalEntry?> getEntry(String id) async {
     final row = await (_db.select(
       _db.journalEntriesTable,
@@ -179,6 +204,7 @@ class DriftJournalRepository implements JournalRepository {
             guidedPrompt: Value(entry.guidedPrompt),
             createdAt: Value(entry.createdAt),
             updatedAt: Value(entry.updatedAt),
+            version: Value(entry.version),
             deletedAt: Value(entry.deletedAt),
           ),
         );
@@ -197,6 +223,14 @@ class DriftJournalRepository implements JournalRepository {
         updatedAt: Value(utcNow()),
       ),
     );
+    _syncActivity?.recordLocalSave(FirestoreCollections.journalEntries);
+  }
+
+  @override
+  Future<void> hardDeleteEntry(String id) async {
+    await (_db.delete(
+      _db.journalEntriesTable,
+    )..where((t) => t.id.equals(id))).go();
   }
 
   @override
@@ -227,6 +261,7 @@ class DriftJournalRepository implements JournalRepository {
     promptCycleDays: row.promptCycleDays,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
     deletedAt: row.deletedAt,
   );
 
@@ -246,6 +281,7 @@ class DriftJournalRepository implements JournalRepository {
     guidedPrompt: row.guidedPrompt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
     deletedAt: row.deletedAt,
   );
 }
@@ -269,6 +305,7 @@ class DriftTodoRepository implements TodoRepository {
             colorValue: r.colorValue,
             createdAt: r.createdAt,
             updatedAt: r.updatedAt,
+            version: r.version,
             deletedAt: r.deletedAt,
           ),
         )
@@ -289,6 +326,7 @@ class DriftTodoRepository implements TodoRepository {
             colorValue: Value(list.colorValue),
             createdAt: Value(list.createdAt),
             updatedAt: Value(list.updatedAt),
+            version: Value(list.version),
             deletedAt: Value(list.deletedAt),
           ),
         );
@@ -376,6 +414,7 @@ class DriftTodoRepository implements TodoRepository {
     parentTaskId: r.parentTaskId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    version: r.version,
     deletedAt: r.deletedAt,
   );
 
@@ -401,6 +440,7 @@ class DriftTodoRepository implements TodoRepository {
             dueDateSetAt: Value(task.dueDateSetAt),
             createdAt: Value(task.createdAt),
             updatedAt: Value(task.updatedAt),
+            version: Value(task.version),
             deletedAt: Value(task.deletedAt),
           ),
         );
@@ -819,6 +859,9 @@ class DriftSettingsRepository implements SettingsRepository {
       devShowCalendarZoomPrewarm: row.devShowCalendarZoomPrewarm,
       devShowCalendarInstantViewSwitch: row.devShowCalendarInstantViewSwitch,
       devTodoSortDebugLog: row.devTodoSortDebugLog,
+      devJournalDebugLog: row.devJournalDebugLog,
+      devForceConflictUi: row.devForceConflictUi,
+      devShowConflictDocumentIds: row.devShowConflictDocumentIds,
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
@@ -870,6 +913,10 @@ class DriftSettingsRepository implements SettingsRepository {
             devShowCalendarInstantViewSwitch:
                 Value(settings.devShowCalendarInstantViewSwitch),
             devTodoSortDebugLog: Value(settings.devTodoSortDebugLog),
+            devJournalDebugLog: Value(settings.devJournalDebugLog),
+            devForceConflictUi: Value(settings.devForceConflictUi),
+            devShowConflictDocumentIds:
+                Value(settings.devShowConflictDocumentIds),
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),
@@ -899,4 +946,77 @@ class DriftSettingsRepository implements SettingsRepository {
           ),
         );
   }
+}
+
+class DriftSyncConflictRepository implements SyncConflictRepository {
+  DriftSyncConflictRepository(this._db);
+
+  final AppDatabase _db;
+
+  @override
+  Future<List<SyncConflict>> listConflicts() async {
+    final rows = await (_db.select(_db.syncConflictsTable)
+          ..orderBy([(t) => OrderingTerm.desc(t.detectedAt)]))
+        .get();
+    return rows.map(_map).toList();
+  }
+
+  @override
+  Future<SyncConflict?> getConflict(String id) async {
+    final row = await (_db.select(_db.syncConflictsTable)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    return row == null ? null : _map(row);
+  }
+
+  @override
+  Future<void> upsertConflict(SyncConflict conflict) async {
+    await _db.into(_db.syncConflictsTable).insertOnConflictUpdate(
+          SyncConflictsTableCompanion(
+            id: Value(conflict.id),
+            collection: Value(conflict.collection),
+            documentId: Value(conflict.documentId),
+            localPayloadJson: Value(conflict.localPayloadJson),
+            remotePayloadJson: Value(conflict.remotePayloadJson),
+            localTitle: Value(conflict.localTitle),
+            remoteTitle: Value(conflict.remoteTitle),
+            localText: Value(conflict.localText),
+            remoteText: Value(conflict.remoteText),
+            detectedAt: Value(conflict.detectedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> deleteConflict(String id) async {
+    await (_db.delete(_db.syncConflictsTable)..where((t) => t.id.equals(id)))
+        .go();
+  }
+
+  @override
+  Future<void> deleteConflictsForDocument(
+    String collection,
+    String documentId,
+  ) async {
+    await (_db.delete(_db.syncConflictsTable)
+          ..where(
+            (t) =>
+                t.collection.equals(collection) &
+                t.documentId.equals(documentId),
+          ))
+        .go();
+  }
+
+  SyncConflict _map(SyncConflictsTableData row) => SyncConflict(
+    id: row.id,
+    collection: row.collection,
+    documentId: row.documentId,
+    localPayloadJson: row.localPayloadJson,
+    remotePayloadJson: row.remotePayloadJson,
+    localTitle: row.localTitle,
+    remoteTitle: row.remoteTitle,
+    localText: row.localText,
+    remoteText: row.remoteText,
+    detectedAt: row.detectedAt,
+  );
 }

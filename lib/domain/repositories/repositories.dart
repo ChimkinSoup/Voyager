@@ -5,6 +5,8 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 
+import 'package:voyager/domain/models/sync_conflict.dart';
+
 abstract class JournalRepository {
   Future<List<Journal>> listJournals({bool includeDeleted = false});
   Future<Journal?> getJournal(String id);
@@ -22,9 +24,11 @@ abstract class JournalRepository {
     int? limit,
     bool includeDeleted = false,
   });
+  Future<Map<String, int>> countEntriesByJournal({bool includeDeleted = false});
   Future<JournalEntry?> getEntry(String id);
   Future<void> upsertEntry(JournalEntry entry, {bool recordLocalActivity = true});
   Future<void> softDeleteEntry(String id);
+  Future<void> hardDeleteEntry(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
 }
 
@@ -92,6 +96,14 @@ abstract class AuthRepository {
   String? get currentUserId;
 }
 
+abstract class SyncConflictRepository {
+  Future<List<SyncConflict>> listConflicts();
+  Future<SyncConflict?> getConflict(String id);
+  Future<void> upsertConflict(SyncConflict conflict);
+  Future<void> deleteConflict(String id);
+  Future<void> deleteConflictsForDocument(String collection, String documentId);
+}
+
 abstract class SyncRepository {
   Future<void> upsertDocument(
     String collection,
@@ -116,4 +128,6 @@ abstract class SyncRepository {
   Future<WeatherForecast?> getStoredForecast();
   Future<void> appendOperation(SyncOperation operation);
   Future<List<SyncOperation>> listOperations(String documentId);
+  Future<void> deleteDocument(String collection, String id);
+  Future<int> deleteOperationsForDocument(String documentId);
 }

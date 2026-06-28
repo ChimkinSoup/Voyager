@@ -11,14 +11,15 @@ import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/domain/services/sequence_crdt_merger.dart';
+import 'package:voyager/domain/services/character_operation.dart';
+import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
 
 class SyncEngine {
   SyncEngine({
     required SyncRepository syncRepository,
     required String deviceId,
     Debouncer? debouncer,
-    SequenceCrdtMerger? merger,
+    CharacterSequenceCrdtMerger? charMerger,
     CrdtDocumentResolver? crdtResolver,
     SyncActivityController? syncActivity,
     SyncRetryPolicy retryPolicy = const SyncRetryPolicy(),
@@ -27,7 +28,9 @@ class SyncEngine {
        _debouncer = debouncer ?? Debouncer(),
        _crdtResolver =
            crdtResolver ??
-           CrdtDocumentResolver(merger: merger ?? SequenceCrdtMerger()),
+           CrdtDocumentResolver(
+             merger: charMerger ?? CharacterSequenceCrdtMerger(),
+           ),
        _syncActivity = syncActivity,
        _retryPolicy = retryPolicy;
 
@@ -76,6 +79,7 @@ class SyncEngine {
     required String documentId,
     required Map<String, dynamic> payload,
     String? cancelDebounceKey,
+    List<CharacterOperation>? charOps,
   }) {
     if (cancelDebounceKey != null) {
       _debouncerFor(cancelDebounceKey).cancel();
@@ -84,6 +88,7 @@ class SyncEngine {
       collection: collection,
       documentId: documentId,
       payload: payload,
+      charOps: charOps,
     );
   }
 
@@ -135,6 +140,7 @@ class SyncEngine {
     required String collection,
     required String documentId,
     required Map<String, dynamic> payload,
+    List<CharacterOperation>? charOps,
   }) async {
     await _retryPolicy.run(() async {
       if (DevFlags.verboseSync) {
@@ -143,12 +149,20 @@ class SyncEngine {
 
       await _syncRepository.upsertDocument(collection, documentId, payload);
       final sequence = ++_sequence;
+
+      final opPayload = charOps != null && charOps.isNotEmpty
+          ? CharOpsPayload(
+              charOps: charOps,
+              snapshot: payload,
+            ).encode()
+          : jsonEncode(payload);
+
       await _syncRepository.appendOperation(
         SyncOperation(
           id: '${_deviceId}_${documentId}_$sequence',
           documentId: documentId,
           sequence: sequence,
-          payload: jsonEncode(payload),
+          payload: opPayload,
           deviceId: _deviceId,
           timestamp: DateTime.now().toUtc(),
         ),

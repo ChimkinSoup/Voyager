@@ -6,7 +6,72 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 void main() {
-  test('remote journal entry merge prefers newer updatedAt', () {
+  test('remote journal entry merge prefers newer version', () {
+    final older = DateTime.utc(2024, 1, 1);
+    final newer = DateTime.utc(2024, 2, 1);
+    final local = JournalEntry(
+      id: 'entry-1',
+      journalId: 'journal-1',
+      title: 'Local title',
+      body: 'Local body',
+      entryDate: older,
+      createdAt: older,
+      updatedAt: newer,
+      version: 2,
+    );
+
+    final merged = mergeJournalEntryFromRemote(
+      {
+        'journalId': 'journal-1',
+        'title': 'Remote title',
+        'body': 'Remote body',
+        'entryDate': older.toIso8601String(),
+        'updatedAt': newer.toIso8601String(),
+        'version': 1,
+      },
+      'entry-1',
+      local: local,
+    );
+
+    expect(merged.title, 'Local title');
+    expect(merged.body, 'Local body');
+    expect(merged.version, 2);
+  });
+
+  test('CRDT body merge applies even when local metadata version is newer', () {
+    final now = utcNow();
+    final local = JournalEntry(
+      id: 'entry-1',
+      journalId: 'journal-1',
+      title: 'Local title',
+      body: 'Local body',
+      entryDate: now,
+      createdAt: now,
+      updatedAt: now,
+      version: 5,
+    );
+
+    final merged = mergeJournalEntryFromRemote(
+      {
+        'journalId': 'journal-1',
+        'title': 'Remote title',
+        'body': 'Remote body',
+        'entryDate': now.toIso8601String(),
+        'updatedAt': now.subtract(const Duration(hours: 1)).toIso8601String(),
+        'version': 2,
+      },
+      'entry-1',
+      local: local,
+      crdtText: const CrdtTextFields(body: 'CRDT body', tags: ['remote']),
+    );
+
+    expect(merged.title, 'Local title');
+    expect(merged.body, 'CRDT body');
+    expect(merged.tags, ['remote']);
+    expect(merged.version, 5);
+  });
+
+  test('remote journal entry merge prefers newer updatedAt when versions tie', () {
     final older = DateTime.utc(2024, 1, 1);
     final newer = DateTime.utc(2024, 2, 1);
     final local = JournalEntry(
@@ -151,4 +216,32 @@ void main() {
     expect(restoredJournal.id, legacyJournalId);
     expect(restoredEntry.journalId, legacyJournalId);
   });
+
+  test(
+    'mergeJournalFromRemote preserves local tombstone when remote omits deletedAt',
+    () {
+      final now = utcNow();
+      final deletedAt = now.subtract(const Duration(days: 1));
+      final local = Journal(
+        id: 'journal-deleted',
+        name: 'Old name',
+        createdAt: now,
+        updatedAt: deletedAt,
+        deletedAt: deletedAt,
+      );
+      final remote = {
+        'name': 'Remote rename',
+        'updatedAt': now.toIso8601String(),
+      };
+
+      final merged = mergeJournalFromRemote(
+        remote,
+        local.id,
+        local: local,
+      );
+
+      expect(merged.deletedAt, deletedAt);
+      expect(merged.name, 'Remote rename');
+    },
+  );
 }

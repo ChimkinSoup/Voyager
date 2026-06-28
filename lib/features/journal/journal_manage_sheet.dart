@@ -6,12 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/features/journal/journal_list_actions.dart';
 
 Future<Journal?> showJournalManageSheet(
   BuildContext context,
@@ -185,58 +185,24 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
   Future<void> _deleteJournal(Journal journal) async {
     if (journal.id == legacyJournalId) return;
     final count = _entryCounts[journal.id] ?? 0;
-    final choice = await showDeleteContainerDialog(
+    await deleteJournalList(
       context,
-      title: 'Delete "${journal.name}"?',
-      message: count == 0
-          ? 'This journal has no entries and will be removed.'
-          : 'This journal has $count entries. Move them to the default "Journal", or delete everything.',
-      deleteAllLabel: 'Yes (delete all entries)',
+      ref,
+      journal: journal,
+      allJournals: _journals,
+      entryCount: count,
+      onConfirmed: () {
+        if (!mounted) return;
+        setState(() {
+          _journals = _journals.where((j) => j.id != journal.id).toList();
+        });
+      },
+      onLocalDeleteFailed: () {
+        if (!mounted) return;
+        unawaited(_reload());
+      },
     );
-    if (choice == DeleteContainerChoice.cancel) return;
-
-    final repo = ref.read(journalRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-
-    if (choice == DeleteContainerChoice.deleteAll && count > 0) {
-      final entries = await repo.listEntries(journalId: journal.id);
-      await repo.softDeleteEntriesInJournal(journal.id);
-      final now = utcNow();
-      for (final entry in entries) {
-        remoteSync.pushJournalEntryNow(entry.copyWith(deletedAt: now));
-      }
-    } else if (choice == DeleteContainerChoice.moveToDefault && count > 0) {
-      final fallback = _journals.firstWhere(
-        (item) => item.id == legacyJournalId,
-        orElse: () {
-          final now = utcNow();
-          return Journal(
-            id: legacyJournalId,
-            name: 'Journal',
-            colorValue: Theme.of(context).colorScheme.primary.toARGB32(),
-            createdAt: now,
-            updatedAt: now,
-          );
-        },
-      );
-      if (!_journals.any((item) => item.id == legacyJournalId)) {
-        await repo.upsertJournal(fallback);
-        remoteSync.pushJournal(fallback);
-      }
-      final entries = await repo.listEntries(journalId: journal.id);
-      await repo.reassignEntriesJournal(journal.id, legacyJournalId);
-      for (final entry in entries) {
-        remoteSync.pushJournalEntryNow(
-          entry.copyWith(journalId: legacyJournalId),
-        );
-      }
-    }
-
-    await repo.softDeleteJournal(journal.id);
-    await remoteSync.pushJournalById(journal.id);
-    ref.invalidate(journalEntriesProvider);
-    ref.invalidate(journalListEntriesProvider);
-    ref.invalidate(journalsProvider);
+    if (!mounted) return;
     await _reload();
   }
 

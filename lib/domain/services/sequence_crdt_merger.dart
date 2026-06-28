@@ -1,6 +1,13 @@
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
 
+/// Backward-compatible alias that delegates to [CharacterSequenceCrdtMerger].
 class SequenceCrdtMerger {
+  SequenceCrdtMerger({CharacterSequenceCrdtMerger? delegate})
+    : _delegate = delegate ?? CharacterSequenceCrdtMerger();
+
+  final CharacterSequenceCrdtMerger _delegate;
+
   List<SyncOperation> merge(
     List<SyncOperation> local,
     List<SyncOperation> remote,
@@ -18,6 +25,6 @@ class SequenceCrdtMerger {
 
   String applyMergedPayload(List<SyncOperation> merged) {
     if (merged.isEmpty) return '';
-    return merged.last.payload;
+    return _delegate.applyMergedPayload(merged);
   }
 }

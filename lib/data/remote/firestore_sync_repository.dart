@@ -225,6 +225,31 @@ class FirestoreSyncRepository implements SyncRepository {
     });
     return operations;
   }
+
+  @override
+  Future<void> deleteDocument(String collection, String id) async {
+    await _doc(collection, id).delete();
+  }
+
+  @override
+  Future<int> deleteOperationsForDocument(String documentId) async {
+    final query = await _collection(
+      'sync_operations',
+    ).where('documentId', isEqualTo: documentId).get();
+    if (query.docs.isEmpty) return 0;
+
+    const batchSize = 500;
+    var deleted = 0;
+    for (var i = 0; i < query.docs.length; i += batchSize) {
+      final batch = _firestore.batch();
+      for (final doc in query.docs.skip(i).take(batchSize)) {
+        batch.delete(doc.reference);
+        deleted++;
+      }
+      await batch.commit();
+    }
+    return deleted;
+  }
 }
 
 class NoOpSyncRepository implements SyncRepository {
@@ -290,4 +315,10 @@ class NoOpSyncRepository implements SyncRepository {
 
   @override
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {}
+
+  @override
+  Future<void> deleteDocument(String collection, String id) async {}
+
+  @override
+  Future<int> deleteOperationsForDocument(String documentId) async => 0;
 }

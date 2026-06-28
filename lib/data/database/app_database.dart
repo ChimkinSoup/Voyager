@@ -19,6 +19,7 @@ class JournalsTable extends Table {
   IntColumn get promptCycleDays => integer().withDefault(const Constant(7))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -41,6 +42,7 @@ class JournalEntriesTable extends Table {
   TextColumn get guidedPrompt => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -53,6 +55,7 @@ class TodoListsTable extends Table {
   IntColumn get colorValue => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -73,6 +76,7 @@ class TodoTasksTable extends Table {
   DateTimeColumn get dueDateSetAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -221,6 +225,12 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get devTodoSortDebugLog =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get devJournalDebugLog =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get devForceConflictUi =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get devShowConflictDocumentIds =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
   IntColumn get weatherChartRainColor => integer().nullable()();
@@ -241,6 +251,22 @@ class TagColorsTable extends Table {
   Set<Column> get primaryKey => {tag};
 }
 
+class SyncConflictsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get collection => text()();
+  TextColumn get documentId => text()();
+  TextColumn get localPayloadJson => text()();
+  TextColumn get remotePayloadJson => text()();
+  TextColumn get localTitle => text().nullable()();
+  TextColumn get remoteTitle => text().nullable()();
+  TextColumn get localText => text().nullable()();
+  TextColumn get remoteText => text().nullable()();
+  DateTimeColumn get detectedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     JournalsTable,
@@ -254,13 +280,14 @@ class TagColorsTable extends Table {
     RankingValuesTable,
     SettingsTable,
     TagColorsTable,
+    SyncConflictsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -452,6 +479,31 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           settingsTable,
           settingsTable.devTodoSortDebugLog,
+        );
+      }
+      if (from < 25) {
+        await migrator.addColumn(journalsTable, journalsTable.version);
+        await migrator.addColumn(journalEntriesTable, journalEntriesTable.version);
+        await migrator.addColumn(todoListsTable, todoListsTable.version);
+        await migrator.addColumn(todoTasksTable, todoTasksTable.version);
+      }
+      if (from < 26) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devJournalDebugLog,
+        );
+      }
+      if (from < 27) {
+        await migrator.createTable(syncConflictsTable);
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devForceConflictUi,
+        );
+      }
+      if (from < 28) {
+        await migrator.addColumn(
+          settingsTable,
+          settingsTable.devShowConflictDocumentIds,
         );
       }
     },

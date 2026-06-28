@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/routing/app_router.dart';
 
 class VoyagerApp extends ConsumerStatefulWidget {
@@ -40,10 +42,15 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      final remoteSync = _remoteSync;
-      if (remoteSync != null) {
-        unawaited(remoteSync.flushAllPending());
-      }
+      unawaited(_flushAllPendingEdits());
+    }
+  }
+
+  Future<void> _flushAllPendingEdits() async {
+    await PendingFlushRegistry.instance.flushAll();
+    final remoteSync = _remoteSync;
+    if (remoteSync != null) {
+      await remoteSync.flushAllPending();
     }
   }
 
@@ -55,15 +62,28 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     final theme = VoyagerTheme.dark(
       accent: Color(settings?.accentColor ?? 0xFF7C9EFF),
     );
+    final geometricProgram = ref.watch(geometricShaderProvider).valueOrNull;
+    final geometricParams = ref.watch(geometricTextureParamsProvider);
 
     return MaterialApp.router(
       title: 'Voyager',
       theme: theme,
       scrollBehavior: const _NoScrollbarScrollBehavior(),
       builder: (context, child) {
-        return DefaultTextStyle(
-          style: AppFonts.style(color: theme.colorScheme.onSurface),
-          child: child ?? const SizedBox.shrink(),
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GeometricTexture(
+                program: geometricProgram,
+                baseColor: theme.scaffoldBackgroundColor,
+                params: geometricParams,
+              ),
+            ),
+            DefaultTextStyle(
+              style: AppFonts.style(color: theme.colorScheme.onSurface),
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ],
         );
       },
       routerConfig: router,

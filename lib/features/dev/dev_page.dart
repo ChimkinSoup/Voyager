@@ -9,7 +9,12 @@ import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/dev/dev_calendar_debug_tile.dart';
+import 'package:voyager/features/dev/dev_out_of_sync_purge_tile.dart';
+import 'package:voyager/features/dev/dev_remote_purge_tile.dart';
+import 'package:voyager/features/dev/dev_sync_compare_tile.dart';
 import 'package:voyager/features/dev/dev_todo_sort_debug_tile.dart';
+import 'package:voyager/features/dev/dev_journal_debug_tile.dart';
+import 'package:voyager/features/dev/dev_geometric_texture_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
@@ -89,6 +94,52 @@ class DevPage extends ConsumerWidget {
         DevWeatherApiTile(settings: settings),
         const Divider(height: 32),
         const DevTodoSortDebugSection(),
+        const Divider(height: 32),
+        const DevJournalDebugSection(),
+        const Divider(height: 32),
+        const DevGeometricTextureSection(),
+        const Divider(height: 32),
+        const DevSyncCompareSection(),
+        const Divider(height: 32),
+        const DevRemotePurgeSection(),
+        const SizedBox(height: 24),
+        const DevOutOfSyncPurgeSection(),
+        const Divider(height: 32),
+        Consumer(
+          builder: (context, ref, _) {
+            final devSettings = ref.watch(devSettingsProvider);
+            return Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Force conflict UI'),
+                  subtitle: const Text(
+                    'Flag the next sync download as a hard conflict to test resolution UI',
+                  ),
+                  value: devSettings.devForceConflictUi,
+                  onChanged: (value) {
+                    unawaited(
+                      ref.read(devSettingsProvider).setDevForceConflictUi(value),
+                    );
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Show conflict document IDs'),
+                  subtitle: const Text(
+                    'Show Firestore document paths in the merge conflict dialog',
+                  ),
+                  value: devSettings.showConflictDocumentIds,
+                  onChanged: (value) {
+                    unawaited(
+                      ref
+                          .read(devSettingsProvider)
+                          .setShowConflictDocumentIds(value),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        ),
         const Divider(height: 32),
         ListTile(
           title: const Text('Force reload local data'),

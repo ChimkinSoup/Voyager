@@ -5,6 +5,7 @@ class TodoListModel extends SoftDeletable {
     required super.id,
     required super.createdAt,
     required super.updatedAt,
+    super.version,
     super.deletedAt,
     required this.name,
     this.colorValue,
@@ -13,11 +14,17 @@ class TodoListModel extends SoftDeletable {
   final String name;
   final int? colorValue;
 
-  TodoListModel copyWith({String? name, int? colorValue, DateTime? deletedAt}) {
+  TodoListModel copyWith({
+    String? name,
+    int? colorValue,
+    DateTime? deletedAt,
+    bool bumpVersion = true,
+  }) {
     return TodoListModel(
       id: id,
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
+      version: bumpVersion ? version + 1 : version,
       deletedAt: deletedAt ?? this.deletedAt,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
@@ -30,6 +37,7 @@ class TodoTask extends SoftDeletable {
     required super.id,
     required super.createdAt,
     required super.updatedAt,
+    super.version,
     super.deletedAt,
     required this.listId,
     required this.title,
@@ -71,11 +79,14 @@ class TodoTask extends SoftDeletable {
     DateTime? dueDateSetAt,
     bool clearDueDateSetAt = false,
     DateTime? deletedAt,
+    int? version,
+    bool bumpVersion = true,
   }) {
     return TodoTask(
       id: id,
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
+      version: version ?? (bumpVersion ? this.version + 1 : this.version),
       deletedAt: deletedAt ?? this.deletedAt,
       listId: listId ?? this.listId,
       title: title ?? this.title,

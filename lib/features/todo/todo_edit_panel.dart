@@ -9,7 +9,9 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -62,9 +64,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   DateTime? _dueDate;
   List<TodoTask> _subtasks = [];
   RemoteSyncService? _remoteSync;
+  PendingTextMergeListener? _pendingTextMergeListener;
   late String _lastNonEmptyTitle;
   Timer? _titleSaveTimer;
   Timer? _notesSaveTimer;
+  var _lastNotesText = '';
 
   @override
   void initState() {
@@ -72,25 +76,113 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _lastNonEmptyTitle = widget.task.title;
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
+    _lastNotesText = _notesController.text;
     _titleFocusNode = FocusNode();
     _titleFocusNode.onKeyEvent = _handleTitleKey;
     _notesFocusNode = FocusNode();
+    _notesFocusNode.addListener(_handleNotesFocusChanged);
     _notesFocusNode.onKeyEvent = _handleNotesKey;
     _subtaskController = TextEditingController();
     _subtaskFocusNode = FocusNode();
     _dueDate = widget.task.dueDate;
     _loadSubtasks();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _remoteSync = ref.read(remoteSyncServiceProvider);
+      _registerPendingNotesListener(widget.task.id);
+      _setNotesEditingFlag(_notesFocusNode.hasFocus);
+    });
   }
 
   @override
   void didUpdateWidget(covariant TodoEditPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.id != widget.task.id) {
+      _unregisterPendingNotesListener(oldWidget.task.id);
       _lastNonEmptyTitle = widget.task.title;
       _titleController.text = widget.task.title;
       _notesController.text = widget.task.notes ?? '';
+      _lastNotesText = _notesController.text;
       _dueDate = widget.task.dueDate;
       _loadSubtasks();
+      _registerPendingNotesListener(widget.task.id);
+    }
+  }
+
+  void _registerPendingNotesListener(String taskId) {
+    final RemoteSyncService remoteSync =
+        _remoteSync ?? ref.read(remoteSyncServiceProvider);
+    _remoteSync = remoteSync;
+    _pendingTextMergeListener ??= _handlePendingNotesMerge;
+    remoteSync.addPendingTextMergeListener(
+      collection: FirestoreCollections.todoTasks,
+      documentId: taskId,
+      listener: _pendingTextMergeListener!,
+    );
+  }
+
+  void _unregisterPendingNotesListener(String taskId) {
+    final remoteSync = _remoteSync;
+    if (remoteSync == null || _pendingTextMergeListener == null) return;
+    remoteSync.removePendingTextMergeListener(
+      collection: FirestoreCollections.todoTasks,
+      documentId: taskId,
+      listener: _pendingTextMergeListener!,
+    );
+  }
+
+  void _setNotesEditingFlag(bool isEditing) {
+    final remoteSync = _remoteSync;
+    if (remoteSync == null) return;
+    remoteSync.setDocumentEditing(
+      collection: FirestoreCollections.todoTasks,
+      documentId: widget.task.id,
+      isEditing: isEditing,
+    );
+  }
+
+  void _handleNotesFocusChanged() {
+    if (!mounted) return;
+    _setNotesEditingFlag(_notesFocusNode.hasFocus);
+    if (!_notesFocusNode.hasFocus) {
+      unawaited(_applyPendingNotesMerge());
+    }
+  }
+
+  void _handlePendingNotesMerge(PendingTextMergeEvent event) {
+    if (!mounted || widget.task.id != event.documentId) return;
+    if (!_notesFocusNode.hasFocus) return;
+
+    final before = _notesController.text;
+    final merged = TextDeltaInjector.injectRemoteDelta(
+      localText: before,
+      oldRemoteText: event.previousRemoteText,
+      newRemoteText: event.remoteText,
+    );
+    if (merged == before) return;
+
+    final selection = _notesController.selection;
+    _notesController.value = TextEditingValue(
+      text: merged,
+      selection: TextSelection.collapsed(
+        offset: TextDeltaInjector.adjustedSelection(
+          selection: selection.baseOffset,
+          before: before,
+          after: merged,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyPendingNotesMerge() async {
+    final remoteSync = _remoteSync;
+    if (remoteSync == null) return;
+    final merged = await remoteSync.applyPendingTodoTaskNotesMerge(
+      taskId: widget.task.id,
+      currentLocalNotes: _notesController.text,
+    );
+    if (merged != null && mounted) {
+      _notesController.text = merged.notes ?? '';
     }
   }
 
@@ -105,13 +197,18 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   void dispose() {
     _titleSaveTimer?.cancel();
     _notesSaveTimer?.cancel();
+    _unregisterPendingNotesListener(widget.task.id);
+    _setNotesEditingFlag(false);
+    _notesFocusNode.removeListener(_handleNotesFocusChanged);
     final remoteSync = _remoteSync;
     if (remoteSync != null) {
       unawaited(
-        remoteSync.flushDocument(
-          FirestoreCollections.todoTasks,
-          widget.task.id,
-        ),
+        _applyPendingNotesMerge().then((_) async {
+          await remoteSync.flushDocument(
+            FirestoreCollections.todoTasks,
+            widget.task.id,
+          );
+        }),
       );
     }
     _titleController.dispose();
@@ -165,6 +262,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     String? listId,
     bool reorderDueDate = false,
   }) async {
+    await _applyPendingNotesMerge();
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
     final notesText = notes ?? _notesController.text.trim();
@@ -298,13 +396,33 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   Future<void> _onNotesChanged(String value) async {
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final repo = ref.read(todoRepositoryProvider);
     final notes = value.trim();
-    final updated = notes.isEmpty
-        ? widget.task.copyWith(clearNotes: true)
-        : widget.task.copyWith(notes: notes);
-    await ref
-        .read(remoteSyncServiceProvider)
-        .saveTodoTaskThenScheduleUpload(updated);
+    final storedLists = await repo.listLists(includeDeleted: true);
+    TodoTask? baseline;
+    for (final list in storedLists) {
+      final tasks = await repo.listTasks(
+        list.id,
+        includeDeleted: true,
+        topLevelOnly: false,
+      );
+      for (final task in tasks) {
+        if (task.id == widget.task.id) {
+          baseline = task;
+          break;
+        }
+      }
+      if (baseline != null) break;
+    }
+    if (baseline == null) return;
+
+    final updated = baseline.copyWith(
+      notes: notes.isEmpty ? null : notes,
+      clearNotes: notes.isEmpty,
+      bumpVersion: false,
+    );
+    await remoteSync.saveTodoTaskThenScheduleUpload(updated);
   }
 
   Future<void> _onTitleChanged(String value) async {
@@ -700,7 +818,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             const SizedBox(height: 16),
             SizedBox(
               height: 120,
-              child: LabeledTextField(
+              child: Listener(
+                onPointerDown: (_) => _setNotesEditingFlag(true),
+                child: LabeledTextField(
                 label: 'Notes',
                 controller: _notesController,
                 focusNode: _notesFocusNode,
@@ -715,8 +835,15 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                         ? widget.task.copyWith(clearNotes: true)
                         : widget.task.copyWith(notes: notes),
                   );
+                  ref.read(remoteSyncServiceProvider).recordTodoNotesChange(
+                        taskId: widget.task.id,
+                        before: _lastNotesText,
+                        after: value,
+                      );
+                  _lastNotesText = value;
                   _scheduleNotesSave(value);
                 },
+              ),
               ),
             ),
             const SizedBox(height: 16),

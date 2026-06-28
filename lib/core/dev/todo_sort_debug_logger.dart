@@ -124,7 +124,6 @@ class TodoSortDebugLogger extends ChangeNotifier {
     buffer.writeln();
 
     final entry = buffer.toString();
-    debugPrint('[todo-sort-debug]\n$entry');
 
     final file = File(await logFilePath());
     await _trimIfNeeded(file);

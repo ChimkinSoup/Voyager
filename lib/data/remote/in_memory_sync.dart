@@ -155,4 +155,18 @@ class InMemorySyncRepository implements SyncRepository {
   Future<List<SyncOperation>> listOperations(String documentId) async {
     return List.unmodifiable(_operations[documentId] ?? const []);
   }
+
+  @override
+  Future<void> deleteDocument(String collection, String id) async {
+    final key = _key(collection, id);
+    _documents.remove(key);
+    _watchers[key]?.add(<String, dynamic>{});
+    _notifyCollection(collection);
+  }
+
+  @override
+  Future<int> deleteOperationsForDocument(String documentId) async {
+    final ops = _operations.remove(documentId);
+    return ops?.length ?? 0;
+  }
 }

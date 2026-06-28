@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -10,13 +11,18 @@ import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/dev/cache_status.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
+import 'package:voyager/core/dev/journal_debug_logger.dart';
+import 'package:voyager/core/dev/remote_sync_compare_service.dart';
+import 'package:voyager/core/dev/sync_compare_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
+import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/platform_info.dart';
+import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/data/remote/cloud_function_weather_client.dart';
 import 'package:voyager/data/remote/dev_openweather_client.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
@@ -25,6 +31,7 @@ import 'package:voyager/data/remote/http_callable_client.dart';
 import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
+import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -74,6 +81,10 @@ final trackerRepositoryProvider = Provider<TrackerRepository>((ref) {
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return DriftSettingsRepository(ref.watch(databaseProvider));
+});
+
+final syncConflictRepositoryProvider = Provider<SyncConflictRepository>((ref) {
+  return DriftSyncConflictRepository(ref.watch(databaseProvider));
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -151,16 +162,40 @@ final weatherServiceProvider = Provider<WeatherService>((ref) {
 });
 
 final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
+  final settings = ref.watch(settingsProvider).valueOrNull;
   final service = RemoteSyncService(
     syncRepository: ref.watch(syncRepositoryProvider),
     journalRepository: ref.watch(journalRepositoryProvider),
     todoRepository: ref.watch(todoRepositoryProvider),
     weatherService: ref.watch(weatherServiceProvider),
     syncEngine: ref.watch(syncEngineProvider),
+    syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
     syncActivity: ref.read(syncActivityProvider),
+    deviceId: ref.watch(deviceIdProvider),
+    forceConflictUi: settings?.devForceConflictUi ?? false,
   );
+  ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+    next.whenData((s) => service.forceConflictUi = s.devForceConflictUi);
+  });
   ref.onDispose(service.dispose);
   return service;
+});
+
+final journalWriteCoordinatorProvider = Provider<JournalWriteCoordinator>((ref) {
+  return JournalWriteCoordinator(
+    journalRepository: ref.watch(journalRepositoryProvider),
+    remoteSync: ref.watch(remoteSyncServiceProvider),
+    onEntrySaved: () => invalidateJournalEntryProviders(ref),
+  );
+});
+
+/// App-scoped journal list cache invalidation (safe after widget dispose).
+final journalEntryCacheInvalidatorProvider = Provider<void Function()>((ref) {
+  return () => invalidateJournalEntryProviders(ref);
+});
+
+final syncConflictsProvider = FutureProvider<List<SyncConflict>>((ref) async {
+  return ref.watch(remoteSyncServiceProvider).listConflicts();
 });
 
 final firestorePullServiceProvider = Provider<RemoteSyncService>(
@@ -178,6 +213,7 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
       ref.invalidate(todoTasksProvider);
       ref.invalidate(allTodoTasksProvider);
       ref.invalidate(todoListStatsProvider);
+      ref.invalidate(syncConflictsProvider);
     },
   );
   ref.onDispose(controller.dispose);
@@ -289,16 +325,23 @@ const allJournalEntriesScope = '__all__';
 void invalidateJournalEntryProviders(Ref ref) {
   ref.invalidate(journalEntriesProvider);
   ref.invalidate(journalListEntriesProvider);
+  ref.invalidate(journalEntryCountsProvider);
 }
+
+final journalEntryCountsProvider =
+    FutureProvider<Map<String, int>>((ref) async {
+  ref.keepAlive();
+  return ref.watch(journalRepositoryProvider).countEntriesByJournal();
+});
 
 final journalListEntriesProvider = FutureProvider.family<
     List<JournalEntry>, String>((ref, scope) {
   ref.keepAlive();
+  final repo = ref.watch(journalRepositoryProvider);
   if (scope == allJournalEntriesScope) {
-    // Reuse warmed recent-entries cache (same data as [journalEntriesProvider]).
-    return ref.watch(journalEntriesProvider.future);
+    return repo.listEntries();
   }
-  return ref.watch(journalRepositoryProvider).listEntries(journalId: scope);
+  return repo.listEntries(journalId: scope);
 });
 
 final historicalJournalEntriesProvider = FutureProvider.family((
@@ -373,15 +416,41 @@ final rankingValuesProvider = FutureProvider.family((ref, String configId) {
   return ref.watch(trackerRepositoryProvider).listRankingValues(configId);
 });
 
+final geometricShaderProvider = FutureProvider<FragmentProgram?>((ref) async {
+  ref.keepAlive();
+  try {
+    return await FragmentProgram.fromAsset('shaders/geometric_texture.frag');
+  } catch (e, st) {
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: e,
+      stack: st,
+      library: 'geometric_texture',
+      context: ErrorDescription('loading geometric texture shader'),
+    ));
+    return null;
+  }
+});
+
+/// Live-tunable geometric texture parameters (dev session only).
+final geometricTextureParamsProvider = StateProvider<GeometricTextureParams>(
+  (ref) => GeometricTextureParams.defaults,
+);
+
+/// Whether the dev-menu geometric texture slider panel is expanded.
+final devGeometricTexturePanelOpenProvider =
+    StateProvider<bool>((ref) => false);
+
 final shellDataWarmupProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
   final listsFuture = ref.read(todoListsProvider.future);
 
   await Future.wait<void>([
+    ref.read(geometricShaderProvider.future).then((_) {}),
     ref.read(quotesLoadedProvider.future),
     ref.read(settingsProvider.future).then((_) {}),
     ref.read(journalsProvider.future).then((_) {}),
     ref.read(journalEntriesProvider.future).then((_) {}),
+    ref.read(journalEntryCountsProvider.future).then((_) {}),
     ref.read(calendarEventsProvider.future).then((_) {}),
     ref.read(trackersProvider.future).then((_) {}),
     ref.read(rankingConfigsProvider.future).then((_) {}),
@@ -392,7 +461,33 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
         ),
       );
     }),
+    ref.read(journalsProvider.future).then((journals) async {
+      await Future.wait<void>([
+        ref
+            .read(journalListEntriesProvider(allJournalEntriesScope).future)
+            .then((_) {}),
+        ...journals.map(
+          (journal) => ref
+              .read(journalListEntriesProvider(journal.id).future)
+              .then((_) {}),
+        ),
+      ]);
+    }),
   ]);
+});
+
+final journalDebugLoggerProvider = ChangeNotifierProvider<JournalDebugLogger>((
+  ref,
+) {
+  final controller = JournalDebugLogger(
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+    journalRepository: ref.watch(journalRepositoryProvider),
+  );
+  unawaited(controller.loadFromSettings());
+  ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+    next.whenData(controller.applySettings);
+  });
+  return controller;
 });
 
 final todoSortDebugLoggerProvider = ChangeNotifierProvider<TodoSortDebugLogger>((
@@ -420,6 +515,23 @@ final devSettingsProvider = ChangeNotifierProvider<DevSettingsController>((
     next.whenData(controller.applySettings);
   });
   return controller;
+});
+
+final syncCompareLoggerProvider = ChangeNotifierProvider<SyncCompareLogger>((
+  ref,
+) {
+  return SyncCompareLogger();
+});
+
+final remoteSyncCompareServiceProvider = Provider<RemoteSyncCompareService>((
+  ref,
+) {
+  return RemoteSyncCompareService(
+    journalRepository: ref.watch(journalRepositoryProvider),
+    todoRepository: ref.watch(todoRepositoryProvider),
+    syncRepository: ref.watch(syncRepositoryProvider),
+    logger: ref.watch(syncCompareLoggerProvider),
+  );
 });
 
 final warmupTrackerProvider = ChangeNotifierProvider<WarmupTracker>((ref) {

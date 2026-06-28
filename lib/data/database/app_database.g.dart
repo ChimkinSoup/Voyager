@@ -87,6 +87,18 @@ class $JournalsTableTable extends JournalsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _deletedAtMeta = const VerificationMeta(
     'deletedAt',
   );
@@ -107,6 +119,7 @@ class $JournalsTableTable extends JournalsTable
     promptCycleDays,
     createdAt,
     updatedAt,
+    version,
     deletedAt,
   ];
   @override
@@ -174,6 +187,12 @@ class $JournalsTableTable extends JournalsTable
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
     if (data.containsKey('deleted_at')) {
       context.handle(
         _deletedAtMeta,
@@ -217,6 +236,10 @@ class $JournalsTableTable extends JournalsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
       deletedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
@@ -239,6 +262,7 @@ class JournalsTableData extends DataClass
   final int promptCycleDays;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int version;
   final DateTime? deletedAt;
   const JournalsTableData({
     required this.id,
@@ -248,6 +272,7 @@ class JournalsTableData extends DataClass
     required this.promptCycleDays,
     required this.createdAt,
     required this.updatedAt,
+    required this.version,
     this.deletedAt,
   });
   @override
@@ -262,6 +287,7 @@ class JournalsTableData extends DataClass
     map['prompt_cycle_days'] = Variable<int>(promptCycleDays);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
@@ -279,6 +305,7 @@ class JournalsTableData extends DataClass
       promptCycleDays: Value(promptCycleDays),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      version: Value(version),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
@@ -298,6 +325,7 @@ class JournalsTableData extends DataClass
       promptCycleDays: serializer.fromJson<int>(json['promptCycleDays']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
@@ -312,6 +340,7 @@ class JournalsTableData extends DataClass
       'promptCycleDays': serializer.toJson<int>(promptCycleDays),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
@@ -324,6 +353,7 @@ class JournalsTableData extends DataClass
     int? promptCycleDays,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? version,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => JournalsTableData(
     id: id ?? this.id,
@@ -333,6 +363,7 @@ class JournalsTableData extends DataClass
     promptCycleDays: promptCycleDays ?? this.promptCycleDays,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   JournalsTableData copyWithCompanion(JournalsTableCompanion data) {
@@ -350,6 +381,7 @@ class JournalsTableData extends DataClass
           : this.promptCycleDays,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
@@ -364,6 +396,7 @@ class JournalsTableData extends DataClass
           ..write('promptCycleDays: $promptCycleDays, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
@@ -378,6 +411,7 @@ class JournalsTableData extends DataClass
     promptCycleDays,
     createdAt,
     updatedAt,
+    version,
     deletedAt,
   );
   @override
@@ -391,6 +425,7 @@ class JournalsTableData extends DataClass
           other.promptCycleDays == this.promptCycleDays &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
           other.deletedAt == this.deletedAt);
 }
 
@@ -402,6 +437,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   final Value<int> promptCycleDays;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<int> version;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const JournalsTableCompanion({
@@ -412,6 +448,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     this.promptCycleDays = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -423,6 +460,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     this.promptCycleDays = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -437,6 +475,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     Expression<int>? promptCycleDays,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<int>? version,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
@@ -448,6 +487,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
       if (promptCycleDays != null) 'prompt_cycle_days': promptCycleDays,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -461,6 +501,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     Value<int>? promptCycleDays,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<int>? version,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
@@ -472,6 +513,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
       promptCycleDays: promptCycleDays ?? this.promptCycleDays,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -501,6 +543,9 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
@@ -520,6 +565,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
           ..write('promptCycleDays: $promptCycleDays, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -691,6 +737,18 @@ class $JournalEntriesTableTable extends JournalEntriesTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _deletedAtMeta = const VerificationMeta(
     'deletedAt',
   );
@@ -719,6 +777,7 @@ class $JournalEntriesTableTable extends JournalEntriesTable
     guidedPrompt,
     createdAt,
     updatedAt,
+    version,
     deletedAt,
   ];
   @override
@@ -846,6 +905,12 @@ class $JournalEntriesTableTable extends JournalEntriesTable
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
     if (data.containsKey('deleted_at')) {
       context.handle(
         _deletedAtMeta,
@@ -924,6 +989,10 @@ class $JournalEntriesTableTable extends JournalEntriesTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
       deletedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
@@ -954,6 +1023,7 @@ class JournalEntriesTableData extends DataClass
   final String? guidedPrompt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int version;
   final DateTime? deletedAt;
   const JournalEntriesTableData({
     required this.id,
@@ -971,6 +1041,7 @@ class JournalEntriesTableData extends DataClass
     this.guidedPrompt,
     required this.createdAt,
     required this.updatedAt,
+    required this.version,
     this.deletedAt,
   });
   @override
@@ -1005,6 +1076,7 @@ class JournalEntriesTableData extends DataClass
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
@@ -1040,6 +1112,7 @@ class JournalEntriesTableData extends DataClass
           : Value(guidedPrompt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      version: Value(version),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
@@ -1067,6 +1140,7 @@ class JournalEntriesTableData extends DataClass
       guidedPrompt: serializer.fromJson<String?>(json['guidedPrompt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
@@ -1089,6 +1163,7 @@ class JournalEntriesTableData extends DataClass
       'guidedPrompt': serializer.toJson<String?>(guidedPrompt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
@@ -1109,6 +1184,7 @@ class JournalEntriesTableData extends DataClass
     Value<String?> guidedPrompt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? version,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => JournalEntriesTableData(
     id: id ?? this.id,
@@ -1126,6 +1202,7 @@ class JournalEntriesTableData extends DataClass
     guidedPrompt: guidedPrompt.present ? guidedPrompt.value : this.guidedPrompt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   JournalEntriesTableData copyWithCompanion(JournalEntriesTableCompanion data) {
@@ -1153,6 +1230,7 @@ class JournalEntriesTableData extends DataClass
           : this.guidedPrompt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
@@ -1175,6 +1253,7 @@ class JournalEntriesTableData extends DataClass
           ..write('guidedPrompt: $guidedPrompt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
@@ -1197,6 +1276,7 @@ class JournalEntriesTableData extends DataClass
     guidedPrompt,
     createdAt,
     updatedAt,
+    version,
     deletedAt,
   );
   @override
@@ -1218,6 +1298,7 @@ class JournalEntriesTableData extends DataClass
           other.guidedPrompt == this.guidedPrompt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
           other.deletedAt == this.deletedAt);
 }
 
@@ -1238,6 +1319,7 @@ class JournalEntriesTableCompanion
   final Value<String?> guidedPrompt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<int> version;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const JournalEntriesTableCompanion({
@@ -1256,6 +1338,7 @@ class JournalEntriesTableCompanion
     this.guidedPrompt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1275,6 +1358,7 @@ class JournalEntriesTableCompanion
     this.guidedPrompt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1300,6 +1384,7 @@ class JournalEntriesTableCompanion
     Expression<String>? guidedPrompt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<int>? version,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
@@ -1319,6 +1404,7 @@ class JournalEntriesTableCompanion
       if (guidedPrompt != null) 'guided_prompt': guidedPrompt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1340,6 +1426,7 @@ class JournalEntriesTableCompanion
     Value<String?>? guidedPrompt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<int>? version,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
@@ -1359,6 +1446,7 @@ class JournalEntriesTableCompanion
       guidedPrompt: guidedPrompt ?? this.guidedPrompt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1412,6 +1500,9 @@ class JournalEntriesTableCompanion
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
@@ -1439,6 +1530,7 @@ class JournalEntriesTableCompanion
           ..write('guidedPrompt: $guidedPrompt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1503,6 +1595,18 @@ class $TodoListsTableTable extends TodoListsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _deletedAtMeta = const VerificationMeta(
     'deletedAt',
   );
@@ -1521,6 +1625,7 @@ class $TodoListsTableTable extends TodoListsTable
     colorValue,
     createdAt,
     updatedAt,
+    version,
     deletedAt,
   ];
   @override
@@ -1570,6 +1675,12 @@ class $TodoListsTableTable extends TodoListsTable
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
     if (data.containsKey('deleted_at')) {
       context.handle(
         _deletedAtMeta,
@@ -1605,6 +1716,10 @@ class $TodoListsTableTable extends TodoListsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
       deletedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
@@ -1625,6 +1740,7 @@ class TodoListsTableData extends DataClass
   final int? colorValue;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int version;
   final DateTime? deletedAt;
   const TodoListsTableData({
     required this.id,
@@ -1632,6 +1748,7 @@ class TodoListsTableData extends DataClass
     this.colorValue,
     required this.createdAt,
     required this.updatedAt,
+    required this.version,
     this.deletedAt,
   });
   @override
@@ -1644,6 +1761,7 @@ class TodoListsTableData extends DataClass
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
@@ -1659,6 +1777,7 @@ class TodoListsTableData extends DataClass
           : Value(colorValue),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      version: Value(version),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
@@ -1676,6 +1795,7 @@ class TodoListsTableData extends DataClass
       colorValue: serializer.fromJson<int?>(json['colorValue']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
@@ -1688,6 +1808,7 @@ class TodoListsTableData extends DataClass
       'colorValue': serializer.toJson<int?>(colorValue),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
@@ -1698,6 +1819,7 @@ class TodoListsTableData extends DataClass
     Value<int?> colorValue = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? version,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => TodoListsTableData(
     id: id ?? this.id,
@@ -1705,6 +1827,7 @@ class TodoListsTableData extends DataClass
     colorValue: colorValue.present ? colorValue.value : this.colorValue,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   TodoListsTableData copyWithCompanion(TodoListsTableCompanion data) {
@@ -1716,6 +1839,7 @@ class TodoListsTableData extends DataClass
           : this.colorValue,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
@@ -1728,14 +1852,22 @@ class TodoListsTableData extends DataClass
           ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, colorValue, createdAt, updatedAt, deletedAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    colorValue,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1745,6 +1877,7 @@ class TodoListsTableData extends DataClass
           other.colorValue == this.colorValue &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
           other.deletedAt == this.deletedAt);
 }
 
@@ -1754,6 +1887,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
   final Value<int?> colorValue;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<int> version;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const TodoListsTableCompanion({
@@ -1762,6 +1896,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     this.colorValue = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1771,6 +1906,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     this.colorValue = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1783,6 +1919,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     Expression<int>? colorValue,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<int>? version,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
@@ -1792,6 +1929,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
       if (colorValue != null) 'color_value': colorValue,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1803,6 +1941,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     Value<int?>? colorValue,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<int>? version,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
@@ -1812,6 +1951,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
       colorValue: colorValue ?? this.colorValue,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1835,6 +1975,9 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
@@ -1852,6 +1995,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
           ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2009,6 +2153,18 @@ class $TodoTasksTableTable extends TodoTasksTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _deletedAtMeta = const VerificationMeta(
     'deletedAt',
   );
@@ -2035,6 +2191,7 @@ class $TodoTasksTableTable extends TodoTasksTable
     dueDateSetAt,
     createdAt,
     updatedAt,
+    version,
     deletedAt,
   ];
   @override
@@ -2143,6 +2300,12 @@ class $TodoTasksTableTable extends TodoTasksTable
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
     if (data.containsKey('deleted_at')) {
       context.handle(
         _deletedAtMeta,
@@ -2210,6 +2373,10 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
       deletedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
@@ -2238,6 +2405,7 @@ class TodoTasksTableData extends DataClass
   final DateTime? dueDateSetAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int version;
   final DateTime? deletedAt;
   const TodoTasksTableData({
     required this.id,
@@ -2253,6 +2421,7 @@ class TodoTasksTableData extends DataClass
     this.dueDateSetAt,
     required this.createdAt,
     required this.updatedAt,
+    required this.version,
     this.deletedAt,
   });
   @override
@@ -2281,6 +2450,7 @@ class TodoTasksTableData extends DataClass
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
@@ -2312,6 +2482,7 @@ class TodoTasksTableData extends DataClass
           : Value(dueDateSetAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      version: Value(version),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
@@ -2337,6 +2508,7 @@ class TodoTasksTableData extends DataClass
       dueDateSetAt: serializer.fromJson<DateTime?>(json['dueDateSetAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
@@ -2357,6 +2529,7 @@ class TodoTasksTableData extends DataClass
       'dueDateSetAt': serializer.toJson<DateTime?>(dueDateSetAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
@@ -2375,6 +2548,7 @@ class TodoTasksTableData extends DataClass
     Value<DateTime?> dueDateSetAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? version,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => TodoTasksTableData(
     id: id ?? this.id,
@@ -2392,6 +2566,7 @@ class TodoTasksTableData extends DataClass
     dueDateSetAt: dueDateSetAt.present ? dueDateSetAt.value : this.dueDateSetAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   TodoTasksTableData copyWithCompanion(TodoTasksTableCompanion data) {
@@ -2415,6 +2590,7 @@ class TodoTasksTableData extends DataClass
           : this.dueDateSetAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
@@ -2435,6 +2611,7 @@ class TodoTasksTableData extends DataClass
           ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
@@ -2455,6 +2632,7 @@ class TodoTasksTableData extends DataClass
     dueDateSetAt,
     createdAt,
     updatedAt,
+    version,
     deletedAt,
   );
   @override
@@ -2474,6 +2652,7 @@ class TodoTasksTableData extends DataClass
           other.dueDateSetAt == this.dueDateSetAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
           other.deletedAt == this.deletedAt);
 }
 
@@ -2491,6 +2670,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<DateTime?> dueDateSetAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<int> version;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const TodoTasksTableCompanion({
@@ -2507,6 +2687,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.dueDateSetAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2524,6 +2705,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.dueDateSetAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2545,6 +2727,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<DateTime>? dueDateSetAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<int>? version,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
@@ -2562,6 +2745,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (dueDateSetAt != null) 'due_date_set_at': dueDateSetAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2581,6 +2765,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<DateTime?>? dueDateSetAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<int>? version,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
@@ -2598,6 +2783,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       dueDateSetAt: dueDateSetAt ?? this.dueDateSetAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2645,6 +2831,9 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
@@ -2670,6 +2859,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -6301,6 +6491,49 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _devJournalDebugLogMeta =
+      const VerificationMeta('devJournalDebugLog');
+  @override
+  late final GeneratedColumn<bool> devJournalDebugLog = GeneratedColumn<bool>(
+    'dev_journal_debug_log',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_journal_debug_log" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _devForceConflictUiMeta =
+      const VerificationMeta('devForceConflictUi');
+  @override
+  late final GeneratedColumn<bool> devForceConflictUi = GeneratedColumn<bool>(
+    'dev_force_conflict_ui',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_force_conflict_ui" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _devShowConflictDocumentIdsMeta =
+      const VerificationMeta('devShowConflictDocumentIds');
+  @override
+  late final GeneratedColumn<bool> devShowConflictDocumentIds =
+      GeneratedColumn<bool>(
+        'dev_show_conflict_document_ids',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("dev_show_conflict_document_ids" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _weatherForecastJsonMeta =
       const VerificationMeta('weatherForecastJson');
   @override
@@ -6403,6 +6636,9 @@ class $SettingsTableTable extends SettingsTable
     devShowCalendarZoomPrewarm,
     devShowCalendarInstantViewSwitch,
     devTodoSortDebugLog,
+    devJournalDebugLog,
+    devForceConflictUi,
+    devShowConflictDocumentIds,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -6713,6 +6949,33 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('dev_journal_debug_log')) {
+      context.handle(
+        _devJournalDebugLogMeta,
+        devJournalDebugLog.isAcceptableOrUnknown(
+          data['dev_journal_debug_log']!,
+          _devJournalDebugLogMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_force_conflict_ui')) {
+      context.handle(
+        _devForceConflictUiMeta,
+        devForceConflictUi.isAcceptableOrUnknown(
+          data['dev_force_conflict_ui']!,
+          _devForceConflictUiMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_show_conflict_document_ids')) {
+      context.handle(
+        _devShowConflictDocumentIdsMeta,
+        devShowConflictDocumentIds.isAcceptableOrUnknown(
+          data['dev_show_conflict_document_ids']!,
+          _devShowConflictDocumentIdsMeta,
+        ),
+      );
+    }
     if (data.containsKey('weather_forecast_json')) {
       context.handle(
         _weatherForecastJsonMeta,
@@ -6916,6 +7179,18 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}dev_todo_sort_debug_log'],
       )!,
+      devJournalDebugLog: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_journal_debug_log'],
+      )!,
+      devForceConflictUi: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_force_conflict_ui'],
+      )!,
+      devShowConflictDocumentIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_conflict_document_ids'],
+      )!,
       weatherForecastJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_forecast_json'],
@@ -6986,6 +7261,9 @@ class SettingsTableData extends DataClass
   final bool devShowCalendarZoomPrewarm;
   final bool devShowCalendarInstantViewSwitch;
   final bool devTodoSortDebugLog;
+  final bool devJournalDebugLog;
+  final bool devForceConflictUi;
+  final bool devShowConflictDocumentIds;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -7028,6 +7306,9 @@ class SettingsTableData extends DataClass
     required this.devShowCalendarZoomPrewarm,
     required this.devShowCalendarInstantViewSwitch,
     required this.devTodoSortDebugLog,
+    required this.devJournalDebugLog,
+    required this.devForceConflictUi,
+    required this.devShowConflictDocumentIds,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -7111,6 +7392,11 @@ class SettingsTableData extends DataClass
       devShowCalendarInstantViewSwitch,
     );
     map['dev_todo_sort_debug_log'] = Variable<bool>(devTodoSortDebugLog);
+    map['dev_journal_debug_log'] = Variable<bool>(devJournalDebugLog);
+    map['dev_force_conflict_ui'] = Variable<bool>(devForceConflictUi);
+    map['dev_show_conflict_document_ids'] = Variable<bool>(
+      devShowConflictDocumentIds,
+    );
     if (!nullToAbsent || weatherForecastJson != null) {
       map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
     }
@@ -7195,6 +7481,9 @@ class SettingsTableData extends DataClass
       devShowCalendarZoomPrewarm: Value(devShowCalendarZoomPrewarm),
       devShowCalendarInstantViewSwitch: Value(devShowCalendarInstantViewSwitch),
       devTodoSortDebugLog: Value(devTodoSortDebugLog),
+      devJournalDebugLog: Value(devJournalDebugLog),
+      devForceConflictUi: Value(devForceConflictUi),
+      devShowConflictDocumentIds: Value(devShowConflictDocumentIds),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherForecastJson),
@@ -7289,6 +7578,11 @@ class SettingsTableData extends DataClass
       devTodoSortDebugLog: serializer.fromJson<bool>(
         json['devTodoSortDebugLog'],
       ),
+      devJournalDebugLog: serializer.fromJson<bool>(json['devJournalDebugLog']),
+      devForceConflictUi: serializer.fromJson<bool>(json['devForceConflictUi']),
+      devShowConflictDocumentIds: serializer.fromJson<bool>(
+        json['devShowConflictDocumentIds'],
+      ),
       weatherForecastJson: serializer.fromJson<String?>(
         json['weatherForecastJson'],
       ),
@@ -7358,6 +7652,11 @@ class SettingsTableData extends DataClass
         devShowCalendarInstantViewSwitch,
       ),
       'devTodoSortDebugLog': serializer.toJson<bool>(devTodoSortDebugLog),
+      'devJournalDebugLog': serializer.toJson<bool>(devJournalDebugLog),
+      'devForceConflictUi': serializer.toJson<bool>(devForceConflictUi),
+      'devShowConflictDocumentIds': serializer.toJson<bool>(
+        devShowConflictDocumentIds,
+      ),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
@@ -7407,6 +7706,9 @@ class SettingsTableData extends DataClass
     bool? devShowCalendarZoomPrewarm,
     bool? devShowCalendarInstantViewSwitch,
     bool? devTodoSortDebugLog,
+    bool? devJournalDebugLog,
+    bool? devForceConflictUi,
+    bool? devShowConflictDocumentIds,
     Value<String?> weatherForecastJson = const Value.absent(),
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
@@ -7470,6 +7772,10 @@ class SettingsTableData extends DataClass
         devShowCalendarInstantViewSwitch ??
         this.devShowCalendarInstantViewSwitch,
     devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
+    devJournalDebugLog: devJournalDebugLog ?? this.devJournalDebugLog,
+    devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
+    devShowConflictDocumentIds:
+        devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
     weatherForecastJson: weatherForecastJson.present
         ? weatherForecastJson.value
         : this.weatherForecastJson,
@@ -7590,6 +7896,15 @@ class SettingsTableData extends DataClass
       devTodoSortDebugLog: data.devTodoSortDebugLog.present
           ? data.devTodoSortDebugLog.value
           : this.devTodoSortDebugLog,
+      devJournalDebugLog: data.devJournalDebugLog.present
+          ? data.devJournalDebugLog.value
+          : this.devJournalDebugLog,
+      devForceConflictUi: data.devForceConflictUi.present
+          ? data.devForceConflictUi.value
+          : this.devForceConflictUi,
+      devShowConflictDocumentIds: data.devShowConflictDocumentIds.present
+          ? data.devShowConflictDocumentIds.value
+          : this.devShowConflictDocumentIds,
       weatherForecastJson: data.weatherForecastJson.present
           ? data.weatherForecastJson.value
           : this.weatherForecastJson,
@@ -7651,6 +7966,9 @@ class SettingsTableData extends DataClass
             'devShowCalendarInstantViewSwitch: $devShowCalendarInstantViewSwitch, ',
           )
           ..write('devTodoSortDebugLog: $devTodoSortDebugLog, ')
+          ..write('devJournalDebugLog: $devJournalDebugLog, ')
+          ..write('devForceConflictUi: $devForceConflictUi, ')
+          ..write('devShowConflictDocumentIds: $devShowConflictDocumentIds, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -7698,6 +8016,9 @@ class SettingsTableData extends DataClass
     devShowCalendarZoomPrewarm,
     devShowCalendarInstantViewSwitch,
     devTodoSortDebugLog,
+    devJournalDebugLog,
+    devForceConflictUi,
+    devShowConflictDocumentIds,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -7745,6 +8066,9 @@ class SettingsTableData extends DataClass
           other.devShowCalendarInstantViewSwitch ==
               this.devShowCalendarInstantViewSwitch &&
           other.devTodoSortDebugLog == this.devTodoSortDebugLog &&
+          other.devJournalDebugLog == this.devJournalDebugLog &&
+          other.devForceConflictUi == this.devForceConflictUi &&
+          other.devShowConflictDocumentIds == this.devShowConflictDocumentIds &&
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
@@ -7789,6 +8113,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> devShowCalendarZoomPrewarm;
   final Value<bool> devShowCalendarInstantViewSwitch;
   final Value<bool> devTodoSortDebugLog;
+  final Value<bool> devJournalDebugLog;
+  final Value<bool> devForceConflictUi;
+  final Value<bool> devShowConflictDocumentIds;
   final Value<String?> weatherForecastJson;
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
@@ -7831,6 +8158,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.devShowCalendarInstantViewSwitch = const Value.absent(),
     this.devTodoSortDebugLog = const Value.absent(),
+    this.devJournalDebugLog = const Value.absent(),
+    this.devForceConflictUi = const Value.absent(),
+    this.devShowConflictDocumentIds = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7874,6 +8204,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.devShowCalendarInstantViewSwitch = const Value.absent(),
     this.devTodoSortDebugLog = const Value.absent(),
+    this.devJournalDebugLog = const Value.absent(),
+    this.devForceConflictUi = const Value.absent(),
+    this.devShowConflictDocumentIds = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -7917,6 +8250,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? devShowCalendarZoomPrewarm,
     Expression<bool>? devShowCalendarInstantViewSwitch,
     Expression<bool>? devTodoSortDebugLog,
+    Expression<bool>? devJournalDebugLog,
+    Expression<bool>? devForceConflictUi,
+    Expression<bool>? devShowConflictDocumentIds,
     Expression<String>? weatherForecastJson,
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
@@ -7981,6 +8317,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
             devShowCalendarInstantViewSwitch,
       if (devTodoSortDebugLog != null)
         'dev_todo_sort_debug_log': devTodoSortDebugLog,
+      if (devJournalDebugLog != null)
+        'dev_journal_debug_log': devJournalDebugLog,
+      if (devForceConflictUi != null)
+        'dev_force_conflict_ui': devForceConflictUi,
+      if (devShowConflictDocumentIds != null)
+        'dev_show_conflict_document_ids': devShowConflictDocumentIds,
       if (weatherForecastJson != null)
         'weather_forecast_json': weatherForecastJson,
       if (weatherChartTempColor != null)
@@ -8031,6 +8373,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? devShowCalendarZoomPrewarm,
     Value<bool>? devShowCalendarInstantViewSwitch,
     Value<bool>? devTodoSortDebugLog,
+    Value<bool>? devJournalDebugLog,
+    Value<bool>? devForceConflictUi,
+    Value<bool>? devShowConflictDocumentIds,
     Value<String?>? weatherForecastJson,
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
@@ -8083,6 +8428,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           devShowCalendarInstantViewSwitch ??
           this.devShowCalendarInstantViewSwitch,
       devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
+      devJournalDebugLog: devJournalDebugLog ?? this.devJournalDebugLog,
+      devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
+      devShowConflictDocumentIds:
+          devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
       weatherChartTempColor:
           weatherChartTempColor ?? this.weatherChartTempColor,
@@ -8234,6 +8583,17 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         devTodoSortDebugLog.value,
       );
     }
+    if (devJournalDebugLog.present) {
+      map['dev_journal_debug_log'] = Variable<bool>(devJournalDebugLog.value);
+    }
+    if (devForceConflictUi.present) {
+      map['dev_force_conflict_ui'] = Variable<bool>(devForceConflictUi.value);
+    }
+    if (devShowConflictDocumentIds.present) {
+      map['dev_show_conflict_document_ids'] = Variable<bool>(
+        devShowConflictDocumentIds.value,
+      );
+    }
     if (weatherForecastJson.present) {
       map['weather_forecast_json'] = Variable<String>(
         weatherForecastJson.value,
@@ -8305,6 +8665,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
             'devShowCalendarInstantViewSwitch: $devShowCalendarInstantViewSwitch, ',
           )
           ..write('devTodoSortDebugLog: $devTodoSortDebugLog, ')
+          ..write('devJournalDebugLog: $devJournalDebugLog, ')
+          ..write('devForceConflictUi: $devForceConflictUi, ')
+          ..write('devShowConflictDocumentIds: $devShowConflictDocumentIds, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -8535,6 +8898,646 @@ class TagColorsTableCompanion extends UpdateCompanion<TagColorsTableData> {
   }
 }
 
+class $SyncConflictsTableTable extends SyncConflictsTable
+    with TableInfo<$SyncConflictsTableTable, SyncConflictsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncConflictsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _collectionMeta = const VerificationMeta(
+    'collection',
+  );
+  @override
+  late final GeneratedColumn<String> collection = GeneratedColumn<String>(
+    'collection',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<String> documentId = GeneratedColumn<String>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localPayloadJsonMeta = const VerificationMeta(
+    'localPayloadJson',
+  );
+  @override
+  late final GeneratedColumn<String> localPayloadJson = GeneratedColumn<String>(
+    'local_payload_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remotePayloadJsonMeta = const VerificationMeta(
+    'remotePayloadJson',
+  );
+  @override
+  late final GeneratedColumn<String> remotePayloadJson =
+      GeneratedColumn<String>(
+        'remote_payload_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _localTitleMeta = const VerificationMeta(
+    'localTitle',
+  );
+  @override
+  late final GeneratedColumn<String> localTitle = GeneratedColumn<String>(
+    'local_title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _remoteTitleMeta = const VerificationMeta(
+    'remoteTitle',
+  );
+  @override
+  late final GeneratedColumn<String> remoteTitle = GeneratedColumn<String>(
+    'remote_title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _localTextMeta = const VerificationMeta(
+    'localText',
+  );
+  @override
+  late final GeneratedColumn<String> localText = GeneratedColumn<String>(
+    'local_text',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _remoteTextMeta = const VerificationMeta(
+    'remoteText',
+  );
+  @override
+  late final GeneratedColumn<String> remoteText = GeneratedColumn<String>(
+    'remote_text',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _detectedAtMeta = const VerificationMeta(
+    'detectedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> detectedAt = GeneratedColumn<DateTime>(
+    'detected_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    collection,
+    documentId,
+    localPayloadJson,
+    remotePayloadJson,
+    localTitle,
+    remoteTitle,
+    localText,
+    remoteText,
+    detectedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_conflicts_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncConflictsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('collection')) {
+      context.handle(
+        _collectionMeta,
+        collection.isAcceptableOrUnknown(data['collection']!, _collectionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_collectionMeta);
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_documentIdMeta);
+    }
+    if (data.containsKey('local_payload_json')) {
+      context.handle(
+        _localPayloadJsonMeta,
+        localPayloadJson.isAcceptableOrUnknown(
+          data['local_payload_json']!,
+          _localPayloadJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localPayloadJsonMeta);
+    }
+    if (data.containsKey('remote_payload_json')) {
+      context.handle(
+        _remotePayloadJsonMeta,
+        remotePayloadJson.isAcceptableOrUnknown(
+          data['remote_payload_json']!,
+          _remotePayloadJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_remotePayloadJsonMeta);
+    }
+    if (data.containsKey('local_title')) {
+      context.handle(
+        _localTitleMeta,
+        localTitle.isAcceptableOrUnknown(data['local_title']!, _localTitleMeta),
+      );
+    }
+    if (data.containsKey('remote_title')) {
+      context.handle(
+        _remoteTitleMeta,
+        remoteTitle.isAcceptableOrUnknown(
+          data['remote_title']!,
+          _remoteTitleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('local_text')) {
+      context.handle(
+        _localTextMeta,
+        localText.isAcceptableOrUnknown(data['local_text']!, _localTextMeta),
+      );
+    }
+    if (data.containsKey('remote_text')) {
+      context.handle(
+        _remoteTextMeta,
+        remoteText.isAcceptableOrUnknown(data['remote_text']!, _remoteTextMeta),
+      );
+    }
+    if (data.containsKey('detected_at')) {
+      context.handle(
+        _detectedAtMeta,
+        detectedAt.isAcceptableOrUnknown(data['detected_at']!, _detectedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_detectedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SyncConflictsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncConflictsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      collection: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}collection'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_id'],
+      )!,
+      localPayloadJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_payload_json'],
+      )!,
+      remotePayloadJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_payload_json'],
+      )!,
+      localTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_title'],
+      ),
+      remoteTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_title'],
+      ),
+      localText: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_text'],
+      ),
+      remoteText: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_text'],
+      ),
+      detectedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}detected_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncConflictsTableTable createAlias(String alias) {
+    return $SyncConflictsTableTable(attachedDatabase, alias);
+  }
+}
+
+class SyncConflictsTableData extends DataClass
+    implements Insertable<SyncConflictsTableData> {
+  final String id;
+  final String collection;
+  final String documentId;
+  final String localPayloadJson;
+  final String remotePayloadJson;
+  final String? localTitle;
+  final String? remoteTitle;
+  final String? localText;
+  final String? remoteText;
+  final DateTime detectedAt;
+  const SyncConflictsTableData({
+    required this.id,
+    required this.collection,
+    required this.documentId,
+    required this.localPayloadJson,
+    required this.remotePayloadJson,
+    this.localTitle,
+    this.remoteTitle,
+    this.localText,
+    this.remoteText,
+    required this.detectedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['collection'] = Variable<String>(collection);
+    map['document_id'] = Variable<String>(documentId);
+    map['local_payload_json'] = Variable<String>(localPayloadJson);
+    map['remote_payload_json'] = Variable<String>(remotePayloadJson);
+    if (!nullToAbsent || localTitle != null) {
+      map['local_title'] = Variable<String>(localTitle);
+    }
+    if (!nullToAbsent || remoteTitle != null) {
+      map['remote_title'] = Variable<String>(remoteTitle);
+    }
+    if (!nullToAbsent || localText != null) {
+      map['local_text'] = Variable<String>(localText);
+    }
+    if (!nullToAbsent || remoteText != null) {
+      map['remote_text'] = Variable<String>(remoteText);
+    }
+    map['detected_at'] = Variable<DateTime>(detectedAt);
+    return map;
+  }
+
+  SyncConflictsTableCompanion toCompanion(bool nullToAbsent) {
+    return SyncConflictsTableCompanion(
+      id: Value(id),
+      collection: Value(collection),
+      documentId: Value(documentId),
+      localPayloadJson: Value(localPayloadJson),
+      remotePayloadJson: Value(remotePayloadJson),
+      localTitle: localTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localTitle),
+      remoteTitle: remoteTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(remoteTitle),
+      localText: localText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localText),
+      remoteText: remoteText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(remoteText),
+      detectedAt: Value(detectedAt),
+    );
+  }
+
+  factory SyncConflictsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncConflictsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      collection: serializer.fromJson<String>(json['collection']),
+      documentId: serializer.fromJson<String>(json['documentId']),
+      localPayloadJson: serializer.fromJson<String>(json['localPayloadJson']),
+      remotePayloadJson: serializer.fromJson<String>(json['remotePayloadJson']),
+      localTitle: serializer.fromJson<String?>(json['localTitle']),
+      remoteTitle: serializer.fromJson<String?>(json['remoteTitle']),
+      localText: serializer.fromJson<String?>(json['localText']),
+      remoteText: serializer.fromJson<String?>(json['remoteText']),
+      detectedAt: serializer.fromJson<DateTime>(json['detectedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'collection': serializer.toJson<String>(collection),
+      'documentId': serializer.toJson<String>(documentId),
+      'localPayloadJson': serializer.toJson<String>(localPayloadJson),
+      'remotePayloadJson': serializer.toJson<String>(remotePayloadJson),
+      'localTitle': serializer.toJson<String?>(localTitle),
+      'remoteTitle': serializer.toJson<String?>(remoteTitle),
+      'localText': serializer.toJson<String?>(localText),
+      'remoteText': serializer.toJson<String?>(remoteText),
+      'detectedAt': serializer.toJson<DateTime>(detectedAt),
+    };
+  }
+
+  SyncConflictsTableData copyWith({
+    String? id,
+    String? collection,
+    String? documentId,
+    String? localPayloadJson,
+    String? remotePayloadJson,
+    Value<String?> localTitle = const Value.absent(),
+    Value<String?> remoteTitle = const Value.absent(),
+    Value<String?> localText = const Value.absent(),
+    Value<String?> remoteText = const Value.absent(),
+    DateTime? detectedAt,
+  }) => SyncConflictsTableData(
+    id: id ?? this.id,
+    collection: collection ?? this.collection,
+    documentId: documentId ?? this.documentId,
+    localPayloadJson: localPayloadJson ?? this.localPayloadJson,
+    remotePayloadJson: remotePayloadJson ?? this.remotePayloadJson,
+    localTitle: localTitle.present ? localTitle.value : this.localTitle,
+    remoteTitle: remoteTitle.present ? remoteTitle.value : this.remoteTitle,
+    localText: localText.present ? localText.value : this.localText,
+    remoteText: remoteText.present ? remoteText.value : this.remoteText,
+    detectedAt: detectedAt ?? this.detectedAt,
+  );
+  SyncConflictsTableData copyWithCompanion(SyncConflictsTableCompanion data) {
+    return SyncConflictsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      collection: data.collection.present
+          ? data.collection.value
+          : this.collection,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      localPayloadJson: data.localPayloadJson.present
+          ? data.localPayloadJson.value
+          : this.localPayloadJson,
+      remotePayloadJson: data.remotePayloadJson.present
+          ? data.remotePayloadJson.value
+          : this.remotePayloadJson,
+      localTitle: data.localTitle.present
+          ? data.localTitle.value
+          : this.localTitle,
+      remoteTitle: data.remoteTitle.present
+          ? data.remoteTitle.value
+          : this.remoteTitle,
+      localText: data.localText.present ? data.localText.value : this.localText,
+      remoteText: data.remoteText.present
+          ? data.remoteText.value
+          : this.remoteText,
+      detectedAt: data.detectedAt.present
+          ? data.detectedAt.value
+          : this.detectedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncConflictsTableData(')
+          ..write('id: $id, ')
+          ..write('collection: $collection, ')
+          ..write('documentId: $documentId, ')
+          ..write('localPayloadJson: $localPayloadJson, ')
+          ..write('remotePayloadJson: $remotePayloadJson, ')
+          ..write('localTitle: $localTitle, ')
+          ..write('remoteTitle: $remoteTitle, ')
+          ..write('localText: $localText, ')
+          ..write('remoteText: $remoteText, ')
+          ..write('detectedAt: $detectedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    collection,
+    documentId,
+    localPayloadJson,
+    remotePayloadJson,
+    localTitle,
+    remoteTitle,
+    localText,
+    remoteText,
+    detectedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncConflictsTableData &&
+          other.id == this.id &&
+          other.collection == this.collection &&
+          other.documentId == this.documentId &&
+          other.localPayloadJson == this.localPayloadJson &&
+          other.remotePayloadJson == this.remotePayloadJson &&
+          other.localTitle == this.localTitle &&
+          other.remoteTitle == this.remoteTitle &&
+          other.localText == this.localText &&
+          other.remoteText == this.remoteText &&
+          other.detectedAt == this.detectedAt);
+}
+
+class SyncConflictsTableCompanion
+    extends UpdateCompanion<SyncConflictsTableData> {
+  final Value<String> id;
+  final Value<String> collection;
+  final Value<String> documentId;
+  final Value<String> localPayloadJson;
+  final Value<String> remotePayloadJson;
+  final Value<String?> localTitle;
+  final Value<String?> remoteTitle;
+  final Value<String?> localText;
+  final Value<String?> remoteText;
+  final Value<DateTime> detectedAt;
+  final Value<int> rowid;
+  const SyncConflictsTableCompanion({
+    this.id = const Value.absent(),
+    this.collection = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.localPayloadJson = const Value.absent(),
+    this.remotePayloadJson = const Value.absent(),
+    this.localTitle = const Value.absent(),
+    this.remoteTitle = const Value.absent(),
+    this.localText = const Value.absent(),
+    this.remoteText = const Value.absent(),
+    this.detectedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncConflictsTableCompanion.insert({
+    required String id,
+    required String collection,
+    required String documentId,
+    required String localPayloadJson,
+    required String remotePayloadJson,
+    this.localTitle = const Value.absent(),
+    this.remoteTitle = const Value.absent(),
+    this.localText = const Value.absent(),
+    this.remoteText = const Value.absent(),
+    required DateTime detectedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       collection = Value(collection),
+       documentId = Value(documentId),
+       localPayloadJson = Value(localPayloadJson),
+       remotePayloadJson = Value(remotePayloadJson),
+       detectedAt = Value(detectedAt);
+  static Insertable<SyncConflictsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? collection,
+    Expression<String>? documentId,
+    Expression<String>? localPayloadJson,
+    Expression<String>? remotePayloadJson,
+    Expression<String>? localTitle,
+    Expression<String>? remoteTitle,
+    Expression<String>? localText,
+    Expression<String>? remoteText,
+    Expression<DateTime>? detectedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (collection != null) 'collection': collection,
+      if (documentId != null) 'document_id': documentId,
+      if (localPayloadJson != null) 'local_payload_json': localPayloadJson,
+      if (remotePayloadJson != null) 'remote_payload_json': remotePayloadJson,
+      if (localTitle != null) 'local_title': localTitle,
+      if (remoteTitle != null) 'remote_title': remoteTitle,
+      if (localText != null) 'local_text': localText,
+      if (remoteText != null) 'remote_text': remoteText,
+      if (detectedAt != null) 'detected_at': detectedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncConflictsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? collection,
+    Value<String>? documentId,
+    Value<String>? localPayloadJson,
+    Value<String>? remotePayloadJson,
+    Value<String?>? localTitle,
+    Value<String?>? remoteTitle,
+    Value<String?>? localText,
+    Value<String?>? remoteText,
+    Value<DateTime>? detectedAt,
+    Value<int>? rowid,
+  }) {
+    return SyncConflictsTableCompanion(
+      id: id ?? this.id,
+      collection: collection ?? this.collection,
+      documentId: documentId ?? this.documentId,
+      localPayloadJson: localPayloadJson ?? this.localPayloadJson,
+      remotePayloadJson: remotePayloadJson ?? this.remotePayloadJson,
+      localTitle: localTitle ?? this.localTitle,
+      remoteTitle: remoteTitle ?? this.remoteTitle,
+      localText: localText ?? this.localText,
+      remoteText: remoteText ?? this.remoteText,
+      detectedAt: detectedAt ?? this.detectedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (collection.present) {
+      map['collection'] = Variable<String>(collection.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<String>(documentId.value);
+    }
+    if (localPayloadJson.present) {
+      map['local_payload_json'] = Variable<String>(localPayloadJson.value);
+    }
+    if (remotePayloadJson.present) {
+      map['remote_payload_json'] = Variable<String>(remotePayloadJson.value);
+    }
+    if (localTitle.present) {
+      map['local_title'] = Variable<String>(localTitle.value);
+    }
+    if (remoteTitle.present) {
+      map['remote_title'] = Variable<String>(remoteTitle.value);
+    }
+    if (localText.present) {
+      map['local_text'] = Variable<String>(localText.value);
+    }
+    if (remoteText.present) {
+      map['remote_text'] = Variable<String>(remoteText.value);
+    }
+    if (detectedAt.present) {
+      map['detected_at'] = Variable<DateTime>(detectedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncConflictsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('collection: $collection, ')
+          ..write('documentId: $documentId, ')
+          ..write('localPayloadJson: $localPayloadJson, ')
+          ..write('remotePayloadJson: $remotePayloadJson, ')
+          ..write('localTitle: $localTitle, ')
+          ..write('remoteTitle: $remoteTitle, ')
+          ..write('localText: $localText, ')
+          ..write('remoteText: $remoteText, ')
+          ..write('detectedAt: $detectedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8554,6 +9557,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $RankingValuesTableTable(this);
   late final $SettingsTableTable settingsTable = $SettingsTableTable(this);
   late final $TagColorsTableTable tagColorsTable = $TagColorsTableTable(this);
+  late final $SyncConflictsTableTable syncConflictsTable =
+      $SyncConflictsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8570,6 +9575,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     rankingValuesTable,
     settingsTable,
     tagColorsTable,
+    syncConflictsTable,
   ];
 }
 
@@ -8582,6 +9588,7 @@ typedef $$JournalsTableTableCreateCompanionBuilder =
       Value<int> promptCycleDays,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -8594,6 +9601,7 @@ typedef $$JournalsTableTableUpdateCompanionBuilder =
       Value<int> promptCycleDays,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -8639,6 +9647,11 @@ class $$JournalsTableTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8692,6 +9705,11 @@ class $$JournalsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
@@ -8733,6 +9751,9 @@ class $$JournalsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
@@ -8780,6 +9801,7 @@ class $$JournalsTableTableTableManager
                 Value<int> promptCycleDays = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => JournalsTableCompanion(
@@ -8790,6 +9812,7 @@ class $$JournalsTableTableTableManager
                 promptCycleDays: promptCycleDays,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -8802,6 +9825,7 @@ class $$JournalsTableTableTableManager
                 Value<int> promptCycleDays = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => JournalsTableCompanion.insert(
@@ -8812,6 +9836,7 @@ class $$JournalsTableTableTableManager
                 promptCycleDays: promptCycleDays,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -8857,6 +9882,7 @@ typedef $$JournalEntriesTableTableCreateCompanionBuilder =
       Value<String?> guidedPrompt,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -8877,6 +9903,7 @@ typedef $$JournalEntriesTableTableUpdateCompanionBuilder =
       Value<String?> guidedPrompt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -8962,6 +9989,11 @@ class $$JournalEntriesTableTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9055,6 +10087,11 @@ class $$JournalEntriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
@@ -9123,6 +10160,9 @@ class $$JournalEntriesTableTableAnnotationComposer
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 }
@@ -9185,6 +10225,7 @@ class $$JournalEntriesTableTableTableManager
                 Value<String?> guidedPrompt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => JournalEntriesTableCompanion(
@@ -9203,6 +10244,7 @@ class $$JournalEntriesTableTableTableManager
                 guidedPrompt: guidedPrompt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -9223,6 +10265,7 @@ class $$JournalEntriesTableTableTableManager
                 Value<String?> guidedPrompt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => JournalEntriesTableCompanion.insert(
@@ -9241,6 +10284,7 @@ class $$JournalEntriesTableTableTableManager
                 guidedPrompt: guidedPrompt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -9280,6 +10324,7 @@ typedef $$TodoListsTableTableCreateCompanionBuilder =
       Value<int?> colorValue,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -9290,6 +10335,7 @@ typedef $$TodoListsTableTableUpdateCompanionBuilder =
       Value<int?> colorValue,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -9325,6 +10371,11 @@ class $$TodoListsTableTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9368,6 +10419,11 @@ class $$TodoListsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
@@ -9399,6 +10455,9 @@ class $$TodoListsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
@@ -9446,6 +10505,7 @@ class $$TodoListsTableTableTableManager
                 Value<int?> colorValue = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TodoListsTableCompanion(
@@ -9454,6 +10514,7 @@ class $$TodoListsTableTableTableManager
                 colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -9464,6 +10525,7 @@ class $$TodoListsTableTableTableManager
                 Value<int?> colorValue = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TodoListsTableCompanion.insert(
@@ -9472,6 +10534,7 @@ class $$TodoListsTableTableTableManager
                 colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -9515,6 +10578,7 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       Value<DateTime?> dueDateSetAt,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -9533,6 +10597,7 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<DateTime?> dueDateSetAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<int> version,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
@@ -9608,6 +10673,11 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9691,6 +10761,11 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
@@ -9751,6 +10826,9 @@ class $$TodoTasksTableTableAnnotationComposer
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 }
@@ -9805,6 +10883,7 @@ class $$TodoTasksTableTableTableManager
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TodoTasksTableCompanion(
@@ -9821,6 +10900,7 @@ class $$TodoTasksTableTableTableManager
                 dueDateSetAt: dueDateSetAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -9839,6 +10919,7 @@ class $$TodoTasksTableTableTableManager
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TodoTasksTableCompanion.insert(
@@ -9855,6 +10936,7 @@ class $$TodoTasksTableTableTableManager
                 dueDateSetAt: dueDateSetAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                version: version,
                 deletedAt: deletedAt,
                 rowid: rowid,
               ),
@@ -11521,6 +12603,9 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> devShowCalendarZoomPrewarm,
       Value<bool> devShowCalendarInstantViewSwitch,
       Value<bool> devTodoSortDebugLog,
+      Value<bool> devJournalDebugLog,
+      Value<bool> devForceConflictUi,
+      Value<bool> devShowConflictDocumentIds,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -11565,6 +12650,9 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> devShowCalendarZoomPrewarm,
       Value<bool> devShowCalendarInstantViewSwitch,
       Value<bool> devTodoSortDebugLog,
+      Value<bool> devJournalDebugLog,
+      Value<bool> devForceConflictUi,
+      Value<bool> devShowConflictDocumentIds,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -11755,6 +12843,21 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get devTodoSortDebugLog => $composableBuilder(
     column: $table.devTodoSortDebugLog,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devJournalDebugLog => $composableBuilder(
+    column: $table.devJournalDebugLog,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devForceConflictUi => $composableBuilder(
+    column: $table.devForceConflictUi,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowConflictDocumentIds => $composableBuilder(
+    column: $table.devShowConflictDocumentIds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11974,6 +13077,21 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get devJournalDebugLog => $composableBuilder(
+    column: $table.devJournalDebugLog,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get devForceConflictUi => $composableBuilder(
+    column: $table.devForceConflictUi,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get devShowConflictDocumentIds => $composableBuilder(
+    column: $table.devShowConflictDocumentIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => ColumnOrderings(column),
@@ -12184,6 +13302,21 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get devJournalDebugLog => $composableBuilder(
+    column: $table.devJournalDebugLog,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get devForceConflictUi => $composableBuilder(
+    column: $table.devForceConflictUi,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get devShowConflictDocumentIds => $composableBuilder(
+    column: $table.devShowConflictDocumentIds,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => column,
@@ -12287,6 +13420,9 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowCalendarInstantViewSwitch =
                     const Value.absent(),
                 Value<bool> devTodoSortDebugLog = const Value.absent(),
+                Value<bool> devJournalDebugLog = const Value.absent(),
+                Value<bool> devForceConflictUi = const Value.absent(),
+                Value<bool> devShowConflictDocumentIds = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -12330,6 +13466,9 @@ class $$SettingsTableTableTableManager
                 devShowCalendarInstantViewSwitch:
                     devShowCalendarInstantViewSwitch,
                 devTodoSortDebugLog: devTodoSortDebugLog,
+                devJournalDebugLog: devJournalDebugLog,
+                devForceConflictUi: devForceConflictUi,
+                devShowConflictDocumentIds: devShowConflictDocumentIds,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -12376,6 +13515,9 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowCalendarInstantViewSwitch =
                     const Value.absent(),
                 Value<bool> devTodoSortDebugLog = const Value.absent(),
+                Value<bool> devJournalDebugLog = const Value.absent(),
+                Value<bool> devForceConflictUi = const Value.absent(),
+                Value<bool> devShowConflictDocumentIds = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -12419,6 +13561,9 @@ class $$SettingsTableTableTableManager
                 devShowCalendarInstantViewSwitch:
                     devShowCalendarInstantViewSwitch,
                 devTodoSortDebugLog: devTodoSortDebugLog,
+                devJournalDebugLog: devJournalDebugLog,
+                devForceConflictUi: devForceConflictUi,
+                devShowConflictDocumentIds: devShowConflictDocumentIds,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -12602,6 +13747,330 @@ typedef $$TagColorsTableTableProcessedTableManager =
       TagColorsTableData,
       PrefetchHooks Function()
     >;
+typedef $$SyncConflictsTableTableCreateCompanionBuilder =
+    SyncConflictsTableCompanion Function({
+      required String id,
+      required String collection,
+      required String documentId,
+      required String localPayloadJson,
+      required String remotePayloadJson,
+      Value<String?> localTitle,
+      Value<String?> remoteTitle,
+      Value<String?> localText,
+      Value<String?> remoteText,
+      required DateTime detectedAt,
+      Value<int> rowid,
+    });
+typedef $$SyncConflictsTableTableUpdateCompanionBuilder =
+    SyncConflictsTableCompanion Function({
+      Value<String> id,
+      Value<String> collection,
+      Value<String> documentId,
+      Value<String> localPayloadJson,
+      Value<String> remotePayloadJson,
+      Value<String?> localTitle,
+      Value<String?> remoteTitle,
+      Value<String?> localText,
+      Value<String?> remoteText,
+      Value<DateTime> detectedAt,
+      Value<int> rowid,
+    });
+
+class $$SyncConflictsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncConflictsTableTable> {
+  $$SyncConflictsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localPayloadJson => $composableBuilder(
+    column: $table.localPayloadJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remotePayloadJson => $composableBuilder(
+    column: $table.remotePayloadJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localTitle => $composableBuilder(
+    column: $table.localTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteTitle => $composableBuilder(
+    column: $table.remoteTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localText => $composableBuilder(
+    column: $table.localText,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteText => $composableBuilder(
+    column: $table.remoteText,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncConflictsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncConflictsTableTable> {
+  $$SyncConflictsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localPayloadJson => $composableBuilder(
+    column: $table.localPayloadJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remotePayloadJson => $composableBuilder(
+    column: $table.remotePayloadJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localTitle => $composableBuilder(
+    column: $table.localTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteTitle => $composableBuilder(
+    column: $table.remoteTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localText => $composableBuilder(
+    column: $table.localText,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteText => $composableBuilder(
+    column: $table.remoteText,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncConflictsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncConflictsTableTable> {
+  $$SyncConflictsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localPayloadJson => $composableBuilder(
+    column: $table.localPayloadJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get remotePayloadJson => $composableBuilder(
+    column: $table.remotePayloadJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localTitle => $composableBuilder(
+    column: $table.localTitle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get remoteTitle => $composableBuilder(
+    column: $table.remoteTitle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localText =>
+      $composableBuilder(column: $table.localText, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteText => $composableBuilder(
+    column: $table.remoteText,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncConflictsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncConflictsTableTable,
+          SyncConflictsTableData,
+          $$SyncConflictsTableTableFilterComposer,
+          $$SyncConflictsTableTableOrderingComposer,
+          $$SyncConflictsTableTableAnnotationComposer,
+          $$SyncConflictsTableTableCreateCompanionBuilder,
+          $$SyncConflictsTableTableUpdateCompanionBuilder,
+          (
+            SyncConflictsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SyncConflictsTableTable,
+              SyncConflictsTableData
+            >,
+          ),
+          SyncConflictsTableData,
+          PrefetchHooks Function()
+        > {
+  $$SyncConflictsTableTableTableManager(
+    _$AppDatabase db,
+    $SyncConflictsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncConflictsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncConflictsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncConflictsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> collection = const Value.absent(),
+                Value<String> documentId = const Value.absent(),
+                Value<String> localPayloadJson = const Value.absent(),
+                Value<String> remotePayloadJson = const Value.absent(),
+                Value<String?> localTitle = const Value.absent(),
+                Value<String?> remoteTitle = const Value.absent(),
+                Value<String?> localText = const Value.absent(),
+                Value<String?> remoteText = const Value.absent(),
+                Value<DateTime> detectedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncConflictsTableCompanion(
+                id: id,
+                collection: collection,
+                documentId: documentId,
+                localPayloadJson: localPayloadJson,
+                remotePayloadJson: remotePayloadJson,
+                localTitle: localTitle,
+                remoteTitle: remoteTitle,
+                localText: localText,
+                remoteText: remoteText,
+                detectedAt: detectedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String collection,
+                required String documentId,
+                required String localPayloadJson,
+                required String remotePayloadJson,
+                Value<String?> localTitle = const Value.absent(),
+                Value<String?> remoteTitle = const Value.absent(),
+                Value<String?> localText = const Value.absent(),
+                Value<String?> remoteText = const Value.absent(),
+                required DateTime detectedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncConflictsTableCompanion.insert(
+                id: id,
+                collection: collection,
+                documentId: documentId,
+                localPayloadJson: localPayloadJson,
+                remotePayloadJson: remotePayloadJson,
+                localTitle: localTitle,
+                remoteTitle: remoteTitle,
+                localText: localText,
+                remoteText: remoteText,
+                detectedAt: detectedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncConflictsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncConflictsTableTable,
+      SyncConflictsTableData,
+      $$SyncConflictsTableTableFilterComposer,
+      $$SyncConflictsTableTableOrderingComposer,
+      $$SyncConflictsTableTableAnnotationComposer,
+      $$SyncConflictsTableTableCreateCompanionBuilder,
+      $$SyncConflictsTableTableUpdateCompanionBuilder,
+      (
+        SyncConflictsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $SyncConflictsTableTable,
+          SyncConflictsTableData
+        >,
+      ),
+      SyncConflictsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -12628,4 +14097,6 @@ class $AppDatabaseManager {
       $$SettingsTableTableTableManager(_db, _db.settingsTable);
   $$TagColorsTableTableTableManager get tagColorsTable =>
       $$TagColorsTableTableTableManager(_db, _db.tagColorsTable);
+  $$SyncConflictsTableTableTableManager get syncConflictsTable =>
+      $$SyncConflictsTableTableTableManager(_db, _db.syncConflictsTable);
 }

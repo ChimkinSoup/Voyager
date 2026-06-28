@@ -36,6 +36,9 @@ class AppSettings {
     this.devShowCalendarZoomPrewarm = false,
     this.devShowCalendarInstantViewSwitch = false,
     this.devTodoSortDebugLog = false,
+    this.devJournalDebugLog = false,
+    this.devForceConflictUi = false,
+    this.devShowConflictDocumentIds = false,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -78,6 +81,9 @@ class AppSettings {
   final bool devShowCalendarZoomPrewarm;
   final bool devShowCalendarInstantViewSwitch;
   final bool devTodoSortDebugLog;
+  final bool devJournalDebugLog;
+  final bool devForceConflictUi;
+  final bool devShowConflictDocumentIds;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -116,6 +122,9 @@ class AppSettings {
     bool? devShowCalendarZoomPrewarm,
     bool? devShowCalendarInstantViewSwitch,
     bool? devTodoSortDebugLog,
+    bool? devJournalDebugLog,
+    bool? devForceConflictUi,
+    bool? devShowConflictDocumentIds,
     String? weatherForecastJson,
     int? weatherChartTempColor,
     int? weatherChartRainColor,
@@ -193,6 +202,10 @@ class AppSettings {
       devShowCalendarInstantViewSwitch: devShowCalendarInstantViewSwitch ??
           this.devShowCalendarInstantViewSwitch,
       devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
+      devJournalDebugLog: devJournalDebugLog ?? this.devJournalDebugLog,
+      devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
+      devShowConflictDocumentIds:
+          devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
       weatherForecastJson: clearWeatherForecastJson
           ? null
           : (weatherForecastJson ?? this.weatherForecastJson),
