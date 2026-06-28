@@ -862,6 +862,12 @@ class DriftSettingsRepository implements SettingsRepository {
       devJournalDebugLog: row.devJournalDebugLog,
       devForceConflictUi: row.devForceConflictUi,
       devShowConflictDocumentIds: row.devShowConflictDocumentIds,
+      geometricTextureScale: row.geometricTextureScale,
+      geometricTextureIntensity: row.geometricTextureIntensity,
+      geometricTextureFocalSpread: row.geometricTextureFocalSpread,
+      geometricTextureFocalPointX: row.geometricTextureFocalPointX,
+      geometricTextureFocalPointY: row.geometricTextureFocalPointY,
+      geometricTextureVariationFloor: row.geometricTextureVariationFloor,
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
@@ -917,6 +923,16 @@ class DriftSettingsRepository implements SettingsRepository {
             devForceConflictUi: Value(settings.devForceConflictUi),
             devShowConflictDocumentIds:
                 Value(settings.devShowConflictDocumentIds),
+            geometricTextureScale: Value(settings.geometricTextureScale),
+            geometricTextureIntensity: Value(settings.geometricTextureIntensity),
+            geometricTextureFocalSpread:
+                Value(settings.geometricTextureFocalSpread),
+            geometricTextureFocalPointX:
+                Value(settings.geometricTextureFocalPointX),
+            geometricTextureFocalPointY:
+                Value(settings.geometricTextureFocalPointY),
+            geometricTextureVariationFloor:
+                Value(settings.geometricTextureVariationFloor),
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),

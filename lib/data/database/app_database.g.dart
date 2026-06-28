@@ -6599,6 +6599,78 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.double,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _geometricTextureScaleMeta =
+      const VerificationMeta('geometricTextureScale');
+  @override
+  late final GeneratedColumn<double> geometricTextureScale =
+      GeneratedColumn<double>(
+        'geometric_texture_scale',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(10.0),
+      );
+  static const VerificationMeta _geometricTextureIntensityMeta =
+      const VerificationMeta('geometricTextureIntensity');
+  @override
+  late final GeneratedColumn<double> geometricTextureIntensity =
+      GeneratedColumn<double>(
+        'geometric_texture_intensity',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.85),
+      );
+  static const VerificationMeta _geometricTextureFocalSpreadMeta =
+      const VerificationMeta('geometricTextureFocalSpread');
+  @override
+  late final GeneratedColumn<double> geometricTextureFocalSpread =
+      GeneratedColumn<double>(
+        'geometric_texture_focal_spread',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(1.0),
+      );
+  static const VerificationMeta _geometricTextureFocalPointXMeta =
+      const VerificationMeta('geometricTextureFocalPointX');
+  @override
+  late final GeneratedColumn<double> geometricTextureFocalPointX =
+      GeneratedColumn<double>(
+        'geometric_texture_focal_point_x',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(1.0),
+      );
+  static const VerificationMeta _geometricTextureFocalPointYMeta =
+      const VerificationMeta('geometricTextureFocalPointY');
+  @override
+  late final GeneratedColumn<double> geometricTextureFocalPointY =
+      GeneratedColumn<double>(
+        'geometric_texture_focal_point_y',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.5),
+      );
+  static const VerificationMeta _geometricTextureVariationFloorMeta =
+      const VerificationMeta('geometricTextureVariationFloor');
+  @override
+  late final GeneratedColumn<double> geometricTextureVariationFloor =
+      GeneratedColumn<double>(
+        'geometric_texture_variation_floor',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.75),
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6645,6 +6717,12 @@ class $SettingsTableTable extends SettingsTable
     weatherChartCurveTension,
     colorPaletteJson,
     journalEntryListWidth,
+    geometricTextureScale,
+    geometricTextureIntensity,
+    geometricTextureFocalSpread,
+    geometricTextureFocalPointX,
+    geometricTextureFocalPointY,
+    geometricTextureVariationFloor,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7030,6 +7108,60 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('geometric_texture_scale')) {
+      context.handle(
+        _geometricTextureScaleMeta,
+        geometricTextureScale.isAcceptableOrUnknown(
+          data['geometric_texture_scale']!,
+          _geometricTextureScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_texture_intensity')) {
+      context.handle(
+        _geometricTextureIntensityMeta,
+        geometricTextureIntensity.isAcceptableOrUnknown(
+          data['geometric_texture_intensity']!,
+          _geometricTextureIntensityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_texture_focal_spread')) {
+      context.handle(
+        _geometricTextureFocalSpreadMeta,
+        geometricTextureFocalSpread.isAcceptableOrUnknown(
+          data['geometric_texture_focal_spread']!,
+          _geometricTextureFocalSpreadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_texture_focal_point_x')) {
+      context.handle(
+        _geometricTextureFocalPointXMeta,
+        geometricTextureFocalPointX.isAcceptableOrUnknown(
+          data['geometric_texture_focal_point_x']!,
+          _geometricTextureFocalPointXMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_texture_focal_point_y')) {
+      context.handle(
+        _geometricTextureFocalPointYMeta,
+        geometricTextureFocalPointY.isAcceptableOrUnknown(
+          data['geometric_texture_focal_point_y']!,
+          _geometricTextureFocalPointYMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_texture_variation_floor')) {
+      context.handle(
+        _geometricTextureVariationFloorMeta,
+        geometricTextureVariationFloor.isAcceptableOrUnknown(
+          data['geometric_texture_variation_floor']!,
+          _geometricTextureVariationFloorMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7215,6 +7347,30 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.double,
         data['${effectivePrefix}journal_entry_list_width'],
       ),
+      geometricTextureScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_texture_scale'],
+      )!,
+      geometricTextureIntensity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_texture_intensity'],
+      )!,
+      geometricTextureFocalSpread: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_texture_focal_spread'],
+      )!,
+      geometricTextureFocalPointX: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_texture_focal_point_x'],
+      )!,
+      geometricTextureFocalPointY: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_texture_focal_point_y'],
+      )!,
+      geometricTextureVariationFloor: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_texture_variation_floor'],
+      )!,
     );
   }
 
@@ -7270,6 +7426,12 @@ class SettingsTableData extends DataClass
   final double weatherChartCurveTension;
   final String? colorPaletteJson;
   final double? journalEntryListWidth;
+  final double geometricTextureScale;
+  final double geometricTextureIntensity;
+  final double geometricTextureFocalSpread;
+  final double geometricTextureFocalPointX;
+  final double geometricTextureFocalPointY;
+  final double geometricTextureVariationFloor;
   const SettingsTableData({
     required this.id,
     required this.accentColor,
@@ -7315,6 +7477,12 @@ class SettingsTableData extends DataClass
     required this.weatherChartCurveTension,
     this.colorPaletteJson,
     this.journalEntryListWidth,
+    required this.geometricTextureScale,
+    required this.geometricTextureIntensity,
+    required this.geometricTextureFocalSpread,
+    required this.geometricTextureFocalPointX,
+    required this.geometricTextureFocalPointY,
+    required this.geometricTextureVariationFloor,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7415,6 +7583,22 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || journalEntryListWidth != null) {
       map['journal_entry_list_width'] = Variable<double>(journalEntryListWidth);
     }
+    map['geometric_texture_scale'] = Variable<double>(geometricTextureScale);
+    map['geometric_texture_intensity'] = Variable<double>(
+      geometricTextureIntensity,
+    );
+    map['geometric_texture_focal_spread'] = Variable<double>(
+      geometricTextureFocalSpread,
+    );
+    map['geometric_texture_focal_point_x'] = Variable<double>(
+      geometricTextureFocalPointX,
+    );
+    map['geometric_texture_focal_point_y'] = Variable<double>(
+      geometricTextureFocalPointY,
+    );
+    map['geometric_texture_variation_floor'] = Variable<double>(
+      geometricTextureVariationFloor,
+    );
     return map;
   }
 
@@ -7500,6 +7684,12 @@ class SettingsTableData extends DataClass
       journalEntryListWidth: journalEntryListWidth == null && nullToAbsent
           ? const Value.absent()
           : Value(journalEntryListWidth),
+      geometricTextureScale: Value(geometricTextureScale),
+      geometricTextureIntensity: Value(geometricTextureIntensity),
+      geometricTextureFocalSpread: Value(geometricTextureFocalSpread),
+      geometricTextureFocalPointX: Value(geometricTextureFocalPointX),
+      geometricTextureFocalPointY: Value(geometricTextureFocalPointY),
+      geometricTextureVariationFloor: Value(geometricTextureVariationFloor),
     );
   }
 
@@ -7599,6 +7789,24 @@ class SettingsTableData extends DataClass
       journalEntryListWidth: serializer.fromJson<double?>(
         json['journalEntryListWidth'],
       ),
+      geometricTextureScale: serializer.fromJson<double>(
+        json['geometricTextureScale'],
+      ),
+      geometricTextureIntensity: serializer.fromJson<double>(
+        json['geometricTextureIntensity'],
+      ),
+      geometricTextureFocalSpread: serializer.fromJson<double>(
+        json['geometricTextureFocalSpread'],
+      ),
+      geometricTextureFocalPointX: serializer.fromJson<double>(
+        json['geometricTextureFocalPointX'],
+      ),
+      geometricTextureFocalPointY: serializer.fromJson<double>(
+        json['geometricTextureFocalPointY'],
+      ),
+      geometricTextureVariationFloor: serializer.fromJson<double>(
+        json['geometricTextureVariationFloor'],
+      ),
     );
   }
   @override
@@ -7667,6 +7875,22 @@ class SettingsTableData extends DataClass
       'journalEntryListWidth': serializer.toJson<double?>(
         journalEntryListWidth,
       ),
+      'geometricTextureScale': serializer.toJson<double>(geometricTextureScale),
+      'geometricTextureIntensity': serializer.toJson<double>(
+        geometricTextureIntensity,
+      ),
+      'geometricTextureFocalSpread': serializer.toJson<double>(
+        geometricTextureFocalSpread,
+      ),
+      'geometricTextureFocalPointX': serializer.toJson<double>(
+        geometricTextureFocalPointX,
+      ),
+      'geometricTextureFocalPointY': serializer.toJson<double>(
+        geometricTextureFocalPointY,
+      ),
+      'geometricTextureVariationFloor': serializer.toJson<double>(
+        geometricTextureVariationFloor,
+      ),
     };
   }
 
@@ -7715,6 +7939,12 @@ class SettingsTableData extends DataClass
     double? weatherChartCurveTension,
     Value<String?> colorPaletteJson = const Value.absent(),
     Value<double?> journalEntryListWidth = const Value.absent(),
+    double? geometricTextureScale,
+    double? geometricTextureIntensity,
+    double? geometricTextureFocalSpread,
+    double? geometricTextureFocalPointX,
+    double? geometricTextureFocalPointY,
+    double? geometricTextureVariationFloor,
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
@@ -7793,6 +8023,17 @@ class SettingsTableData extends DataClass
     journalEntryListWidth: journalEntryListWidth.present
         ? journalEntryListWidth.value
         : this.journalEntryListWidth,
+    geometricTextureScale: geometricTextureScale ?? this.geometricTextureScale,
+    geometricTextureIntensity:
+        geometricTextureIntensity ?? this.geometricTextureIntensity,
+    geometricTextureFocalSpread:
+        geometricTextureFocalSpread ?? this.geometricTextureFocalSpread,
+    geometricTextureFocalPointX:
+        geometricTextureFocalPointX ?? this.geometricTextureFocalPointX,
+    geometricTextureFocalPointY:
+        geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
+    geometricTextureVariationFloor:
+        geometricTextureVariationFloor ?? this.geometricTextureVariationFloor,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
     return SettingsTableData(
@@ -7923,6 +8164,25 @@ class SettingsTableData extends DataClass
       journalEntryListWidth: data.journalEntryListWidth.present
           ? data.journalEntryListWidth.value
           : this.journalEntryListWidth,
+      geometricTextureScale: data.geometricTextureScale.present
+          ? data.geometricTextureScale.value
+          : this.geometricTextureScale,
+      geometricTextureIntensity: data.geometricTextureIntensity.present
+          ? data.geometricTextureIntensity.value
+          : this.geometricTextureIntensity,
+      geometricTextureFocalSpread: data.geometricTextureFocalSpread.present
+          ? data.geometricTextureFocalSpread.value
+          : this.geometricTextureFocalSpread,
+      geometricTextureFocalPointX: data.geometricTextureFocalPointX.present
+          ? data.geometricTextureFocalPointX.value
+          : this.geometricTextureFocalPointX,
+      geometricTextureFocalPointY: data.geometricTextureFocalPointY.present
+          ? data.geometricTextureFocalPointY.value
+          : this.geometricTextureFocalPointY,
+      geometricTextureVariationFloor:
+          data.geometricTextureVariationFloor.present
+          ? data.geometricTextureVariationFloor.value
+          : this.geometricTextureVariationFloor,
     );
   }
 
@@ -7974,7 +8234,15 @@ class SettingsTableData extends DataClass
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
           ..write('weatherChartCurveTension: $weatherChartCurveTension, ')
           ..write('colorPaletteJson: $colorPaletteJson, ')
-          ..write('journalEntryListWidth: $journalEntryListWidth')
+          ..write('journalEntryListWidth: $journalEntryListWidth, ')
+          ..write('geometricTextureScale: $geometricTextureScale, ')
+          ..write('geometricTextureIntensity: $geometricTextureIntensity, ')
+          ..write('geometricTextureFocalSpread: $geometricTextureFocalSpread, ')
+          ..write('geometricTextureFocalPointX: $geometricTextureFocalPointX, ')
+          ..write('geometricTextureFocalPointY: $geometricTextureFocalPointY, ')
+          ..write(
+            'geometricTextureVariationFloor: $geometricTextureVariationFloor',
+          )
           ..write(')'))
         .toString();
   }
@@ -8025,6 +8293,12 @@ class SettingsTableData extends DataClass
     weatherChartCurveTension,
     colorPaletteJson,
     journalEntryListWidth,
+    geometricTextureScale,
+    geometricTextureIntensity,
+    geometricTextureFocalSpread,
+    geometricTextureFocalPointX,
+    geometricTextureFocalPointY,
+    geometricTextureVariationFloor,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -8074,7 +8348,17 @@ class SettingsTableData extends DataClass
           other.weatherChartRainColor == this.weatherChartRainColor &&
           other.weatherChartCurveTension == this.weatherChartCurveTension &&
           other.colorPaletteJson == this.colorPaletteJson &&
-          other.journalEntryListWidth == this.journalEntryListWidth);
+          other.journalEntryListWidth == this.journalEntryListWidth &&
+          other.geometricTextureScale == this.geometricTextureScale &&
+          other.geometricTextureIntensity == this.geometricTextureIntensity &&
+          other.geometricTextureFocalSpread ==
+              this.geometricTextureFocalSpread &&
+          other.geometricTextureFocalPointX ==
+              this.geometricTextureFocalPointX &&
+          other.geometricTextureFocalPointY ==
+              this.geometricTextureFocalPointY &&
+          other.geometricTextureVariationFloor ==
+              this.geometricTextureVariationFloor);
 }
 
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
@@ -8122,6 +8406,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<double> weatherChartCurveTension;
   final Value<String?> colorPaletteJson;
   final Value<double?> journalEntryListWidth;
+  final Value<double> geometricTextureScale;
+  final Value<double> geometricTextureIntensity;
+  final Value<double> geometricTextureFocalSpread;
+  final Value<double> geometricTextureFocalPointX;
+  final Value<double> geometricTextureFocalPointY;
+  final Value<double> geometricTextureVariationFloor;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
@@ -8167,6 +8457,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherChartCurveTension = const Value.absent(),
     this.colorPaletteJson = const Value.absent(),
     this.journalEntryListWidth = const Value.absent(),
+    this.geometricTextureScale = const Value.absent(),
+    this.geometricTextureIntensity = const Value.absent(),
+    this.geometricTextureFocalSpread = const Value.absent(),
+    this.geometricTextureFocalPointX = const Value.absent(),
+    this.geometricTextureFocalPointY = const Value.absent(),
+    this.geometricTextureVariationFloor = const Value.absent(),
   });
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
@@ -8213,6 +8509,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherChartCurveTension = const Value.absent(),
     this.colorPaletteJson = const Value.absent(),
     this.journalEntryListWidth = const Value.absent(),
+    this.geometricTextureScale = const Value.absent(),
+    this.geometricTextureIntensity = const Value.absent(),
+    this.geometricTextureFocalSpread = const Value.absent(),
+    this.geometricTextureFocalPointX = const Value.absent(),
+    this.geometricTextureFocalPointY = const Value.absent(),
+    this.geometricTextureVariationFloor = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
@@ -8259,6 +8561,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<double>? weatherChartCurveTension,
     Expression<String>? colorPaletteJson,
     Expression<double>? journalEntryListWidth,
+    Expression<double>? geometricTextureScale,
+    Expression<double>? geometricTextureIntensity,
+    Expression<double>? geometricTextureFocalSpread,
+    Expression<double>? geometricTextureFocalPointX,
+    Expression<double>? geometricTextureFocalPointY,
+    Expression<double>? geometricTextureVariationFloor,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -8334,6 +8642,18 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (colorPaletteJson != null) 'color_palette_json': colorPaletteJson,
       if (journalEntryListWidth != null)
         'journal_entry_list_width': journalEntryListWidth,
+      if (geometricTextureScale != null)
+        'geometric_texture_scale': geometricTextureScale,
+      if (geometricTextureIntensity != null)
+        'geometric_texture_intensity': geometricTextureIntensity,
+      if (geometricTextureFocalSpread != null)
+        'geometric_texture_focal_spread': geometricTextureFocalSpread,
+      if (geometricTextureFocalPointX != null)
+        'geometric_texture_focal_point_x': geometricTextureFocalPointX,
+      if (geometricTextureFocalPointY != null)
+        'geometric_texture_focal_point_y': geometricTextureFocalPointY,
+      if (geometricTextureVariationFloor != null)
+        'geometric_texture_variation_floor': geometricTextureVariationFloor,
     });
   }
 
@@ -8382,6 +8702,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<double>? weatherChartCurveTension,
     Value<String?>? colorPaletteJson,
     Value<double?>? journalEntryListWidth,
+    Value<double>? geometricTextureScale,
+    Value<double>? geometricTextureIntensity,
+    Value<double>? geometricTextureFocalSpread,
+    Value<double>? geometricTextureFocalPointX,
+    Value<double>? geometricTextureFocalPointY,
+    Value<double>? geometricTextureVariationFloor,
   }) {
     return SettingsTableCompanion(
       id: id ?? this.id,
@@ -8442,6 +8768,18 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       colorPaletteJson: colorPaletteJson ?? this.colorPaletteJson,
       journalEntryListWidth:
           journalEntryListWidth ?? this.journalEntryListWidth,
+      geometricTextureScale:
+          geometricTextureScale ?? this.geometricTextureScale,
+      geometricTextureIntensity:
+          geometricTextureIntensity ?? this.geometricTextureIntensity,
+      geometricTextureFocalSpread:
+          geometricTextureFocalSpread ?? this.geometricTextureFocalSpread,
+      geometricTextureFocalPointX:
+          geometricTextureFocalPointX ?? this.geometricTextureFocalPointX,
+      geometricTextureFocalPointY:
+          geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
+      geometricTextureVariationFloor:
+          geometricTextureVariationFloor ?? this.geometricTextureVariationFloor,
     );
   }
 
@@ -8622,6 +8960,36 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         journalEntryListWidth.value,
       );
     }
+    if (geometricTextureScale.present) {
+      map['geometric_texture_scale'] = Variable<double>(
+        geometricTextureScale.value,
+      );
+    }
+    if (geometricTextureIntensity.present) {
+      map['geometric_texture_intensity'] = Variable<double>(
+        geometricTextureIntensity.value,
+      );
+    }
+    if (geometricTextureFocalSpread.present) {
+      map['geometric_texture_focal_spread'] = Variable<double>(
+        geometricTextureFocalSpread.value,
+      );
+    }
+    if (geometricTextureFocalPointX.present) {
+      map['geometric_texture_focal_point_x'] = Variable<double>(
+        geometricTextureFocalPointX.value,
+      );
+    }
+    if (geometricTextureFocalPointY.present) {
+      map['geometric_texture_focal_point_y'] = Variable<double>(
+        geometricTextureFocalPointY.value,
+      );
+    }
+    if (geometricTextureVariationFloor.present) {
+      map['geometric_texture_variation_floor'] = Variable<double>(
+        geometricTextureVariationFloor.value,
+      );
+    }
     return map;
   }
 
@@ -8673,7 +9041,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
           ..write('weatherChartCurveTension: $weatherChartCurveTension, ')
           ..write('colorPaletteJson: $colorPaletteJson, ')
-          ..write('journalEntryListWidth: $journalEntryListWidth')
+          ..write('journalEntryListWidth: $journalEntryListWidth, ')
+          ..write('geometricTextureScale: $geometricTextureScale, ')
+          ..write('geometricTextureIntensity: $geometricTextureIntensity, ')
+          ..write('geometricTextureFocalSpread: $geometricTextureFocalSpread, ')
+          ..write('geometricTextureFocalPointX: $geometricTextureFocalPointX, ')
+          ..write('geometricTextureFocalPointY: $geometricTextureFocalPointY, ')
+          ..write(
+            'geometricTextureVariationFloor: $geometricTextureVariationFloor',
+          )
           ..write(')'))
         .toString();
   }
@@ -12612,6 +12988,12 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<double> weatherChartCurveTension,
       Value<String?> colorPaletteJson,
       Value<double?> journalEntryListWidth,
+      Value<double> geometricTextureScale,
+      Value<double> geometricTextureIntensity,
+      Value<double> geometricTextureFocalSpread,
+      Value<double> geometricTextureFocalPointX,
+      Value<double> geometricTextureFocalPointY,
+      Value<double> geometricTextureVariationFloor,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
@@ -12659,6 +13041,12 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<double> weatherChartCurveTension,
       Value<String?> colorPaletteJson,
       Value<double?> journalEntryListWidth,
+      Value<double> geometricTextureScale,
+      Value<double> geometricTextureIntensity,
+      Value<double> geometricTextureFocalSpread,
+      Value<double> geometricTextureFocalPointX,
+      Value<double> geometricTextureFocalPointY,
+      Value<double> geometricTextureVariationFloor,
     });
 
 class $$SettingsTableTableFilterComposer
@@ -12890,6 +13278,37 @@ class $$SettingsTableTableFilterComposer
     column: $table.journalEntryListWidth,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<double> get geometricTextureScale => $composableBuilder(
+    column: $table.geometricTextureScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricTextureIntensity => $composableBuilder(
+    column: $table.geometricTextureIntensity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricTextureFocalSpread => $composableBuilder(
+    column: $table.geometricTextureFocalSpread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricTextureFocalPointX => $composableBuilder(
+    column: $table.geometricTextureFocalPointX,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricTextureFocalPointY => $composableBuilder(
+    column: $table.geometricTextureFocalPointY,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricTextureVariationFloor =>
+      $composableBuilder(
+        column: $table.geometricTextureVariationFloor,
+        builder: (column) => ColumnFilters(column),
+      );
 }
 
 class $$SettingsTableTableOrderingComposer
@@ -13121,6 +13540,37 @@ class $$SettingsTableTableOrderingComposer
     column: $table.journalEntryListWidth,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<double> get geometricTextureScale => $composableBuilder(
+    column: $table.geometricTextureScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricTextureIntensity => $composableBuilder(
+    column: $table.geometricTextureIntensity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricTextureFocalSpread => $composableBuilder(
+    column: $table.geometricTextureFocalSpread,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricTextureFocalPointX => $composableBuilder(
+    column: $table.geometricTextureFocalPointX,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricTextureFocalPointY => $composableBuilder(
+    column: $table.geometricTextureFocalPointY,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricTextureVariationFloor =>
+      $composableBuilder(
+        column: $table.geometricTextureVariationFloor,
+        builder: (column) => ColumnOrderings(column),
+      );
 }
 
 class $$SettingsTableTableAnnotationComposer
@@ -13346,6 +13796,37 @@ class $$SettingsTableTableAnnotationComposer
     column: $table.journalEntryListWidth,
     builder: (column) => column,
   );
+
+  GeneratedColumn<double> get geometricTextureScale => $composableBuilder(
+    column: $table.geometricTextureScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricTextureIntensity => $composableBuilder(
+    column: $table.geometricTextureIntensity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricTextureFocalSpread => $composableBuilder(
+    column: $table.geometricTextureFocalSpread,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricTextureFocalPointX => $composableBuilder(
+    column: $table.geometricTextureFocalPointX,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricTextureFocalPointY => $composableBuilder(
+    column: $table.geometricTextureFocalPointY,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricTextureVariationFloor =>
+      $composableBuilder(
+        column: $table.geometricTextureVariationFloor,
+        builder: (column) => column,
+      );
 }
 
 class $$SettingsTableTableTableManager
@@ -13429,6 +13910,16 @@ class $$SettingsTableTableTableManager
                 Value<double> weatherChartCurveTension = const Value.absent(),
                 Value<String?> colorPaletteJson = const Value.absent(),
                 Value<double?> journalEntryListWidth = const Value.absent(),
+                Value<double> geometricTextureScale = const Value.absent(),
+                Value<double> geometricTextureIntensity = const Value.absent(),
+                Value<double> geometricTextureFocalSpread =
+                    const Value.absent(),
+                Value<double> geometricTextureFocalPointX =
+                    const Value.absent(),
+                Value<double> geometricTextureFocalPointY =
+                    const Value.absent(),
+                Value<double> geometricTextureVariationFloor =
+                    const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
@@ -13475,6 +13966,12 @@ class $$SettingsTableTableTableManager
                 weatherChartCurveTension: weatherChartCurveTension,
                 colorPaletteJson: colorPaletteJson,
                 journalEntryListWidth: journalEntryListWidth,
+                geometricTextureScale: geometricTextureScale,
+                geometricTextureIntensity: geometricTextureIntensity,
+                geometricTextureFocalSpread: geometricTextureFocalSpread,
+                geometricTextureFocalPointX: geometricTextureFocalPointX,
+                geometricTextureFocalPointY: geometricTextureFocalPointY,
+                geometricTextureVariationFloor: geometricTextureVariationFloor,
               ),
           createCompanionCallback:
               ({
@@ -13524,6 +14021,16 @@ class $$SettingsTableTableTableManager
                 Value<double> weatherChartCurveTension = const Value.absent(),
                 Value<String?> colorPaletteJson = const Value.absent(),
                 Value<double?> journalEntryListWidth = const Value.absent(),
+                Value<double> geometricTextureScale = const Value.absent(),
+                Value<double> geometricTextureIntensity = const Value.absent(),
+                Value<double> geometricTextureFocalSpread =
+                    const Value.absent(),
+                Value<double> geometricTextureFocalPointX =
+                    const Value.absent(),
+                Value<double> geometricTextureFocalPointY =
+                    const Value.absent(),
+                Value<double> geometricTextureVariationFloor =
+                    const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
@@ -13570,6 +14077,12 @@ class $$SettingsTableTableTableManager
                 weatherChartCurveTension: weatherChartCurveTension,
                 colorPaletteJson: colorPaletteJson,
                 journalEntryListWidth: journalEntryListWidth,
+                geometricTextureScale: geometricTextureScale,
+                geometricTextureIntensity: geometricTextureIntensity,
+                geometricTextureFocalSpread: geometricTextureFocalSpread,
+                geometricTextureFocalPointX: geometricTextureFocalPointX,
+                geometricTextureFocalPointY: geometricTextureFocalPointY,
+                geometricTextureVariationFloor: geometricTextureVariationFloor,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

@@ -39,6 +39,12 @@ class AppSettings {
     this.devJournalDebugLog = false,
     this.devForceConflictUi = false,
     this.devShowConflictDocumentIds = false,
+    this.geometricTextureScale = 10.0,
+    this.geometricTextureIntensity = 0.85,
+    this.geometricTextureFocalSpread = 1.0,
+    this.geometricTextureFocalPointX = 1.0,
+    this.geometricTextureFocalPointY = 0.5,
+    this.geometricTextureVariationFloor = 0.75,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -84,6 +90,12 @@ class AppSettings {
   final bool devJournalDebugLog;
   final bool devForceConflictUi;
   final bool devShowConflictDocumentIds;
+  final double geometricTextureScale;
+  final double geometricTextureIntensity;
+  final double geometricTextureFocalSpread;
+  final double geometricTextureFocalPointX;
+  final double geometricTextureFocalPointY;
+  final double geometricTextureVariationFloor;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -125,6 +137,12 @@ class AppSettings {
     bool? devJournalDebugLog,
     bool? devForceConflictUi,
     bool? devShowConflictDocumentIds,
+    double? geometricTextureScale,
+    double? geometricTextureIntensity,
+    double? geometricTextureFocalSpread,
+    double? geometricTextureFocalPointX,
+    double? geometricTextureFocalPointY,
+    double? geometricTextureVariationFloor,
     String? weatherForecastJson,
     int? weatherChartTempColor,
     int? weatherChartRainColor,
@@ -206,6 +224,18 @@ class AppSettings {
       devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
       devShowConflictDocumentIds:
           devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
+      geometricTextureScale:
+          geometricTextureScale ?? this.geometricTextureScale,
+      geometricTextureIntensity:
+          geometricTextureIntensity ?? this.geometricTextureIntensity,
+      geometricTextureFocalSpread:
+          geometricTextureFocalSpread ?? this.geometricTextureFocalSpread,
+      geometricTextureFocalPointX:
+          geometricTextureFocalPointX ?? this.geometricTextureFocalPointX,
+      geometricTextureFocalPointY:
+          geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
+      geometricTextureVariationFloor: geometricTextureVariationFloor ??
+          this.geometricTextureVariationFloor,
       weatherForecastJson: clearWeatherForecastJson
           ? null
           : (weatherForecastJson ?? this.weatherForecastJson),

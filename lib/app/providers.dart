@@ -23,6 +23,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
+import 'package:voyager/core/widgets/geometric_texture_settings.dart';
 import 'package:voyager/data/remote/cloud_function_weather_client.dart';
 import 'package:voyager/data/remote/dev_openweather_client.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
@@ -431,10 +432,65 @@ final geometricShaderProvider = FutureProvider<FragmentProgram?>((ref) async {
   }
 });
 
-/// Live-tunable geometric texture parameters (dev session only).
-final geometricTextureParamsProvider = StateProvider<GeometricTextureParams>(
-  (ref) => GeometricTextureParams.defaults,
-);
+/// Live-tunable geometric texture parameters (persisted in local settings).
+class GeometricTextureParamsNotifier
+    extends StateNotifier<GeometricTextureParams> {
+  GeometricTextureParamsNotifier(this._ref)
+    : super(GeometricTextureParams.defaults) {
+    _ref.listen<AsyncValue<AppSettings>>(settingsProvider, (_, next) {
+      next.whenData(syncFromSettings);
+    });
+    final cached = _ref.read(settingsProvider).valueOrNull;
+    if (cached != null) {
+      syncFromSettings(cached);
+    }
+  }
+
+  final Ref _ref;
+  Timer? _saveTimer;
+
+  void syncFromSettings(AppSettings settings) {
+    final next = geometricTextureParamsFromSettings(settings);
+    if (next != state) {
+      state = next;
+    }
+  }
+
+  void update(GeometricTextureParams params) {
+    state = params;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_persist(params));
+    });
+  }
+
+  Future<void> resetToDefaults() async {
+    _saveTimer?.cancel();
+    state = GeometricTextureParams.defaults;
+    await _persist(GeometricTextureParams.defaults);
+  }
+
+  Future<void> _persist(GeometricTextureParams params) async {
+    final repo = _ref.read(settingsRepositoryProvider);
+    final settings = await repo.getSettings();
+    await repo.saveSettings(
+      appSettingsWithGeometricTextureParams(settings, params),
+    );
+    _ref.invalidate(settingsProvider);
+  }
+
+  @override
+  void dispose() {
+    _saveTimer?.cancel();
+    super.dispose();
+  }
+}
+
+final geometricTextureParamsProvider =
+    StateNotifierProvider<
+      GeometricTextureParamsNotifier,
+      GeometricTextureParams
+    >((ref) => GeometricTextureParamsNotifier(ref));
 
 /// Whether the dev-menu geometric texture slider panel is expanded.
 final devGeometricTexturePanelOpenProvider =

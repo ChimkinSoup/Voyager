@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
@@ -19,19 +21,35 @@ class VoyagerApp extends ConsumerStatefulWidget {
 }
 
 class _VoyagerAppState extends ConsumerState<VoyagerApp>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, WindowListener {
   RemoteSyncService? _remoteSync;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (desktopWindowChromeActive) {
+      windowManager.addListener(this);
+    }
   }
 
   @override
   void dispose() {
+    if (desktopWindowChromeActive) {
+      windowManager.removeListener(this);
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void onWindowFocus() {
+    setState(() {});
+  }
+
+  @override
+  void onWindowRestore() {
+    unawaited(windowManager.focus());
   }
 
   @override
@@ -79,9 +97,11 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
                 params: geometricParams,
               ),
             ),
-            DefaultTextStyle(
-              style: AppFonts.style(color: theme.colorScheme.onSurface),
-              child: child ?? const SizedBox.shrink(),
+            RepaintBoundary(
+              child: DefaultTextStyle(
+                style: AppFonts.style(color: theme.colorScheme.onSurface),
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ],
         );
