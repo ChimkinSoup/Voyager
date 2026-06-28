@@ -519,33 +519,47 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 29) {
-        await migrator.addColumn(
-          settingsTable,
+        await _addSettingsColumnIfNotExists(
+          migrator,
           settingsTable.geometricTextureScale,
         );
-        await migrator.addColumn(
-          settingsTable,
+        await _addSettingsColumnIfNotExists(
+          migrator,
           settingsTable.geometricTextureIntensity,
         );
-        await migrator.addColumn(
-          settingsTable,
+        await _addSettingsColumnIfNotExists(
+          migrator,
           settingsTable.geometricTextureFocalSpread,
         );
-        await migrator.addColumn(
-          settingsTable,
+        await _addSettingsColumnIfNotExists(
+          migrator,
           settingsTable.geometricTextureFocalPointX,
         );
-        await migrator.addColumn(
-          settingsTable,
+        await _addSettingsColumnIfNotExists(
+          migrator,
           settingsTable.geometricTextureFocalPointY,
         );
-        await migrator.addColumn(
-          settingsTable,
+        await _addSettingsColumnIfNotExists(
+          migrator,
           settingsTable.geometricTextureVariationFloor,
         );
       }
     },
   );
+
+  /// Skips ADD COLUMN when the local DB already has it (e.g. after branch churn).
+  Future<void> _addSettingsColumnIfNotExists(
+    Migrator migrator,
+    GeneratedColumn<Object> column,
+  ) async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('settings_table') WHERE name = ?",
+      variables: [Variable.withString(column.name)],
+    ).get();
+    if (exists.isEmpty) {
+      await migrator.addColumn(settingsTable, column);
+    }
+  }
 
   Future<void> _backfillNullBools() async {
     await customStatement(
