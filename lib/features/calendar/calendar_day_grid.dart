@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/features/calendar/calendar_day_entries.dart';
+import 'package:voyager/features/calendar/calendar_day_entry_stack.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
 class CalendarDayIndicator {
@@ -172,6 +174,18 @@ class MonthDayCellStyle {
   bool get isCompactLayout => fontSize <= 9 && eventFontSize < 8;
 }
 
+/// Day-cell density for the week view — also the morph end-state for month↔week.
+const weekViewDayCellStyle = MonthDayCellStyle(
+  fontSize: 13,
+  borderRadius: 12,
+  cellPadding: EdgeInsets.all(4),
+  cellMargin: EdgeInsets.all(1),
+  maxEventLines: 8,
+  dotSize: 7,
+  eventFontSize: 10,
+  borderOpacity: 1,
+);
+
 /// Bordered day square shared by year mini-months and the full month grid.
 class CalendarDayCell extends StatelessWidget {
   const CalendarDayCell({
@@ -184,9 +198,14 @@ class CalendarDayCell extends StatelessWidget {
     this.todoMarkers = const [],
     this.showTodoIcons = true,
     this.onTap,
+    this.onEntryTap,
     this.isSelected = false,
     this.adjacentTextT,
     this.adjacentBorderT,
+    this.hideEntries = false,
+    this.entryOpacity = 1,
+    this.dayNumberOpacity = 1,
+    this.frozenEntryLayoutHeight,
   });
 
   final DateTime date;
@@ -196,6 +215,7 @@ class CalendarDayCell extends StatelessWidget {
   final List<CalendarTodoMarker> todoMarkers;
   final MonthDayCellStyle style;
   final VoidCallback? onTap;
+  final void Function(CalendarDayEntry entry)? onEntryTap;
   final bool isSelected;
 
   /// When false, todo icons are hidden (e.g. during view morph animations).
@@ -206,6 +226,18 @@ class CalendarDayCell extends StatelessWidget {
 
   /// When set, adjacent-month borders lerp from muted (0) to active (1).
   final double? adjacentBorderT;
+
+  /// When true, chronological entry stack is omitted (morph overlay paints items).
+  final bool hideEntries;
+
+  /// Fades the chronological entry stack (used during month↔week morph).
+  final double entryOpacity;
+
+  /// Fades the day number (used during month↔week morph).
+  final double dayNumberOpacity;
+
+  /// When set, event bars keep this layout height instead of growing with the cell.
+  final double? frozenEntryLayoutHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -268,92 +300,108 @@ class CalendarDayCell extends StatelessWidget {
   }
 
   Widget _buildFullCellContent(bool inMonth, double cellHeight) {
+    final layoutHeight = frozenEntryLayoutHeight ?? cellHeight;
     final dayNumberHeight = style.fontSize + 8;
     var headerUsed = dayNumberHeight;
     if (indicators.isNotEmpty) {
       headerUsed += 2 + style.dotSize;
     }
     const eventGap = 2.0;
-    final eventAreaHeight =
-        (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
-    final visibleEvents = calendarVisibleEventCount(
-      cellHeight: cellHeight,
+    final entries = inMonth
+        ? calendarDayEntriesForDay(
+            events: events,
+            todos: todoMarkers,
+            day: date,
+          )
+        : const <CalendarDayEntry>[];
+    final visibleEntries = calendarVisibleEntryCount(
+      cellHeight: layoutHeight,
       style: style,
-      eventCount: events.length,
+      entryCount: entries.length,
       hasIndicators: indicators.isNotEmpty,
     );
-    final barHeight = visibleEvents > 0
+    final barHeight = visibleEntries > 0
         ? calendarMonthEventBarHeight(
-            cellHeight: cellHeight,
+            cellHeight: layoutHeight,
             style: style,
-            visibleEventCount: visibleEvents,
+            visibleEventCount: visibleEntries,
             hasIndicators: indicators.isNotEmpty,
           )
         : 0.0;
-
-    final showTodos =
-        inMonth && showTodoIcons && todoMarkers.isNotEmpty;
+    final eventAreaHeight = (layoutHeight - headerUsed - eventGap)
+        .clamp(0.0, double.infinity);
+    final availableHeight =
+        (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
+    final clampedEventAreaHeight =
+        eventAreaHeight.clamp(0.0, availableHeight);
 
     return ClipRect(
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              CalendarDayNumber(
-                date: date,
-                month: month,
-                fontSize: style.fontSize,
-                mutedWhenAdjacent: !inMonth,
-                adjacentTextT: adjacentTextT,
-                isSelected: isSelected,
-              ),
-              if (indicators.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                CalendarDayIndicatorDots(
-                  indicators: indicators,
-                  dotSize: style.dotSize,
-                ),
-              ],
-              if (inMonth && visibleEvents > 0) ...[
-                const SizedBox(height: 2),
-                SizedBox(
-                  height: eventAreaHeight,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < visibleEvents; i++) ...[
-                        if (i > 0) const SizedBox(height: 1),
-                        SizedBox(
-                          height: barHeight,
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final eventFontSize = calendarMonthEventFontSize(
-                                barHeight: barHeight,
-                                style: style,
-                              );
-                              return CalendarDayEventBar(
-                                event: events[i],
-                                fontSize: eventFontSize,
-                                height: barHeight,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (showTodos)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: CalendarDayTodoIcons(markers: todoMarkers),
+          Opacity(
+            opacity: dayNumberOpacity.clamp(0.0, 1.0),
+            child: CalendarDayNumber(
+              date: date,
+              month: month,
+              fontSize: style.fontSize,
+              mutedWhenAdjacent: !inMonth,
+              adjacentTextT: adjacentTextT,
+              isSelected: isSelected,
             ),
+          ),
+          if (indicators.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Opacity(
+              opacity: entryOpacity.clamp(0.0, 1.0),
+              child: CalendarDayIndicatorDots(
+                indicators: indicators,
+                dotSize: style.dotSize,
+              ),
+            ),
+          ],
+          if (inMonth && visibleEntries > 0 && !hideEntries) ...[
+            const SizedBox(height: 2),
+            Opacity(
+              opacity: entryOpacity.clamp(0.0, 1.0),
+              child: SizedBox(
+                height: clampedEventAreaHeight,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < visibleEntries; i++) ...[
+                      if (i > 0) const SizedBox(height: 1),
+                      Builder(
+                        builder: (context) {
+                          final entry = entries[i];
+                          final entryHeight = entry.isTodo
+                              ? calendarWeekTaskBarHeight.clamp(0.0, barHeight)
+                              : barHeight;
+                          final eventFontSize = calendarMonthEventFontSize(
+                            barHeight: entry.isTodo
+                                ? entryHeight
+                                : barHeight,
+                            style: style,
+                          );
+                          return SizedBox(
+                            height: entryHeight,
+                            child: CalendarDayEntryBar(
+                              entry: entry,
+                              fontSize: eventFontSize,
+                              height: entryHeight,
+                              onTap: onEntryTap == null
+                                  ? null
+                                  : () => onEntryTap!(entry),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -366,13 +414,16 @@ class CalendarDayCell extends StatelessWidget {
       children: [
         FittedBox(
           fit: BoxFit.scaleDown,
-          child: CalendarDayNumber(
-            date: date,
-            month: month,
-            fontSize: style.fontSize,
-            mutedWhenAdjacent: !inMonth,
-            adjacentTextT: adjacentTextT,
-            isSelected: isSelected,
+          child: Opacity(
+            opacity: dayNumberOpacity.clamp(0.0, 1.0),
+            child: CalendarDayNumber(
+              date: date,
+              month: month,
+              fontSize: style.fontSize,
+              mutedWhenAdjacent: !inMonth,
+              adjacentTextT: adjacentTextT,
+              isSelected: isSelected,
+            ),
           ),
         ),
         if (inMonth && events.isNotEmpty) ...[
@@ -1427,6 +1478,7 @@ class MonthDayGrid extends StatelessWidget {
     this.todoMarkers = const [],
     this.showTodoIcons = true,
     this.onDayTap,
+    this.onEntryTap,
     this.showWeekdayHeader = false,
     this.weekdayHeaderOpacity = 1,
     this.useSingleLetterWeekdays = false,
@@ -1441,6 +1493,7 @@ class MonthDayGrid extends StatelessWidget {
   final bool weekStartsMonday;
   final MonthDayCellStyle style;
   final void Function(DateTime day)? onDayTap;
+  final void Function(CalendarDayEntry entry)? onEntryTap;
   final bool showWeekdayHeader;
   final double weekdayHeaderOpacity;
   final bool useSingleLetterWeekdays;
@@ -1507,6 +1560,7 @@ class MonthDayGrid extends StatelessWidget {
                         style: style,
                         isSelected: isSelected,
                         onTap: onDayTap == null ? null : () => onDayTap!(date),
+                        onEntryTap: onEntryTap,
                       ),
                     );
                   }),

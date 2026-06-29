@@ -1,3 +1,4 @@
+import 'dart:math' show max;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
@@ -9,12 +10,16 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/features/calendar/calendar_event_panel.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
-import 'package:voyager/features/calendar/event_editor_dialog.dart';
+import 'package:voyager/features/todo/todo_edit_panel.dart';
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
 final _mmmmFormat = DateFormat.MMMM();
+
+enum _CalendarSidebarKind { none, event, todo }
 
 class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
@@ -29,9 +34,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
 
+  _CalendarSidebarKind _sidebarKind = _CalendarSidebarKind.none;
+  CalendarEvent? _sidebarEvent;
+  DateTime? _sidebarEventInitialDate;
+  TodoTask? _sidebarTodo;
+
   final _calendarAreaKey = GlobalKey();
 
   late final AnimationController _zoomController;
+  late final ScrollController _weekTimelineScrollController;
+  double _weekTimelineScrollOffset = calendarWeekDefaultScrollOffset();
   Matrix4Tween? _yearMatrixTween;
   bool _isZooming = false;
   // true when the animation is playing in the month→year direction.
@@ -76,9 +88,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarTodoMarker>? _weekMorphTodos;
 
   static const _sidebarWidth = 350.0;
-  static const _zoomDuration = Duration(milliseconds: 600);
-  static const _weekMorphDuration = Duration(milliseconds: 600);
-  static const _chainedMorphDuration = Duration(milliseconds: 400);
+  static const _zoomDuration = Duration(milliseconds: 6000);
+  static const _weekMorphDuration = Duration(milliseconds: 6000);
+  static const _chainedMorphDuration = Duration(milliseconds: 4000);
 
   bool _isChainedWeekToYear = false;
   bool _isChainedYearToWeek = false;
@@ -91,6 +103,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       vsync: this,
       duration: _weekMorphDuration,
     );
+    final maxWeekScroll = calendarWeekTimelineScrollContentHeight();
+    _weekTimelineScrollOffset =
+        calendarWeekDefaultScrollOffset().clamp(0.0, maxWeekScroll);
+    _weekTimelineScrollController = ScrollController(
+      initialScrollOffset: _weekTimelineScrollOffset,
+    );
+    _weekTimelineScrollController.addListener(_onWeekTimelineScrolled);
     final now = DateTime.now();
     _lastViewedMonth = DateTime(now.year, now.month, 1);
   }
@@ -239,7 +258,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     final (compact, full) = _weekdayMorphStyles(context);
     final (yearName, monthTitle) = _titleMorphStyles(context);
-    final weekdayStyle = calendarWeekdayLabelStyle(context);
+    final weekdayStyle = calendarWeekdayLabelStyle(
+      context,
+      fontSize: calendarWeekWeekdayFontSize,
+    );
     _layoutCache = CalendarLayoutCache.compute(
       areaSize: areaSize,
       yearTileNameStyle: yearName,
@@ -273,14 +295,50 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
   }
 
-  Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) =>
-          EventEditorDialog(event: event, initialDate: day ?? _focused),
-    );
-    if (result == null) return;
+  void _openEventSidebar({CalendarEvent? event, DateTime? day}) {
+    setState(() {
+      _sidebarKind = _CalendarSidebarKind.event;
+      _sidebarEvent = event;
+      _sidebarEventInitialDate = day ?? _focused;
+      _sidebarTodo = null;
+    });
+  }
 
+  Future<void> _openTodoSidebar(CalendarTodoMarker marker) async {
+    final tasks = await ref.read(allTodoTasksProvider.future);
+    final matches = tasks.where((t) => t.id == marker.taskId);
+    if (matches.isEmpty || !mounted) return;
+    final task = matches.first;
+    setState(() {
+      _sidebarKind = _CalendarSidebarKind.todo;
+      _sidebarTodo = task;
+      _sidebarEvent = null;
+    });
+  }
+
+  void _openWeekSlotSidebar(DateTime day, DateTime time) {
+    _openEventSidebar(day: time);
+  }
+
+  void _handleEntryTap(CalendarDayEntry entry) {
+    if (entry.isTodo) {
+      _openTodoSidebar(entry.todo!);
+      return;
+    }
+    _openEventSidebar(event: entry.event);
+  }
+
+  void _closeSidebar() {
+    setState(() {
+      _sidebarKind = _CalendarSidebarKind.none;
+      _sidebarEvent = null;
+      _sidebarEventInitialDate = null;
+      _sidebarTodo = null;
+    });
+  }
+
+  Future<void> _saveSidebarEvent(Map<String, dynamic> result) async {
+    final event = _sidebarEvent;
     final now = utcNow();
     final saved = CalendarEvent(
       id: event?.id ?? newId(),
@@ -298,6 +356,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
     await ref.read(calendarRepositoryProvider).upsertEvent(saved);
     ref.invalidate(calendarEventsProvider);
+    if (mounted) _closeSidebar();
+  }
+
+  Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
+    _openEventSidebar(event: event, day: day);
   }
 
   Future<void> _syncGoogle() async {
@@ -381,12 +444,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
+  void _onWeekTimelineScrolled() {
+    _weekTimelineScrollOffset = calendarWeekEffectiveScrollOffset(
+      _weekTimelineScrollController,
+      _weekTimelineScrollOffset,
+    );
+  }
+
+  void _captureWeekTimelineScrollOffset() {
+    _onWeekTimelineScrolled();
+  }
+
   @override
   void dispose() {
     _disposeMorphListener();
     _disposeWeekMorphListener();
+    _weekTimelineScrollController.removeListener(_onWeekTimelineScrolled);
     _zoomController.dispose();
     _weekMorphController.dispose();
+    _weekTimelineScrollController.dispose();
     super.dispose();
   }
 
@@ -474,6 +550,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final cache = _layoutCache;
     if (cache == null) return false;
 
+    _captureWeekTimelineScrollOffset();
     final anchor = _weekMorphAnchorDate(morphMonth, weekStartsMonday);
     final weekRow = _weekRowForDate(morphMonth, anchor, weekStartsMonday);
     final generation = _prepareWeekMorphSession();
@@ -551,6 +628,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     final morphMonth = _visibleMonthForWeekReturn(weekStartsMonday);
     _rememberViewedWeek(_focused, weekStartsMonday);
+    _captureWeekTimelineScrollOffset();
     final anchor = _focused;
     final weekRow = _weekRowForDate(morphMonth, anchor, weekStartsMonday);
     final generation = _prepareWeekMorphSession(resetValue: false);
@@ -1198,8 +1276,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       todoMarkers: mode == CalendarViewMode.year ? const [] : todoMarkers,
       showTodoIcons: mode == CalendarViewMode.year ? false : showTodoIcons,
       weekStartsMonday: weekStartsMonday,
-      onDayTap: (day) => _openEditor(day: day),
+      onDayTap: (day) => _openEventSidebar(day: day),
       onMonthTap: _onMonthTapped,
+      onEventTap: (event) => _openEventSidebar(event: event),
+      onTodoTap: _openTodoSidebar,
+      onWeekSlotTap: _openWeekSlotSidebar,
+      onEntryTap: _handleEntryTap,
       hiddenMonth: hiddenMonth,
       hiddenWeekRow: hiddenWeekRow,
       showMonthChrome: showMonthChrome,
@@ -1209,6 +1291,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       onNextMonth: monthNavigation
           ? () => _shiftFocus(1, weekStartsMonday: weekStartsMonday)
           : null,
+      weekTimelineScrollController: _weekTimelineScrollController,
     );
   }
 
@@ -1312,7 +1395,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
       final monthTitleStyle = _titleMorphStyles(context).$2;
       final monthWeekdayStyle = calendarWeekdayLabelStyle(context);
-      final weekWeekdayStyle = monthWeekdayStyle;
+      final weekWeekdayStyle = calendarWeekdayLabelStyle(
+        context,
+        fontSize: calendarWeekWeekdayFontSize,
+      );
 
       return _MonthWeekMorphLayer(
         key: ValueKey(_weekMorphGeneration),
@@ -1345,6 +1431,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           monthTitleStyle: monthTitleStyle,
           monthWeekdayStyle: monthWeekdayStyle,
         ),
+        weekTimelineScrollController: _weekTimelineScrollController,
+        weekTimelineScrollOffset: _weekTimelineScrollOffset,
+        weekMorphForward: _weekMorphForward,
+        weekStart: _weekStart(anchor, weekStartsMonday),
       );
     }
 
@@ -1433,15 +1523,84 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
+  Widget _buildSidebar() {
+    switch (_sidebarKind) {
+      case _CalendarSidebarKind.none:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Spacer(),
+            if (ref.watch(devSettingsProvider).showCalendarInstantViewSwitch) ...[
+              OutlinedButton(
+                onPressed: () => _instantSwitchToMonthView(
+                  ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true,
+                ),
+                child: const Text('Month'),
+              ),
+              const SizedBox(height: 4),
+              OutlinedButton(
+                onPressed: _instantSwitchToYearView,
+                child: const Text('Year'),
+              ),
+            ],
+          ],
+        );
+      case _CalendarSidebarKind.event:
+        return CalendarEventPanel(
+          key: ValueKey(
+            _sidebarEvent?.id ??
+                'new-${_sidebarEventInitialDate?.millisecondsSinceEpoch}',
+          ),
+          event: _sidebarEvent,
+          initialDate: _sidebarEventInitialDate ?? _focused,
+          onSave: _saveSidebarEvent,
+          onCancel: _closeSidebar,
+        );
+      case _CalendarSidebarKind.todo:
+        final task = _sidebarTodo;
+        if (task == null) return const SizedBox.shrink();
+        final lists = ref.watch(todoListsProvider).valueOrNull ?? const [];
+        final listColors = {
+          for (final list in lists) list.id: list.colorValue,
+        };
+        return TodoEditPanel(
+          key: ValueKey(task.id),
+          task: task,
+          listColor: listColors[task.listId],
+          lists: lists,
+          onClose: () {
+            ref.invalidate(calendarTodoMarkersProvider);
+            ref.invalidate(allTodoTasksProvider);
+            _closeSidebar();
+          },
+          onChanged: () {
+            ref.invalidate(calendarTodoMarkersProvider);
+            ref.invalidate(allTodoTasksProvider);
+          },
+          onDeleted: () {
+            ref.invalidate(calendarTodoMarkersProvider);
+            ref.invalidate(allTodoTasksProvider);
+            _closeSidebar();
+          },
+          onToggleStar: () async {
+            final updated = task.copyWith(starred: !task.starred);
+            await ref.read(todoRepositoryProvider).upsertTask(updated);
+            ref.invalidate(calendarTodoMarkersProvider);
+            ref.invalidate(allTodoTasksProvider);
+            if (mounted) {
+              setState(() => _sidebarTodo = updated);
+            }
+          },
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(calendarEventsProvider);
     final todosAsync = ref.watch(calendarTodoMarkersProvider);
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
     final weekStartsMonday = settings.weekStartsOnMonday;
-    final showInstantViewSwitch = ref
-        .watch(devSettingsProvider)
-        .showCalendarInstantViewSwitch;
 
     const indicators = <CalendarDayIndicator>[];
 
@@ -1498,26 +1657,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                         children: [
                           SizedBox(
                             width: _sidebarWidth,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Spacer(),
-                                if (showInstantViewSwitch) ...[
-                                  OutlinedButton(
-                                    onPressed: () =>
-                                        _instantSwitchToMonthView(
-                                          weekStartsMonday,
-                                        ),
-                                    child: const Text('Month'),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  OutlinedButton(
-                                    onPressed: _instantSwitchToYearView,
-                                    child: const Text('Year'),
-                                  ),
-                                ],
-                              ],
-                            ),
+                            child: _buildSidebar(),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -1687,8 +1827,8 @@ class CalendarLayoutCache {
   static const _crossAxisSpacing = 8.0;
   static const _mainAxisSpacing = 6.0;
 
-  /// Gap below weekday labels in [_WeekGrid] — must match calendar_grid.dart.
-  static const weekHeaderGap = 6.0;
+  /// Gap below weekday labels in week view — must match [calendarWeekHeaderGap].
+  static const weekHeaderGap = calendarWeekHeaderGap;
 
   /// Builds the cache from [areaSize] and resolved text styles.
   ///
@@ -1733,7 +1873,7 @@ class CalendarLayoutCache {
       weekdayLabelStyle: fullWeekdayStyle,
     );
 
-    final weekColumnRects = _weekColumnRects(areaSize, fullWeekdayStyle);
+    final weekColumnRects = _weekColumnRects(areaSize, weekWeekdayStyle);
     final monthWeekdayHeaderY = MonthTitleHeader.weekdayHeaderY(
       fullTitleStyle,
     );
@@ -1754,22 +1894,16 @@ class CalendarLayoutCache {
       monthCardRect: monthCardRect,
       weekAreaRect: weekAreaRect,
       monthWeekdayHeaderY: monthWeekdayHeaderY,
-      weekWeekdayHeaderY: 0,
+      weekWeekdayHeaderY: calendarWeekHeaderTopPadding,
       monthMorphEventMetrics: monthMorphEventMetrics,
     );
   }
 
   static List<Rect> _weekColumnRects(Size areaSize, TextStyle weekdayStyle) {
-    final weekdayHeight = WeekdayHeaderRow.labelHeight(weekdayStyle);
-    final gridTop = weekdayHeight + weekHeaderGap;
-    final gridH = areaSize.height - gridTop;
-    final gridLeft = MonthTitleHeader.cardPadding;
-    final gridWidth = areaSize.width - MonthTitleHeader.cardPadding * 2;
-    final cellW = gridWidth / 7;
-    return List.generate(
-      7,
-      (i) => Rect.fromLTWH(gridLeft + i * cellW, gridTop, cellW, gridH),
-    );
+    return CalendarWeekLayoutMetrics.compute(
+      areaSize: areaSize,
+      weekdayStyle: weekdayStyle,
+    ).dayColumnRects;
   }
 
   static Matrix4 _zoomMatrixForTile(Rect tileRect, Size areaSize) {
@@ -2022,11 +2156,6 @@ class _MorphAnimationLayer extends StatefulWidget {
 }
 
 class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
-  static final _cardWidget = Card(
-    margin: EdgeInsets.zero,
-    child: SizedBox.expand(),
-  );
-
   late final List<Widget> _cellChildren;
   late final Widget _yearGridChild;
   late final Matrix4 _yearMatrixBegin;
@@ -2185,7 +2314,11 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                     top: bgRect.top,
                     width: bgRect.width,
                     height: bgRect.height,
-                    child: _cardWidget,
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      color: calendarPanelBackgroundColor(context),
+                      child: const SizedBox.expand(),
+                    ),
                   ),
                   CustomMultiChildLayout(
                     delegate: _MorphLayoutDelegate(
@@ -2644,16 +2777,19 @@ class _ViewModeSegmentedControl extends StatelessWidget {
 class _WeekMorphProgress extends InheritedWidget {
   const _WeekMorphProgress({
     required this.t,
+    required this.monthEntryOpacity,
     required super.child,
   });
 
   final double t;
+  final double monthEntryOpacity;
 
   static _WeekMorphProgress of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_WeekMorphProgress>()!;
 
   @override
-  bool updateShouldNotify(_WeekMorphProgress old) => old.t != t;
+  bool updateShouldNotify(_WeekMorphProgress old) =>
+      old.t != t || old.monthEntryOpacity != monthEntryOpacity;
 }
 
 class _MonthWeekMorphLayer extends StatefulWidget {
@@ -2678,6 +2814,10 @@ class _MonthWeekMorphLayer extends StatefulWidget {
     required this.indicators,
     required this.todoMarkers,
     required this.inactiveMonthRows,
+    required this.weekTimelineScrollController,
+    required this.weekTimelineScrollOffset,
+    required this.weekMorphForward,
+    required this.weekStart,
   });
 
   final AnimationController controller;
@@ -2699,6 +2839,10 @@ class _MonthWeekMorphLayer extends StatefulWidget {
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
   final Widget inactiveMonthRows;
+  final ScrollController weekTimelineScrollController;
+  final double weekTimelineScrollOffset;
+  final bool weekMorphForward;
+  final DateTime weekStart;
 
   @override
   State<_MonthWeekMorphLayer> createState() => _MonthWeekMorphLayerState();
@@ -2710,6 +2854,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
   late final String _monthTitleLabel;
   late final double _monthTitleHeight;
   late final Widget _inactiveMonthChild;
+  late final double _frozenEntryLayoutHeight;
 
   @override
   void initState() {
@@ -2725,6 +2870,9 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
     _monthTitleLabel = _mmmmFormat.format(widget.morphMonth);
     _monthTitleHeight = MonthTitleHeader.preferredHeight(widget.monthTitleStyle);
     _inactiveMonthChild = widget.inactiveMonthRows;
+    _frozenEntryLayoutHeight = calendarMorphMonthInnerCellHeight(
+      widget.monthRowRects.first.height,
+    );
 
     _cellChildren = [
       for (var i = 0; i < 7; i++)
@@ -2737,6 +2885,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             events: widget.events,
             indicators: widget.indicators,
             todoMarkers: widget.todoMarkers,
+            frozenEntryLayoutHeight: _frozenEntryLayoutHeight,
           ),
         ),
     ];
@@ -2752,52 +2901,59 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
           builder: (context, inactiveMonthChild) {
             final t = Curves.easeInOutCubic.transform(widget.controller.value);
             final monthFade = (1.0 - t).clamp(0.0, 1.0);
-            final weekFade = t.clamp(0.0, 1.0);
             final headerY = lerpDouble(
               widget.monthWeekdayHeaderY,
               widget.weekWeekdayHeaderY,
               t,
             )!;
-            final weekdayLabelHeight = WeekdayHeaderRow.labelHeight(
-              widget.monthWeekdayStyle,
+            final weekdayLabelHeight = max(
+              WeekdayHeaderRow.labelHeight(widget.monthWeekdayStyle),
+              WeekdayHeaderRow.labelHeight(widget.weekWeekdayStyle),
             );
             final divider = Theme.of(context).dividerColor;
+            final morphBorderRects = calendarWeekMorphBorderedDayColumnRects(
+              monthRowRects: widget.monthRowRects,
+              weekColumnRects: widget.weekColumnRects,
+              t: t,
+            );
+            final morphBorderRadius = calendarWeekMorphBorderRadius(t);
+            final weekChromeOpacity =
+                Curves.easeInOut.transform(t.clamp(0.0, 1.0));
+            final monthEntryOpacity = (1.0 - t).clamp(0.0, 1.0);
+            final dayAreaTop = Rect.lerp(
+              widget.monthRowRects.first,
+              widget.weekColumnRects.first,
+              t,
+            )!.top;
+            final onSurfaceVariant =
+                Theme.of(context).colorScheme.onSurfaceVariant;
+            final hourClipRects = morphBorderRects
+                .map(
+                  (rect) => rect.shift(
+                    Offset(-MonthTitleHeader.cardPadding, -dayAreaTop),
+                  ),
+                )
+                .toList();
 
             return _WeekMorphProgress(
               t: t,
+              monthEntryOpacity: monthEntryOpacity,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Month card + inactive rows fade out.
-                  Opacity(
-                    opacity: monthFade,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Positioned.fromRect(
-                          rect: widget.monthCardRect,
-                          child: Card(
-                            margin: EdgeInsets.zero,
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                        inactiveMonthChild!,
-                      ],
+                  // Constant 60% panel background for month and week views.
+                  Positioned.fromRect(
+                    rect: widget.monthCardRect,
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      color: calendarPanelBackgroundColor(context),
+                      child: const SizedBox.expand(),
                     ),
                   ),
-                  // Week flat background fades in.
-                  Positioned.fromRect(
-                    rect: widget.weekAreaRect,
-                    child: Opacity(
-                      opacity: weekFade,
-                      child: CustomPaint(
-                        painter: _WeekColumnDividerPainter(
-                          columnRects: widget.weekColumnRects,
-                          color: divider,
-                        ),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
+                  // Inactive month rows fade out during month→week morph.
+                  Opacity(
+                    opacity: monthFade,
+                    child: inactiveMonthChild!,
                   ),
                   // Month title fades out beneath morph cells as they expand upward.
                   Positioned(
@@ -2829,7 +2985,89 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                     ),
                     children: _cellChildren,
                   ),
-                  // Weekday headers: fixed month Y at t=0, slide up to week Y.
+                  // Shared border painter — same stroke as the live week view.
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: t.clamp(0.0, 1.0),
+                        child: CustomPaint(
+                          painter: CalendarWeekDayColumnBorderPainter(
+                            borderedRects: morphBorderRects,
+                            color: divider,
+                            borderRadius: morphBorderRadius,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Hour lines fade in during month→week (mirrored fade-out via overlay).
+                  if (widget.weekMorphForward)
+                    Positioned(
+                      left: MonthTitleHeader.cardPadding,
+                      right: MonthTitleHeader.cardPadding,
+                      top: dayAreaTop,
+                      bottom: 0,
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: widget.weekTimelineScrollController,
+                          builder: (context, _) {
+                            final allDayShelfHeight =
+                                calendarWeekAllDayShelfHeightFor(
+                              events: widget.events,
+                              weekDays: _weekDates,
+                            );
+                            final scrollOffset =
+                                calendarWeekEffectiveScrollOffset(
+                              widget.weekTimelineScrollController,
+                              widget.weekTimelineScrollOffset,
+                            );
+                            return CustomPaint(
+                              painter: CalendarWeekTimeGridPainter(
+                                scrollOffset: scrollOffset,
+                                allDayShelfHeight: allDayShelfHeight,
+                                borderedClipRects: hourClipRects,
+                                borderRadius: morphBorderRadius,
+                                lineColor: divider.withValues(alpha: 0.45),
+                                labelColor: onSurfaceVariant,
+                                hourLabelBuilder: calendarWeekHourLabel,
+                                lineOpacity: weekChromeOpacity,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  // Week timeline fades out during week→month (mirrors month→week fade-in).
+                  if (!widget.weekMorphForward)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top:
+                          headerY +
+                          weekdayLabelHeight +
+                          calendarWeekHeaderGap +
+                          calendarWeekDayColumnTopInset,
+                      bottom: 0,
+                      child: IgnorePointer(
+                        child: Opacity(
+                          opacity: weekChromeOpacity,
+                          child: CalendarWeekTimeline(
+                            weekStart: widget.weekStart,
+                            events: widget.events,
+                            todoMarkers: widget.todoMarkers,
+                            weekStartsMonday: widget.weekStartsMonday,
+                            initialScrollOffset: widget.weekTimelineScrollOffset,
+                            showWeekdayHeader: false,
+                            entryFadeEnabled: false,
+                            interactive: false,
+                            onEventTap: (_) {},
+                            onTodoTap: (_) {},
+                            onSlotTap: (_, _) {},
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Weekday headers slide between month and week Y — full labels both ends.
                   Positioned(
                     left: MonthTitleHeader.cardPadding,
                     right: MonthTitleHeader.cardPadding,
@@ -2837,7 +3075,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                     height: weekdayLabelHeight,
                     child: WeekdayHeaderRow(
                       weekStartsMonday: widget.weekStartsMonday,
-                      labelStyle: widget.monthWeekdayStyle,
+                      labelStyle: widget.weekWeekdayStyle,
                     ),
                   ),
                 ],
@@ -2850,34 +3088,6 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
   }
 }
 
-class _WeekColumnDividerPainter extends CustomPainter {
-  _WeekColumnDividerPainter({
-    required this.columnRects,
-    required this.color,
-  });
-
-  final List<Rect> columnRects;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (columnRects.length < 2) return;
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-    final top = columnRects.first.top;
-    final bottom = columnRects.first.bottom;
-    for (var i = 1; i < columnRects.length; i++) {
-      final x = columnRects[i].left;
-      canvas.drawLine(Offset(x, top), Offset(x, bottom), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WeekColumnDividerPainter old) =>
-      old.columnRects != columnRects || old.color != color;
-}
-
 class _MonthWeekMorphCell extends StatelessWidget {
   const _MonthWeekMorphCell({
     super.key,
@@ -2886,6 +3096,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
     required this.events,
     required this.indicators,
     required this.todoMarkers,
+    required this.frozenEntryLayoutHeight,
   });
 
   final DateTime date;
@@ -2893,33 +3104,37 @@ class _MonthWeekMorphCell extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
+  final double frozenEntryLayoutHeight;
 
   @override
   Widget build(BuildContext context) {
     final t = _WeekMorphProgress.of(context).t;
     final monthStyle = MonthDayCellStyle.full;
-    final weekStyle = weekViewDayCellStyle;
 
-    final fontSize = lerpDouble(monthStyle.fontSize, weekStyle.fontSize, t)!;
+    final fontSize = lerpDouble(monthStyle.fontSize, 13, t)!;
     final borderRadius = monthStyle.borderRadius +
-        (weekStyle.borderRadius - monthStyle.borderRadius) * t;
+        (12 - monthStyle.borderRadius) * t;
     final cellMargin = lerpDouble(
       monthStyle.cellMargin.top,
-      weekStyle.cellMargin.top,
+      1,
       t,
     )!;
     final cellPadding = EdgeInsets.lerp(
       monthStyle.cellPadding,
-      weekStyle.cellPadding,
+      const EdgeInsets.all(4),
       t,
     )!;
 
     final inMonth = date.month == month.month;
-    final borderAlpha = lerpDouble(
-      monthStyle.borderOpacity,
-      weekStyle.borderOpacity,
-      t,
-    )!;
+    final baseBorderAlpha = inMonth
+        ? monthStyle.borderOpacity
+        : lerpDouble(
+            calendarAdjacentMonthBorderOpacity,
+            monthStyle.borderOpacity,
+            Curves.easeOutCubic.transform(t),
+          )!;
+    // Cell borders fade out as the shared morph border painter takes over.
+    final borderAlpha = (1.0 - t) * baseBorderAlpha;
 
     final dayEvents = inMonth
         ? events.where((e) => calendarEventOnDay(e, date)).toList()
@@ -2932,6 +3147,8 @@ class _MonthWeekMorphCell extends StatelessWidget {
         ? calendarTodoMarkersForDay(todoMarkers, date)
         : const <CalendarTodoMarker>[];
 
+    final progress = _WeekMorphProgress.of(context);
+
     return CalendarDayCell(
       date: date,
       month: month,
@@ -2939,22 +3156,20 @@ class _MonthWeekMorphCell extends StatelessWidget {
       indicators: dayIndicators,
       todoMarkers: dayTodos,
       showTodoIcons: false,
+      hideEntries: false,
+      entryOpacity: progress.monthEntryOpacity,
+      dayNumberOpacity: (1.0 - t).clamp(0.0, 1.0),
+      frozenEntryLayoutHeight: frozenEntryLayoutHeight,
       adjacentTextT: inMonth ? null : t,
-      adjacentBorderT: inMonth ? null : t,
+      adjacentBorderT: inMonth ? null : Curves.easeOutCubic.transform(t),
       style: MonthDayCellStyle(
         fontSize: fontSize,
         borderRadius: borderRadius,
         cellPadding: cellPadding,
         cellMargin: EdgeInsets.all(cellMargin),
-        maxEventLines: (monthStyle.maxEventLines +
-                (weekStyle.maxEventLines - monthStyle.maxEventLines) * t)
-            .round(),
-        dotSize: lerpDouble(monthStyle.dotSize, weekStyle.dotSize, t)!,
-        eventFontSize: lerpDouble(
-          monthStyle.eventFontSize,
-          weekStyle.eventFontSize,
-          t,
-        )!,
+        maxEventLines: monthStyle.maxEventLines,
+        dotSize: monthStyle.dotSize,
+        eventFontSize: monthStyle.eventFontSize,
         borderOpacity: borderAlpha,
       ),
     );

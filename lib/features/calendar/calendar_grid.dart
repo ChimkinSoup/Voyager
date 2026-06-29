@@ -7,7 +7,9 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
+import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
+import 'package:voyager/features/calendar/calendar_week_timeline.dart';
 
 export 'calendar_todo_markers.dart'
     show
@@ -17,7 +19,40 @@ export 'calendar_todo_markers.dart'
         buildCalendarTodoMarkers,
         calendarTodoMarkersForDay,
         calendarTodoOnDay,
-        calendarMorphTodoIconProgress;
+        calendarMorphTodoIconProgress,
+        calendarWeekPxPerHour,
+        calendarWeekTaskBarHeight,
+        calendarWeekTimelineHeight,
+        calendarWeekTimelineScrollPadding,
+        calendarWeekTimelineScrollContentHeight,
+        calendarWeekAllDayShelfHeight,
+        calendarWeekAllDayEventRowHeight,
+        calendarWeekAllDayShelfHeightFor,
+        calendarWeekDayColumnTopInset,
+        calendarWeekDayColumnBottomInset,
+        calendarWeekTimeGutterWidth,
+        calendarWeekHeaderGap,
+        calendarWeekHeaderTopPadding,
+        calendarWeekWeekdayFontSize,
+        calendarWeekDefaultScrollOffset,
+        calendarWeekEffectiveScrollOffset;
+export 'calendar_day_entries.dart'
+    show
+        CalendarDayEntry,
+        CalendarDayEntryKind,
+        calendarDayEntriesForDay,
+        calendarVisibleEntryCount;
+export 'calendar_week_timeline.dart'
+    show
+        CalendarWeekTimeline,
+        CalendarWeekLayoutMetrics,
+        CalendarWeekDayColumnBorderPainter,
+        CalendarWeekTimeGridPainter,
+        calendarWeekBorderedDayColumnRects,
+        calendarWeekMorphBorderedDayColumnRects,
+        calendarWeekMorphBorderRadius,
+        calendarWeekHourLineClipPath,
+        calendarWeekHourLabel;
 export 'calendar_day_grid.dart'
     show
         CalendarDayCell,
@@ -27,11 +62,13 @@ export 'calendar_day_grid.dart'
         MorphDayEventStack,
         MorphDayEventFrozenMetrics,
         calendarMorphEventFrozenMetrics,
+        calendarMorphMonthInnerCellHeight,
         MorphWeekdayHeader,
         MonthDayCellStyle,
         MonthDayGrid,
         WeekdayHeaderRow,
         WeekdayMorphMetrics,
+        weekViewDayCellStyle,
         calendarAdjacentMonthBorderOpacity,
         calendarAdjacentMonthColor,
         calendarSameDay,
@@ -47,6 +84,14 @@ export 'calendar_day_grid.dart'
 
 /// Reused across all month-name formatting calls to avoid repeated allocation.
 final _mmmmFormat = DateFormat.MMMM();
+
+/// Shared calendar panel fill — month, week, and year tiles use the same tint.
+const calendarPanelBackgroundOpacity = 0.6;
+
+Color calendarPanelBackgroundColor(BuildContext context) =>
+    Theme.of(context).colorScheme.surface.withValues(
+      alpha: calendarPanelBackgroundOpacity,
+    );
 
 class CalendarGrid extends StatelessWidget {
   const CalendarGrid({
@@ -68,6 +113,11 @@ class CalendarGrid extends StatelessWidget {
     this.showMonthChrome = true,
     this.onPreviousMonth,
     this.onNextMonth,
+    this.onEventTap,
+    this.onTodoTap,
+    this.onWeekSlotTap,
+    this.onEntryTap,
+    this.weekTimelineScrollController,
   });
 
   final CalendarViewMode mode;
@@ -100,6 +150,11 @@ class CalendarGrid extends StatelessWidget {
   final bool showMonthChrome;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
+  final void Function(CalendarEvent event)? onEventTap;
+  final void Function(CalendarTodoMarker marker)? onTodoTap;
+  final void Function(DateTime day, DateTime time)? onWeekSlotTap;
+  final void Function(CalendarDayEntry entry)? onEntryTap;
+  final ScrollController? weekTimelineScrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -107,11 +162,12 @@ class CalendarGrid extends StatelessWidget {
       CalendarViewMode.week => _WeekGrid(
         focused: focused,
         events: events,
-        indicators: indicators,
         todoMarkers: todoMarkers,
-        showTodoIcons: showTodoIcons,
-        onDayTap: onDayTap,
+        onEventTap: onEventTap,
+        onTodoTap: onTodoTap,
+        onSlotTap: onWeekSlotTap,
         weekStartsMonday: weekStartsMonday,
+        scrollController: weekTimelineScrollController,
       ),
       CalendarViewMode.month => _MonthGrid(
         focused: focused,
@@ -120,6 +176,7 @@ class CalendarGrid extends StatelessWidget {
         todoMarkers: todoMarkers,
         showTodoIcons: showTodoIcons,
         onDayTap: onDayTap,
+        onEntryTap: onEntryTap,
         weekStartsMonday: weekStartsMonday,
         dayGridKey: monthDayGridKey,
         hiddenWeekRow: hiddenWeekRow,
@@ -596,6 +653,7 @@ class _MonthGrid extends StatelessWidget {
     required this.showTodoIcons,
     required this.onDayTap,
     required this.weekStartsMonday,
+    this.onEntryTap,
     this.dayGridKey,
     this.hiddenWeekRow,
     this.showMonthChrome = true,
@@ -609,6 +667,7 @@ class _MonthGrid extends StatelessWidget {
   final List<CalendarTodoMarker> todoMarkers;
   final bool showTodoIcons;
   final void Function(DateTime day) onDayTap;
+  final void Function(CalendarDayEntry entry)? onEntryTap;
   final bool weekStartsMonday;
 
   /// Optional key placed on the inner [MonthDayGrid] for measurement.
@@ -632,6 +691,7 @@ class _MonthGrid extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
+      color: calendarPanelBackgroundColor(context),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
@@ -659,6 +719,7 @@ class _MonthGrid extends StatelessWidget {
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
                 onDayTap: onDayTap,
+                onEntryTap: onEntryTap,
                 hiddenWeekRow: hiddenWeekRow,
               ),
             ),
@@ -673,81 +734,43 @@ class _WeekGrid extends StatelessWidget {
   const _WeekGrid({
     required this.focused,
     required this.events,
-    required this.indicators,
     required this.todoMarkers,
-    required this.showTodoIcons,
-    required this.onDayTap,
+    required this.onEventTap,
+    required this.onTodoTap,
+    required this.onSlotTap,
     required this.weekStartsMonday,
+    this.scrollController,
   });
 
   final DateTime focused;
   final List<CalendarEvent> events;
-  final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
-  final bool showTodoIcons;
-  final void Function(DateTime day) onDayTap;
+  final void Function(CalendarEvent event)? onEventTap;
+  final void Function(CalendarTodoMarker marker)? onTodoTap;
+  final void Function(DateTime day, DateTime time)? onSlotTap;
   final bool weekStartsMonday;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
     final start = _weekStart(focused, weekStartsMonday);
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: MonthTitleHeader.cardPadding,
-          ),
-          child: WeekdayHeaderRow(weekStartsMonday: weekStartsMonday),
-        ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: MonthTitleHeader.cardPadding,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: List.generate(7, (i) {
-              final date = start.add(Duration(days: i));
-              final dayEvents = events
-                  .where((e) => calendarEventOnDay(e, date))
-                  .toList();
-              final dayIndicators = indicators
-                  .where((indicator) => calendarSameDay(indicator.day, date))
-                  .take(4)
-                  .toList();
-              final dayTodos = calendarTodoMarkersForDay(todoMarkers, date);
-              return Expanded(
-                child: CalendarDayCell(
-                  date: date,
-                  month: date,
-                  events: dayEvents,
-                  indicators: dayIndicators,
-                  todoMarkers: dayTodos,
-                  showTodoIcons: showTodoIcons,
-                  style: weekViewDayCellStyle,
-                  onTap: () => onDayTap(date),
-                ),
-              );
-            }),
-            ),
-          ),
-        ),
-      ],
+
+    return Card(
+      margin: EdgeInsets.zero,
+      color: calendarPanelBackgroundColor(context),
+      child: CalendarWeekTimeline(
+      weekStart: start,
+      events: events,
+      todoMarkers: todoMarkers,
+      weekStartsMonday: weekStartsMonday,
+      scrollController: scrollController,
+      onEventTap: onEventTap ?? (_) {},
+      onTodoTap: onTodoTap ?? (_) {},
+      onSlotTap: onSlotTap ?? (_, _) {},
+      ),
     );
   }
 }
-
-/// Day-cell density for the week view — also the morph end-state for month↔week.
-const weekViewDayCellStyle = MonthDayCellStyle(
-  fontSize: 13,
-  borderRadius: 12,
-  cellPadding: EdgeInsets.all(4),
-  cellMargin: EdgeInsets.all(1),
-  maxEventLines: 8,
-  dotSize: 7,
-  eventFontSize: 10,
-);
 
 class _YearGrid extends StatelessWidget {
   const _YearGrid({
@@ -830,6 +853,7 @@ class _YearGrid extends StatelessWidget {
       child: Card(
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
+        color: calendarPanelBackgroundColor(context),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
         ),
