@@ -1400,7 +1400,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         fontSize: calendarWeekWeekdayFontSize,
       );
 
-      return _MonthWeekMorphLayer(
+      final morphLayer = _MonthWeekMorphLayer(
         key: ValueKey(_weekMorphGeneration),
         controller: _weekMorphController,
         morphMonth: morphMonth,
@@ -1434,8 +1434,34 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         weekTimelineScrollController: _weekTimelineScrollController,
         weekTimelineScrollOffset: _weekTimelineScrollOffset,
         weekMorphForward: _weekMorphForward,
-        weekStart: _weekStart(anchor, weekStartsMonday),
       );
+
+      if (!_weekMorphForward) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Live week view stays underneath so events/tasks are visible at
+            // the start and get gradually covered as the panel fades in.
+            IgnorePointer(
+              child: CalendarWeekTimeline(
+                weekStart: _weekStart(anchor, weekStartsMonday),
+                events: activeEvents,
+                todoMarkers: activeTodos,
+                weekStartsMonday: weekStartsMonday,
+                scrollController: _weekTimelineScrollController,
+                entryFadeEnabled: false,
+                interactive: false,
+                onEventTap: (_) {},
+                onTodoTap: (_) {},
+                onSlotTap: (_, _) {},
+              ),
+            ),
+            morphLayer,
+          ],
+        );
+      }
+
+      return morphLayer;
     }
 
     if (_isZooming &&
@@ -2817,7 +2843,6 @@ class _MonthWeekMorphLayer extends StatefulWidget {
     required this.weekTimelineScrollController,
     required this.weekTimelineScrollOffset,
     required this.weekMorphForward,
-    required this.weekStart,
   });
 
   final AnimationController controller;
@@ -2842,7 +2867,6 @@ class _MonthWeekMorphLayer extends StatefulWidget {
   final ScrollController weekTimelineScrollController;
   final double weekTimelineScrollOffset;
   final bool weekMorphForward;
-  final DateTime weekStart;
 
   @override
   State<_MonthWeekMorphLayer> createState() => _MonthWeekMorphLayerState();
@@ -2855,6 +2879,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
   late final double _monthTitleHeight;
   late final Widget _inactiveMonthChild;
   late final double _frozenEntryLayoutHeight;
+  late final double _frozenAllDayShelfHeight;
 
   @override
   void initState() {
@@ -2872,6 +2897,10 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
     _inactiveMonthChild = widget.inactiveMonthRows;
     _frozenEntryLayoutHeight = calendarMorphMonthInnerCellHeight(
       widget.monthRowRects.first.height,
+    );
+    _frozenAllDayShelfHeight = calendarWeekAllDayShelfHeightFor(
+      events: widget.events,
+      weekDays: _weekDates,
     );
 
     _cellChildren = [
@@ -2920,6 +2949,20 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             final weekChromeOpacity =
                 Curves.easeInOut.transform(t.clamp(0.0, 1.0));
             final monthEntryOpacity = (1.0 - t).clamp(0.0, 1.0);
+            // week→month: panel fades in to cover the live week grid underneath;
+            // borders and hour lines are provided by the live grid so the morph
+            // layer doesn't double-paint them.
+            final panelOpacity =
+                widget.weekMorphForward ? 1.0 : monthFade.clamp(0.0, 1.0);
+            final morphBorderOpacity =
+                widget.weekMorphForward ? t.clamp(0.0, 1.0) : 0.0;
+            final hourLineOpacity =
+                widget.weekMorphForward ? weekChromeOpacity : 0.0;
+            final weekdayLabelStyle = TextStyle.lerp(
+              widget.monthWeekdayStyle,
+              widget.weekWeekdayStyle,
+              t,
+            )!;
             final dayAreaTop = Rect.lerp(
               widget.monthRowRects.first,
               widget.weekColumnRects.first,
@@ -2927,6 +2970,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             )!.top;
             final onSurfaceVariant =
                 Theme.of(context).colorScheme.onSurfaceVariant;
+            final accentColor = Theme.of(context).colorScheme.primary;
             final hourClipRects = morphBorderRects
                 .map(
                   (rect) => rect.shift(
@@ -2941,13 +2985,17 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Constant 60% panel background for month and week views.
+                  // Panel: always opaque in month→week; fades in during
+                  // week→month to progressively cover the live week grid.
                   Positioned.fromRect(
                     rect: widget.monthCardRect,
-                    child: Card(
-                      margin: EdgeInsets.zero,
-                      color: calendarPanelBackgroundColor(context),
-                      child: const SizedBox.expand(),
+                    child: Opacity(
+                      opacity: panelOpacity,
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        color: calendarPanelBackgroundColor(context),
+                        child: const SizedBox.expand(),
+                      ),
                     ),
                   ),
                   // Inactive month rows fade out during month→week morph.
@@ -2989,7 +3037,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: Opacity(
-                        opacity: t.clamp(0.0, 1.0),
+                        opacity: morphBorderOpacity,
                         child: CustomPaint(
                           painter: CalendarWeekDayColumnBorderPainter(
                             borderedRects: morphBorderRects,
@@ -3000,74 +3048,56 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                       ),
                     ),
                   ),
-                  // Hour lines fade in during month→week (mirrored fade-out via overlay).
+                  // Hour lines fade in during month→week only.
+                  Positioned(
+                    left: MonthTitleHeader.cardPadding,
+                    right: MonthTitleHeader.cardPadding,
+                    top: dayAreaTop,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: AnimatedBuilder(
+                        animation: widget.weekTimelineScrollController,
+                        builder: (context, _) {
+                          final allDayShelfHeight =
+                              calendarWeekAllDayShelfHeightFor(
+                            events: widget.events,
+                            weekDays: _weekDates,
+                          );
+                          final scrollOffset =
+                              calendarWeekEffectiveScrollOffset(
+                            widget.weekTimelineScrollController,
+                            widget.weekTimelineScrollOffset,
+                          );
+                          return CustomPaint(
+                            painter: CalendarWeekTimeGridPainter(
+                              scrollOffset: scrollOffset,
+                              allDayShelfHeight: allDayShelfHeight,
+                              borderedClipRects: hourClipRects,
+                              borderRadius: morphBorderRadius,
+                              lineColor: divider.withValues(alpha: 0.45),
+                              labelColor: onSurfaceVariant,
+                              hourLabelBuilder: calendarWeekHourLabel,
+                              lineOpacity: hourLineOpacity,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  // All-day shelf accent line fades in with week chrome
+                  // (month→week only; week→month relies on the live grid).
                   if (widget.weekMorphForward)
                     Positioned(
                       left: MonthTitleHeader.cardPadding,
                       right: MonthTitleHeader.cardPadding,
-                      top: dayAreaTop,
-                      bottom: 0,
-                      child: IgnorePointer(
-                        child: AnimatedBuilder(
-                          animation: widget.weekTimelineScrollController,
-                          builder: (context, _) {
-                            final allDayShelfHeight =
-                                calendarWeekAllDayShelfHeightFor(
-                              events: widget.events,
-                              weekDays: _weekDates,
-                            );
-                            final scrollOffset =
-                                calendarWeekEffectiveScrollOffset(
-                              widget.weekTimelineScrollController,
-                              widget.weekTimelineScrollOffset,
-                            );
-                            return CustomPaint(
-                              painter: CalendarWeekTimeGridPainter(
-                                scrollOffset: scrollOffset,
-                                allDayShelfHeight: allDayShelfHeight,
-                                borderedClipRects: hourClipRects,
-                                borderRadius: morphBorderRadius,
-                                lineColor: divider.withValues(alpha: 0.45),
-                                labelColor: onSurfaceVariant,
-                                hourLabelBuilder: calendarWeekHourLabel,
-                                lineOpacity: weekChromeOpacity,
-                              ),
-                            );
-                          },
-                        ),
+                      top: dayAreaTop + _frozenAllDayShelfHeight,
+                      height: 1,
+                      child: Opacity(
+                        opacity: weekChromeOpacity,
+                        child: ColoredBox(color: accentColor),
                       ),
                     ),
-                  // Week timeline fades out during week→month (mirrors month→week fade-in).
-                  if (!widget.weekMorphForward)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top:
-                          headerY +
-                          weekdayLabelHeight +
-                          calendarWeekHeaderGap +
-                          calendarWeekDayColumnTopInset,
-                      bottom: 0,
-                      child: IgnorePointer(
-                        child: Opacity(
-                          opacity: weekChromeOpacity,
-                          child: CalendarWeekTimeline(
-                            weekStart: widget.weekStart,
-                            events: widget.events,
-                            todoMarkers: widget.todoMarkers,
-                            weekStartsMonday: widget.weekStartsMonday,
-                            initialScrollOffset: widget.weekTimelineScrollOffset,
-                            showWeekdayHeader: false,
-                            entryFadeEnabled: false,
-                            interactive: false,
-                            onEventTap: (_) {},
-                            onTodoTap: (_) {},
-                            onSlotTap: (_, _) {},
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Weekday headers slide between month and week Y — full labels both ends.
+                  // Weekday headers slide between month and week Y — lerped style.
                   Positioned(
                     left: MonthTitleHeader.cardPadding,
                     right: MonthTitleHeader.cardPadding,
@@ -3075,7 +3105,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                     height: weekdayLabelHeight,
                     child: WeekdayHeaderRow(
                       weekStartsMonday: widget.weekStartsMonday,
-                      labelStyle: widget.weekWeekdayStyle,
+                      labelStyle: weekdayLabelStyle,
                     ),
                   ),
                 ],
