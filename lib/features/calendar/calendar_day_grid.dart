@@ -5,7 +5,6 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
-import 'package:voyager/features/calendar/calendar_day_entry_stack.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
 class CalendarDayIndicator {
@@ -307,101 +306,103 @@ class CalendarDayCell extends StatelessWidget {
       headerUsed += 2 + style.dotSize;
     }
     const eventGap = 2.0;
-    final entries = inMonth
-        ? calendarDayEntriesForDay(
-            events: events,
-            todos: todoMarkers,
-            day: date,
-          )
-        : const <CalendarDayEntry>[];
-    final visibleEntries = calendarVisibleEntryCount(
+    final eventAreaHeight =
+        (layoutHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
+    final visibleEvents = calendarVisibleEventCount(
       cellHeight: layoutHeight,
       style: style,
-      entryCount: entries.length,
+      eventCount: events.length,
       hasIndicators: indicators.isNotEmpty,
     );
-    final barHeight = visibleEntries > 0
+    final barHeight = visibleEvents > 0
         ? calendarMonthEventBarHeight(
             cellHeight: layoutHeight,
             style: style,
-            visibleEventCount: visibleEntries,
+            visibleEventCount: visibleEvents,
             hasIndicators: indicators.isNotEmpty,
           )
         : 0.0;
-    final eventAreaHeight = (layoutHeight - headerUsed - eventGap)
-        .clamp(0.0, double.infinity);
     final availableHeight =
         (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
     final clampedEventAreaHeight =
         eventAreaHeight.clamp(0.0, availableHeight);
 
+    final showTodos =
+        inMonth && showTodoIcons && todoMarkers.isNotEmpty;
+
     return ClipRect(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
         children: [
-          Opacity(
-            opacity: dayNumberOpacity.clamp(0.0, 1.0),
-            child: CalendarDayNumber(
-              date: date,
-              month: month,
-              fontSize: style.fontSize,
-              mutedWhenAdjacent: !inMonth,
-              adjacentTextT: adjacentTextT,
-              isSelected: isSelected,
-            ),
-          ),
-          if (indicators.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Opacity(
-              opacity: entryOpacity.clamp(0.0, 1.0),
-              child: CalendarDayIndicatorDots(
-                indicators: indicators,
-                dotSize: style.dotSize,
-              ),
-            ),
-          ],
-          if (inMonth && visibleEntries > 0 && !hideEntries) ...[
-            const SizedBox(height: 2),
-            Opacity(
-              opacity: entryOpacity.clamp(0.0, 1.0),
-              child: SizedBox(
-                height: clampedEventAreaHeight,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var i = 0; i < visibleEntries; i++) ...[
-                      if (i > 0) const SizedBox(height: 1),
-                      Builder(
-                        builder: (context) {
-                          final entry = entries[i];
-                          final entryHeight = entry.isTodo
-                              ? calendarWeekTaskBarHeight.clamp(0.0, barHeight)
-                              : barHeight;
-                          final eventFontSize = calendarMonthEventFontSize(
-                            barHeight: entry.isTodo
-                                ? entryHeight
-                                : barHeight,
-                            style: style,
-                          );
-                          return SizedBox(
-                            height: entryHeight,
-                            child: CalendarDayEntryBar(
-                              entry: entry,
-                              fontSize: eventFontSize,
-                              height: entryHeight,
-                              onTap: onEntryTap == null
-                                  ? null
-                                  : () => onEntryTap!(entry),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ],
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Opacity(
+                opacity: dayNumberOpacity.clamp(0.0, 1.0),
+                child: CalendarDayNumber(
+                  date: date,
+                  month: month,
+                  fontSize: style.fontSize,
+                  mutedWhenAdjacent: !inMonth,
+                  adjacentTextT: adjacentTextT,
+                  isSelected: isSelected,
                 ),
               ),
+              if (indicators.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Opacity(
+                  opacity: entryOpacity.clamp(0.0, 1.0),
+                  child: CalendarDayIndicatorDots(
+                    indicators: indicators,
+                    dotSize: style.dotSize,
+                  ),
+                ),
+              ],
+              if (inMonth && visibleEvents > 0 && !hideEntries) ...[
+                const SizedBox(height: 2),
+                Opacity(
+                  opacity: entryOpacity.clamp(0.0, 1.0),
+                  child: SizedBox(
+                    height: clampedEventAreaHeight,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < visibleEvents; i++) ...[
+                          if (i > 0) const SizedBox(height: 1),
+                          SizedBox(
+                            height: barHeight,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final eventFontSize =
+                                    calendarMonthEventFontSize(
+                                  barHeight: barHeight,
+                                  style: style,
+                                );
+                                return CalendarDayEventBar(
+                                  event: events[i],
+                                  fontSize: eventFontSize,
+                                  height: barHeight,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (showTodos)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Opacity(
+                opacity: entryOpacity.clamp(0.0, 1.0),
+                child: CalendarDayTodoIcons(markers: todoMarkers),
+              ),
             ),
-          ],
         ],
       ),
     );
@@ -433,6 +434,13 @@ class CalendarDayCell extends StatelessWidget {
             dotSize: style.eventDotSize,
             maxDots: style.maxEventLines,
             baseOpacity: entryOpacity,
+          ),
+        ],
+        if (inMonth && showTodoIcons && todoMarkers.isNotEmpty) ...[
+          const SizedBox(height: 1),
+          Opacity(
+            opacity: entryOpacity.clamp(0.0, 1.0),
+            child: CalendarDayTodoIcons(markers: todoMarkers),
           ),
         ],
       ],
