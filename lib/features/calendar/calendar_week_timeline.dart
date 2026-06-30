@@ -255,17 +255,33 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.showWeekdayHeader) ...[
-              const SizedBox(height: calendarWeekHeaderTopPadding),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: metrics.horizontalPadding),
-                child: WeekdayHeaderRow(
-                  weekStartsMonday: widget.weekStartsMonday,
-                  labelStyle: weekdayStyle,
-                ),
+            // Always reserve the header space so that day-column layout is
+            // stable regardless of showWeekdayHeader. The morph animation
+            // hides the header via showWeekdayHeader: false while keeping a
+            // separate sliding header in the morph layer above.
+            Visibility(
+              visible: widget.showWeekdayHeader,
+              maintainState: true,
+              maintainSize: true,
+              maintainAnimation: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: calendarWeekHeaderTopPadding),
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: metrics.horizontalPadding,
+                    ),
+                    child: WeekdayHeaderRow(
+                      weekStartsMonday: widget.weekStartsMonday,
+                      labelStyle: weekdayStyle,
+                    ),
+                  ),
+                  const SizedBox(height: calendarWeekHeaderGap),
+                ],
               ),
-              const SizedBox(height: calendarWeekHeaderGap),
-            ],
+            ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: metrics.horizontalPadding),

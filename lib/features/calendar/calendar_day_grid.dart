@@ -428,10 +428,11 @@ class CalendarDayCell extends StatelessWidget {
         ),
         if (inMonth && events.isNotEmpty) ...[
           const SizedBox(height: 1),
-          CalendarDayEventDots(
+          CalendarFadedEventDots(
             events: events,
             dotSize: style.eventDotSize,
             maxDots: style.maxEventLines,
+            baseOpacity: entryOpacity,
           ),
         ],
       ],
@@ -692,6 +693,7 @@ class MorphDayEventStack extends StatefulWidget {
     required this.morphReverse,
     this.layoutDayLayoutSize,
     this.frozenMetrics,
+    this.opacity = 1,
   });
 
   final List<CalendarEvent> events;
@@ -707,6 +709,9 @@ class MorphDayEventStack extends StatefulWidget {
 
   /// Pre-computed from [CalendarLayoutCache] — avoids per-cell work on frame 1.
   final MorphDayEventFrozenMetrics? frozenMetrics;
+
+  /// Fades year dots during chained week↔year zoom transitions.
+  final double opacity;
 
   static const maxYearDots = 3;
   static const maxMonthEvents = 4;
@@ -847,11 +852,13 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       }
     }
 
-    return RepaintBoundary(
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          for (var i = count - 1; i >= MorphDayEventStack.maxYearDots; i--)
+    return Opacity(
+      opacity: widget.opacity.clamp(0.0, 1.0),
+      child: RepaintBoundary(
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            for (var i = count - 1; i >= MorphDayEventStack.maxYearDots; i--)
             _buildEventMarker(
               event: widget.events[i],
               index: i,
@@ -880,6 +887,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
               yearX: yearXOffsets[i],
             ),
         ],
+      ),
       ),
     );
   }
@@ -1090,6 +1098,62 @@ class CalendarDayEventBar extends StatelessWidget {
         style: AppFonts.style(fontSize: fontSize, height: 1),
       ),
     );
+  }
+}
+
+/// Opacity for year-tile event dots during chained week↔year zoom morphs.
+///
+/// Only [CalendarFadedEventDots] listens to this — the year grid widget tree
+/// stays cached across animation frames.
+class CalendarMorphYearDotsOpacity extends InheritedWidget {
+  const CalendarMorphYearDotsOpacity({
+    super.key,
+    required this.opacity,
+    required super.child,
+  });
+
+  final double opacity;
+
+  static double morphOpacityOf(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<CalendarMorphYearDotsOpacity>()
+            ?.opacity ??
+        1.0;
+  }
+
+  @override
+  bool updateShouldNotify(CalendarMorphYearDotsOpacity old) =>
+      old.opacity != opacity;
+}
+
+/// Year-view event dots that fade during chained week↔year zoom morphs.
+class CalendarFadedEventDots extends StatelessWidget {
+  const CalendarFadedEventDots({
+    super.key,
+    required this.events,
+    required this.dotSize,
+    this.maxDots = 3,
+    this.baseOpacity = 1,
+  });
+
+  final List<CalendarEvent> events;
+  final double dotSize;
+  final int maxDots;
+  final double baseOpacity;
+
+  @override
+  Widget build(BuildContext context) {
+    final opacity =
+        (baseOpacity * CalendarMorphYearDotsOpacity.morphOpacityOf(context))
+            .clamp(0.0, 1.0);
+    if (opacity <= 0) return const SizedBox.shrink();
+    final dots = CalendarDayEventDots(
+      events: events,
+      dotSize: dotSize,
+      maxDots: maxDots,
+    );
+    if (opacity >= 1) return dots;
+    return Opacity(opacity: opacity, child: dots);
   }
 }
 

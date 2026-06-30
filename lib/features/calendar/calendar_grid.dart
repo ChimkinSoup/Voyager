@@ -57,6 +57,8 @@ export 'calendar_day_grid.dart'
     show
         CalendarDayCell,
         CalendarDayEventDots,
+        CalendarFadedEventDots,
+        CalendarMorphYearDotsOpacity,
         CalendarDayIndicator,
         CalendarDayNumber,
         MorphDayEventStack,
