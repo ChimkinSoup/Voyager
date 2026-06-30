@@ -88,9 +88,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarTodoMarker>? _weekMorphTodos;
 
   static const _sidebarWidth = 350.0;
-  static const _zoomDuration = Duration(milliseconds: 6000);
-  static const _weekMorphDuration = Duration(milliseconds: 6000);
-  static const _chainedMorphDuration = Duration(milliseconds: 4000);
+  static const _zoomDuration = Duration(milliseconds: 600);
+  static const _weekMorphDuration = Duration(milliseconds: 600);
+  static const _chainedMorphDuration = Duration(milliseconds: 400);
 
   bool _isChainedWeekToYear = false;
   bool _isChainedYearToWeek = false;
@@ -1338,7 +1338,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 events: events,
                 indicators: indicators,
                 todoMarkers: todoMarkers,
-                showTodoIcons: false,
+                showTodoIcons: true,
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
                 hiddenWeekRow: hiddenWeekRow,
@@ -3296,7 +3296,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
       events: dayEvents,
       indicators: dayIndicators,
       todoMarkers: dayTodos,
-      showTodoIcons: false,
+      showTodoIcons: dayTodos.isNotEmpty,
       hideEntries: false,
       entryOpacity: progress.monthEntryOpacity,
       dayNumberOpacity: (1.0 - t).clamp(0.0, 1.0),
