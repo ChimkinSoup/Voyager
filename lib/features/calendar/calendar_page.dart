@@ -426,7 +426,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       animation: _weekMorphController,
       builder: (context, _) {
         final t = Curves.easeInOutCubic.transform(_weekMorphController.value);
-        final opacity = (_weekMorphForward ? t : 1.0 - t).clamp(0.0, 1.0);
+        // t=0 month, t=1 week — week header visible at week end, hidden at month end.
+        final opacity = t.clamp(0.0, 1.0);
         if (opacity <= 0) return const SizedBox.shrink();
         return Opacity(
           opacity: opacity,
@@ -637,6 +638,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _weekMorphController.duration = duration;
     }
 
+    // Set to 1.0 before setState so the very first build frame renders at
+    // the week-view end of the animation — prevents a one-frame flash of the
+    // month-view state.
+    _weekMorphController.value = 1.0;
+
     setState(() {
       _isWeekMorphing = true;
       _weekMorphForward = false;
@@ -648,7 +654,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
       _weekMorphTodos = List<CalendarTodoMarker>.from(_latestTodos);
     });
-    _weekMorphController.value = 1.0;
 
     _startWeekMorphAnimation(
       generation: generation,
@@ -1155,6 +1160,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _immediatelySwitchToYear();
   }
 
+  void _instantSwitchToWeekView(bool weekStartsMonday) {
+    _abortMorphAnimation();
+    final morphMonth = _mode == CalendarViewMode.year
+        ? _monthTargetForYear(_focused.year)
+        : DateTime(_focused.year, _focused.month, 1);
+    _immediatelySwitchToWeek(weekStartsMonday, morphMonth);
+  }
+
   // ---------------------------------------------------------------------------
   // Header / toolbar
   // ---------------------------------------------------------------------------
@@ -1437,31 +1450,80 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       );
 
       if (!_weekMorphForward) {
+        // week→month: morph layer behind, live grid on top fading out.
+        //
+        // The live grid is built directly (not via _calendarGrid) so we can:
+        //  • entryFadeEnabled: false — events start at full opacity, preventing
+        //    a blank-panel flash caused by a fresh state's entry-fade at 0.
+        //  • showWeekdayHeader: false — the morph layer owns the single sliding
+        //    weekday header for both directions; hiding it here eliminates the
+        //    duplicate-header artifact without any crossfade gymnastics.
+        final reverseLiveGrid = Card(
+          margin: EdgeInsets.zero,
+          color: calendarPanelBackgroundColor(context),
+          child: CalendarWeekTimeline(
+            weekStart: _weekStart(anchor, weekStartsMonday),
+            events: activeEvents,
+            todoMarkers: activeTodos,
+            weekStartsMonday: weekStartsMonday,
+            scrollController: _weekTimelineScrollController,
+            showWeekdayHeader: false,
+            entryFadeEnabled: false,
+            interactive: false,
+            onEventTap: (_) {},
+            onTodoTap: (_) {},
+            onSlotTap: (_, _) {},
+          ),
+        );
+
+        // Live grid behind, morph layer above. The morph panel starts
+        // transparent (panelOpacity = monthFade = 0 at t=1) so the live grid
+        // shows through. As the animation progresses the panel fades in and
+        // the live grid fades out. The morph layer's weekday header sits above
+        // the live grid from frame 0, so it's always visible — no duplication
+        // because the live grid has showWeekdayHeader: false.
         return Stack(
           fit: StackFit.expand,
           children: [
-            // Live week view stays underneath so events/tasks are visible at
-            // the start and get gradually covered as the panel fades in.
-            IgnorePointer(
-              child: CalendarWeekTimeline(
-                weekStart: _weekStart(anchor, weekStartsMonday),
-                events: activeEvents,
-                todoMarkers: activeTodos,
-                weekStartsMonday: weekStartsMonday,
-                scrollController: _weekTimelineScrollController,
-                entryFadeEnabled: false,
-                interactive: false,
-                onEventTap: (_) {},
-                onTodoTap: (_) {},
-                onSlotTap: (_, _) {},
-              ),
+            AnimatedBuilder(
+              animation: _weekMorphController,
+              child: IgnorePointer(child: reverseLiveGrid),
+              builder: (context, child) {
+                final opacity = Curves.easeInOut
+                    .transform(_weekMorphController.value.clamp(0.0, 1.0));
+                return Opacity(opacity: opacity, child: child);
+              },
             ),
             morphLayer,
           ],
         );
       }
 
-      return morphLayer;
+      final liveWeekGrid = _calendarGrid(
+        events: activeEvents,
+        indicators: activeIndicators,
+        todoMarkers: activeTodos,
+        showTodoIcons: false,
+        weekStartsMonday: weekStartsMonday,
+        mode: CalendarViewMode.week,
+        focused: _weekStart(anchor, weekStartsMonday),
+      );
+
+      // month→week: keep the week grid alive behind the morph so the
+      // ScrollController is never detached — prevents a scroll jump on handoff.
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Visibility(
+            visible: false,
+            maintainState: true,
+            maintainSize: true,
+            maintainAnimation: true,
+            child: IgnorePointer(child: liveWeekGrid),
+          ),
+          morphLayer,
+        ],
+      );
     }
 
     if (_isZooming &&
@@ -1501,6 +1563,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         fullWeekdayStyle: fullWeekdayStyle,
         yearMonthNameStyle: yearMonthNameStyle,
         monthTitleStyle: monthTitleStyleForMorph,
+        chainedYearWeekTransition:
+            _isChainedWeekToYear || _isChainedYearToWeek,
         yearGrid: _calendarGrid(
           events: activeEvents,
           indicators: activeIndicators,
@@ -1557,6 +1621,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           children: [
             const Spacer(),
             if (ref.watch(devSettingsProvider).showCalendarInstantViewSwitch) ...[
+              OutlinedButton(
+                onPressed: () => _instantSwitchToWeekView(
+                  ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true,
+                ),
+                child: const Text('Week'),
+              ),
+              const SizedBox(height: 4),
               OutlinedButton(
                 onPressed: () => _instantSwitchToMonthView(
                   ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true,
@@ -2074,6 +2145,7 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
               fullWeekdayStyle: full,
               yearMonthNameStyle: yearName,
               monthTitleStyle: monthTitle,
+              chainedYearWeekTransition: false,
               yearGrid: CalendarGrid(
                 mode: CalendarViewMode.year,
                 focused: DateTime(morphMonth.year, 1, 1),
@@ -2111,6 +2183,8 @@ class _MorphProgress extends InheritedWidget {
     required this.dividerColor,
     required this.adjacentColor,
     required this.monthMorphEventMetrics,
+    required this.chainedYearWeekTransition,
+    required this.yearEventDotsOpacity,
     required super.child,
   });
 
@@ -2126,12 +2200,22 @@ class _MorphProgress extends InheritedWidget {
   /// Event-bar metrics indexed by event count — from [CalendarLayoutCache].
   final List<MorphDayEventFrozenMetrics> monthMorphEventMetrics;
 
+  /// True during the year zoom leg of a chained week↔year transition.
+  final bool chainedYearWeekTransition;
+
+  /// Fades year-tile event dots in/out during chained week↔year zoom.
+  final double yearEventDotsOpacity;
+
   static _MorphProgress of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_MorphProgress>()!;
 
   @override
   bool updateShouldNotify(_MorphProgress old) =>
-      old.t != t || old.styleT != styleT || old.morphReverse != morphReverse;
+      old.t != t ||
+      old.styleT != styleT ||
+      old.morphReverse != morphReverse ||
+      old.chainedYearWeekTransition != chainedYearWeekTransition ||
+      old.yearEventDotsOpacity != yearEventDotsOpacity;
 }
 
 /// Bifurcated morph stack — isolated from parent rebuilds during the animation.
@@ -2156,6 +2240,7 @@ class _MorphAnimationLayer extends StatefulWidget {
     required this.events,
     required this.todoMarkers,
     required this.monthMorphEventMetrics,
+    this.chainedYearWeekTransition = false,
   });
 
   final AnimationController controller;
@@ -2176,6 +2261,7 @@ class _MorphAnimationLayer extends StatefulWidget {
   final List<CalendarEvent> events;
   final List<CalendarTodoMarker> todoMarkers;
   final List<MorphDayEventFrozenMetrics> monthMorphEventMetrics;
+  final bool chainedYearWeekTransition;
 
   @override
   State<_MorphAnimationLayer> createState() => _MorphAnimationLayerState();
@@ -2306,9 +2392,12 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
       child: IgnorePointer(
         child: AnimatedBuilder(
           animation: widget.controller,
-          child: IgnorePointer(child: _yearGridChild),
+          child: _yearGridChild,
           builder: (context, yearGridChild) {
             final t = Curves.easeInOutCubic.transform(widget.controller.value);
+            final yearEventDotsOpacity = widget.chainedYearWeekTransition
+                ? (widget.morphReverse ? t : (1.0 - t))
+                : 1.0;
             final bgRect = widget.morphReverse
                 ? Rect.lerp(_fullAreaRect, widget.tileRect, t)!
                 : Rect.lerp(widget.tileRect, _fullAreaRect, t)!;
@@ -2331,10 +2420,20 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
               dividerColor: Theme.of(context).dividerColor,
               adjacentColor: calendarAdjacentMonthColor(context),
               monthMorphEventMetrics: widget.monthMorphEventMetrics,
+              chainedYearWeekTransition: widget.chainedYearWeekTransition,
+              yearEventDotsOpacity: yearEventDotsOpacity,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Transform(transform: _yearTransform, child: yearGridChild),
+                  Transform(
+                    transform: _yearTransform,
+                    child: widget.chainedYearWeekTransition
+                        ? CalendarMorphYearDotsOpacity(
+                            opacity: yearEventDotsOpacity,
+                            child: yearGridChild!,
+                          )
+                        : yearGridChild!,
+                  ),
                   Positioned(
                     left: bgRect.left,
                     top: bgRect.top,
@@ -2550,6 +2649,8 @@ class _MorphCell extends StatelessWidget {
             builder: (context, constraints) {
               final dayLayoutSize = _dayLayoutDiameter(dayFontSize)
                   .clamp(0.0, constraints.maxHeight);
+              final chained = progress.chainedYearWeekTransition;
+              final dotsOpacity = chained ? progress.yearEventDotsOpacity : 1.0;
               final showEvents = events.isNotEmpty && inMonth;
               final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
                 morphReverse: progress.morphReverse,
@@ -2599,10 +2700,15 @@ class _MorphCell extends StatelessWidget {
                           ),
                           if (inMonth && events.isNotEmpty) ...[
                             const SizedBox(height: 1),
-                            CalendarDayEventDots(
-                              events: events,
-                              dotSize: MonthDayCellStyle.compact.eventDotSize,
-                              maxDots: MonthDayCellStyle.compact.maxEventLines,
+                            Opacity(
+                              opacity: dotsOpacity.clamp(0.0, 1.0),
+                              child: CalendarDayEventDots(
+                                events: events,
+                                dotSize:
+                                    MonthDayCellStyle.compact.eventDotSize,
+                                maxDots:
+                                    MonthDayCellStyle.compact.maxEventLines,
+                              ),
                             ),
                           ],
                         ],
@@ -2646,9 +2752,12 @@ class _MorphCell extends StatelessWidget {
                           dayLayoutSize: dayLayoutSize,
                           layoutDayLayoutSize: layoutDayLayoutSize,
                           morphReverse: progress.morphReverse,
+                          opacity: dotsOpacity,
                           frozenMetrics: progress.monthMorphEventMetrics[
-                              events.length
-                                  .clamp(0, MorphDayEventStack.maxMonthEvents)],
+                              events.length.clamp(
+                                0,
+                                MorphDayEventStack.maxMonthEvents,
+                              )],
                         ),
                       ),
                     ?todoOverlay,
@@ -2949,11 +3058,8 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             final weekChromeOpacity =
                 Curves.easeInOut.transform(t.clamp(0.0, 1.0));
             final monthEntryOpacity = (1.0 - t).clamp(0.0, 1.0);
-            // week→month: panel fades in to cover the live week grid underneath;
-            // borders and hour lines are provided by the live grid so the morph
-            // layer doesn't double-paint them.
-            final panelOpacity =
-                widget.weekMorphForward ? 1.0 : monthFade.clamp(0.0, 1.0);
+            // week→month: borders and hour lines are provided by the live grid
+            // underneath (which fades out), so the morph layer doesn't double-paint.
             final morphBorderOpacity =
                 widget.weekMorphForward ? t.clamp(0.0, 1.0) : 0.0;
             final hourLineOpacity =
@@ -2985,12 +3091,14 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Panel: always opaque in month→week; fades in during
-                  // week→month to progressively cover the live week grid.
+                  // Panel background.
+                  // month→week: always opaque (month card is the canvas).
+                  // week→month: fades in with monthFade so the live grid on
+                  //   top crossfades cleanly into the month card appearance.
                   Positioned.fromRect(
                     rect: widget.monthCardRect,
                     child: Opacity(
-                      opacity: panelOpacity,
+                      opacity: widget.weekMorphForward ? 1.0 : monthFade,
                       child: Card(
                         margin: EdgeInsets.zero,
                         color: calendarPanelBackgroundColor(context),
@@ -3097,7 +3205,10 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                         child: ColoredBox(color: accentColor),
                       ),
                     ),
-                  // Weekday headers slide between month and week Y — lerped style.
+                  // Weekday header slides between month and week Y for both
+                  // directions. The live grid's own weekday header is hidden
+                  // (`showWeekdayHeader: false`) during week→month so this is
+                  // the single owner of the header label throughout the morph.
                   Positioned(
                     left: MonthTitleHeader.cardPadding,
                     right: MonthTitleHeader.cardPadding,
