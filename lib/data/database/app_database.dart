@@ -279,6 +279,16 @@ class SyncConflictsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('PendingUploadData')
+class PendingUploadsTable extends Table {
+  TextColumn get documentId => text()();
+  TextColumn get collectionName => text()();
+  DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {documentId, collectionName};
+}
+
 @DriftDatabase(
   tables: [
     JournalsTable,
@@ -293,13 +303,14 @@ class SyncConflictsTable extends Table {
     SettingsTable,
     TagColorsTable,
     SyncConflictsTable,
+    PendingUploadsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -543,6 +554,9 @@ class AppDatabase extends _$AppDatabase {
           migrator,
           settingsTable.geometricTextureVariationFloor,
         );
+      }
+      if (from < 30) {
+        await migrator.createTable(pendingUploadsTable);
       }
     },
   );
