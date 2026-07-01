@@ -16,7 +16,7 @@ flowchart TB
     warmupData["shellDataWarmupProvider"]
     frag --> pubspec --> provider
     provider --> warmupData
-  end 
+  end
 
   subgraph params["3. Parameters"]
     defaults["GeometricTextureParams.defaults"]

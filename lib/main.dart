@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -9,7 +8,6 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
-import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/features/hotkeys/quick_popups.dart';
 import 'package:voyager/firebase_options.dart';
@@ -49,10 +47,6 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
 
   Future<void> _bootstrap() async {
     if (!mounted) return;
-    final db = ref.read(databaseProvider);
-    final authRepo = ref.read(authRepositoryProvider);
-    OutboxSyncWorker.initialize(db, FirebaseFirestore.instance, authRepo);
-
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final deviceId = await ensureDeviceId(settingsRepo);
     if (!mounted) return;
@@ -202,9 +196,6 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
     if (isAuthenticated) {
       _schedulePostAuthWarmup();
       _startWeatherRefreshTimer();
-      if (OutboxSyncWorker.isInitialized) {
-        OutboxSyncWorker.instance.startDraining();
-      }
     } else {
       _stopWeatherRefreshTimer();
     }

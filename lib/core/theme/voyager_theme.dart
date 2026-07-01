@@ -171,10 +171,7 @@ class VoyagerTheme {
         titleTextStyle: textTheme.titleLarge,
         contentTextStyle: textTheme.bodyMedium,
       ),
-      snackBarTheme: SnackBarThemeData(
-        backgroundColor: const Color(0xFF30303A),
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface),
-      ),
+      snackBarTheme: SnackBarThemeData(contentTextStyle: textTheme.bodyMedium),
       tooltipTheme: TooltipThemeData(
         textStyle: textTheme.bodySmall?.copyWith(color: colorScheme.onSurface),
         decoration: BoxDecoration(

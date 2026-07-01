@@ -57,10 +57,8 @@ bool remoteVersionWins({
 /// Keeps a local soft-delete when remote payloads omit [deletedAt].
 DateTime? mergeDeletedAtFromRemote(
   Map<String, dynamic> data,
-  DateTime? localDeletedAt, {
-  bool remoteWins = true,
-}) {
-  if (!remoteWins) return localDeletedAt;
+  DateTime? localDeletedAt,
+) {
   final remoteDeleted = parseFirestoreDate(data['deletedAt']);
   if (remoteDeleted != null) return remoteDeleted;
   return localDeletedAt;
@@ -263,7 +261,7 @@ JournalEntry mergeJournalEntryFromRemote(
         remoteUpdated,
     updatedAt: resolvedUpdated,
     version: resolvedVersion,
-    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt, remoteWins: metadataRemoteWins),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
 }
 
@@ -405,6 +403,6 @@ TodoTask mergeTodoTaskFromRemote(
         remoteUpdated,
     updatedAt: resolvedUpdated,
     version: resolvedVersion,
-    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt, remoteWins: metadataRemoteWins),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
 }

@@ -30,7 +30,6 @@ abstract class JournalRepository {
   Future<void> softDeleteEntry(String id);
   Future<void> hardDeleteEntry(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
-  Future<List<JournalEntry>> getAllEntries({bool includeDeleted = true});
 }
 
 abstract class TodoRepository {
@@ -50,8 +49,6 @@ abstract class TodoRepository {
   Future<void> upsertTask(TodoTask task, {bool recordLocalActivity = true});
   Future<void> softDeleteTask(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
-  Future<List<TodoTask>> getAllTasks({bool includeDeleted = true});
-  Future<TodoTask?> getTask(String id);
 }
 
 abstract class CalendarRepository {
