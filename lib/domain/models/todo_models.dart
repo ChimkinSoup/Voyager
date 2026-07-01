@@ -104,4 +104,42 @@ class TodoTask extends SoftDeletable {
       parentTaskId: parentTaskId,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+    'listId': listId,
+    'title': title,
+    'notes': notes,
+    'dueDate': dueDate?.toIso8601String(),
+    'completed': completed,
+    'starred': starred,
+    'sortOrder': sortOrder,
+    'preStarSortOrder': preStarSortOrder,
+    'dueDateSetAt': dueDateSetAt?.toIso8601String(),
+    'parentTaskId': parentTaskId,
+  };
+
+  factory TodoTask.fromJson(Map<String, dynamic> json) {
+    return TodoTask(
+      id: json['id'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
+      updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
+      version: json['version'] as int? ?? 0,
+      deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt'] as String).toUtc() : null,
+      listId: json['listId'] as String,
+      title: json['title'] as String,
+      notes: json['notes'] as String?,
+      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate'] as String).toUtc() : null,
+      completed: json['completed'] as bool? ?? false,
+      starred: json['starred'] as bool? ?? false,
+      sortOrder: json['sortOrder'] as int? ?? 0,
+      preStarSortOrder: json['preStarSortOrder'] as int?,
+      dueDateSetAt: json['dueDateSetAt'] != null ? DateTime.parse(json['dueDateSetAt'] as String).toUtc() : null,
+      parentTaskId: json['parentTaskId'] as String?,
+    );
+  }
 }

@@ -111,6 +111,48 @@ class JournalEntry extends SoftDeletable {
       guidedPrompt: guidedPrompt ?? this.guidedPrompt,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+    'journalId': journalId,
+    'title': title,
+    'body': body,
+    'richBodyJson': richBodyJson,
+    'entryDate': entryDate.toIso8601String(),
+    'timestamp': timestamp?.toIso8601String(),
+    'tags': tags,
+    'mood': mood,
+    'quoteId': quoteId,
+    'customQuote': customQuote,
+    'weatherIcon': weatherIcon,
+    'guidedPrompt': guidedPrompt,
+  };
+
+  factory JournalEntry.fromJson(Map<String, dynamic> json) {
+    return JournalEntry(
+      id: json['id'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
+      updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
+      version: json['version'] as int? ?? 0,
+      deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt'] as String).toUtc() : null,
+      journalId: json['journalId'] as String,
+      title: json['title'] as String,
+      body: json['body'] as String,
+      entryDate: DateTime.parse(json['entryDate'] as String).toUtc(),
+      richBodyJson: json['richBodyJson'] as String?,
+      timestamp: json['timestamp'] != null ? DateTime.parse(json['timestamp'] as String).toUtc() : null,
+      tags: List<String>.from(json['tags'] as List? ?? const []),
+      mood: json['mood'] as int?,
+      quoteId: json['quoteId'] as String?,
+      customQuote: json['customQuote'] as String?,
+      weatherIcon: json['weatherIcon'] as String?,
+      guidedPrompt: json['guidedPrompt'] as String?,
+    );
+  }
 }
 
 class TagColor {

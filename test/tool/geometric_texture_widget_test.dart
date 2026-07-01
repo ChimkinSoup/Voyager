@@ -21,9 +21,10 @@ void main() {
             width: 400,
             height: 300,
             child: GeometricTexture(
-              program: program,
-              baseColor: const Color(0xFF1B1B22),
-            ),
+            program: program,
+            baseColor: const Color(0xFF1B1B22),
+            accentColor: Colors.blue,
+          ),  ),
           ),
         ),
       ),

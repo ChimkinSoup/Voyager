@@ -506,6 +506,28 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     });
   }
 
+  /// Evicts entries from [_pendingEntries] that have been confirmed saved to the
+  /// database — including entries that were soft-deleted (e.g. by an import).
+  /// [allDbIds] must include deleted entry IDs so that stale pending entries
+  /// whose rows were imported with [deletedAt] set are also evicted, preventing
+  /// them from inflating the journal badge count.
+  void _reconcilePendingEntries(Set<String> allDbIds) {
+    if (_pendingEntries.isEmpty) return;
+    final toEvict = _pendingEntryIds
+        .where((id) => allDbIds.contains(id))
+        .toList();
+    if (toEvict.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        for (final id in toEvict) {
+          _pendingEntries.remove(id);
+          _pendingEntryIds.remove(id);
+        }
+      });
+    });
+  }
+
   DateTime _nextEntryTimestamp() {
     final now = utcNow();
     final last = _lastEntryCreatedAt;
@@ -544,7 +566,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   List<JournalEntry> _buildDisplayEntries(List<JournalEntry> entries) {
     final persisted = sortJournalEntriesNewestFirst(
-      entries.where((entry) => !_pendingEntries.containsKey(entry.id)),
+      entries.where((entry) => 
+          !_pendingEntries.containsKey(entry.id) &&
+          !_optimisticallyHiddenJournalIds.contains(entry.journalId)),
     );
     final pending = [
       for (final id in _pendingEntryIds)
@@ -594,18 +618,31 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     required String entryListScope,
     required List<JournalEntry> displayEntries,
     required bool entriesLoading,
+    required Set<String> dbEntryIds,
   }) {
+    // If database counts are loaded, they are our source of truth
+    if (persistedCounts != null) {
+      final dbCount = persistedCounts[journalId] ?? 0;
+      // Only count pending entries that are genuinely not yet in the DB.
+      // Stale entries that were already persisted (but not yet evicted by
+      // _reconcilePendingEntries) are excluded here so counts are accurate
+      // immediately after deletion, without waiting for the next frame.
+      final pendingCount = _pendingEntryIds
+          .where((id) =>
+              _pendingEntries[id]?.journalId == journalId &&
+              !dbEntryIds.contains(id))
+          .length;
+      return dbCount + pendingCount;
+    }
+
+    // Fallback if database counts are still loading:
     if (entryListScope == journalId) {
-      if (entriesLoading) {
-        return persistedCounts?[journalId] ?? 0;
-      }
       return _scopedEntryCount(displayEntries, journalId);
     }
     if (entryListScope == allJournalEntriesScope) {
-      return persistedCounts?[journalId] ??
-          displayEntries.where((entry) => entry.journalId == journalId).length;
+      return displayEntries.where((entry) => entry.journalId == journalId).length;
     }
-    return persistedCounts?[journalId] ?? 0;
+    return 0;
   }
 
   void _scrollEntryListToTop() {
@@ -1330,7 +1367,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     required String entriesScope,
   }) {
           final entryCountsAsync = ref.watch(journalEntryCountsProvider);
+          final allEntryIdsAsync = ref.watch(journalAllEntryIdsProvider);
           _reconcilePendingJournal(journals);
+          _reconcilePendingEntries(allEntryIdsAsync.valueOrNull ?? const {});
           final displayEntries = _buildDisplayEntries(entries);
           _reconcileSelectedEntryFromProvider(entries);
           final displayJournals = _displayJournals(journals);
@@ -1350,17 +1389,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
               : displayEntries
                   .where((e) => e.journalId == entryListScope)
                   .toList();
-          final selectedId = _selectedEntryId;
-          final selected = _selectedEntry;
-          if (_viewAllJournals &&
-              selectedId != null &&
-              selected != null &&
-              !filtered.any((entry) => entry.id == selectedId)) {
-            filtered = sortJournalEntriesNewestFirst([
-              _entryWithDraftBody(selected),
-              ...filtered,
-            ]);
-          }
           final accentJournal = _selectedEntry == null
               ? null
               : displayJournals.cast<Journal?>().firstWhere(
@@ -1397,6 +1425,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           }
 
           final countsByJournal = entryCountsAsync.valueOrNull;
+          // Use all DB IDs (including deleted) to filter pending entries:
+          // a pending entry is only "extra" if it's genuinely not yet in the DB
+          // at all — not if it's already there but soft-deleted.
+          final dbEntryIds = allEntryIdsAsync.valueOrNull ?? {for (final e in entries) e.id};
           final entryCounts = {
             for (final journal in displayJournals)
               journal.id: _entryCountForJournal(
@@ -1405,6 +1437,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                 entryListScope: entriesScope,
                 displayEntries: displayEntries,
                 entriesLoading: entriesLoading,
+                dbEntryIds: dbEntryIds,
               ),
           };
           final selectedJournal = displayJournals.cast<Journal?>().firstWhere(
