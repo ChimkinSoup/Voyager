@@ -159,9 +159,34 @@ class DevGeometricTextureSection extends ConsumerWidget {
           ),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => unawaited(notifier.resetToDefaults()),
-              child: const Text('Reset to defaults'),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => unawaited(notifier.resetToDefaults()),
+                  child: const Text('Reset to defaults'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final current = ref.read(geometricAnimationTriggerProvider);
+                    ref.read(geometricAnimationTriggerProvider.notifier).state = (
+                      count: current.count + 1,
+                      speedMultiplier: 1.0,
+                    );
+                  },
+                  child: const Text('Trigger animation'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final current = ref.read(geometricAnimationTriggerProvider);
+                    ref.read(geometricAnimationTriggerProvider.notifier).state = (
+                      count: current.count + 1,
+                      speedMultiplier: 10.0,
+                    );
+                  },
+                  child: const Text('Trigger slow (10x)'),
+                ),
+              ],
             ),
           ),
         ],
