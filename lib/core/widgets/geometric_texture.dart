@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 /// Tunable parameters for the equilateral-triangle gradient texture shader.
 class GeometricTextureParams {
@@ -11,6 +12,9 @@ class GeometricTextureParams {
     this.focalPointX = 1.0,
     this.focalPointY = 0.5,
     this.variationFloor = 0.75,
+    this.flashBrightness = 0.5,
+    this.flashDensity = 0.3,
+    this.flashSpeed = 1.0,
   });
 
   /// Triangle density. Higher = smaller, more numerous triangles.
@@ -31,6 +35,15 @@ class GeometricTextureParams {
 
   /// Minimum per-triangle shade (0–1). Higher values reduce very dark triangles.
   final double variationFloor;
+  
+  /// Brightness of the flashing animation (0-1).
+  final double flashBrightness;
+  
+  /// Density/Probability of a triangle flashing at any given time (0-1).
+  final double flashDensity;
+  
+  /// Speed of the continuous flashing cycle (0.1-5.0).
+  final double flashSpeed;
 
   static const defaults = GeometricTextureParams();
 
@@ -41,6 +54,9 @@ class GeometricTextureParams {
     double? focalPointX,
     double? focalPointY,
     double? variationFloor,
+    double? flashBrightness,
+    double? flashDensity,
+    double? flashSpeed,
   }) {
     return GeometricTextureParams(
       scale: scale ?? this.scale,
@@ -49,6 +65,9 @@ class GeometricTextureParams {
       focalPointX: focalPointX ?? this.focalPointX,
       focalPointY: focalPointY ?? this.focalPointY,
       variationFloor: variationFloor ?? this.variationFloor,
+      flashBrightness: flashBrightness ?? this.flashBrightness,
+      flashDensity: flashDensity ?? this.flashDensity,
+      flashSpeed: flashSpeed ?? this.flashSpeed,
     );
   }
 
@@ -60,7 +79,10 @@ class GeometricTextureParams {
         other.focalSpread == focalSpread &&
         other.focalPointX == focalPointX &&
         other.focalPointY == focalPointY &&
-        other.variationFloor == variationFloor;
+        other.variationFloor == variationFloor &&
+        other.flashBrightness == flashBrightness &&
+        other.flashDensity == flashDensity &&
+        other.flashSpeed == flashSpeed;
   }
 
   @override
@@ -71,6 +93,9 @@ class GeometricTextureParams {
     focalPointX,
     focalPointY,
     variationFloor,
+    flashBrightness,
+    flashDensity,
+    flashSpeed,
   );
 }
 
@@ -102,13 +127,34 @@ class GeometricTexture extends StatefulWidget {
   State<GeometricTexture> createState() => _GeometricTextureState();
 }
 
-class _GeometricTextureState extends State<GeometricTexture> {
+class _GeometricTextureState extends State<GeometricTexture> with SingleTickerProviderStateMixin {
   FragmentShader? _shader;
+  late final Ticker _ticker;
+  
+  // Normalized time [0, 1) that loops every 10 seconds.
+  final ValueNotifier<double> _timeNotifier = ValueNotifier(0.0);
+  
+  // Throttle repaints to 30fps to halve GPU load. The flashing effect
+  // is imperceptibly different at 30fps vs 60fps.
+  static const _minFrameGap = Duration(milliseconds: 33); // ~30fps
+  Duration _lastPaint = Duration.zero;
 
   @override
   void initState() {
     super.initState();
     _shader = widget.program?.fragmentShader();
+    _ticker = createTicker(_onTick)..start();
+  }
+
+  void _onTick(Duration elapsed) {
+    // Throttle: skip frames that arrive faster than 30fps
+    if (elapsed - _lastPaint < _minFrameGap) return;
+    _lastPaint = elapsed;
+    
+    // Advance normalized time, looping every 10 seconds
+    final newTime = (elapsed.inMilliseconds / 10000.0) % 1.0;
+    
+    _timeNotifier.value = newTime;
   }
 
   @override
@@ -123,7 +169,9 @@ class _GeometricTextureState extends State<GeometricTexture> {
 
   @override
   void dispose() {
+    _ticker.dispose();
     _shader?.dispose();
+    _timeNotifier.dispose();
     super.dispose();
   }
 
@@ -135,12 +183,19 @@ class _GeometricTextureState extends State<GeometricTexture> {
       return ColoredBox(color: widget.baseColor);
     }
 
-    return CustomPaint(
-      painter: GeometricTexturePainter(
-        shader: shader,
-        baseColor: widget.baseColor,
-        accentColor: widget.accentColor,
-        params: widget.params,
+    // RepaintBoundary is critical: it creates a separate compositing layer
+    // for the shader, so its 30fps repaints are completely isolated from
+    // the rest of the widget tree. Buttons, lists, and navigation are
+    // unaffected by the shader animation.
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: GeometricTexturePainter(
+          shader: shader,
+          baseColor: widget.baseColor,
+          accentColor: widget.accentColor,
+          params: widget.params,
+          timeNotifier: _timeNotifier,
+        ),
       ),
     );
   }
@@ -152,12 +207,14 @@ class GeometricTexturePainter extends CustomPainter {
     required this.baseColor,
     required this.accentColor,
     required this.params,
-  });
+    required this.timeNotifier,
+  }) : super(repaint: timeNotifier);
 
   final FragmentShader shader;
   final Color baseColor;
   final Color accentColor;
   final GeometricTextureParams params;
+  final ValueNotifier<double> timeNotifier;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -172,6 +229,10 @@ class GeometricTexturePainter extends CustomPainter {
     // 7     float u_variation_floor
     // 8-11  vec4  u_base_color
     // 12-15 vec4  u_accent_color
+    // 16    float u_time
+    // 17    float u_flash_brightness
+    // 18    float u_flash_density
+    // 19    float u_flash_speed
     shader.setFloat(0, size.width);
     shader.setFloat(1, size.height);
     shader.setFloat(2, params.scale);
@@ -188,6 +249,10 @@ class GeometricTexturePainter extends CustomPainter {
     shader.setFloat(13, accentColor.g);
     shader.setFloat(14, accentColor.b);
     shader.setFloat(15, accentColor.a);
+    shader.setFloat(16, timeNotifier.value);
+    shader.setFloat(17, params.flashBrightness);
+    shader.setFloat(18, params.flashDensity);
+    shader.setFloat(19, params.flashSpeed);
 
     final paint = Paint()..shader = shader;
     canvas.drawRect(Offset.zero & size, paint);
@@ -198,6 +263,7 @@ class GeometricTexturePainter extends CustomPainter {
     return oldDelegate.shader != shader ||
         oldDelegate.baseColor != baseColor ||
         oldDelegate.accentColor != accentColor ||
-        oldDelegate.params != params;
+        oldDelegate.params != params ||
+        oldDelegate.timeNotifier != timeNotifier;
   }
 }
