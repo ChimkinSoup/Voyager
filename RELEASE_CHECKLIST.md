@@ -217,7 +217,3 @@ Compare all (B):              PASS / FAIL —
 CRDT opChainValid issues:     NONE / DETAILS —
 Notes:
 ```
-
-
-
-# Check import/export works, especially for todo lists, and deleting journals keeps journal count consistent

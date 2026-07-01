@@ -38,8 +38,6 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/features/settings/services/data_export_service.dart';
-import 'package:voyager/features/settings/services/data_import_service.dart';
 import 'package:voyager/domain/repositories/weather_api_client.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/domain/services/periodic_prompt_service.dart';
@@ -89,21 +87,6 @@ final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
 
 final syncConflictRepositoryProvider = Provider<SyncConflictRepository>((ref) {
   return DriftSyncConflictRepository(ref.watch(databaseProvider));
-});
-
-final dataExportServiceProvider = Provider<DataExportService>((ref) {
-  return DataExportService(
-    ref.watch(journalRepositoryProvider),
-    ref.watch(todoRepositoryProvider),
-  );
-});
-
-final dataImportServiceProvider = Provider<DataImportService>((ref) {
-  return DataImportService(
-    ref.watch(databaseProvider),
-    ref.watch(journalRepositoryProvider),
-    ref.watch(todoRepositoryProvider),
-  );
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -345,25 +328,12 @@ void invalidateJournalEntryProviders(Ref ref) {
   ref.invalidate(journalEntriesProvider);
   ref.invalidate(journalListEntriesProvider);
   ref.invalidate(journalEntryCountsProvider);
-  ref.invalidate(journalAllEntryIdsProvider);
 }
 
 final journalEntryCountsProvider =
     FutureProvider<Map<String, int>>((ref) async {
   ref.keepAlive();
   return ref.watch(journalRepositoryProvider).countEntriesByJournal();
-});
-
-/// All persisted journal entry IDs, **including deleted ones**.
-/// Used by the journal page to evict stale in-memory pending entries that were
-/// soft-deleted (e.g. by an import), which wouldn't appear in the
-/// non-deleted [journalListEntriesProvider] list.
-final journalAllEntryIdsProvider = FutureProvider<Set<String>>((ref) async {
-  ref.keepAlive();
-  final entries = await ref
-      .watch(journalRepositoryProvider)
-      .getAllEntries(includeDeleted: true);
-  return {for (final e in entries) e.id};
 });
 
 final journalListEntriesProvider = FutureProvider.family<

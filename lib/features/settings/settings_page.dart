@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -116,103 +114,6 @@ class SettingsPage extends ConsumerWidget {
                 _save(ref, settings.copyWith(hideCompletedTasks: v)),
           ),
           WeatherLocationTile(settings: settings),
-          const SizedBox(height: 16),
-          Text('Backup & Restore', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Export Backup'),
-            subtitle: const Text('Export all journal entries and tasks to a ZIP file'),
-            leading: const Icon(PhosphorIconsRegular.downloadSimple),
-            onTap: () async {
-              try {
-                String? selectedDirectory =
-                    await FilePicker.platform.getDirectoryPath();
-                if (selectedDirectory == null) return;
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Exporting backup...')),
-                  );
-                }
-
-                final file =
-                    await ref.read(dataExportServiceProvider).exportDataToZip();
-
-                final finalPath =
-                    '$selectedDirectory/voyager_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
-                await file.copy(finalPath);
-                await file.delete();
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Backup exported to: $finalPath'),
-                      duration: const Duration(seconds: 5),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Export failed: $e')),
-                  );
-                }
-              }
-            },
-          ),
-          ListTile(
-            title: const Text('Import Backup'),
-            subtitle: const Text(
-              'Restore journal entries and tasks from a ZIP file',
-            ),
-            leading: const Icon(PhosphorIconsRegular.uploadSimple),
-            onTap: () async {
-              try {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['zip'],
-                );
-                if (result == null || result.files.single.path == null) return;
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Importing backup...')),
-                  );
-                }
-
-                final file = File(result.files.single.path!);
-                await ref.read(dataImportServiceProvider).importFromZip(file);
-
-                // Refresh UI caches immediately
-                ref.invalidate(journalsProvider);
-                ref.invalidate(journalEntriesProvider);
-                ref.invalidate(journalListEntriesProvider);
-                ref.invalidate(journalEntryCountsProvider);
-                ref.invalidate(journalAllEntryIdsProvider);
-                ref.invalidate(todoListsProvider);
-                ref.invalidate(todoTasksProvider);
-                ref.invalidate(allTodoTasksProvider);
-                ref.invalidate(todoListStatsProvider);
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Backup imported successfully! Draining sync queue...',
-                      ),
-                      duration: Duration(seconds: 4),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Import failed: $e')),
-                  );
-                }
-              }
-            },
-          ),
           const ListTile(
             title: Text('About'),
             subtitle: Text('Voyager — local-first journal and productivity'),
