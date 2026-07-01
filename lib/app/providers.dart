@@ -541,6 +541,9 @@ final geometricTextureParamsProvider =
 final devGeometricTexturePanelOpenProvider =
     StateProvider<bool>((ref) => false);
 
+/// Forces the geometric texture animation to restart when incremented, with an optional speed multiplier.
+final geometricAnimationTriggerProvider = StateProvider<({int count, double speedMultiplier})>((ref) => (count: 0, speedMultiplier: 1.0));
+
 final shellDataWarmupProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
   final listsFuture = ref.read(todoListsProvider.future);

@@ -91,24 +91,47 @@ class GeometricTexture extends StatefulWidget {
     required this.baseColor,
     required this.accentColor,
     this.params = GeometricTextureParams.defaults,
+    this.animationSpeedMultiplier = 1.0,
   });
 
   final FragmentProgram? program;
   final Color baseColor;
   final Color accentColor;
   final GeometricTextureParams params;
+  final double animationSpeedMultiplier;
 
   @override
   State<GeometricTexture> createState() => _GeometricTextureState();
 }
 
-class _GeometricTextureState extends State<GeometricTexture> {
+class _GeometricTextureState extends State<GeometricTexture> with SingleTickerProviderStateMixin {
   FragmentShader? _shader;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
     _shader = widget.program?.fragmentShader();
+    
+    // Play a single sweep animation when the texture is first loaded.
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: (2600 * widget.animationSpeedMultiplier).toInt()),
+    );
+    
+    if (widget.program != null) {
+      _startAnimation();
+    }
+  }
+
+  void _startAnimation() {
+    // We only want it to play once, but we delay slightly so it's smooth
+    // after the initial app render.
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _controller.forward(from: 0.0);
+      }
+    });
   }
 
   @override
@@ -117,12 +140,18 @@ class _GeometricTextureState extends State<GeometricTexture> {
     if (oldWidget.program != widget.program) {
       _shader?.dispose();
       _shader = widget.program?.fragmentShader();
+      
+      if (oldWidget.program == null && widget.program != null) {
+        _startAnimation();
+      }
+      
       setState(() {});
     }
   }
 
   @override
   void dispose() {
+    _controller.dispose();
     _shader?.dispose();
     super.dispose();
   }
@@ -135,13 +164,19 @@ class _GeometricTextureState extends State<GeometricTexture> {
       return ColoredBox(color: widget.baseColor);
     }
 
-    return CustomPaint(
-      painter: GeometricTexturePainter(
-        shader: shader,
-        baseColor: widget.baseColor,
-        accentColor: widget.accentColor,
-        params: widget.params,
-      ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return CustomPaint(
+          painter: GeometricTexturePainter(
+            shader: shader,
+            baseColor: widget.baseColor,
+            accentColor: widget.accentColor,
+            params: widget.params,
+            animationTime: _controller.value,
+          ),
+        );
+      },
     );
   }
 }
@@ -152,12 +187,14 @@ class GeometricTexturePainter extends CustomPainter {
     required this.baseColor,
     required this.accentColor,
     required this.params,
+    required this.animationTime,
   });
 
   final FragmentShader shader;
   final Color baseColor;
   final Color accentColor;
   final GeometricTextureParams params;
+  final double animationTime;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -172,6 +209,7 @@ class GeometricTexturePainter extends CustomPainter {
     // 7     float u_variation_floor
     // 8-11  vec4  u_base_color
     // 12-15 vec4  u_accent_color
+    // 16    float u_animation_time
     shader.setFloat(0, size.width);
     shader.setFloat(1, size.height);
     shader.setFloat(2, params.scale);
@@ -188,6 +226,7 @@ class GeometricTexturePainter extends CustomPainter {
     shader.setFloat(13, accentColor.g);
     shader.setFloat(14, accentColor.b);
     shader.setFloat(15, accentColor.a);
+    shader.setFloat(16, animationTime);
 
     final paint = Paint()..shader = shader;
     canvas.drawRect(Offset.zero & size, paint);
@@ -198,6 +237,8 @@ class GeometricTexturePainter extends CustomPainter {
     return oldDelegate.shader != shader ||
         oldDelegate.baseColor != baseColor ||
         oldDelegate.accentColor != accentColor ||
-        oldDelegate.params != params;
+        oldDelegate.params != params ||
+        oldDelegate.animationTime != animationTime;
   }
 }
+

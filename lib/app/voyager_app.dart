@@ -120,13 +120,16 @@ class _GeometricBackground extends ConsumerWidget {
     final program = ref.watch(geometricShaderProvider).valueOrNull;
     final params = ref.watch(geometricTextureParamsProvider);
     final baseColor = Theme.of(context).scaffoldBackgroundColor;
+    final animationTrigger = ref.watch(geometricAnimationTriggerProvider);
 
     return Positioned.fill(
       child: GeometricTexture(
+        key: ValueKey(animationTrigger.count),
         program: program,
         baseColor: baseColor,
         accentColor: accent,
         params: params,
+        animationSpeedMultiplier: animationTrigger.speedMultiplier,
       ),
     );
   }
