@@ -253,6 +253,15 @@ class DriftJournalRepository implements JournalRepository {
     }
   }
 
+  @override
+  Future<List<JournalEntry>> getAllEntries({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.journalEntriesTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapEntry)
+        .toList();
+  }
+
   Journal _mapJournal(JournalsTableData row) => Journal(
     id: row.id,
     name: row.name,
@@ -477,6 +486,23 @@ class DriftTodoRepository implements TodoRepository {
         )..where((t) => t.id.equals(row.id))).go();
       }
     }
+  }
+
+  @override
+  Future<List<TodoTask>> getAllTasks({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.todoTasksTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapTask)
+        .toList();
+  }
+
+  @override
+  Future<TodoTask?> getTask(String id) async {
+    final row = await (_db.select(
+      _db.todoTasksTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapTask(row);
   }
 }
 
