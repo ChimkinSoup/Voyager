@@ -372,8 +372,6 @@ class _AddListMenuItem extends PopupMenuEntry<Object?> {
 }
 
 class _AddListMenuItemState extends State<_AddListMenuItem> {
-  var _hovered = false;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -387,37 +385,24 @@ class _AddListMenuItemState extends State<_AddListMenuItem> {
         itemPadding.right,
         4,
       ),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: Material(
-          color: _hovered
-              ? accent.withValues(alpha: 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(VoyagerMenuTheme.radius),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: widget.onSelect,
-            borderRadius: BorderRadius.circular(VoyagerMenuTheme.radius),
-            child: SizedBox(
-              height: 40,
-              child: Center(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      widget.label,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: theme.colorScheme.onPrimary,
-                      ),
-                    ),
+      child: SizedBox(
+        height: 40,
+        child: Center(
+          child: Material(
+            color: accent,
+            borderRadius: BorderRadius.circular(10),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: widget.onSelect,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                child: Text(
+                  widget.label,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onPrimary,
                   ),
                 ),
               ),
@@ -477,7 +462,7 @@ class _RoundedDropdownMenuItemState<T>
     final theme = Theme.of(context);
     final itemPadding = VoyagerMenuTheme.itemPadding(theme);
     const highlightRadius = BorderRadius.all(
-      Radius.circular(VoyagerMenuTheme.radius),
+      Radius.circular(8),
     );
     final topInset =
         widget._isFirst ? RoundedDropdown.menuTopPadding : 0.0;

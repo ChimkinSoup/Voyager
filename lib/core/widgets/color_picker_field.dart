@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -401,9 +402,12 @@ class _ColorSwatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final ringColor = theme.colorScheme.onSurface.withValues(alpha: 0.28);
     final usedRingColor = theme.colorScheme.onSurface.withValues(alpha: 0.88);
     final diameter = radius * 2;
+    
+    final swatchColor = Color(colorValue);
+    final isDark = swatchColor.computeLuminance() < 0.5;
+    final checkColor = isDark ? Colors.white : Colors.black;
 
     return InkWell(
       onTap: onTap,
@@ -413,13 +417,23 @@ class _ColorSwatch extends StatelessWidget {
         height: diameter,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Color(colorValue),
-          border: selected
-              ? Border.all(color: ringColor, width: 2.5)
-              : used
+          color: swatchColor,
+          border: (!selected && used)
               ? Border.all(color: usedRingColor, width: 3)
               : null,
+          boxShadow: selected ? [
+            BoxShadow(
+              color: swatchColor.withValues(alpha: 0.6),
+              blurRadius: 8,
+              spreadRadius: 2,
+            ),
+          ] : null,
         ),
+        child: selected ? Icon(
+          PhosphorIconsFill.checkFat,
+          color: checkColor,
+          size: radius * 1.2,
+        ) : null,
       ),
     );
   }

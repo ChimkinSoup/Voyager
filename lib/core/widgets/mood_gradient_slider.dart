@@ -21,6 +21,7 @@ class MoodGradientSlider extends StatelessWidget {
         inactiveTrackColor: Colors.transparent,
         overlayColor: accent.withValues(alpha: 0.16),
         thumbColor: accent,
+        valueIndicatorColor: accent,
         trackShape: GradientSliderTrackShape(
           gradient: LinearGradient(colors: [Colors.white, accent]),
           inactiveColor: Theme.of(context).colorScheme.surface,

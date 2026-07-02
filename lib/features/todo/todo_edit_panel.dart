@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -488,23 +489,31 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   Future<void> _addSubtask() async {
     final title = _subtaskController.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      _subtaskFocusNode.requestFocus();
+      return;
+    }
+    _subtaskController.clear();
+    _subtaskFocusNode.requestFocus();
+    
+    final minSortOrder = _subtasks.isEmpty 
+        ? 0 
+        : _subtasks.map((e) => e.sortOrder).reduce(math.min);
+
     final now = utcNow();
     final subtask = TodoTask(
       id: newId(),
       listId: widget.task.listId,
       parentTaskId: widget.task.id,
       title: title,
-      sortOrder: _subtasks.length,
+      sortOrder: minSortOrder - 1,
       createdAt: now,
       updatedAt: now,
     );
     await ref.read(todoRepositoryProvider).upsertTask(subtask);
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(subtask);
-    _subtaskController.clear();
     await _loadSubtasks();
     widget.onChanged();
-    _subtaskFocusNode.requestFocus();
   }
 
   Future<void> _toggleSubtask(TodoTask subtask, bool completed) async {
@@ -534,13 +543,27 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   Future<void> _reorderSubtasks(int oldIndex, int newIndex) async {
-    final batch = applyReorder(_subtasks, oldIndex, newIndex);
-    if (batch == null) return;
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    if (oldIndex == newIndex) return;
 
-    setState(() => _subtasks = batch.tasks);
+    final subtasks = List<TodoTask>.from(_subtasks);
+    final item = subtasks.removeAt(oldIndex);
+    subtasks.insert(newIndex, item);
+
+    final updates = <TodoTask>[];
+    for (int i = 0; i < subtasks.length; i++) {
+      if (subtasks[i].sortOrder != i) {
+        updates.add(subtasks[i].copyWith(sortOrder: i));
+        subtasks[i] = subtasks[i].copyWith(sortOrder: i);
+      }
+    }
+
+    setState(() => _subtasks = subtasks);
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
-    for (final task in batch.tasks) {
+    for (final task in updates) {
       await repo.upsertTask(task);
       remoteSync.pushTodoTaskNow(task);
     }
@@ -1006,6 +1029,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
 
   void _finishEditing() {
     if (!_editing) return;
+    _editFocusNode.unfocus();
     setState(() => _editing = false);
     widget.onRename(_editController.text);
   }
@@ -1045,6 +1069,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          const SizedBox(width: 8),
           Checkbox(
             value: _displayCompleted,
             activeColor: widget.listColor,
@@ -1217,8 +1242,8 @@ class _MultilineStrikePainter extends CustomPainter {
           line.ascent +
           line.height / 2;
       canvas.drawLine(
-        Offset(line.left, y),
-        Offset(line.left + drawWidth, y),
+        Offset(line.left + textPadding.left, y),
+        Offset(line.left + textPadding.left + drawWidth, y),
         paint,
       );
       remaining -= line.width;

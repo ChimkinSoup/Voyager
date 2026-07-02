@@ -51,7 +51,7 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
           23,
           59,
         );
-    _colorValue = e?.colorValue ?? 0xFF7C9EFF;
+    _colorValue = e?.colorValue ?? 0;
     _recurrence = e?.recurrence ?? EventRecurrence.none;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _titleFocusNode.requestFocus();
@@ -86,6 +86,10 @@ class _EventEditorDialogState extends State<EventEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (_colorValue == 0) {
+      _colorValue = Theme.of(context).colorScheme.primary.toARGB32();
+    }
+    
     return EnterToSubmitScope(
       onSubmit: _submit,
       child: AlertDialog(

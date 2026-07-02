@@ -5,6 +5,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
+import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
@@ -194,13 +195,14 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
     final controller = TextEditingController(text: initial ?? '');
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => EnterToSubmitScope(
+        onSubmit: () => Navigator.pop(context, controller.text),
+        child: AlertDialog(
         title: Text(title),
         content: LabeledTextField(
           label: title,
           controller: controller,
           autofocus: true,
-          onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [
           TextButton(
@@ -212,6 +214,7 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
             child: const Text('OK'),
           ),
         ],
+      ),
       ),
     );
   }

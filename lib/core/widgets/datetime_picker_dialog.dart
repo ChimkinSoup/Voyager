@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 
 /// Shows a combined calendar + clock picker dialog.
 Future<DateTime?> showDateTimePickerDialog(
@@ -39,7 +40,17 @@ class _DateTimePickerDialogState extends State<DateTimePickerDialog> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Dialog(
+    return EnterToSubmitScope(
+      onSubmit: () => Navigator.of(context).pop(
+        DateTime(
+          _date.year,
+          _date.month,
+          _date.day,
+          _hour,
+          _minute,
+        ),
+      ),
+      child: Dialog(
       child: SizedBox(
         width: 680,
         child: Column(
@@ -108,6 +119,7 @@ class _DateTimePickerDialogState extends State<DateTimePickerDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
