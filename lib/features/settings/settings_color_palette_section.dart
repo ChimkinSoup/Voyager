@@ -99,7 +99,7 @@ class _SettingsColorPaletteSectionState
         ),
         const SizedBox(height: 12),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: VoyagerTextField(
@@ -118,8 +118,7 @@ class _SettingsColorPaletteSectionState
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Fa-f]')),
                 ],
                 decoration: InputDecoration(
-                  labelText: 'Add custom color',
-                  hintText: '7C9EFF',
+                  hintText: 'Add custom color (e.g. 7C9EFF)',
                   errorText: _hexError,
                 ),
                 onSubmitted: (_) => _addColor(),

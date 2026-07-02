@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
@@ -177,10 +178,12 @@ class _SearchEntryDialog extends ConsumerStatefulWidget {
 class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
+  late final FocusNode _titleFocusNode;
   late final FocusNode _bodyFocusNode;
   late JournalEntry _entry;
   late int? _mood;
   late String _weatherIcon;
+  bool _isSaved = false;
 
   @override
   void initState() {
@@ -188,15 +191,41 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     _entry = widget.entry;
     _titleController = TextEditingController(text: _entry.title);
     _bodyController = TextEditingController(text: _entry.body);
+    
+    _titleFocusNode = FocusNode();
+    _titleFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.tab && !HardwareKeyboard.instance.isShiftPressed) {
+        _bodyFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+    
     _bodyFocusNode = FocusNode();
+    _bodyFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
+        _save().then((_) {
+          if (mounted) Navigator.pop(context);
+        });
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+    
     _mood = _entry.mood;
     _weatherIcon = _entry.weatherIcon ?? 'sunny';
   }
 
   @override
   void dispose() {
+    if (!_isSaved) {
+      _save();
+    }
     _titleController.dispose();
     _bodyController.dispose();
+    _titleFocusNode.dispose();
     _bodyFocusNode.dispose();
     super.dispose();
   }
@@ -213,6 +242,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   );
 
   Future<void> _save() async {
+    _isSaved = true;
     final body = _bodyController.text.trimRight();
     final helper = SearchEntrySaveHelper(
       coordinator: ref.read(journalWriteCoordinatorProvider),
@@ -305,6 +335,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                   LabeledTextField(
                     label: 'Title',
                     controller: _titleController,
+                    focusNode: _titleFocusNode,
                     textInputAction: TextInputAction.next,
                     accentColor: _accentColor,
                     contentPadding: const EdgeInsets.fromLTRB(16, 16, 56, 16),

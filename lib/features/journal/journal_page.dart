@@ -58,6 +58,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   var _viewAllJournals = false;
   String? _lastViewedJournalId;
   final _optimisticallyHiddenJournalIds = <String>{};
+  final _optimisticallyHiddenEntryIds = <String>{};
   Journal? _pendingJournal;
   final _pendingEntries = <String, JournalEntry>{};
   final _pendingEntryIds = <String>[];
@@ -133,6 +134,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await ref.read(journalListEntriesProvider(journalId).future);
     if (!mounted) return;
     setState(() {
+      _optimisticallyHiddenEntryIds.clear();
+      if (_selectedEntry != null && _selectedEntry!.journalId != journalId) {
+        _selectedEntry = null;
+      }
       _journalFilter = journalId;
       _lastViewedJournalId = journalId;
       _viewAllJournals = false;
@@ -169,7 +174,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
     await ref.read(journalListEntriesProvider(allJournalEntriesScope).future);
     if (!mounted) return;
-    setState(() => _viewAllJournals = true);
+    setState(() {
+      _optimisticallyHiddenEntryIds.clear();
+      _viewAllJournals = true;
+    });
+    unawaited(_persistLastViewedJournal("ALL_JOURNALS"));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _writeEntryListScrollStorage(0);
@@ -179,7 +188,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   void _restoreFromSettings(AppSettings? settings) {
     final savedId = settings?.lastViewedJournalId;
-    if (savedId != null) {
+    if (savedId == "ALL_JOURNALS") {
+      _viewAllJournals = true;
+    } else if (savedId != null) {
       _journalFilter = savedId;
       _lastViewedJournalId = savedId;
     }
@@ -194,11 +205,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _appliedSavedPreferences = true;
 
     final savedId = settings.lastViewedJournalId;
-    final restoredJournalId = savedId != null &&
+    final isAll = savedId == "ALL_JOURNALS";
+    final restoredJournalId = !isAll && savedId != null &&
             journals.any((journal) => journal.id == savedId)
         ? savedId
         : null;
-    if (restoredJournalId == null &&
+    
+    if (!isAll && restoredJournalId == null &&
         settings.journalEntryListWidth == null) {
       return;
     }
@@ -206,7 +219,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
-        if (restoredJournalId != null) {
+        if (isAll) {
+          _viewAllJournals = true;
+        } else if (restoredJournalId != null) {
           _journalFilter = restoredJournalId;
           _lastViewedJournalId = restoredJournalId;
         }
@@ -398,6 +413,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _pendingEntryIds.removeWhere((id) => !_pendingEntries.containsKey(id));
     final remaining = allJournals.where((j) => j.id != journalId).toList();
     _viewAllJournals = true;
+    unawaited(_persistLastViewedJournal("ALL_JOURNALS"));
     _journalFilter = remaining
             .cast<Journal?>()
             .firstWhere(
@@ -563,11 +579,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       identifier: _entryListStorageKey(),
     );
   }
-
   List<JournalEntry> _buildDisplayEntries(List<JournalEntry> entries) {
     final persisted = sortJournalEntriesNewestFirst(
       entries.where((entry) => 
           !_pendingEntries.containsKey(entry.id) &&
+          !_optimisticallyHiddenEntryIds.contains(entry.id) &&
           !_optimisticallyHiddenJournalIds.contains(entry.journalId)),
     );
     final pending = [
@@ -705,7 +721,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       if (!mounted) return;
       _writeEntryListScrollStorage(0);
       _scrollEntryListToTop();
-      _bodyFocusNode.requestFocus();
+      _titleFocusNode.requestFocus();
     });
 
     unawaited(_finalizeNewEntry(entry, settings));
@@ -1218,10 +1234,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final entry = _selectedEntry;
     if (entry == null) return;
     final controller = TextEditingController(text: entry.customQuote ?? '');
-    final quote = await showDialog<String?>(
+    final result = await showDialog<bool?>(
       context: context,
       builder: (context) => EnterToSubmitScope(
-        onSubmit: () => Navigator.pop(context, controller.text),
+        onSubmit: () => Navigator.pop(context, true),
         child: AlertDialog(
         title: const Text('Edit quote'),
         content: SizedBox(
@@ -1233,24 +1249,25 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             minLines: 8,
             maxLines: 16,
             onSubmitted: (_) =>
-                Navigator.pop(context, controller.text),
+                Navigator.pop(context, true),
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Save'),
           ),
         ],
       ),
       ),
     );
+    final quote = controller.text;
     controller.dispose();
-    if (quote == null) return;
+    if (result == false) return;
     final updated = entry.copyWith(customQuote: quote.trim());
     await ref.read(journalRepositoryProvider).upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
@@ -1269,7 +1286,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await repo.upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
     if (!mounted) return;
-    setState(() => _selectedEntry = updated);
+    setState(() {
+      if (_viewAllJournals) {
+        _selectedEntry = updated;
+      } else {
+        _selectedEntry = null;
+        _optimisticallyHiddenEntryIds.add(entry.id);
+      }
+    });
     _invalidateJournalEntryCaches();
   }
 
@@ -1514,8 +1538,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               child: Row(
                                 children: [
                                   Expanded(
-                                    child: RoundedDropdown<String>(
-                                      value: journalFilter,
+                                    child: RoundedDropdown<String?>(
+                                      value: _viewAllJournals ? null : journalFilter,
                                       displayLabel: _viewAllJournals
                                           ? 'All journals'
                                           : null,
@@ -1547,7 +1571,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                               : entityManageMenuEntries,
                                       onManage: (journalId, action) =>
                                           _handleJournalManage(
-                                            journalId,
+                                            journalId!,
                                             action,
                                             displayJournals,
                                             entryCounts,
@@ -1567,8 +1591,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                           .toList(),
                                       onChanged: displayJournals.isEmpty
                                           ? null
-                                          : (v) =>
-                                              unawaited(_selectJournal(v)),
+                                          : (v) {
+                                              if (v != null) unawaited(_selectJournal(v));
+                                            },
                                     ),
                                   ),
                                   const SizedBox(width: 8),

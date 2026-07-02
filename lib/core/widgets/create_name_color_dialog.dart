@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 
@@ -9,6 +10,7 @@ Future<({String name, int color})?> showCreateNameColorDialog(
   required List<int> palette,
   required int initialColor,
   Set<int> usedColors = const {},
+  String submitLabel = 'Create',
 }) {
   return showDialog<({String name, int color})>(
     context: context,
@@ -17,6 +19,7 @@ Future<({String name, int color})?> showCreateNameColorDialog(
       palette: palette,
       initialColor: initialColor,
       usedColors: usedColors,
+      submitLabel: submitLabel,
     ),
   );
 }
@@ -27,12 +30,14 @@ class _CreateNameColorDialog extends StatefulWidget {
     required this.palette,
     required this.initialColor,
     required this.usedColors,
+    required this.submitLabel,
   });
 
   final String title;
   final List<int> palette;
   final int initialColor;
   final Set<int> usedColors;
+  final String submitLabel;
 
   @override
   State<_CreateNameColorDialog> createState() => _CreateNameColorDialogState();
@@ -67,7 +72,9 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return EnterToSubmitScope(
+      onSubmit: _submit,
+      child: AlertDialog(
       title: Text(widget.title),
       content: SizedBox(
         width: 520,
@@ -84,7 +91,6 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
                   setState(() => _showEmptyNameError = false);
                 }
               },
-              onSubmitted: (_) => _submit(),
             ),
             if (_showEmptyNameError) ...[
               const SizedBox(height: 6),
@@ -115,8 +121,9 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        FilledButton(onPressed: _submit, child: Text(widget.submitLabel)),
       ],
+      ),
     );
   }
 }
