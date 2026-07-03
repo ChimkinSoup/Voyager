@@ -398,7 +398,11 @@ class DriftTodoRepository implements TodoRepository {
   Future<List<TodoTask>> listSubtasks(String parentTaskId) async {
     final rows = await (_db.select(
       _db.todoTasksTable,
-    )..where((t) => t.parentTaskId.equals(parentTaskId))).get();
+    )
+      ..where((t) => t.parentTaskId.equals(parentTaskId))
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.sortOrder, mode: OrderingMode.asc)
+      ])).get();
     return rows.where((r) => r.deletedAt == null).map(_mapTask).toList();
   }
 

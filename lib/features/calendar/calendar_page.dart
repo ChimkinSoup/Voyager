@@ -1457,7 +1457,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             events: activeEvents,
             todoMarkers: activeTodos,
             weekStartsMonday: weekStartsMonday,
-            scrollController: _weekTimelineScrollController,
+            initialScrollOffset: _weekTimelineScrollOffset,
             showWeekdayHeader: false,
             entryFadeEnabled: false,
             interactive: false,

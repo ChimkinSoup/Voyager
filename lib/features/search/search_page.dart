@@ -21,6 +21,8 @@ import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/sync/journal_write_coordinator.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/search/search_entry_save_helper.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
@@ -34,6 +36,8 @@ class SearchPage extends ConsumerStatefulWidget {
 class _SearchPageState extends ConsumerState<SearchPage> {
   final _queryController = TextEditingController();
   final _queryFocusNode = FocusNode();
+
+  final Map<String, JournalEntry> _localUpdates = {};
 
   @override
   void dispose() {
@@ -78,9 +82,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               data: (entries) => journalsAsync.when(
                 skipLoadingOnReload: true,
                 data: (journals) {
+                  final mergedEntries = entries.map((e) {
+                    final local = _localUpdates[e.id];
+                    if (local != null && local.version >= e.version) {
+                      return local;
+                    }
+                    return e;
+                  }).toList();
                   final parsedQuery = _parseSearchQuery(_queryController.text);
                   final results = search.searchEntries(
-                    entries: entries,
+                    entries: mergedEntries,
                     query: parsedQuery.keywords,
                     tagFilter: parsedQuery.tag == null
                         ? null
@@ -119,10 +130,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             builder: (context) => _SearchEntryDialog(
                               entry: entry,
                               journals: journals,
-                              onSaved: () {
-                                ref.invalidate(journalEntriesProvider);
-                                ref.invalidate(journalListEntriesProvider);
-                                ref.invalidate(journalEntryCountsProvider);
+                              onSaved: (updatedEntry) {
+                                if (mounted) {
+                                  setState(() {
+                                    _localUpdates[updatedEntry.id] = updatedEntry;
+                                  });
+                                  ref.invalidate(journalEntriesProvider);
+                                  ref.invalidate(journalListEntriesProvider);
+                                  ref.invalidate(journalEntryCountsProvider);
+                                }
                               },
                             ),
                           );
@@ -169,7 +185,7 @@ class _SearchEntryDialog extends ConsumerStatefulWidget {
 
   final JournalEntry entry;
   final List<Journal> journals;
-  final VoidCallback onSaved;
+  final void Function(JournalEntry) onSaved;
 
   @override
   ConsumerState<_SearchEntryDialog> createState() => _SearchEntryDialogState();
@@ -218,10 +234,44 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     _weatherIcon = _entry.weatherIcon ?? 'sunny';
   }
 
+  JournalWriteCoordinator? _coordinator;
+  RemoteSyncService? _remoteSync;
+  JournalRepository? _journalRepository;
+
   @override
   void dispose() {
     if (!_isSaved) {
-      _save();
+      _isSaved = true;
+      final title = _titleController.text.trim();
+      final body = _bodyController.text.trimRight();
+      final mood = _mood;
+      final weatherIcon = _weatherIcon;
+      final entry = _entry;
+      final coordinator = _coordinator;
+      final remoteSync = _remoteSync;
+      final repo = _journalRepository;
+      final onSaved = widget.onSaved;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (coordinator != null && remoteSync != null && repo != null) {
+          final helper = SearchEntrySaveHelper(
+            coordinator: coordinator,
+            remoteSync: remoteSync,
+            journalRepository: repo,
+          );
+          final updated = await helper.saveEntry(
+            baseline: entry,
+            title: title,
+            body: body,
+            mood: mood,
+            weatherIcon: weatherIcon,
+            journalId: entry.journalId,
+          );
+          if (updated != null) {
+            onSaved(updated);
+          }
+        }
+      });
     }
     _titleController.dispose();
     _bodyController.dispose();
@@ -244,9 +294,12 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   Future<void> _save() async {
     _isSaved = true;
     final body = _bodyController.text.trimRight();
+    
+    // Use cached references to avoid calling ref.read() during dispose()
     final helper = SearchEntrySaveHelper(
-      coordinator: ref.read(journalWriteCoordinatorProvider),
-      remoteSync: ref.read(remoteSyncServiceProvider),
+      coordinator: _coordinator ?? ref.read(journalWriteCoordinatorProvider),
+      remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
+      journalRepository: _journalRepository ?? ref.read(journalRepositoryProvider),
     );
     final updated = await helper.saveEntry(
       baseline: _entry,
@@ -256,8 +309,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       weatherIcon: _weatherIcon,
       journalId: _entry.journalId,
     );
-    if (updated != null && mounted) setState(() => _entry = updated);
-    widget.onSaved();
+    if (updated != null) {
+      if (mounted) setState(() => _entry = updated);
+      widget.onSaved(updated);
+    }
   }
 
   Future<void> _changeEntryDate() async {
@@ -269,6 +324,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     final helper = SearchEntrySaveHelper(
       coordinator: ref.read(journalWriteCoordinatorProvider),
       remoteSync: ref.read(remoteSyncServiceProvider),
+      journalRepository: ref.read(journalRepositoryProvider),
     );
     final updated = await helper.saveEntry(
       baseline: _entry,
@@ -279,8 +335,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       journalId: _entry.journalId,
       entryDate: picked.toUtc(),
     );
-    if (updated != null && mounted) setState(() => _entry = updated);
-    widget.onSaved();
+    if (updated != null) {
+      if (mounted) setState(() => _entry = updated);
+      widget.onSaved(updated);
+    }
   }
 
   Future<void> _moveToJournal(String journalId) async {
@@ -288,6 +346,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     final helper = SearchEntrySaveHelper(
       coordinator: ref.read(journalWriteCoordinatorProvider),
       remoteSync: ref.read(remoteSyncServiceProvider),
+      journalRepository: ref.read(journalRepositoryProvider),
     );
     final updated = await helper.saveEntry(
       baseline: _entry,
@@ -297,8 +356,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       weatherIcon: _weatherIcon,
       journalId: journalId,
     );
-    if (updated != null && mounted) setState(() => _entry = updated);
-    widget.onSaved();
+    if (updated != null) {
+      if (mounted) setState(() => _entry = updated);
+      widget.onSaved(updated);
+    }
   }
 
   String _entryDateTimeLabel(BuildContext context) {
@@ -309,6 +370,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   @override
   Widget build(BuildContext context) {
+    _coordinator = ref.watch(journalWriteCoordinatorProvider);
+    _remoteSync = ref.watch(remoteSyncServiceProvider);
+    _journalRepository = ref.watch(journalRepositoryProvider);
+
     final dialogWidth = math.min(
       920.0,
       MediaQuery.sizeOf(context).width - 48,
@@ -316,7 +381,6 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
     return EnterToSubmitScope(
       onSubmit: () async {
-        await _save();
         if (context.mounted) Navigator.pop(context);
       },
       child: AlertDialog(
@@ -453,7 +517,6 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
         ),
         FilledButton(
           onPressed: () async {
-            await _save();
             if (context.mounted) Navigator.pop(context);
           },
           style: FilledButton.styleFrom(backgroundColor: _accentColor),

@@ -53,8 +53,7 @@ class CharacterSequenceCrdtMerger {
         mergedBody: mergedBody,
         snapshotBody: snapshotBody,
       );
-      final result = Map<String, dynamic>.from(latestSnapshot)
-        ..['body'] = body;
+      final result = Map<String, dynamic>.from(latestSnapshot)..['body'] = body;
       if (latestSnapshot.containsKey('notes')) {
         result['notes'] = body.isEmpty ? null : body;
       }
@@ -95,7 +94,7 @@ class CharacterSequenceCrdtMerger {
 
   bool _wins(CharacterOperation incoming, CharacterOperation existing) {
     if (incoming.deleted != existing.deleted) {
-      return incoming.logicalClock >= existing.logicalClock;
+      return incoming.deleted;
     }
     if (incoming.logicalClock != existing.logicalClock) {
       return incoming.logicalClock > existing.logicalClock;
@@ -142,10 +141,7 @@ class CharacterSequenceCrdtMerger {
     return snapshot['body'] as String? ?? snapshot['notes'] as String? ?? '';
   }
 
-  String _pickBody({
-    required String mergedBody,
-    required String snapshotBody,
-  }) {
+  String _pickBody({required String mergedBody, required String snapshotBody}) {
     if (mergedBody.isEmpty) return snapshotBody;
     if (snapshotBody.isEmpty) return mergedBody;
     // Guard against corrupted merges that interleave duplicate characters.

@@ -364,30 +364,34 @@ class CalendarDayCell extends StatelessWidget {
                   opacity: entryOpacity.clamp(0.0, 1.0),
                   child: SizedBox(
                     height: clampedEventAreaHeight,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var i = 0; i < visibleEvents; i++) ...[
-                          if (i > 0) const SizedBox(height: 1),
-                          SizedBox(
-                            height: barHeight,
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final eventFontSize =
-                                    calendarMonthEventFontSize(
-                                  barHeight: barHeight,
-                                  style: style,
-                                );
-                                return CalendarDayEventBar(
-                                  event: events[i],
-                                  fontSize: eventFontSize,
-                                  height: barHeight,
-                                );
-                              },
+                    child: OverflowBox(
+                      maxHeight: double.infinity,
+                      alignment: Alignment.topCenter,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < visibleEvents; i++) ...[
+                            if (i > 0) const SizedBox(height: 1),
+                            SizedBox(
+                              height: barHeight,
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final eventFontSize =
+                                      calendarMonthEventFontSize(
+                                    barHeight: barHeight,
+                                    style: style,
+                                  );
+                                  return CalendarDayEventBar(
+                                    event: events[i],
+                                    fontSize: eventFontSize,
+                                    height: barHeight,
+                                  );
+                                },
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),

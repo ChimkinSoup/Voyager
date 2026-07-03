@@ -37,7 +37,10 @@ class _AccentFocusBorderState extends State<AccentFocusBorder> {
     if (oldWidget.focusNode != widget.focusNode) {
       oldWidget.focusNode.removeListener(_handleFocusChanged);
       widget.focusNode.addListener(_handleFocusChanged);
-      _focused = widget.focusNode.hasFocus;
+    }
+    final focused = widget.focusNode.hasFocus;
+    if (_focused != focused) {
+      _focused = focused;
     }
   }
 
