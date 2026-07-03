@@ -75,6 +75,14 @@ class CharacterOpSession {
       }
       if (i < live.length) {
         posAfter = live[i].position;
+        var nextIdx = i + 1;
+        while (posAfter == posBefore && nextIdx < live.length) {
+          posAfter = live[nextIdx].position;
+          nextIdx++;
+        }
+        if (posAfter == posBefore) {
+          posAfter = null;
+        }
       }
 
       var cursorBefore = posBefore;
@@ -123,6 +131,7 @@ class CharacterOpSession {
         position: pos,
         character: char,
       );
+      _pendingOpIds.add(id);
     }
   }
 

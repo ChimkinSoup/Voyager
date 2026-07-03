@@ -13,6 +13,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -71,9 +72,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   Timer? _notesSaveTimer;
   var _lastNotesText = '';
 
+  late final Future<void> Function() _lifecycleFlushCallback;
+
   @override
   void initState() {
     super.initState();
+    _lifecycleFlushCallback = _lifecycleFlush;
+    PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
     _lastNonEmptyTitle = widget.task.title;
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
@@ -93,8 +98,20 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _remoteSync = ref.read(remoteSyncServiceProvider);
       _registerPendingNotesListener(widget.task.id);
       _setNotesEditingFlag(_notesFocusNode.hasFocus);
+      _remoteSync!.prepareEditingSession(
+        collection: FirestoreCollections.todoTasks,
+        documentId: widget.task.id,
+        initialText: _notesController.text,
+      ).then((_) {
+        if (!mounted) return;
+        setState(() {
+          _isSessionReady = true;
+        });
+      });
     });
   }
+
+  bool _isSessionReady = false;
 
   @override
   void didUpdateWidget(covariant TodoEditPanel oldWidget) {
@@ -108,6 +125,17 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _dueDate = widget.task.dueDate;
       _loadSubtasks();
       _registerPendingNotesListener(widget.task.id);
+      final remoteSync = ref.read(remoteSyncServiceProvider);
+      remoteSync.prepareEditingSession(
+        collection: FirestoreCollections.todoTasks,
+        documentId: widget.task.id,
+        initialText: _notesController.text,
+      ).then((_) {
+        if (!mounted) return;
+        setState(() {
+          _isSessionReady = true;
+        });
+      });
     }
   }
 
@@ -197,6 +225,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   @override
   void dispose() {
+    PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
     _titleSaveTimer?.cancel();
     _notesSaveTimer?.cancel();
     _unregisterPendingNotesListener(widget.task.id);
@@ -264,6 +293,10 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  Future<void> _lifecycleFlush() async {
+    await _save();
   }
 
   Future<void> _save({
@@ -875,6 +908,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 label: 'Notes',
                 controller: _notesController,
                 focusNode: _notesFocusNode,
+                enabled: _isSessionReady,
                 expands: true,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,

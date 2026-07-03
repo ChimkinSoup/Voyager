@@ -26,6 +26,7 @@ Future<void> configureDesktopWindow() async {
       await windowManager.show();
       await windowManager.maximize();
       await windowManager.focus();
+      await windowManager.setPreventClose(true);
     });
 
     _desktopWindowConfigured = true;

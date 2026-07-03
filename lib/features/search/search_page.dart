@@ -25,6 +25,7 @@ import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/search/search_entry_save_helper.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
@@ -84,8 +85,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 data: (journals) {
                   final mergedEntries = entries.map((e) {
                     final local = _localUpdates[e.id];
-                    if (local != null && local.version >= e.version) {
-                      return local;
+                    if (local != null) {
+                      if (local.version > e.version) return local;
+                      if (local.version == e.version && !local.updatedAt.isBefore(e.updatedAt)) return local;
                     }
                     return e;
                   }).toList();
@@ -201,9 +203,13 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   late String _weatherIcon;
   bool _isSaved = false;
 
+  late final Future<void> Function() _lifecycleFlushCallback;
+
   @override
   void initState() {
     super.initState();
+    _lifecycleFlushCallback = _lifecycleFlush;
+    PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
     _entry = widget.entry;
     _titleController = TextEditingController(text: _entry.title);
     _bodyController = TextEditingController(text: _entry.body);
@@ -240,6 +246,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   @override
   void dispose() {
+    PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
     if (!_isSaved) {
       _isSaved = true;
       final title = _titleController.text.trim();
@@ -313,6 +320,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       if (mounted) setState(() => _entry = updated);
       widget.onSaved(updated);
     }
+  }
+
+  Future<void> _lifecycleFlush() async {
+    await _save();
   }
 
   Future<void> _changeEntryDate() async {

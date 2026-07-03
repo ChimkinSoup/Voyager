@@ -72,8 +72,28 @@ class JournalDebugLogger extends ChangeNotifier {
   Future<void> loadFromSettings() async {
     final repo = _settingsRepository;
     if (repo == null) return;
+    
+    await _enqueue(() async {
+      await _pruneAndMarkSession();
+    });
+
     final settings = await repo.getSettings();
     applySettings(settings);
+  }
+
+  static const _appStartMarker = '=== APP START ===';
+
+  Future<void> _pruneAndMarkSession() async {
+    final file = File(await logFilePath());
+    if (await file.exists()) {
+      final content = await file.readAsString();
+      final splits = content.split(_appStartMarker);
+      if (splits.length > 2) {
+        final kept = splits.last;
+        await file.writeAsString('$_appStartMarker$kept');
+      }
+    }
+    await file.writeAsString('$_appStartMarker\n', mode: FileMode.append, flush: true);
   }
 
   void applySettings(AppSettings settings) {

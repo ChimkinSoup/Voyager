@@ -22,6 +22,7 @@ class TagHighlightedTextField extends StatefulWidget {
     this.cursorColor,
     this.useFocusGlow = true,
     this.highlightDebounce = const Duration(milliseconds: 200),
+    this.readOnly = false,
   });
 
   final TextEditingController controller;
@@ -39,6 +40,7 @@ class TagHighlightedTextField extends StatefulWidget {
   final Color? cursorColor;
   final bool useFocusGlow;
   final Duration highlightDebounce;
+  final bool readOnly;
 
   @override
   State<TagHighlightedTextField> createState() =>
@@ -176,6 +178,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
           child: TextField(
             controller: widget.controller,
             focusNode: widget.focusNode,
+            readOnly: widget.readOnly,
             scrollController: _scrollController,
             expands: widget.expands,
             maxLines: widget.expands ? null : widget.maxLines,

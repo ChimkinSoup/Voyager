@@ -54,6 +54,18 @@ class SearchEntrySaveHelper {
           result = saved;
         },
       );
+      // The search page doesn't maintain a CRDT editing session, so the
+      // debounced upload scheduled above would push empty char-ops — creating
+      // a gap in the CRDT history that causes corrupted-op-chain conflicts on
+      // next pull.  Cancel that upload and replace it with a full-text CRDT
+      // overwrite that wipes stale ops and re-seeds from the current body.
+      if (result != null) {
+        remoteSync.cancelDocument(
+          FirestoreCollections.journalEntries,
+          baseline.id,
+        );
+        await remoteSync.forceOverwriteJournalEntryText(result!);
+      }
       return result;
     } catch (e, st) {
       debugPrint('Error saving entry in SearchEntrySaveHelper: $e\n$st');
