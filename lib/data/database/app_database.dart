@@ -231,6 +231,8 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowConflictDocumentIds =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get devShowJournalRemotePullButton =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
   IntColumn get weatherChartRainColor => integer().nullable()();
@@ -310,7 +312,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -557,6 +559,12 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 30) {
         await migrator.createTable(pendingUploadsTable);
+      }
+      if (from < 31) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.devShowJournalRemotePullButton,
+        );
       }
     },
   );

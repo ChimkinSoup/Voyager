@@ -892,6 +892,7 @@ class DriftSettingsRepository implements SettingsRepository {
       devJournalDebugLog: row.devJournalDebugLog,
       devForceConflictUi: row.devForceConflictUi,
       devShowConflictDocumentIds: row.devShowConflictDocumentIds,
+      devShowJournalRemotePullButton: row.devShowJournalRemotePullButton,
       geometricTextureScale: row.geometricTextureScale,
       geometricTextureIntensity: row.geometricTextureIntensity,
       geometricTextureFocalSpread: row.geometricTextureFocalSpread,
@@ -953,6 +954,8 @@ class DriftSettingsRepository implements SettingsRepository {
             devForceConflictUi: Value(settings.devForceConflictUi),
             devShowConflictDocumentIds:
                 Value(settings.devShowConflictDocumentIds),
+            devShowJournalRemotePullButton:
+                Value(settings.devShowJournalRemotePullButton),
             geometricTextureScale: Value(settings.geometricTextureScale),
             geometricTextureIntensity: Value(settings.geometricTextureIntensity),
             geometricTextureFocalSpread:

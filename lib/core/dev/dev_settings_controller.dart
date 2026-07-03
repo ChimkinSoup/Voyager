@@ -21,6 +21,7 @@ class DevSettingsController extends ChangeNotifier {
 
   bool devForceConflictUi = false;
   bool showConflictDocumentIds = false;
+  bool showJournalRemotePullButton = false;
 
   Future<void> loadFromSettings() async {
     final repo = _settingsRepository;
@@ -53,6 +54,11 @@ class DevSettingsController extends ChangeNotifier {
 
     if (showConflictDocumentIds != settings.devShowConflictDocumentIds) {
       showConflictDocumentIds = settings.devShowConflictDocumentIds;
+      changed = true;
+    }
+
+    if (showJournalRemotePullButton != settings.devShowJournalRemotePullButton) {
+      showJournalRemotePullButton = settings.devShowJournalRemotePullButton;
       changed = true;
     }
 
@@ -94,6 +100,13 @@ class DevSettingsController extends ChangeNotifier {
     await _persist();
   }
 
+  Future<void> setShowJournalRemotePullButton(bool value) async {
+    if (showJournalRemotePullButton == value) return;
+    showJournalRemotePullButton = value;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> _persist() async {
     final repo = _settingsRepository;
     if (repo == null) return;
@@ -105,6 +118,7 @@ class DevSettingsController extends ChangeNotifier {
         devShowCalendarInstantViewSwitch: showCalendarInstantViewSwitch,
         devForceConflictUi: devForceConflictUi,
         devShowConflictDocumentIds: showConflictDocumentIds,
+        devShowJournalRemotePullButton: showJournalRemotePullButton,
       ),
     );
   }

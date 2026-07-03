@@ -19,6 +19,8 @@ import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -1911,6 +1913,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
+                                if (ref.watch(devSettingsProvider).showJournalRemotePullButton) ...[
+                                  IconButton(
+                                    tooltip: 'Compare remote DB value',
+                                    onPressed: () => _pullAndCompareRemoteValue(_selectedEntry!),
+                                    icon: const Icon(PhosphorIconsRegular.cloudArrowDown),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
                                 IconButton(
                                   tooltip: 'Delete entry',
                                   onPressed: _deleteEntry,
@@ -2343,6 +2354,67 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+}
+
+extension on _JournalPageState {
+  Future<void> _pullAndCompareRemoteValue(JournalEntry entry) async {
+    final scaffoldMsg = ScaffoldMessenger.of(context);
+    try {
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) {
+        scaffoldMsg.showSnackBar(const SnackBar(content: Text('Not signed in')));
+        return;
+      }
+      final doc = await FirebaseFirestore.instance
+          .collection('users/$userId/${FirestoreCollections.journalEntries}')
+          .doc(entry.id)
+          .get();
+      if (!mounted) return;
+      
+      final remoteData = doc.data();
+      final remoteText = remoteData?['body'] as String? ?? '';
+      
+      final currentLocalText = _editorKey.currentState?.currentBodyText ?? entry.body;
+      
+      await showDialog<void>(
+        context: this.context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Remote Value Comparison'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Local (Current UI):', style: TextStyle(fontWeight: FontWeight.bold)),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                  child: Text(currentLocalText),
+                ),
+                const SizedBox(height: 16),
+                const Text('Remote (Firestore):', style: TextStyle(fontWeight: FontWeight.bold)),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                  child: Text(remoteText),
+                ),
+                const SizedBox(height: 16),
+                Text('Matches: ${currentLocalText == remoteText}', style: TextStyle(fontWeight: FontWeight.bold, color: currentLocalText == remoteText ? Colors.green : Colors.red)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      scaffoldMsg.showSnackBar(SnackBar(content: Text('Failed to pull remote value: $e')));
+    }
   }
 }
 

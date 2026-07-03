@@ -247,6 +247,9 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
           7,
           (i) => widget.weekStart.add(Duration(days: i)),
         );
+        final today = DateTime.now();
+        final todayIndex = weekDays.indexWhere((d) => calendarSameDay(d, today));
+        
         final allDayShelfHeight = calendarWeekAllDayShelfHeightFor(
           events: widget.events,
           weekDays: weekDays,
@@ -436,12 +439,21 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                         // ── Bordered day-column rectangles (fixed overlay) ──
                         Positioned.fill(
                           child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: CalendarWeekDayColumnBorderPainter(
-                                borderedRects: borderedDayRects,
-                                color: divider,
-                                borderRadius: borderRadius,
-                              ),
+                            child: AnimatedBuilder(
+                              animation: _entryFade,
+                              builder: (context, _) {
+                                return CustomPaint(
+                                  painter: CalendarWeekDayColumnBorderPainter(
+                                    borderedRects: borderedDayRects,
+                                    color: divider,
+                                    borderRadius: borderRadius,
+                                    todayIndex: todayIndex >= 0 ? todayIndex : null,
+                                    todayFillColor: accentColor.withValues(
+                                      alpha: 0.28 * _entryFade.value,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -603,11 +615,15 @@ class CalendarWeekDayColumnBorderPainter extends CustomPainter {
     required this.borderedRects,
     required this.color,
     required this.borderRadius,
+    this.todayIndex,
+    this.todayFillColor,
   });
 
   final List<Rect> borderedRects;
   final Color color;
   final double borderRadius;
+  final int? todayIndex;
+  final Color? todayFillColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -615,6 +631,16 @@ class CalendarWeekDayColumnBorderPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
+
+    if (todayIndex != null && todayFillColor != null && todayIndex! >= 0 && todayIndex! < borderedRects.length) {
+      final fillPaint = Paint()
+        ..color = todayFillColor!
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(borderedRects[todayIndex!], Radius.circular(borderRadius)),
+        fillPaint,
+      );
+    }
 
     for (final rect in borderedRects) {
       canvas.drawRRect(
@@ -628,7 +654,9 @@ class CalendarWeekDayColumnBorderPainter extends CustomPainter {
   bool shouldRepaint(CalendarWeekDayColumnBorderPainter old) =>
       old.color != color ||
       old.borderRadius != borderRadius ||
-      old.borderedRects != borderedRects;
+      old.borderedRects != borderedRects ||
+      old.todayIndex != todayIndex ||
+      old.todayFillColor != todayFillColor;
 }
 
 /// Insets [outerRects] by [margin] on each side.
