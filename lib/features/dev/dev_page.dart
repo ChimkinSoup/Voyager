@@ -136,6 +136,20 @@ class DevPage extends ConsumerWidget {
                     );
                   },
                 ),
+                SwitchListTile(
+                  title: const Text('Show journal remote pull button'),
+                  subtitle: const Text(
+                    'Add a button to pull the remote value of a journal entry from Firestore',
+                  ),
+                  value: devSettings.showJournalRemotePullButton,
+                  onChanged: (value) {
+                    unawaited(
+                      ref
+                          .read(devSettingsProvider)
+                          .setShowJournalRemotePullButton(value),
+                    );
+                  },
+                ),
               ],
             );
           },

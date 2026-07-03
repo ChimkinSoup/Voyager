@@ -6534,6 +6534,21 @@ class $SettingsTableTable extends SettingsTable
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _devShowJournalRemotePullButtonMeta =
+      const VerificationMeta('devShowJournalRemotePullButton');
+  @override
+  late final GeneratedColumn<bool> devShowJournalRemotePullButton =
+      GeneratedColumn<bool>(
+        'dev_show_journal_remote_pull_button',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("dev_show_journal_remote_pull_button" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _weatherForecastJsonMeta =
       const VerificationMeta('weatherForecastJson');
   @override
@@ -6711,6 +6726,7 @@ class $SettingsTableTable extends SettingsTable
     devJournalDebugLog,
     devForceConflictUi,
     devShowConflictDocumentIds,
+    devShowJournalRemotePullButton,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -7054,6 +7070,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('dev_show_journal_remote_pull_button')) {
+      context.handle(
+        _devShowJournalRemotePullButtonMeta,
+        devShowJournalRemotePullButton.isAcceptableOrUnknown(
+          data['dev_show_journal_remote_pull_button']!,
+          _devShowJournalRemotePullButtonMeta,
+        ),
+      );
+    }
     if (data.containsKey('weather_forecast_json')) {
       context.handle(
         _weatherForecastJsonMeta,
@@ -7323,6 +7348,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}dev_show_conflict_document_ids'],
       )!,
+      devShowJournalRemotePullButton: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_journal_remote_pull_button'],
+      )!,
       weatherForecastJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_forecast_json'],
@@ -7420,6 +7449,7 @@ class SettingsTableData extends DataClass
   final bool devJournalDebugLog;
   final bool devForceConflictUi;
   final bool devShowConflictDocumentIds;
+  final bool devShowJournalRemotePullButton;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -7471,6 +7501,7 @@ class SettingsTableData extends DataClass
     required this.devJournalDebugLog,
     required this.devForceConflictUi,
     required this.devShowConflictDocumentIds,
+    required this.devShowJournalRemotePullButton,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -7564,6 +7595,9 @@ class SettingsTableData extends DataClass
     map['dev_force_conflict_ui'] = Variable<bool>(devForceConflictUi);
     map['dev_show_conflict_document_ids'] = Variable<bool>(
       devShowConflictDocumentIds,
+    );
+    map['dev_show_journal_remote_pull_button'] = Variable<bool>(
+      devShowJournalRemotePullButton,
     );
     if (!nullToAbsent || weatherForecastJson != null) {
       map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
@@ -7668,6 +7702,7 @@ class SettingsTableData extends DataClass
       devJournalDebugLog: Value(devJournalDebugLog),
       devForceConflictUi: Value(devForceConflictUi),
       devShowConflictDocumentIds: Value(devShowConflictDocumentIds),
+      devShowJournalRemotePullButton: Value(devShowJournalRemotePullButton),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherForecastJson),
@@ -7773,6 +7808,9 @@ class SettingsTableData extends DataClass
       devShowConflictDocumentIds: serializer.fromJson<bool>(
         json['devShowConflictDocumentIds'],
       ),
+      devShowJournalRemotePullButton: serializer.fromJson<bool>(
+        json['devShowJournalRemotePullButton'],
+      ),
       weatherForecastJson: serializer.fromJson<String?>(
         json['weatherForecastJson'],
       ),
@@ -7865,6 +7903,9 @@ class SettingsTableData extends DataClass
       'devShowConflictDocumentIds': serializer.toJson<bool>(
         devShowConflictDocumentIds,
       ),
+      'devShowJournalRemotePullButton': serializer.toJson<bool>(
+        devShowJournalRemotePullButton,
+      ),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
@@ -7933,6 +7974,7 @@ class SettingsTableData extends DataClass
     bool? devJournalDebugLog,
     bool? devForceConflictUi,
     bool? devShowConflictDocumentIds,
+    bool? devShowJournalRemotePullButton,
     Value<String?> weatherForecastJson = const Value.absent(),
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
@@ -8006,6 +8048,8 @@ class SettingsTableData extends DataClass
     devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
     devShowConflictDocumentIds:
         devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
+    devShowJournalRemotePullButton:
+        devShowJournalRemotePullButton ?? this.devShowJournalRemotePullButton,
     weatherForecastJson: weatherForecastJson.present
         ? weatherForecastJson.value
         : this.weatherForecastJson,
@@ -8146,6 +8190,10 @@ class SettingsTableData extends DataClass
       devShowConflictDocumentIds: data.devShowConflictDocumentIds.present
           ? data.devShowConflictDocumentIds.value
           : this.devShowConflictDocumentIds,
+      devShowJournalRemotePullButton:
+          data.devShowJournalRemotePullButton.present
+          ? data.devShowJournalRemotePullButton.value
+          : this.devShowJournalRemotePullButton,
       weatherForecastJson: data.weatherForecastJson.present
           ? data.weatherForecastJson.value
           : this.weatherForecastJson,
@@ -8229,6 +8277,9 @@ class SettingsTableData extends DataClass
           ..write('devJournalDebugLog: $devJournalDebugLog, ')
           ..write('devForceConflictUi: $devForceConflictUi, ')
           ..write('devShowConflictDocumentIds: $devShowConflictDocumentIds, ')
+          ..write(
+            'devShowJournalRemotePullButton: $devShowJournalRemotePullButton, ',
+          )
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -8287,6 +8338,7 @@ class SettingsTableData extends DataClass
     devJournalDebugLog,
     devForceConflictUi,
     devShowConflictDocumentIds,
+    devShowJournalRemotePullButton,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -8343,6 +8395,8 @@ class SettingsTableData extends DataClass
           other.devJournalDebugLog == this.devJournalDebugLog &&
           other.devForceConflictUi == this.devForceConflictUi &&
           other.devShowConflictDocumentIds == this.devShowConflictDocumentIds &&
+          other.devShowJournalRemotePullButton ==
+              this.devShowJournalRemotePullButton &&
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
@@ -8400,6 +8454,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> devJournalDebugLog;
   final Value<bool> devForceConflictUi;
   final Value<bool> devShowConflictDocumentIds;
+  final Value<bool> devShowJournalRemotePullButton;
   final Value<String?> weatherForecastJson;
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
@@ -8451,6 +8506,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devJournalDebugLog = const Value.absent(),
     this.devForceConflictUi = const Value.absent(),
     this.devShowConflictDocumentIds = const Value.absent(),
+    this.devShowJournalRemotePullButton = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -8503,6 +8559,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devJournalDebugLog = const Value.absent(),
     this.devForceConflictUi = const Value.absent(),
     this.devShowConflictDocumentIds = const Value.absent(),
+    this.devShowJournalRemotePullButton = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -8555,6 +8612,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? devJournalDebugLog,
     Expression<bool>? devForceConflictUi,
     Expression<bool>? devShowConflictDocumentIds,
+    Expression<bool>? devShowJournalRemotePullButton,
     Expression<String>? weatherForecastJson,
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
@@ -8631,6 +8689,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'dev_force_conflict_ui': devForceConflictUi,
       if (devShowConflictDocumentIds != null)
         'dev_show_conflict_document_ids': devShowConflictDocumentIds,
+      if (devShowJournalRemotePullButton != null)
+        'dev_show_journal_remote_pull_button': devShowJournalRemotePullButton,
       if (weatherForecastJson != null)
         'weather_forecast_json': weatherForecastJson,
       if (weatherChartTempColor != null)
@@ -8696,6 +8756,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? devJournalDebugLog,
     Value<bool>? devForceConflictUi,
     Value<bool>? devShowConflictDocumentIds,
+    Value<bool>? devShowJournalRemotePullButton,
     Value<String?>? weatherForecastJson,
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
@@ -8758,6 +8819,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
       devShowConflictDocumentIds:
           devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
+      devShowJournalRemotePullButton:
+          devShowJournalRemotePullButton ?? this.devShowJournalRemotePullButton,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
       weatherChartTempColor:
           weatherChartTempColor ?? this.weatherChartTempColor,
@@ -8932,6 +8995,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         devShowConflictDocumentIds.value,
       );
     }
+    if (devShowJournalRemotePullButton.present) {
+      map['dev_show_journal_remote_pull_button'] = Variable<bool>(
+        devShowJournalRemotePullButton.value,
+      );
+    }
     if (weatherForecastJson.present) {
       map['weather_forecast_json'] = Variable<String>(
         weatherForecastJson.value,
@@ -9036,6 +9104,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('devJournalDebugLog: $devJournalDebugLog, ')
           ..write('devForceConflictUi: $devForceConflictUi, ')
           ..write('devShowConflictDocumentIds: $devShowConflictDocumentIds, ')
+          ..write(
+            'devShowJournalRemotePullButton: $devShowJournalRemotePullButton, ',
+          )
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -13260,6 +13331,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> devJournalDebugLog,
       Value<bool> devForceConflictUi,
       Value<bool> devShowConflictDocumentIds,
+      Value<bool> devShowJournalRemotePullButton,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -13313,6 +13385,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> devJournalDebugLog,
       Value<bool> devForceConflictUi,
       Value<bool> devShowConflictDocumentIds,
+      Value<bool> devShowJournalRemotePullButton,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -13524,6 +13597,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get devShowConflictDocumentIds => $composableBuilder(
     column: $table.devShowConflictDocumentIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowJournalRemotePullButton => $composableBuilder(
+    column: $table.devShowJournalRemotePullButton,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13789,6 +13867,12 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get devShowJournalRemotePullButton =>
+      $composableBuilder(
+        column: $table.devShowJournalRemotePullButton,
+        builder: (column) => ColumnOrderings(column),
+      );
+
   ColumnOrderings<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => ColumnOrderings(column),
@@ -14045,6 +14129,12 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get devShowJournalRemotePullButton =>
+      $composableBuilder(
+        column: $table.devShowJournalRemotePullButton,
+        builder: (column) => column,
+      );
+
   GeneratedColumn<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => column,
@@ -14182,6 +14272,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> devJournalDebugLog = const Value.absent(),
                 Value<bool> devForceConflictUi = const Value.absent(),
                 Value<bool> devShowConflictDocumentIds = const Value.absent(),
+                Value<bool> devShowJournalRemotePullButton =
+                    const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -14238,6 +14330,7 @@ class $$SettingsTableTableTableManager
                 devJournalDebugLog: devJournalDebugLog,
                 devForceConflictUi: devForceConflictUi,
                 devShowConflictDocumentIds: devShowConflictDocumentIds,
+                devShowJournalRemotePullButton: devShowJournalRemotePullButton,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -14293,6 +14386,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> devJournalDebugLog = const Value.absent(),
                 Value<bool> devForceConflictUi = const Value.absent(),
                 Value<bool> devShowConflictDocumentIds = const Value.absent(),
+                Value<bool> devShowJournalRemotePullButton =
+                    const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -14349,6 +14444,7 @@ class $$SettingsTableTableTableManager
                 devJournalDebugLog: devJournalDebugLog,
                 devForceConflictUi: devForceConflictUi,
                 devShowConflictDocumentIds: devShowConflictDocumentIds,
+                devShowJournalRemotePullButton: devShowJournalRemotePullButton,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,

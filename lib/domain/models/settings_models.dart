@@ -39,6 +39,7 @@ class AppSettings {
     this.devJournalDebugLog = false,
     this.devForceConflictUi = false,
     this.devShowConflictDocumentIds = false,
+    this.devShowJournalRemotePullButton = false,
     this.geometricTextureScale = 10.0,
     this.geometricTextureIntensity = 0.85,
     this.geometricTextureFocalSpread = 1.0,
@@ -90,6 +91,7 @@ class AppSettings {
   final bool devJournalDebugLog;
   final bool devForceConflictUi;
   final bool devShowConflictDocumentIds;
+  final bool devShowJournalRemotePullButton;
   final double geometricTextureScale;
   final double geometricTextureIntensity;
   final double geometricTextureFocalSpread;
@@ -137,6 +139,7 @@ class AppSettings {
     bool? devJournalDebugLog,
     bool? devForceConflictUi,
     bool? devShowConflictDocumentIds,
+    bool? devShowJournalRemotePullButton,
     double? geometricTextureScale,
     double? geometricTextureIntensity,
     double? geometricTextureFocalSpread,
@@ -224,6 +227,8 @@ class AppSettings {
       devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
       devShowConflictDocumentIds:
           devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
+      devShowJournalRemotePullButton: devShowJournalRemotePullButton ??
+          this.devShowJournalRemotePullButton,
       geometricTextureScale:
           geometricTextureScale ?? this.geometricTextureScale,
       geometricTextureIntensity:
