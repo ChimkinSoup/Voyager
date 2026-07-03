@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -264,6 +265,7 @@ class _SyncConflictResolutionDialogState
                           title: localTitle,
                           textLabel: textLabel,
                           text: localText,
+                          payloadJson: conflict.localPayloadJson,
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -273,6 +275,7 @@ class _SyncConflictResolutionDialogState
                           title: remoteTitle,
                           textLabel: textLabel,
                           text: remoteText,
+                          payloadJson: conflict.remotePayloadJson,
                         ),
                       ),
                     ],
@@ -433,15 +436,51 @@ class _DiffColumn extends StatelessWidget {
     required this.title,
     required this.textLabel,
     required this.text,
+    required this.payloadJson,
   });
 
   final String heading;
   final String title;
   final String textLabel;
   final String text;
+  final String payloadJson;
 
   @override
   Widget build(BuildContext context) {
+    Map<String, dynamic>? payload;
+    try {
+      payload = jsonDecode(payloadJson) as Map<String, dynamic>;
+    } catch (_) {}
+
+    final metadataList = <Widget>[];
+    if (payload != null) {
+      final keys = [
+        'createdAt',
+        'updatedAt',
+        'entryDate',
+        'version',
+        'mood',
+        'weatherIcon',
+        'tags',
+      ];
+      for (final key in keys) {
+        if (payload.containsKey(key)) {
+          final value = payload[key];
+          metadataList.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                '$key: $value',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                    ),
+              ),
+            ),
+          );
+        }
+      }
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(
@@ -460,6 +499,12 @@ class _DiffColumn extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text('Title: $title'),
+            if (metadataList.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Metadata:', style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 4),
+              ...metadataList,
+            ],
             const SizedBox(height: 8),
             Text('$textLabel:', style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 4),

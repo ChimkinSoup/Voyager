@@ -488,6 +488,32 @@ class RemoteSyncService {
     }
   }
 
+  Future<void> prepareEditingSession({
+    required String collection,
+    required String documentId,
+    required String initialText,
+  }) async {
+    final key = documentKey(collection, documentId);
+    if (_charOpRegistry.session(collection, documentId) != null) return;
+    
+    final ops = await _listRemoteCharOps(documentId);
+    if (ops.isNotEmpty) {
+      _charOpRegistry.loadSession(
+        collection: collection,
+        documentId: documentId,
+        clientId: deviceId,
+        operations: ops,
+      );
+    } else {
+      _charOpRegistry.ensureSession(
+        collection: collection,
+        documentId: documentId,
+        clientId: deviceId,
+        initialText: initialText,
+      );
+    }
+  }
+
   bool isDocumentEditing(String collection, String documentId) {
     return _activelyEditedDocuments.contains(
       documentKey(collection, documentId),

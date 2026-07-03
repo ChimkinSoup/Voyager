@@ -53,6 +53,12 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   }
 
   @override
+  void onWindowClose() async {
+    await _flushAllPendingEdits();
+    await windowManager.destroy();
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(resyncWindowsKeyboardState());

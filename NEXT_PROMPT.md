@@ -4,3 +4,6 @@ Also, what happens when the user edits a journal, waits until it saves locally, 
 
 
 Before starting your implementation, tell me how feasible it is to make it so that both the journal edits and search page edits save if the user is in the middle of editing, then closes the app. 
+
+
+Make weely view highlight the current day
