@@ -5,9 +5,14 @@ import 'package:voyager/domain/services/fractional_index.dart';
 class CharacterOpSession {
   CharacterOpSession({
     required this.clientId,
-    required String initialText,
+    String? initialText,
+    List<CharacterOperation>? initialOperations,
   }) : _logicalClock = 0 {
-    _seedFromText(initialText);
+    if (initialOperations != null) {
+      _loadFromOperations(initialOperations);
+    } else if (initialText != null) {
+      _seedFromText(initialText);
+    }
   }
 
   final String clientId;
@@ -121,6 +126,17 @@ class CharacterOpSession {
     }
   }
 
+  void _loadFromOperations(List<CharacterOperation> operations) {
+    var maxClock = -1;
+    for (final op in operations) {
+      _opsById[op.id] = op;
+      if (op.clientId == clientId && op.logicalClock > maxClock) {
+        maxClock = op.logicalClock;
+      }
+    }
+    _logicalClock = maxClock + 1;
+  }
+
   void _insertOp({required String char, required String position}) {
     final id = '${clientId}_${_logicalClock}_$position';
     final op = CharacterOperation(
@@ -163,12 +179,30 @@ class CharacterOpRegistry {
     required String collection,
     required String documentId,
     required String clientId,
-    required String initialText,
+    String? initialText,
+    List<CharacterOperation>? operations,
   }) {
     final k = key(collection, documentId);
     return _sessions.putIfAbsent(
       k,
-      () => CharacterOpSession(clientId: clientId, initialText: initialText),
+      () => CharacterOpSession(
+        clientId: clientId,
+        initialText: initialText,
+        initialOperations: operations,
+      ),
+    );
+  }
+
+  void loadSession({
+    required String collection,
+    required String documentId,
+    required String clientId,
+    required List<CharacterOperation> operations,
+  }) {
+    final k = key(collection, documentId);
+    _sessions[k] = CharacterOpSession(
+      clientId: clientId,
+      initialOperations: operations,
     );
   }
 

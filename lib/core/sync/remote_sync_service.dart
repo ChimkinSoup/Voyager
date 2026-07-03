@@ -116,18 +116,21 @@ class RemoteSyncService {
     if (conflict.collection == FirestoreCollections.journalEntries) {
       final local = await _journalRepository.getEntry(conflict.documentId);
       if (local != null) {
-        await _syncRepository.deleteOperationsForDocument(conflict.documentId);
-        _charOpRegistry.resetSession(
+        final remotePayload = jsonDecode(conflict.remotePayloadJson) as Map<String, dynamic>;
+        final opsList = remotePayload['_remoteCharOps'] as List<dynamic>?;
+        final ops = opsList?.map((e) => CharacterOperation.fromJson(e as Map<String, dynamic>)).toList() ?? const [];
+        
+        _charOpRegistry.loadSession(
           collection: FirestoreCollections.journalEntries,
           documentId: conflict.documentId,
           clientId: deviceId,
-          text: '',
+          operations: ops,
         );
         _charOpRegistry.recordTextChange(
           collection: FirestoreCollections.journalEntries,
           documentId: conflict.documentId,
           clientId: deviceId,
-          before: '',
+          before: conflict.remoteText ?? '',
           after: local.body,
         );
         await _uploadJournalEntryNow(local, bumpVersion: true);
@@ -135,18 +138,21 @@ class RemoteSyncService {
     } else if (conflict.collection == FirestoreCollections.todoTasks) {
       final local = await _findTodoTask(conflict.documentId);
       if (local != null) {
-        await _syncRepository.deleteOperationsForDocument(conflict.documentId);
-        _charOpRegistry.resetSession(
+        final remotePayload = jsonDecode(conflict.remotePayloadJson) as Map<String, dynamic>;
+        final opsList = remotePayload['_remoteCharOps'] as List<dynamic>?;
+        final ops = opsList?.map((e) => CharacterOperation.fromJson(e as Map<String, dynamic>)).toList() ?? const [];
+        
+        _charOpRegistry.loadSession(
           collection: FirestoreCollections.todoTasks,
           documentId: conflict.documentId,
           clientId: deviceId,
-          text: '',
+          operations: ops,
         );
         _charOpRegistry.recordTextChange(
           collection: FirestoreCollections.todoTasks,
           documentId: conflict.documentId,
           clientId: deviceId,
-          before: '',
+          before: conflict.remoteText ?? '',
           after: local.notes ?? '',
         );
         await _uploadTodoTaskNow(local, bumpVersion: true);
@@ -167,18 +173,20 @@ class RemoteSyncService {
         local: local,
       );
       await _journalRepository.upsertEntry(merged, recordLocalActivity: false);
-      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
-      _charOpRegistry.resetSession(
+      
+      final opsList = remote['_remoteCharOps'] as List<dynamic>?;
+      final ops = opsList?.map((e) => CharacterOperation.fromJson(e as Map<String, dynamic>)).toList() ?? const [];
+      _charOpRegistry.loadSession(
         collection: FirestoreCollections.journalEntries,
         documentId: conflict.documentId,
         clientId: deviceId,
-        text: '',
+        operations: ops,
       );
       _charOpRegistry.recordTextChange(
         collection: FirestoreCollections.journalEntries,
         documentId: conflict.documentId,
         clientId: deviceId,
-        before: '',
+        before: conflict.remoteText ?? '',
         after: merged.body,
       );
       await _uploadJournalEntryNow(merged, bumpVersion: true);
@@ -190,18 +198,20 @@ class RemoteSyncService {
         local: local,
       );
       await _todoRepository.upsertTask(merged, recordLocalActivity: false);
-      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
-      _charOpRegistry.resetSession(
+      
+      final opsList = remote['_remoteCharOps'] as List<dynamic>?;
+      final ops = opsList?.map((e) => CharacterOperation.fromJson(e as Map<String, dynamic>)).toList() ?? const [];
+      _charOpRegistry.loadSession(
         collection: FirestoreCollections.todoTasks,
         documentId: conflict.documentId,
         clientId: deviceId,
-        text: '',
+        operations: ops,
       );
       _charOpRegistry.recordTextChange(
         collection: FirestoreCollections.todoTasks,
         documentId: conflict.documentId,
         clientId: deviceId,
-        before: '',
+        before: conflict.remoteText ?? '',
         after: merged.notes ?? '',
       );
       await _uploadTodoTaskNow(merged, bumpVersion: true);
@@ -224,18 +234,21 @@ class RemoteSyncService {
         bumpVersion: true,
       );
       await _journalRepository.upsertEntry(updated, recordLocalActivity: false);
-      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
-      _charOpRegistry.resetSession(
+      
+      final remotePayload = jsonDecode(conflict.remotePayloadJson) as Map<String, dynamic>;
+      final opsList = remotePayload['_remoteCharOps'] as List<dynamic>?;
+      final ops = opsList?.map((e) => CharacterOperation.fromJson(e as Map<String, dynamic>)).toList() ?? const [];
+      _charOpRegistry.loadSession(
         collection: FirestoreCollections.journalEntries,
         documentId: conflict.documentId,
         clientId: deviceId,
-        text: '',
+        operations: ops,
       );
       _charOpRegistry.recordTextChange(
         collection: FirestoreCollections.journalEntries,
         documentId: conflict.documentId,
         clientId: deviceId,
-        before: '',
+        before: conflict.remoteText ?? '',
         after: mergedText,
       );
       await _uploadJournalEntryNow(updated, bumpVersion: true);
@@ -248,19 +261,22 @@ class RemoteSyncService {
         bumpVersion: true,
       );
       await _todoRepository.upsertTask(updated, recordLocalActivity: false);
-      await _syncRepository.deleteOperationsForDocument(conflict.documentId);
-      _charOpRegistry.resetSession(
+      
+      final remotePayload = jsonDecode(conflict.remotePayloadJson) as Map<String, dynamic>;
+      final opsList = remotePayload['_remoteCharOps'] as List<dynamic>?;
+      final ops = opsList?.map((e) => CharacterOperation.fromJson(e as Map<String, dynamic>)).toList() ?? const [];
+      _charOpRegistry.loadSession(
         collection: FirestoreCollections.todoTasks,
         documentId: conflict.documentId,
         clientId: deviceId,
-        text: '',
+        operations: ops,
       );
       _charOpRegistry.recordTextChange(
         collection: FirestoreCollections.todoTasks,
         documentId: conflict.documentId,
         clientId: deviceId,
-        before: '',
-        after: mergedText,
+        before: conflict.remoteText ?? '',
+        after: mergedText.isEmpty ? '' : mergedText,
       );
       await _uploadTodoTaskNow(updated, bumpVersion: true);
     }
@@ -306,6 +322,33 @@ class RemoteSyncService {
     }
 
     return operationsDeleted;
+  }
+
+  /// Forces an overwrite of the journal entry text by wiping remote CRDT operations,
+  /// resetting the local editing session, recording the new text, and pushing.
+  /// Used for out-of-band wholesale text edits (like the Search page popup) 
+  /// where an active sequential CRDT session isn't maintained.
+  Future<void> forceOverwriteJournalEntryText(JournalEntry entry) async {
+    await _syncRepository.deleteOperationsForDocument(entry.id);
+    _charOpRegistry.resetSession(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entry.id,
+      clientId: deviceId,
+      text: '',
+    );
+    _charOpRegistry.recordTextChange(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entry.id,
+      clientId: deviceId,
+      before: '',
+      after: entry.body,
+    );
+    await _uploadJournalEntryNow(entry, bumpVersion: true);
+    
+    _charOpRegistry.removeSession(
+      FirestoreCollections.journalEntries,
+      entry.id,
+    );
   }
 
   /// Hard-deletes a journal entry from Firestore (if present) and this device.
@@ -608,13 +651,16 @@ class RemoteSyncService {
               recordLocalActivity: false,
             );
           }
+          final payloadWithOps = Map<String, dynamic>.from(data);
+          payloadWithOps['_remoteCharOps'] = remoteCharOps.map((o) => o.toJson()).toList();
+
           await _quarantineConflict(
             collection: FirestoreCollections.journalEntries,
             documentId: id,
             local: local == null
                 ? null
                 : SyncConflictDetector.payloadJson(journalEntryToFirestore(local)),
-            remote: SyncConflictDetector.payloadJson(data),
+            remote: SyncConflictDetector.payloadJson(payloadWithOps),
             localTitle: local?.title,
             remoteTitle: data['title'] as String?,
             localText: local?.body,
@@ -697,13 +743,16 @@ class RemoteSyncService {
             forceConflict: force,
           );
           if (detection.isConflict) {
+            final payloadWithOps = Map<String, dynamic>.from(data);
+            payloadWithOps['_remoteCharOps'] = remoteCharOps.map((o) => o.toJson()).toList();
+
             await _quarantineConflict(
               collection: FirestoreCollections.todoTasks,
               documentId: id,
               local: local == null
                   ? null
                   : SyncConflictDetector.payloadJson(todoTaskToFirestore(local)),
-              remote: SyncConflictDetector.payloadJson(data),
+              remote: SyncConflictDetector.payloadJson(payloadWithOps),
               localTitle: local?.title,
               remoteTitle: data['title'] as String?,
               localText: local?.notes,

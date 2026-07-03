@@ -175,11 +175,13 @@ List<JournalEntry> sortJournalEntriesNewestFirst(Iterable<JournalEntry> entries)
   return sorted;
 }
 
+final _firstSentenceExp = RegExp(r'^(.+?[.!?])(?:\s|$)');
+
 String firstSentencePreview(String body) {
   final trimmed = body.trim();
   if (trimmed.isEmpty) return '';
 
-  final match = RegExp(r'^(.+?[.!?])(?:\s|$)').firstMatch(trimmed);
+  final match = _firstSentenceExp.firstMatch(trimmed);
   if (match != null) return match.group(1)!.trim();
 
   final line = trimmed.split('\n').first.trim();

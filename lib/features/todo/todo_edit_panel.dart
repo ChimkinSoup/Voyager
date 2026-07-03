@@ -85,6 +85,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _notesFocusNode.onKeyEvent = _handleNotesKey;
     _subtaskController = TextEditingController();
     _subtaskFocusNode = FocusNode();
+    _subtaskFocusNode.onKeyEvent = _handleSubtaskKey;
     _dueDate = widget.task.dueDate;
     _loadSubtasks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -253,6 +254,16 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     }
     _saveNotesAndUnfocus();
     return KeyEventResult.handled;
+  }
+
+  KeyEventResult _handleSubtaskKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _addSubtask();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _save({
@@ -494,7 +505,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       return;
     }
     _subtaskController.clear();
-    _subtaskFocusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _subtaskFocusNode.requestFocus();
+    });
     
     final minSortOrder = _subtasks.isEmpty 
         ? 0 
@@ -510,36 +523,51 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       createdAt: now,
       updatedAt: now,
     );
-    await ref.read(todoRepositoryProvider).upsertTask(subtask);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(subtask);
-    await _loadSubtasks();
-    widget.onChanged();
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (!mounted) return;
+      setState(() => _subtasks = [subtask, ..._subtasks]);
+      ref.read(todoRepositoryProvider).upsertTask(subtask).then((_) {
+        ref.read(remoteSyncServiceProvider).pushTodoTaskNow(subtask);
+        _loadSubtasks().then((_) => widget.onChanged());
+      });
+    });
   }
 
   Future<void> _toggleSubtask(TodoTask subtask, bool completed) async {
     final updated = subtask.copyWith(completed: completed);
-    await ref.read(todoRepositoryProvider).upsertTask(updated);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
-    await _loadSubtasks();
-    widget.onChanged();
+    setState(() {
+      final index = _subtasks.indexWhere((s) => s.id == subtask.id);
+      if (index != -1) _subtasks[index] = updated;
+    });
+    ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
+      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+      _loadSubtasks().then((_) => widget.onChanged());
+    });
   }
 
   Future<void> _renameSubtask(TodoTask subtask, String title) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty || trimmed == subtask.title) return;
-    final updated = subtask.copyWith(title: trimmed);
-    await ref.read(todoRepositoryProvider).upsertTask(updated);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
-    await _loadSubtasks();
-    widget.onChanged();
+    final updated = subtask.copyWith(title: title);
+    setState(() {
+      final index = _subtasks.indexWhere((s) => s.id == subtask.id);
+      if (index != -1) _subtasks[index] = updated;
+    });
+    ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
+      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+      _loadSubtasks().then((_) => widget.onChanged());
+    });
   }
 
   Future<void> _deleteSubtask(TodoTask subtask) async {
     final deleted = subtask.copyWith(deletedAt: utcNow());
-    await ref.read(todoRepositoryProvider).upsertTask(deleted);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
-    await _loadSubtasks();
-    widget.onChanged();
+    setState(() {
+      _subtasks.removeWhere((s) => s.id == subtask.id);
+    });
+    ref.read(todoRepositoryProvider).upsertTask(deleted).then((_) {
+      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+      _loadSubtasks().then((_) => widget.onChanged());
+    });
   }
 
   Future<void> _reorderSubtasks(int oldIndex, int newIndex) async {
@@ -909,10 +937,12 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                         listColor: listColor,
                         onToggle: (completed) =>
                             _toggleSubtask(_subtasks[i], completed),
-                        onRename: (title) =>
-                            _renameSubtask(_subtasks[i], title),
+                        onRename: (title) => _renameSubtask(_subtasks[i], title),
                         onDelete: () => _deleteSubtask(_subtasks[i]),
                         onPromote: () => _promoteSubtask(_subtasks[i]),
+                        onSubmitRename: () {
+                          _subtaskFocusNode.requestFocus();
+                        },
                       ),
                     ),
                 ],
@@ -949,6 +979,7 @@ class _SubtaskRow extends StatefulWidget {
     required this.onRename,
     required this.onDelete,
     required this.onPromote,
+    required this.onSubmitRename,
     required this.listColor,
   });
 
@@ -957,6 +988,7 @@ class _SubtaskRow extends StatefulWidget {
   final ValueChanged<String> onRename;
   final VoidCallback onDelete;
   final VoidCallback onPromote;
+  final VoidCallback onSubmitRename;
   final Color listColor;
 
   @override
@@ -980,6 +1012,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
     _editController = TextEditingController(text: widget.subtask.title);
     _editFocusNode = FocusNode();
     _editFocusNode.addListener(_handleEditFocusChanged);
+    _editFocusNode.onKeyEvent = _handleEditKey;
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
@@ -1019,6 +1052,16 @@ class _SubtaskRowState extends State<_SubtaskRow>
     }
   }
 
+  KeyEventResult _handleEditKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _finishEditing(focusNext: true);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _startEditing() {
     setState(() {
       _editing = true;
@@ -1027,11 +1070,18 @@ class _SubtaskRowState extends State<_SubtaskRow>
     _editFocusNode.requestFocus();
   }
 
-  void _finishEditing() {
+  void _finishEditing({bool focusNext = false}) {
     if (!_editing) return;
-    _editFocusNode.unfocus();
     setState(() => _editing = false);
-    widget.onRename(_editController.text);
+    _editFocusNode.unfocus();
+    if (focusNext) {
+      widget.onSubmitRename();
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) widget.onRename(_editController.text);
+      });
+    } else {
+      widget.onRename(_editController.text);
+    }
   }
 
   Future<void> _handleToggle(bool? value) async {
@@ -1091,8 +1141,9 @@ class _SubtaskRowState extends State<_SubtaskRow>
                       TextField(
                         controller: _editController,
                         focusNode: _editFocusNode,
+                        autofocus: true,
                         style: textStyle,
-                        maxLines: null,
+                        textInputAction: TextInputAction.done,
                         decoration: const InputDecoration(
                           isDense: true,
                           contentPadding: EdgeInsets.symmetric(
@@ -1101,7 +1152,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
                           ),
                           border: InputBorder.none,
                         ),
-                        onSubmitted: (_) => _finishEditing(),
+                        onSubmitted: (_) => _finishEditing(focusNext: true),
                       )
                     else
                       Material(

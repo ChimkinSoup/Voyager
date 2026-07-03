@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -65,6 +66,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   final _entryListScrollController = ScrollController();
   String? _selectedEntryId;
   JournalEntry? _selectedEntry;
+  final _selectedEntryKey = GlobalKey();
+  bool _shouldScrollToSelected = false;
   final _titleController = TextEditingController();
   final _titleFocusNode = FocusNode();
   final _bodyFocusNode = FocusNode();
@@ -136,6 +139,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     setState(() {
       _optimisticallyHiddenEntryIds.clear();
       if (_selectedEntry != null && _selectedEntry!.journalId != journalId) {
+        _selectedEntryId = null;
         _selectedEntry = null;
       }
       _journalFilter = journalId;
@@ -875,6 +879,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _metadataSaveTimer?.cancel();
     _editorKey.currentState?.cancelPendingPersist();
 
+    final title = _titleController.text;
+    final mood = _mood;
+    final weatherIcon = _weatherIcon;
+
     var body = _editorKey.currentState?.currentBodyText ??
         _entryBodyDrafts[entryId] ??
         entry.body;
@@ -901,10 +909,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
     await _persistEntryEdits(
       entry: entry,
-      title: _titleController.text,
+      title: title,
       body: body,
-      mood: _mood,
-      weatherIcon: _weatherIcon,
+      mood: mood,
+      weatherIcon: weatherIcon,
       refreshList: refreshList,
       bumpVersion: true,
     );
@@ -1068,6 +1076,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
               });
             }
           }
+          if (mounted) {
+            ref.invalidate(journalListEntriesProvider);
+            ref.invalidate(journalEntriesProvider);
+            ref.invalidate(journalEntryCountsProvider);
+          }
         },
       );
     } catch (error, stackTrace) {
@@ -1193,8 +1206,69 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await repo.upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
     if (!mounted) return;
-    setState(() => _selectedEntry = updated);
+    setState(() {
+      _selectedEntry = updated;
+      _shouldScrollToSelected = true;
+    });
     _invalidateJournalEntryCaches();
+  }
+
+  void _scrollToSelectedEntry(List<JournalEntry> filtered) {
+    if (!mounted || _selectedEntryId == null) return;
+
+    if (_selectedEntryKey.currentContext != null) {
+      Scrollable.ensureVisible(
+        _selectedEntryKey.currentContext!,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      return;
+    }
+
+    final index = filtered.indexWhere((e) => e.id == _selectedEntryId);
+    if (index == -1) return;
+
+    double estimatedOffset = 0.0;
+    for (int i = 0; i < index; i++) {
+      final entry = filtered[i];
+      final hasPreview = firstSentencePreview(entry.body).isNotEmpty;
+      estimatedOffset += hasPreview ? 68.0 : 52.0;
+    }
+
+    if (!_entryListScrollController.hasClients) return;
+
+    final viewport = _entryListScrollController.position.viewportDimension;
+    final target = math.max(0.0, estimatedOffset - viewport / 2 + 34.0);
+
+    _jumpToTarget(target);
+  }
+
+  void _jumpToTarget(double target) {
+    if (!mounted || !_entryListScrollController.hasClients) return;
+    final pos = _entryListScrollController.position;
+
+    if (target > pos.maxScrollExtent && pos.maxScrollExtent > 0) {
+      // Force layout by jumping to current max extent, then repeat next frame
+      pos.jumpTo(pos.maxScrollExtent);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jumpToTarget(target);
+      });
+    } else {
+      // We reached the target area, or hit the absolute end
+      pos.jumpTo(math.min(target, pos.maxScrollExtent));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_selectedEntryKey.currentContext != null) {
+          Scrollable.ensureVisible(
+            _selectedEntryKey.currentContext!,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
   }
 
   String _entryDateTimeLabel(BuildContext context, DateTime dateTime) {
@@ -1290,6 +1364,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       if (_viewAllJournals) {
         _selectedEntry = updated;
       } else {
+        _selectedEntryId = null;
         _selectedEntry = null;
         _optimisticallyHiddenEntryIds.add(entry.id);
       }
@@ -1358,6 +1433,30 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final entriesAsync =
         ref.watch(journalListEntriesProvider(entriesScope));
 
+    ref.listen(journalListEntriesProvider(entriesScope), (previous, next) {
+      final entries = next.valueOrNull;
+      if (entries != null && _selectedEntryId != null) {
+        final updated = entries.where((e) => e.id == _selectedEntryId).firstOrNull;
+        if (updated != null && _selectedEntry != null) {
+          if (updated.updatedAt.isAfter(_selectedEntry!.updatedAt) || updated.version > _selectedEntry!.version) {
+            if (mounted) {
+              setState(() {
+                _selectedEntry = updated;
+                if (_titleController.text != updated.title) {
+                  _titleController.text = updated.title;
+                }
+                _listTitlePreview.value = updated.title;
+                _listBodyPreview.value = updated.body;
+                _mood = updated.mood;
+                _weatherIcon = updated.weatherIcon;
+              });
+              _editorKey.currentState?.setBodyText(updated.body);
+            }
+          }
+        }
+      }
+    });
+
     return journalsAsync.when(
         skipLoadingOnReload: true,
         data: (journals) {
@@ -1413,6 +1512,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
               : displayEntries
                   .where((e) => e.journalId == entryListScope)
                   .toList();
+                  
+          if (_shouldScrollToSelected) {
+            final index = filtered.indexWhere((e) => e.id == _selectedEntryId);
+            if (index != -1) {
+              final dbSeconds = filtered[index].entryDate.millisecondsSinceEpoch ~/ 1000;
+              final selectedSeconds = (_selectedEntry?.entryDate.millisecondsSinceEpoch ?? 0) ~/ 1000;
+              if (dbSeconds == selectedSeconds) {
+                _shouldScrollToSelected = false;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _scrollToSelectedEntry(filtered);
+                });
+              }
+            }
+          }
           final accentJournal = _selectedEntry == null
               ? null
               : displayJournals.cast<Journal?>().firstWhere(
@@ -1514,12 +1627,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                         entry.id == _selectedEntryId;
                                     return KeyedSubtree(
                                       key: ValueKey(entry.id),
-                                      child: _JournalEntryListTile(
-                                        entry: entry,
-                                        isSelected: isSelected,
-                                        titlePreview: _listTitlePreview,
-                                        bodyPreview: _listBodyPreview,
-                                        onTap: () => unawaited(_loadEntry(entry)),
+                                      child: Builder(
+                                        key: isSelected ? _selectedEntryKey : null,
+                                        builder: (context) => _JournalEntryListTile(
+                                          entry: entry,
+                                          isSelected: isSelected,
+                                          titlePreview: _listTitlePreview,
+                                          bodyPreview: _listBodyPreview,
+                                          onTap: () => unawaited(_loadEntry(entry)),
+                                        ),
                                       ),
                                     );
                                   },
