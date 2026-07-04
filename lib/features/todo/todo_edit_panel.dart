@@ -281,7 +281,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     if (HardwareKeyboard.instance.isShiftPressed) {
       return KeyEventResult.ignored;
     }
-    _saveNotesAndUnfocus();
+    unawaited(_close());
     return KeyEventResult.handled;
   }
 
@@ -483,13 +483,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   Future<void> _onTitleSubmitted(String value) async {
+    if (mounted) _notesFocusNode.requestFocus();
     final title = value.trim();
     if (title.isEmpty) return;
     _titleSaveTimer?.cancel();
     final updated = widget.task.copyWith(title: title);
     widget.onTaskOptimistic?.call(updated);
     unawaited(_save(title: title));
-    if (mounted) FocusScope.of(context).unfocus();
   }
 
   Future<void> _moveToList(String listId) async {
@@ -497,12 +497,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final updated = widget.task.copyWith(listId: listId);
     widget.onTaskOptimistic?.call(updated);
     unawaited(_save(listId: listId));
-  }
-
-  void _saveNotesAndUnfocus() {
-    _notesSaveTimer?.cancel();
-    FocusManager.instance.primaryFocus?.unfocus();
-    unawaited(_save());
   }
 
   Future<void> _pickDueDateTime() async {

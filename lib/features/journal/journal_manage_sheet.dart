@@ -216,6 +216,7 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
           label: title,
           controller: controller,
           autofocus: true,
+          textInputAction: TextInputAction.done,
           onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [
