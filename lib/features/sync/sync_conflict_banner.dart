@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 
 /// Persistent banner shown when quarantined sync conflicts exist.
@@ -281,14 +282,11 @@ class _SyncConflictResolutionDialogState
                     ],
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  LabeledTextField(
+                    label: 'Manual merge ($textLabel)',
                     controller: mergeController,
                     maxLines: 8,
                     enabled: !_resolving,
-                    decoration: InputDecoration(
-                      labelText: 'Manual merge ($textLabel)',
-                      border: const OutlineInputBorder(),
-                    ),
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton.icon(

@@ -136,17 +136,52 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   Future<void> _selectJournal(String journalId) async {
     _logJournal('SELECT_JOURNAL', details: 'journalId=$journalId');
-    await ref.read(journalListEntriesProvider(journalId).future);
+    final entries = await ref.read(journalListEntriesProvider(journalId).future);
     if (!mounted) return;
-    setState(() {
-      _optimisticallyHiddenEntryIds.clear();
-      if (_selectedEntry != null && _selectedEntry!.journalId != journalId) {
-        _selectedEntryId = null;
-        _selectedEntry = null;
+
+    // Keep the current selection only if it already belongs to the target
+    // journal (e.g. picking the same journal from the dropdown while viewing
+    // all journals). Otherwise we swap to the target journal's latest entry.
+    final keepCurrent =
+        _selectedEntry != null && _selectedEntry!.journalId == journalId;
+
+    // Persist any in-progress edits on the outgoing entry before switching, so
+    // nothing is lost — this mirrors what an in-journal entry switch does.
+    if (!keepCurrent && _selectedEntryId != null) {
+      await _flushActiveEntryEdits(refreshList: true);
+      if (!mounted) return;
+    }
+
+    // No awaits past this point: compute the target entry and apply the journal
+    // filter + selection together in a single setState. Selecting the new
+    // journal's latest entry in the same frame (instead of clearing the
+    // selection and letting a post-frame callback re-select it) keeps the
+    // editor mounted, so it simply swaps its text/colors in place rather than
+    // flashing the whole editing screen.
+    _optimisticallyHiddenEntryIds.clear();
+
+    JournalEntry? displayTarget;
+    if (!keepCurrent) {
+      final scoped = _buildDisplayEntries(entries)
+          .where((entry) => entry.journalId == journalId)
+          .toList();
+      if (scoped.isNotEmpty) {
+        displayTarget = _prepareSelectedEntry(scoped.first);
       }
+    }
+
+    setState(() {
       _journalFilter = journalId;
       _lastViewedJournalId = journalId;
       _viewAllJournals = false;
+      if (!keepCurrent) {
+        if (displayTarget != null) {
+          _selectEntryFields(displayTarget);
+        } else {
+          _selectedEntryId = null;
+          _selectedEntry = null;
+        }
+      }
     });
     unawaited(_persistLastViewedJournal(journalId));
   }
@@ -963,21 +998,35 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       if (!mounted) return;
     }
 
+    final displayEntry = _prepareSelectedEntry(entry);
+    setState(() {
+      _selectEntryFields(displayEntry);
+    });
+
+    unawaited(_persistLastViewedJournal(displayEntry.journalId));
+  }
+
+  /// Resolves [entry] to the version that should be shown (applying any local
+  /// draft body) and updates the list preview notifiers. Returns the resolved
+  /// entry; call [_selectEntryFields] inside a setState to actually select it.
+  JournalEntry _prepareSelectedEntry(JournalEntry entry) {
     final displayEntry = _entryWithDraftBody(entry);
     final draftBody = _entryBodyDrafts[displayEntry.id] ?? displayEntry.body;
     _listTitlePreview.value = displayEntry.title;
     _listBodyPreview.value = draftBody;
-    setState(() {
-      _selectedEntryId = displayEntry.id;
-      _selectedEntry = displayEntry;
-      _titleController.text = displayEntry.title;
-      _mood = displayEntry.mood;
-      _weatherIcon = displayEntry.weatherIcon ?? 'sunny';
-      _metadataDirty = false;
-      _lastViewedJournalId = displayEntry.journalId;
-    });
+    return displayEntry;
+  }
 
-    unawaited(_persistLastViewedJournal(displayEntry.journalId));
+  /// Applies the selection state for [displayEntry]. Must be called inside a
+  /// setState so the change is painted in a single frame.
+  void _selectEntryFields(JournalEntry displayEntry) {
+    _selectedEntryId = displayEntry.id;
+    _selectedEntry = displayEntry;
+    _titleController.text = displayEntry.title;
+    _mood = displayEntry.mood;
+    _weatherIcon = displayEntry.weatherIcon ?? 'sunny';
+    _metadataDirty = false;
+    _lastViewedJournalId = displayEntry.journalId;
   }
 
   void _updateBodyDraft(String entryId, String body) {
@@ -1317,41 +1366,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Future<void> _editQuote() async {
     final entry = _selectedEntry;
     if (entry == null) return;
-    final controller = TextEditingController(text: entry.customQuote ?? '');
-    final result = await showDialog<bool?>(
+    final quote = await showDialog<String?>(
       context: context,
-      builder: (context) => EnterToSubmitScope(
-        onSubmit: () => Navigator.pop(context, true),
-        child: AlertDialog(
-        title: const Text('Edit quote'),
-        content: SizedBox(
-          width: 720,
-          child: LabeledTextField(
-            label: 'Quote',
-            controller: controller,
-            autofocus: true,
-            minLines: 8,
-            maxLines: 16,
-            onSubmitted: (_) =>
-                Navigator.pop(context, true),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-      ),
+      builder: (dialogContext) =>
+          _EditQuoteDialog(initialQuote: entry.customQuote ?? ''),
     );
-    final quote = controller.text;
-    controller.dispose();
-    if (result == false) return;
+    if (quote == null) return;
     final updated = entry.copyWith(customQuote: quote.trim());
     await ref.read(journalRepositoryProvider).upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
@@ -1370,13 +1390,37 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await repo.upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
     if (!mounted) return;
+
+    if (_viewAllJournals) {
+      setState(() => _selectedEntry = updated);
+      _invalidateJournalEntryCaches();
+      return;
+    }
+
+    // Non-view-all: the moved entry leaves the journal we're currently viewing.
+    // Hide it and pick the next entry to show up front, then apply everything in
+    // a single setState. Selecting the replacement entry in the same frame
+    // (instead of clearing the selection and letting a post-frame callback
+    // re-select) keeps the editor mounted, so the metadata row and body just
+    // swap their contents in place rather than flashing away and back.
+    _optimisticallyHiddenEntryIds.add(entry.id);
+    final scope = entry.journalId;
+    final scopedEntries =
+        ref.read(journalListEntriesProvider(scope)).valueOrNull ??
+            const <JournalEntry>[];
+    final remaining = _buildDisplayEntries(scopedEntries)
+        .where((e) => e.journalId == scope && e.id != entry.id)
+        .toList();
+
+    final displayTarget =
+        remaining.isEmpty ? null : _prepareSelectedEntry(remaining.first);
     setState(() {
-      if (_viewAllJournals) {
-        _selectedEntry = updated;
+      if (displayTarget != null) {
+        _selectEntryFields(displayTarget);
       } else {
         _selectedEntryId = null;
         _selectedEntry = null;
-        _optimisticallyHiddenEntryIds.add(entry.id);
+        _titleController.clear();
       }
     });
     _invalidateJournalEntryCaches();
@@ -1809,7 +1853,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   },
                                   child: LabeledTextField(
                                     label: 'Title',
-                                    showLabel: false,
                                     controller: _titleController,
                                     focusNode: _titleFocusNode,
                                     textInputAction: TextInputAction.next,
@@ -1988,6 +2031,87 @@ class _PlainJournalEditor extends ConsumerStatefulWidget {
   @override
   ConsumerState<_PlainJournalEditor> createState() =>
       _PlainJournalEditorState();
+}
+
+class _EditQuoteDialog extends StatefulWidget {
+  const _EditQuoteDialog({required this.initialQuote});
+
+  final String initialQuote;
+
+  @override
+  State<_EditQuoteDialog> createState() => _EditQuoteDialogState();
+}
+
+class _EditQuoteDialogState extends State<_EditQuoteDialog> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuote);
+    _focusNode = FocusNode();
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.enter &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _save();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _save() => Navigator.pop(context, _controller.text);
+
+  void _cancel() => Navigator.pop(context);
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope<String?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        // Dismissed via the barrier or Escape: save the current text
+        // instead of discarding it.
+        _save();
+      },
+      child: EnterToSubmitScope(
+        onSubmit: _save,
+        child: AlertDialog(
+          title: const Text('Edit quote'),
+          content: SizedBox(
+            width: 720,
+            child: LabeledTextField(
+              label: 'Quote',
+              controller: _controller,
+              focusNode: _focusNode,
+              autofocus: true,
+              minLines: 8,
+              maxLines: 16,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _cancel,
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: _save,
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _EntryQuote extends StatelessWidget {

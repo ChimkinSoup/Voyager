@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:voyager/core/widgets/accent_focus_border.dart';
+import 'package:voyager/core/widgets/notched_field_border.dart';
 
-/// Text field with accent-colored caret and animated focus glow.
+/// Text field with accent-colored caret, animated focus glow, and a
+/// Material-style floating/notched label — all drawn by [NotchedFieldBorder].
 class VoyagerTextField extends StatefulWidget {
   const VoyagerTextField({
     super.key,
@@ -56,53 +57,76 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
 
   FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
 
+  bool _hasText = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.focusNode == null) {
       _ownedFocusNode = FocusNode();
     }
+    _hasText = widget.controller?.text.isNotEmpty ?? false;
+    widget.controller?.addListener(_handleTextChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant VoyagerTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_handleTextChanged);
+      widget.controller?.addListener(_handleTextChanged);
+      _hasText = widget.controller?.text.isNotEmpty ?? false;
+    }
   }
 
   @override
   void dispose() {
+    widget.controller?.removeListener(_handleTextChanged);
     _ownedFocusNode?.dispose();
     super.dispose();
+  }
+
+  void _handleTextChanged() {
+    final hasText = widget.controller?.text.isNotEmpty ?? false;
+    if (hasText != _hasText) {
+      setState(() => _hasText = hasText);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
-    final baseDecoration = theme.inputDecorationTheme;
-    final decoration = (widget.decoration ?? const InputDecoration()).copyWith(
+    final decoration = widget.decoration ?? const InputDecoration();
+    final contentPadding = decoration.contentPadding ??
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 18);
+
+    final innerDecoration = decoration.copyWith(
+      labelText: null,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
       filled: false,
-      floatingLabelBehavior: FloatingLabelBehavior.auto,
       border: InputBorder.none,
       enabledBorder: InputBorder.none,
       focusedBorder: InputBorder.none,
       disabledBorder: InputBorder.none,
       errorBorder: InputBorder.none,
       focusedErrorBorder: InputBorder.none,
-      contentPadding: widget.decoration?.contentPadding ??
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      labelStyle: (widget.decoration?.labelStyle ?? baseDecoration.labelStyle)
-          ?.copyWith(color: accent.withValues(alpha: 0.85)),
-      floatingLabelStyle:
-          (widget.decoration?.floatingLabelStyle ??
-                  baseDecoration.floatingLabelStyle)
-              ?.copyWith(color: accent.withValues(alpha: 0.85)),
+      contentPadding: contentPadding,
     );
 
-    return AccentFocusBorder(
+    return NotchedFieldBorder(
       focusNode: _focusNode,
       accentColor: accent,
+      label: decoration.labelText,
+      hasContent: _hasText,
+      enabled: widget.enabled,
+      contentPadding: contentPadding,
+      alignLabelToTop: widget.expands || (widget.maxLines ?? 1) > 1,
       child: TextField(
         controller: widget.controller,
         focusNode: _focusNode,
-        decoration: decoration,
-        style:
-            widget.style ??
+        decoration: innerDecoration,
+        style: widget.style ??
             theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurface,
             ),
@@ -120,7 +144,9 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         maxLength: widget.maxLength,
         buildCounter: widget.buildCounter,
         inputFormatters: widget.inputFormatters,
-        textAlignVertical: TextAlignVertical.top,
+        textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
+            ? TextAlignVertical.top
+            : TextAlignVertical.center,
       ),
     );
   }

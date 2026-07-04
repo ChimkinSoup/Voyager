@@ -7,6 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 
 class DevRemotePurgeSection extends ConsumerStatefulWidget {
   const DevRemotePurgeSection({super.key});
@@ -113,14 +114,11 @@ class _DevRemotePurgeSectionState extends ConsumerState<DevRemotePurgeSection> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         const SizedBox(height: 8),
-        TextField(
+        LabeledTextField(
+          label: 'Journal entry ID',
+          hintText: 'ecbb36e5-9c33-49ef-8501-ebd08ae772bc',
           controller: _entryIdController,
           enabled: authUid != null && !_purging,
-          decoration: const InputDecoration(
-            labelText: 'Journal entry ID',
-            hintText: 'ecbb36e5-9c33-49ef-8501-ebd08ae772bc',
-            border: OutlineInputBorder(),
-          ),
         ),
         const SizedBox(height: 12),
         FilledButton.icon(
