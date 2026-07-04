@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -29,6 +30,7 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final FocusNode _titleFocusNode;
+  late final FocusNode _notesFocusNode;
   late bool _isFullDay;
   late DateTime _start;
   late DateTime _end;
@@ -43,6 +45,17 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
     _titleController = TextEditingController(text: e?.title ?? '');
     _notesController = TextEditingController(text: e?.notes ?? '');
     _titleFocusNode = FocusNode();
+    _notesFocusNode = FocusNode();
+    // Notes is the last text field: Enter saves, Shift+Enter inserts a newline.
+    _notesFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.enter &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _submit();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
     _isFullDay = e?.isFullDay ?? false;
     _start = e?.start ??
         DateTime(
@@ -89,6 +102,7 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
     _titleController.dispose();
     _notesController.dispose();
     _titleFocusNode.dispose();
+    _notesFocusNode.dispose();
     super.dispose();
   }
 
@@ -192,7 +206,10 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
                       LabeledTextField(
                         label: 'Notes',
                         controller: _notesController,
+                        focusNode: _notesFocusNode,
                         maxLines: 3,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
                       ),
                       const SizedBox(height: 12),
                       ColorPickerField(

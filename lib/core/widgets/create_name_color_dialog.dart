@@ -86,6 +86,8 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
               label: 'Name',
               controller: _nameController,
               autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
               onChanged: (_) {
                 if (_showEmptyNameError) {
                   setState(() => _showEmptyNameError = false);
