@@ -107,19 +107,19 @@ class TodoTask extends SoftDeletable {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'createdAt': createdAt.toIso8601String(),
-    'updatedAt': updatedAt.toIso8601String(),
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
     'version': version,
-    'deletedAt': deletedAt?.toIso8601String(),
+    'deletedAt': deletedAt?.toUtc().toIso8601String(),
     'listId': listId,
     'title': title,
     'notes': notes,
-    'dueDate': dueDate?.toIso8601String(),
+    'dueDate': dueDate?.toUtc().toIso8601String(),
     'completed': completed,
     'starred': starred,
     'sortOrder': sortOrder,
     'preStarSortOrder': preStarSortOrder,
-    'dueDateSetAt': dueDateSetAt?.toIso8601String(),
+    'dueDateSetAt': dueDateSetAt?.toUtc().toIso8601String(),
     'parentTaskId': parentTaskId,
   };
 

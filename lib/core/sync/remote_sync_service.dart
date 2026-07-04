@@ -493,9 +493,8 @@ class RemoteSyncService {
     required String documentId,
     required String initialText,
   }) async {
-    final key = documentKey(collection, documentId);
     if (_charOpRegistry.session(collection, documentId) != null) return;
-    
+
     final ops = await _listRemoteCharOps(documentId);
     if (ops.isNotEmpty) {
       _charOpRegistry.loadSession(
@@ -504,6 +503,22 @@ class RemoteSyncService {
         clientId: deviceId,
         operations: ops,
       );
+      // If the reconstructed op-chain text doesn't match what's actually
+      // on screen/in SQLite (e.g. an earlier session's final char-ops were
+      // never flushed to remote before an app restart), diffing future
+      // edits against this stale session would recompute fractional
+      // positions from the wrong baseline and can collide with positions
+      // that already exist remotely, corrupting the op chain. Reseed from
+      // the known-good current text instead of trusting the stale session.
+      final loaded = _charOpRegistry.session(collection, documentId);
+      if (loaded != null && loaded.text != initialText) {
+        _charOpRegistry.resetSession(
+          collection: collection,
+          documentId: documentId,
+          clientId: deviceId,
+          text: initialText,
+        );
+      }
     } else {
       _charOpRegistry.ensureSession(
         collection: collection,

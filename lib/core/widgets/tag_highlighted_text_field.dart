@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
-import 'package:voyager/core/widgets/accent_focus_border.dart';
+import 'package:voyager/core/widgets/notched_field_border.dart';
 
 class TagHighlightedTextField extends StatefulWidget {
   const TagHighlightedTextField({
@@ -11,6 +11,8 @@ class TagHighlightedTextField extends StatefulWidget {
     required this.focusNode,
     this.onChanged,
     this.hintText,
+    this.label,
+    this.accentColor,
     this.style,
     this.contentPadding = const EdgeInsets.all(16),
     this.expands = false,
@@ -29,6 +31,13 @@ class TagHighlightedTextField extends StatefulWidget {
   final FocusNode focusNode;
   final ValueChanged<String>? onChanged;
   final String? hintText;
+
+  /// Optional Material-style floating label, drawn by [NotchedFieldBorder].
+  /// Most callers (search box, journal/todo body) leave this null, which
+  /// renders a plain (non-notched) border — matching the field's previous
+  /// look exactly.
+  final String? label;
+  final Color? accentColor;
   final TextStyle? style;
   final EdgeInsetsGeometry contentPadding;
   final bool expands;
@@ -56,12 +65,14 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   late final ScrollController _scrollController;
   Timer? _highlightTimer;
   String _highlightedText = '';
+  bool _hasText = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _highlightedText = widget.controller.text;
+    _hasText = widget.controller.text.isNotEmpty;
     widget.controller.addListener(_handleControllerChanged);
   }
 
@@ -71,6 +82,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_handleControllerChanged);
       widget.controller.addListener(_handleControllerChanged);
+      _hasText = widget.controller.text.isNotEmpty;
     }
     if (widget.controller.text != _highlightedText) {
       _highlightedText = widget.controller.text;
@@ -86,6 +98,12 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   }
 
   void _handleControllerChanged() {
+    // Immediate (undebounced) so the floating label reacts on the very first
+    // keystroke; the highlight repaint itself stays debounced below.
+    final hasText = widget.controller.text.isNotEmpty;
+    if (hasText != _hasText) {
+      setState(() => _hasText = hasText);
+    }
     _scheduleHighlightRepaint();
   }
 
@@ -116,9 +134,13 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         theme.textTheme.bodyLarge ??
         DefaultTextStyle.of(context).style;
     final strutStyle = StrutStyle.fromTextStyle(baseStyle);
-    final accent = widget.cursorColor ?? theme.colorScheme.primary;
+    final accent = widget.accentColor ?? widget.cursorColor ?? theme.colorScheme.primary;
+    final hasLabel = (widget.label ?? '').isNotEmpty;
     final decoration = widget.decoration.copyWith(
-      hintText: widget.hintText,
+      // The floating label (drawn externally by NotchedFieldBorder) rests in
+      // the same spot a hint would occupy, so suppress the hint to avoid
+      // double-printed placeholder text.
+      hintText: hasLabel ? null : widget.hintText,
       contentPadding: widget.contentPadding,
       filled: widget.useFocusGlow ? false : widget.decoration.filled,
       border: widget.useFocusGlow ? InputBorder.none : widget.decoration.border,
@@ -197,9 +219,14 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
 
     if (!widget.useFocusGlow) return field;
 
-    return AccentFocusBorder(
+    return NotchedFieldBorder(
       focusNode: widget.focusNode,
       accentColor: accent,
+      label: widget.label,
+      hasContent: _hasText,
+      contentPadding: widget.contentPadding,
+      labelStyle: baseStyle,
+      alignLabelToTop: widget.expands || (widget.maxLines ?? 1) > 1,
       child: field,
     );
   }

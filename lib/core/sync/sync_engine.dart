@@ -142,33 +142,47 @@ class SyncEngine {
     required Map<String, dynamic> payload,
     List<CharacterOperation>? charOps,
   }) async {
-    await _retryPolicy.run(() async {
-      if (DevFlags.verboseSync) {
-        debugPrint('[sync] upsert $collection/$documentId $payload');
-      }
+    if (DevFlags.verboseSync) {
+      debugPrint('[sync] upsert $collection/$documentId $payload');
+    }
 
-      await _syncRepository.upsertDocument(collection, documentId, payload);
-      final sequence = ++_sequence;
+    // Sequence/operation are computed once per call (outside any retry loop)
+    // so that if the operation-log write below needs to be retried, every
+    // attempt targets the same operation id instead of minting a new one.
+    final sequence = ++_sequence;
+    final opPayload = charOps != null && charOps.isNotEmpty
+        ? CharOpsPayload(
+            charOps: charOps,
+            snapshot: payload,
+          ).encode()
+        : jsonEncode(payload);
+    final operation = SyncOperation(
+      id: '${_deviceId}_${documentId}_$sequence',
+      documentId: documentId,
+      sequence: sequence,
+      payload: opPayload,
+      deviceId: _deviceId,
+      timestamp: DateTime.now().toUtc(),
+    );
 
-      final opPayload = charOps != null && charOps.isNotEmpty
-          ? CharOpsPayload(
-              charOps: charOps,
-              snapshot: payload,
-            ).encode()
-          : jsonEncode(payload);
-
-      await _syncRepository.appendOperation(
-        SyncOperation(
-          id: '${_deviceId}_${documentId}_$sequence',
-          documentId: documentId,
-          sequence: sequence,
-          payload: opPayload,
-          deviceId: _deviceId,
-          timestamp: DateTime.now().toUtc(),
-        ),
-      );
-      _syncActivity?.recordUpload(collection);
-    });
+    // Write the operation-log entry (which embeds a full snapshot of
+    // [payload]) before the mirrored document, each with its own retry
+    // scope. If the app is killed between these two writes, the document
+    // mirror may be left stale, but that's safely recoverable: pulls prefer
+    // the CRDT-resolved payload from sync_operations over the raw document,
+    // and the next editing session will see the complete char-op history
+    // instead of reseeding from scratch and colliding with it. Writing the
+    // document first (the old order) could leave sync_operations missing
+    // the final edit while the document already reflects it, which is what
+    // causes "duplicate fractional position" conflicts after an interrupted
+    // sync. Retrying each write independently (rather than retrying both
+    // together) keeps a retry of the document write from re-appending an
+    // already-succeeded operation entry.
+    await _retryPolicy.run(() => _syncRepository.appendOperation(operation));
+    await _retryPolicy.run(
+      () => _syncRepository.upsertDocument(collection, documentId, payload),
+    );
+    _syncActivity?.recordUpload(collection);
   }
 }
 

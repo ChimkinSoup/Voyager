@@ -34,6 +34,17 @@ DateTime parseFirestoreDateOrNow(dynamic value) =>
 
 String? _dateToFirestore(DateTime? value) => value?.toUtc().toIso8601String();
 
+/// Non-nullable counterpart of [_dateToFirestore].
+///
+/// Required because Drift returns `DateTime` values read from SQLite with
+/// `isUtc == false` (it stores unix timestamps and reconstructs them as
+/// local time), even though the app always writes UTC instants. Serializing
+/// those values with a bare `.toIso8601String()` silently prints the wall
+/// clock time with no timezone marker, which is off by the device's UTC
+/// offset from the real instant once compared elsewhere (e.g. in the sync
+/// conflict UI). Always normalize to UTC before serializing.
+String _dateToFirestoreRequired(DateTime value) => value.toUtc().toIso8601String();
+
 int parseVersion(Map<String, dynamic> data) =>
     (data['version'] as num?)?.toInt() ?? 0;
 
@@ -106,8 +117,8 @@ Map<String, dynamic> journalToFirestore(Journal journal) => {
   'colorValue': journal.colorValue,
   'guidedJournaling': journal.guidedJournaling,
   'promptCycleDays': journal.promptCycleDays,
-  'createdAt': journal.createdAt.toIso8601String(),
-  'updatedAt': journal.updatedAt.toIso8601String(),
+  'createdAt': _dateToFirestoreRequired(journal.createdAt),
+  'updatedAt': _dateToFirestoreRequired(journal.updatedAt),
   'version': journal.version,
   'deletedAt': _dateToFirestore(journal.deletedAt),
 };
@@ -156,7 +167,7 @@ Map<String, dynamic> journalEntryToFirestore(JournalEntry entry) => {
   'title': entry.title,
   'body': entry.body,
   'richBodyJson': entry.richBodyJson,
-  'entryDate': entry.entryDate.toIso8601String(),
+  'entryDate': _dateToFirestoreRequired(entry.entryDate),
   'timestamp': _dateToFirestore(entry.timestamp),
   'tags': entry.tags,
   'mood': entry.mood,
@@ -164,8 +175,8 @@ Map<String, dynamic> journalEntryToFirestore(JournalEntry entry) => {
   'customQuote': entry.customQuote,
   'weatherIcon': entry.weatherIcon,
   'guidedPrompt': entry.guidedPrompt,
-  'createdAt': entry.createdAt.toIso8601String(),
-  'updatedAt': entry.updatedAt.toIso8601String(),
+  'createdAt': _dateToFirestoreRequired(entry.createdAt),
+  'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
   'version': entry.version,
   'deletedAt': _dateToFirestore(entry.deletedAt),
 };
@@ -271,8 +282,8 @@ Map<String, dynamic> todoListToFirestore(TodoListModel list) => {
   'id': todoListDocumentIdForFirestore(list.id),
   'name': list.name,
   'colorValue': list.colorValue,
-  'createdAt': list.createdAt.toIso8601String(),
-  'updatedAt': list.updatedAt.toIso8601String(),
+  'createdAt': _dateToFirestoreRequired(list.createdAt),
+  'updatedAt': _dateToFirestoreRequired(list.updatedAt),
   'version': list.version,
   'deletedAt': _dateToFirestore(list.deletedAt),
 };
@@ -321,8 +332,8 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'preStarSortOrder': task.preStarSortOrder,
   'dueDateSetAt': _dateToFirestore(task.dueDateSetAt),
   'parentTaskId': task.parentTaskId,
-  'createdAt': task.createdAt.toIso8601String(),
-  'updatedAt': task.updatedAt.toIso8601String(),
+  'createdAt': _dateToFirestoreRequired(task.createdAt),
+  'updatedAt': _dateToFirestoreRequired(task.updatedAt),
   'version': task.version,
   'deletedAt': _dateToFirestore(task.deletedAt),
 };
