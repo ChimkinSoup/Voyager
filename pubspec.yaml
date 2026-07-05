@@ -32,7 +32,6 @@ dependencies:
   window_manager: ^0.4.3
   archive: ^3.6.1
   file_picker: ^8.1.7
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
