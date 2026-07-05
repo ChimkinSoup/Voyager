@@ -26,11 +26,13 @@ class SettingsColorPaletteSection extends ConsumerStatefulWidget {
 class _SettingsColorPaletteSectionState
     extends ConsumerState<SettingsColorPaletteSection> {
   final _hexController = TextEditingController();
+  final _hexFocusNode = FocusNode();
   String? _hexError;
 
   @override
   void dispose() {
     _hexController.dispose();
+    _hexFocusNode.dispose();
     super.dispose();
   }
 
@@ -42,17 +44,20 @@ class _SettingsColorPaletteSectionState
     final parsed = parseHexColor(_hexController.text);
     if (parsed == null) {
       setState(() => _hexError = 'Enter 6 hex digits (e.g. 7C9EFF)');
+      _hexFocusNode.requestFocus();
       return;
     }
     final palette = List<int>.from(widget.settings.colorPalette);
     if (palette.contains(parsed)) {
       setState(() => _hexError = 'Color already in palette');
+      _hexFocusNode.requestFocus();
       return;
     }
     palette.add(parsed);
     _hexController.clear();
     setState(() => _hexError = null);
     await _updatePalette(palette);
+    if (mounted) _hexFocusNode.requestFocus();
   }
 
   Future<void> _removeColor(int color) async {
@@ -104,6 +109,7 @@ class _SettingsColorPaletteSectionState
             Expanded(
               child: VoyagerTextField(
                 controller: _hexController,
+                focusNode: _hexFocusNode,
                 maxLength: 6,
                 buildCounter: (
                   _,
@@ -117,9 +123,8 @@ class _SettingsColorPaletteSectionState
                   LengthLimitingTextInputFormatter(6),
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Fa-f]')),
                 ],
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   hintText: 'Add custom color (e.g. 7C9EFF)',
-                  errorText: _hexError,
                 ),
                 onSubmitted: (_) => _addColor(),
               ),
@@ -131,6 +136,15 @@ class _SettingsColorPaletteSectionState
             ),
           ],
         ),
+        if (_hexError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _hexError!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
       ],
     );
   }

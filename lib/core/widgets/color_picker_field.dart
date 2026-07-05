@@ -19,8 +19,9 @@ double _swatchVisualRadius(double layoutRadius) =>
 /// Height for a palette grid showing [visibleRows] of swatches.
 double paletteViewportHeight(double swatchRadius, {int visibleRows = 3}) {
   if (visibleRows <= 0) return 0;
-  final cell = swatchRadius * 2 + _paletteSpacing;
-  return visibleRows * cell - _paletteSpacing;
+  final visualDiameter = _swatchVisualRadius(swatchRadius) * 2;
+  final cell = visualDiameter + _paletteSpacing;
+  return visibleRows * cell - _paletteSpacing + 32.0;
 }
 
 /// Sizes a palette grid inside a 4:3 box that grows with color count.
@@ -50,8 +51,8 @@ computeColorPaletteLayout({
   }
 
   final cell = swatchRadius * 2 + _paletteSpacing;
-  final cappedMaxWidth = math.max(160, maxWidth);
-  final cappedMaxHeight = math.max(120, maxHeight);
+  final cappedMaxWidth = math.max(cell, maxWidth);
+  final cappedMaxHeight = math.max(cell, maxHeight);
 
   final targetColumns = math.min(
     colorCount,
@@ -67,34 +68,13 @@ computeColorPaletteLayout({
   var intrinsicW = columns * cell - _paletteSpacing;
   var intrinsicH = rows * cell - _paletteSpacing;
 
-  double boxW;
-  double boxH;
-  if (intrinsicW / intrinsicH >= _paletteAspect) {
-    boxW = intrinsicW;
-    boxH = intrinsicW / _paletteAspect;
-  } else {
-    boxH = intrinsicH;
-    boxW = intrinsicH * _paletteAspect;
-  }
-
-  const minW = 160.0;
-  const minH = 120.0;
-  if (boxW < minW) {
-    boxW = minW;
-    boxH = boxW / _paletteAspect;
-  }
-  if (boxH < minH) {
-    boxH = minH;
-    boxW = boxH * _paletteAspect;
-  }
-
+  double boxW = intrinsicW;
+  double boxH = intrinsicH;
+  
   var scrollable = false;
-  if (boxW > cappedMaxWidth || boxH > cappedMaxHeight) {
-    boxW = math
-        .min(cappedMaxWidth, cappedMaxHeight * _paletteAspect)
-        .toDouble();
-    boxH = boxW / _paletteAspect;
-    scrollable = intrinsicH > boxH;
+  if (boxH > cappedMaxHeight) {
+    boxH = cappedMaxHeight;
+    scrollable = true;
   }
 
   return (
@@ -144,66 +124,69 @@ class ColorPaletteGrid extends StatelessWidget {
       );
     }
 
-    final media = MediaQuery.sizeOf(context);
-    final layout = computeColorPaletteLayout(
-      colorCount: palette.length,
-      maxWidth: maxWidth ?? media.width * 0.85,
-      maxHeight: maxHeight ?? media.height * 0.45,
-      swatchRadius: swatchRadius,
-    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final media = MediaQuery.sizeOf(context);
 
-    final normalizedSelected = selected == null
-        ? null
-        : normalizeColorValue(selected!);
+        final availableWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : (maxWidth ?? media.width * 0.85);
 
-    final maxViewportHeight = maxHeight ?? media.height * 0.45;
-    final scrollable =
-        layout.scrollable || layout.contentHeight > maxViewportHeight;
+        final visualDiameter = _swatchVisualRadius(swatchRadius) * 2;
+        final cell = visualDiameter + _paletteSpacing;
+        final columns = math.max(1, ((availableWidth - 32 + _paletteSpacing) / cell).floor());
+        final rows = (palette.length / columns).ceil();
+        final intrinsicH = rows * visualDiameter + (rows - 1) * _paletteSpacing + 32.0;
 
-    final width = tightLayout
-        ? math.min(
-            layout.contentWidth,
-            maxWidth ?? layout.contentWidth,
-          )
-        : layout.width;
-    final height = scrollable
-        ? (tightLayout
-            ? maxViewportHeight
-            : layout.height)
-        : (tightLayout ? layout.contentHeight : layout.height);
+        // Cap the visible height. Inside an unbounded context (SingleChildScrollView)
+        // constraints.maxHeight is infinity, so we fall back to maxHeight param.
+        final capH = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : (maxHeight ?? media.height * 0.45);
 
-    final grid = GridView.builder(
-      padding: EdgeInsets.zero,
-      shrinkWrap: !scrollable,
-      physics: scrollable
-          ? const ClampingScrollPhysics()
-          : const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: layout.columns,
-        mainAxisSpacing: _paletteSpacing,
-        crossAxisSpacing: _paletteSpacing,
-        childAspectRatio: 1,
-      ),
-      itemCount: palette.length,
-      itemBuilder: (context, index) {
-        final colorValue = palette[index];
-        final normalized = normalizeColorValue(colorValue);
-        return Center(
-          child: _ColorSwatch(
-            colorValue: colorValue,
-            selected: normalized == normalizedSelected,
-            used: usedColors.map(normalizeColorValue).contains(normalized),
-            radius: _swatchVisualRadius(swatchRadius),
-            onTap: () => onSelected(normalized),
+        final viewportH = math.min(intrinsicH, capH);
+        final needsScroll = intrinsicH > capH;
+
+        final normalizedSelected =
+            selected == null ? null : normalizeColorValue(selected!);
+
+        final wrap = Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Wrap(
+            spacing: _paletteSpacing,
+            runSpacing: _paletteSpacing,
+            children: palette.map((colorValue) {
+              final normalized = normalizeColorValue(colorValue);
+              return _ColorSwatch(
+                colorValue: colorValue,
+                selected: normalized == normalizedSelected,
+                used: usedColors.map(normalizeColorValue).contains(normalized),
+                radius: _swatchVisualRadius(swatchRadius),
+                onTap: () => onSelected(normalized),
+              );
+            }).toList(),
+          ),
+        );
+
+        Widget content = wrap;
+
+        if (needsScroll) {
+          content = SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: content,
+          );
+        }
+
+        return SizedBox(
+          width: availableWidth,
+          height: viewportH,
+          child: Material(
+            color: Colors.transparent,
+            clipBehavior: Clip.hardEdge,
+            child: content,
           ),
         );
       },
-    );
-
-    return SizedBox(
-      width: width,
-      height: height,
-      child: ClipRect(child: grid),
     );
   }
 }
@@ -281,7 +264,7 @@ class _ColorPickerFieldState extends ConsumerState<ColorPickerField> {
   }
 }
 
-const _palettePickDialogHeightScale = 1.17;
+
 
 Future<int?> pickColorFromPalette(
   BuildContext context, {
@@ -320,6 +303,10 @@ class _PalettePickDialog extends StatefulWidget {
   State<_PalettePickDialog> createState() => _PalettePickDialogState();
 }
 
+class _SubmitIntent extends Intent {
+  const _SubmitIntent();
+}
+
 class _PalettePickDialogState extends State<_PalettePickDialog> {
   late int _picked;
 
@@ -338,11 +325,11 @@ class _PalettePickDialogState extends State<_PalettePickDialog> {
   Widget build(BuildContext context) {
     return Shortcuts(
       shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter): _SubmitIntent(),
       },
       child: Actions(
         actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
+          _SubmitIntent: CallbackAction<_SubmitIntent>(
             onInvoke: (_) {
               Navigator.pop(context, _picked);
               return null;
@@ -355,17 +342,20 @@ class _PalettePickDialogState extends State<_PalettePickDialog> {
           contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
           content: SizedBox(
             width: 520,
-            child: ColorPaletteGrid(
-              palette: widget.palette,
-              selected: _picked,
-              usedColors: widget.usedColors,
-              onSelected: (color) => setState(() => _picked = color),
-              swatchRadius: 22,
-              maxWidth: 520,
-              maxHeight:
-                  paletteViewportHeight(22, visibleRows: 3) *
-                  _palettePickDialogHeightScale,
-              tightLayout: true,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: paletteViewportHeight(32, visibleRows: 3),
+              ),
+              child: ColorPaletteGrid(
+                palette: widget.palette,
+                selected: _picked,
+                usedColors: widget.usedColors,
+                onSelected: (color) => setState(() => _picked = color),
+                swatchRadius: 32,
+                maxWidth: 520,
+                maxHeight: paletteViewportHeight(32, visibleRows: 3),
+                tightLayout: true,
+              ),
             ),
           ),
           actions: [
@@ -411,8 +401,11 @@ class _ColorSwatch extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onFocusChange: (focused) {
+        if (focused) onTap();
+      },
       customBorder: const CircleBorder(),
-      child: Container(
+      child: Ink(
         width: diameter,
         height: diameter,
         decoration: BoxDecoration(

@@ -556,11 +556,12 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
     ref.read(trackersProvider.future).then((_) {}),
     ref.read(rankingConfigsProvider.future).then((_) {}),
     listsFuture.then((lists) async {
-      await Future.wait<void>(
-        lists.map(
+      await Future.wait<void>([
+        ref.read(allTodoTasksProvider.future).then((_) {}),
+        ...lists.map(
           (list) => ref.read(todoTasksProvider(list.id).future).then((_) {}),
         ),
-      );
+      ]);
     }),
     ref.read(journalsProvider.future).then((journals) async {
       await Future.wait<void>([
@@ -662,6 +663,9 @@ final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
 
   final lists = listsAsync.valueOrNull;
   if (lists != null) {
+    items.add(
+      cacheStatusFromAsync('All tasks', ref.watch(allTodoTasksProvider)),
+    );
     for (final list in lists) {
       items.add(
         cacheStatusFromAsync(

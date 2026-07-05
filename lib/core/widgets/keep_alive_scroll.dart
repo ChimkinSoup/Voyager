@@ -97,3 +97,40 @@ class _KeepAliveSingleChildScrollViewState
     return SingleChildScrollView(key: widget.storageKey, child: widget.child);
   }
 }
+
+/// Preserves scroll offset for CustomScrollViews in shell tabs.
+class KeepAliveCustomScrollView extends StatefulWidget {
+  const KeepAliveCustomScrollView({
+    super.key,
+    required this.storageKey,
+    required this.slivers,
+    this.controller,
+    this.cacheExtent,
+  });
+
+  final PageStorageKey<String> storageKey;
+  final List<Widget> slivers;
+  final ScrollController? controller;
+  final double? cacheExtent;
+
+  @override
+  State<KeepAliveCustomScrollView> createState() =>
+      _KeepAliveCustomScrollViewState();
+}
+
+class _KeepAliveCustomScrollViewState extends State<KeepAliveCustomScrollView>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return CustomScrollView(
+      key: widget.storageKey,
+      controller: widget.controller,
+      cacheExtent: widget.cacheExtent,
+      slivers: widget.slivers,
+    );
+  }
+}

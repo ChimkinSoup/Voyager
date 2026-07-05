@@ -106,14 +106,20 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
             const SizedBox(height: 16),
             Text('Color', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
-            ColorPaletteGrid(
-              palette: widget.palette,
-              selected: _selectedColor,
-              usedColors: widget.usedColors,
-              onSelected: (color) => setState(() => _selectedColor = color),
-              maxWidth: 520,
-              maxHeight: paletteViewportHeight(18, visibleRows: 3),
-              tightLayout: true,
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: paletteViewportHeight(32, visibleRows: 3),
+              ),
+              child: ColorPaletteGrid(
+                palette: widget.palette,
+                selected: _selectedColor,
+                usedColors: widget.usedColors,
+                onSelected: (color) => setState(() => _selectedColor = color),
+                swatchRadius: 32,
+                maxWidth: 520,
+                maxHeight: paletteViewportHeight(32, visibleRows: 3),
+                tightLayout: true,
+              ),
             ),
           ],
         ),

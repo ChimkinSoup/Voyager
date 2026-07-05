@@ -23,6 +23,7 @@ import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
@@ -63,6 +64,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late final FocusNode _titleFocusNode;
   late final FocusNode _notesFocusNode;
   late final FocusNode _subtaskFocusNode;
+  final GlobalKey _subtaskListKey = GlobalKey();
   DateTime? _dueDate;
   List<TodoTask> _subtasks = [];
   RemoteSyncService? _remoteSync;
@@ -597,10 +599,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     });
   }
 
-  Future<void> _reorderSubtasks(int oldIndex, int newIndex) async {
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
-    }
+  void _reorderSubtasks(int oldIndex, int newIndex) {
+    // onReorderItem already adjusts newIndex for the removed item at oldIndex,
+    // so no manual correction is needed here (unlike the old onReorder API).
     if (oldIndex == newIndex) return;
 
     final subtasks = List<TodoTask>.from(_subtasks);
@@ -616,13 +617,18 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     }
 
     setState(() => _subtasks = subtasks);
-    final repo = ref.read(todoRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    for (final task in updates) {
-      await repo.upsertTask(task);
-      remoteSync.pushTodoTaskNow(task);
-    }
-    widget.onChanged();
+    
+    // Yield to the event loop so the UI updates immediately before we do
+    // potentially blocking database operations.
+    unawaited(Future.delayed(Duration.zero, () async {
+      final repo = ref.read(todoRepositoryProvider);
+      final remoteSync = ref.read(remoteSyncServiceProvider);
+      for (final task in updates) {
+        await repo.upsertTask(task);
+        remoteSync.pushTodoTaskNow(task);
+      }
+      widget.onChanged();
+    }));
   }
 
   Future<void> _promoteSubtask(TodoTask subtask) async {
@@ -953,7 +959,20 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             const SizedBox(height: 4),
             Expanded(
               child: ReorderableListView(
+                key: _subtaskListKey,
+                cacheExtent: 10000.0,
                 buildDefaultDragHandles: false,
+                proxyDecorator: (child, index, animation) {
+                  return ClampToTargetBounds(
+                    targetKey: _subtaskListKey,
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(14),
+                      clipBehavior: Clip.antiAlias,
+                      child: child,
+                    ),
+                  );
+                },
                 onReorderItem: _reorderSubtasks,
                 children: [
                   for (var i = 0; i < _subtasks.length; i++)

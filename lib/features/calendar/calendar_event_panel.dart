@@ -45,6 +45,15 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
     _titleController = TextEditingController(text: e?.title ?? '');
     _notesController = TextEditingController(text: e?.notes ?? '');
     _titleFocusNode = FocusNode();
+    _titleFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.tab &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _notesFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
     _notesFocusNode = FocusNode();
     // Notes is the last text field: Enter saves, Shift+Enter inserts a newline.
     _notesFocusNode.onKeyEvent = (node, event) {
@@ -216,6 +225,7 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
                         label: 'Event color',
                         value: _colorValue,
                         swatchRadius: 20,
+                        maxHeight: 160,
                         onChanged: (value) => setState(() => _colorValue = value),
                       ),
                     ],

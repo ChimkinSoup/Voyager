@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -228,9 +229,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     _bodyFocusNode.onKeyEvent = (node, event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
-        _save().then((_) {
-          if (mounted) Navigator.pop(context);
-        });
+        unawaited(_save());
+        if (mounted) Navigator.pop(context);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -248,37 +248,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
     if (!_isSaved) {
-      _isSaved = true;
-      final title = _titleController.text.trim();
-      final body = _bodyController.text.trimRight();
-      final mood = _mood;
-      final weatherIcon = _weatherIcon;
-      final entry = _entry;
-      final coordinator = _coordinator;
-      final remoteSync = _remoteSync;
-      final repo = _journalRepository;
-      final onSaved = widget.onSaved;
-
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (coordinator != null && remoteSync != null && repo != null) {
-          final helper = SearchEntrySaveHelper(
-            coordinator: coordinator,
-            remoteSync: remoteSync,
-            journalRepository: repo,
-          );
-          final updated = await helper.saveEntry(
-            baseline: entry,
-            title: title,
-            body: body,
-            mood: mood,
-            weatherIcon: weatherIcon,
-            journalId: entry.journalId,
-          );
-          if (updated != null) {
-            onSaved(updated);
-          }
-        }
-      });
+      unawaited(_save());
     }
     _titleController.dispose();
     _bodyController.dispose();
@@ -300,6 +270,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   Future<void> _save() async {
     _isSaved = true;
+    final title = _titleController.text.trim();
     final body = _bodyController.text.trimRight();
     
     // Use cached references to avoid calling ref.read() during dispose()
@@ -310,7 +281,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     );
     final updated = await helper.saveEntry(
       baseline: _entry,
-      title: _titleController.text.trim(),
+      title: title,
       body: body,
       mood: _mood,
       weatherIcon: _weatherIcon,
@@ -527,7 +498,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
           child: const Text('Close'),
         ),
         FilledButton(
-          onPressed: () async {
+          onPressed: () {
+            unawaited(_save());
             if (context.mounted) Navigator.pop(context);
           },
           style: FilledButton.styleFrom(backgroundColor: _accentColor),

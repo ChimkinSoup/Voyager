@@ -19,7 +19,7 @@ abstract final class VoyagerListItemSurface {
           Theme.of(context).scaffoldBackgroundColor,
           0.35,
         )!
-        .withValues(alpha: 0.92);
+        .withValues(alpha: 0.65);
   }
 
   static BoxDecoration decoration(
