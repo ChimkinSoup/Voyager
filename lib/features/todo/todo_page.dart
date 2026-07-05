@@ -1169,7 +1169,7 @@ class _TaskRowState extends State<_TaskRow>
   late final Animation<double> _checkScale;
 
   var _displayCompleted = false;
-  var _animatingComplete = false;
+  int _toggleGeneration = 0;
   
   ({int completed, int total})? _cachedStats;
 
@@ -1212,14 +1212,14 @@ class _TaskRowState extends State<_TaskRow>
   @override
   void didUpdateWidget(covariant _TaskRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_animatingComplete) return;
+    if (_animController.isAnimating) return;
     if (oldWidget.task.completed != widget.task.completed) {
       if (widget.task.completed) {
         _displayCompleted = true;
         _animController.value = 1.0;
       } else {
         _displayCompleted = false;
-        _animController.reset();
+        _animController.value = 0.0;
       }
     }
   }
@@ -1231,24 +1231,22 @@ class _TaskRowState extends State<_TaskRow>
   }
 
   Future<void> _handleToggle(bool? value) async {
-    if (_animatingComplete) return;
-    if (value == true && !widget.task.completed) {
-      setState(() {
-        _animatingComplete = true;
-        _displayCompleted = true;
-      });
-      await _animController.forward(from: 0);
-      if (!mounted) return;
-      unawaited(widget.onToggle(true));
-      setState(() => _animatingComplete = false);
-    } else if (value == false && widget.task.completed) {
-      setState(() => _animatingComplete = true);
-      await _animController.reverse(from: 1.0);
-      if (!mounted) return;
-      setState(() => _displayCompleted = false);
-      unawaited(widget.onToggle(false));
-      setState(() => _animatingComplete = false);
+    final target = value ?? false;
+    setState(() {
+      _displayCompleted = target;
+    });
+
+    final currentGen = ++_toggleGeneration;
+
+    if (target) {
+      await _animController.forward();
+    } else {
+      await _animController.reverse();
     }
+
+    if (!mounted || _toggleGeneration != currentGen) return;
+
+    unawaited(widget.onToggle(target));
   }
 
   String? _formatDue(DateTime? dueDate) {
@@ -1293,12 +1291,15 @@ class _TaskRowState extends State<_TaskRow>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-          ScaleTransition(
-            scale: _checkScale,
-            child: Checkbox(
-              value: _displayCompleted,
-              onChanged: _handleToggle,
-              activeColor: listColor,
+          Padding(
+            padding: const EdgeInsets.only(left: 8.0),
+            child: ScaleTransition(
+              scale: _checkScale,
+              child: Checkbox(
+                value: _displayCompleted,
+                onChanged: _handleToggle,
+                activeColor: listColor,
+              ),
             ),
           ),
           Expanded(
@@ -1322,6 +1323,7 @@ class _TaskRowState extends State<_TaskRow>
                           style: Theme.of(context).textTheme.bodyLarge!
                               .copyWith(
                                 color: _displayCompleted ? strikeColor : null,
+                                decoration: _displayCompleted ? TextDecoration.lineThrough : null,
                               ),
                           child: Text(
                             widget.task.title,

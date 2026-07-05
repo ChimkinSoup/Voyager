@@ -14,6 +14,20 @@ Future<DateTime?> showDateTimePickerDialog(
   );
 }
 
+Future<({TimeOfDay start, TimeOfDay end})?> showTimeRangePickerDialog(
+  BuildContext context, {
+  required TimeOfDay initialStart,
+  required TimeOfDay initialEnd,
+}) {
+  return showDialog<({TimeOfDay start, TimeOfDay end})>(
+    context: context,
+    builder: (_) => TimeRangePickerDialog(
+      initialStart: initialStart,
+      initialEnd: initialEnd,
+    ),
+  );
+}
+
 class DateTimePickerDialog extends StatefulWidget {
   const DateTimePickerDialog({super.key, required this.initialDateTime});
 
@@ -120,6 +134,110 @@ class _DateTimePickerDialogState extends State<DateTimePickerDialog> {
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+enum _TimeRangeTab { start, end }
+
+class TimeRangePickerDialog extends StatefulWidget {
+  const TimeRangePickerDialog({
+    super.key,
+    required this.initialStart,
+    required this.initialEnd,
+  });
+
+  final TimeOfDay initialStart;
+  final TimeOfDay initialEnd;
+
+  @override
+  State<TimeRangePickerDialog> createState() => _TimeRangePickerDialogState();
+}
+
+class _TimeRangePickerDialogState extends State<TimeRangePickerDialog> {
+  late TimeOfDay _start;
+  late TimeOfDay _end;
+  var _tab = _TimeRangeTab.start;
+
+  @override
+  void initState() {
+    super.initState();
+    _start = widget.initialStart;
+    _end = widget.initialEnd;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final activeTime = _tab == _TimeRangeTab.start ? _start : _end;
+    
+    return EnterToSubmitScope(
+      onSubmit: () => Navigator.of(context).pop((start: _start, end: _end)),
+      child: Dialog(
+        child: SizedBox(
+          width: 340,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: SegmentedButton<_TimeRangeTab>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _TimeRangeTab.start,
+                      label: Text('Start Time'),
+                    ),
+                    ButtonSegment(
+                      value: _TimeRangeTab.end,
+                      label: Text('End Time'),
+                    ),
+                  ],
+                  selected: {_tab},
+                  onSelectionChanged: (set) => setState(() => _tab = set.first),
+                ),
+              ),
+              SizedBox(
+                height: 380,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: _ClockTimePicker(
+                    hour: activeTime.hour,
+                    minute: activeTime.minute,
+                    onChanged: (time) {
+                      setState(() {
+                        if (_tab == _TimeRangeTab.start) {
+                          _start = time;
+                        } else {
+                          _end = time;
+                        }
+                      });
+                    },
+                  ),
+                ),
+              ),
+              Divider(height: 1, color: colorScheme.outlineVariant),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop((start: _start, end: _end)),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
