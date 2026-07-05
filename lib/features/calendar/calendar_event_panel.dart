@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
@@ -8,7 +12,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 
 /// Inline event add/edit panel for the calendar sidebar (no dialog).
-class CalendarEventPanel extends StatefulWidget {
+class CalendarEventPanel extends ConsumerStatefulWidget {
   const CalendarEventPanel({
     super.key,
     this.event,
@@ -23,10 +27,10 @@ class CalendarEventPanel extends StatefulWidget {
   final VoidCallback onCancel;
 
   @override
-  State<CalendarEventPanel> createState() => _CalendarEventPanelState();
+  ConsumerState<CalendarEventPanel> createState() => _CalendarEventPanelState();
 }
 
-class _CalendarEventPanelState extends State<CalendarEventPanel> {
+class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   late final FocusNode _titleFocusNode;
@@ -75,7 +79,8 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
           widget.initialDate.minute,
         );
     _end = e?.end ?? _start.add(const Duration(hours: 1));
-    _colorValue = e?.colorValue ?? 0xFF7C9EFF;
+    final settings = ref.read(settingsProvider).valueOrNull;
+    _colorValue = e?.colorValue ?? (settings?.accentColor ?? 0xFF7C9EFF);
     _recurrence = e?.recurrence ?? EventRecurrence.none;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _titleFocusNode.requestFocus();
@@ -100,7 +105,8 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
             widget.initialDate.minute,
           );
       _end = e?.end ?? _start.add(const Duration(hours: 1));
-      _colorValue = e?.colorValue ?? 0xFF7C9EFF;
+      final settings = ref.read(settingsProvider).valueOrNull;
+      _colorValue = e?.colorValue ?? (settings?.accentColor ?? 0xFF7C9EFF);
       _recurrence = e?.recurrence ?? EventRecurrence.none;
       _titleError = null;
     }
@@ -188,12 +194,76 @@ class _CalendarEventPanelState extends State<CalendarEventPanel> {
                         ),
                       ],
                       const SizedBox(height: 12),
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12.0),
+                        title: const Text('Date'),
+                        trailing: Text(DateFormat.yMMMd().format(_start)),
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _start,
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime(2100),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              _start = DateTime(
+                                date.year,
+                                date.month,
+                                date.day,
+                                _start.hour,
+                                _start.minute,
+                              );
+                              _end = DateTime(
+                                date.year,
+                                date.month,
+                                date.day,
+                                _end.hour,
+                                _end.minute,
+                              );
+                            });
+                          }
+                        },
+                      ),
                       SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12.0),
                         title: const Text('All day'),
                         value: _isFullDay,
                         onChanged: (v) => setState(() => _isFullDay = v),
                       ),
+                      if (!_isFullDay) ...[
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12.0),
+                          title: const Text('Time'),
+                          trailing: Text(
+                              '${TimeOfDay.fromDateTime(_start).format(context)} - ${TimeOfDay.fromDateTime(_end).format(context)}'),
+                          onTap: () async {
+                            final times = await showTimeRangePickerDialog(
+                              context,
+                              initialStart: TimeOfDay.fromDateTime(_start),
+                              initialEnd: TimeOfDay.fromDateTime(_end),
+                            );
+                            if (times != null) {
+                              setState(() {
+                                _start = DateTime(
+                                  _start.year,
+                                  _start.month,
+                                  _start.day,
+                                  times.start.hour,
+                                  times.start.minute,
+                                );
+                                _end = DateTime(
+                                  _end.year,
+                                  _end.month,
+                                  _end.day,
+                                  times.end.hour,
+                                  times.end.minute,
+                                );
+                              });
+                            }
+                          },
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       VoyagerDropdownButtonFormField<EventRecurrence>(
                         decoration: const InputDecoration(labelText: 'Repeat'),

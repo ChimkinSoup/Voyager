@@ -1113,6 +1113,9 @@ class _SubtaskRowState extends State<_SubtaskRow>
     setState(() {
       _editing = true;
       _editController.text = widget.subtask.title;
+      _editController.selection = TextSelection.collapsed(
+        offset: widget.subtask.title.length,
+      );
     });
     _editFocusNode.requestFocus();
   }
@@ -1223,7 +1226,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
                           ),
                         ),
                       ),
-                    if (_displayCompleted)
+                    if (_displayCompleted && !_editing)
                       Positioned.fill(
                         child: IgnorePointer(
                           child: AnimatedBuilder(
@@ -1314,11 +1317,13 @@ class _MultilineStrikePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (progress <= 0) return;
+    
+    final layoutWidth = maxWidth - textPadding.horizontal;
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: textDirection,
       maxLines: null,
-    )..layout(maxWidth: maxWidth);
+    )..layout(maxWidth: layoutWidth > 0 ? layoutWidth : 0);
 
     final metrics = painter.computeLineMetrics();
     if (metrics.isEmpty) return;
