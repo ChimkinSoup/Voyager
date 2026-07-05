@@ -105,7 +105,7 @@ Future<Journal?> createJournalList(
     context,
     title: 'New journal',
     palette: palette,
-    initialColor: assigner.nextColor(),
+    initialColor: defaultColor,
     usedColors: allJournals
         .where((j) => j.colorValue != null)
         .map((j) => j.colorValue!)

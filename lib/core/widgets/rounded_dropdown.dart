@@ -155,7 +155,6 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
           widget.labelColor ??
           widget.labelStyle?.color ??
           theme.colorScheme.onSurface,
-      fontWeight: FontWeight.bold,
     );
     final subtitleStyle = _subtitleStyle(theme);
     final trailingStyle = _trailingStyle(theme);
@@ -166,22 +165,38 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
     final closedTrailing = widget.closedTrailing ??
         (widget.displayLabel == null ? selected?.trailing : null);
 
-    return Material(
-      color: flat ? Colors.transparent : theme.inputDecorationTheme.fillColor,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: enabled ? _openMenu : null,
+    final glowColor = flat ? widget.labelColor?.withValues(alpha: 0.3) : null;
+
+    return Container(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        child: Container(
-          height: hasSubtitle ? 52 : 48,
-          decoration: BoxDecoration(
-            color: flat ? Colors.transparent : null,
-            border: flat
-                ? null
-                : Border.all(color: theme.colorScheme.outline),
-            borderRadius: BorderRadius.circular(18),
-          ),
+        boxShadow: glowColor != null
+            ? [
+                BoxShadow(
+                  color: glowColor,
+                  blurRadius: 16,
+                  blurStyle: BlurStyle.outer,
+                )
+              ]
+            : null,
+      ), 
+      child: Material(
+        type: MaterialType.canvas,
+        color: flat ? VoyagerMenuTheme.menuColor : theme.inputDecorationTheme.fillColor,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: enabled ? _openMenu : null,
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            height: hasSubtitle ? 52 : 48,
+            decoration: BoxDecoration(
+              color: flat ? Colors.transparent : null,
+              border: flat
+                  ? null
+                  : Border.all(color: theme.colorScheme.outline),
+              borderRadius: BorderRadius.circular(18),
+            ),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final narrow = constraints.maxWidth < 100;
@@ -240,6 +255,7 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
             },
           ),
         ),
+      ),
       ),
     );
   }
@@ -393,6 +409,7 @@ class _AddListMenuItemState extends State<_AddListMenuItem> {
             borderRadius: BorderRadius.circular(10),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
+              hoverColor: Colors.white.withValues(alpha: 0.25),
               onTap: widget.onSelect,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -462,12 +479,12 @@ class _RoundedDropdownMenuItemState<T>
     final theme = Theme.of(context);
     final itemPadding = VoyagerMenuTheme.itemPadding(theme);
     const highlightRadius = BorderRadius.all(
-      Radius.circular(8),
+      Radius.circular(12),
     );
     final topInset =
         widget._isFirst ? RoundedDropdown.menuTopPadding : 0.0;
     final selectionBorder = widget.selected
-        ? Border.all(color: theme.colorScheme.primary, width: 1.5)
+        ? Border.all(color: widget.item.labelColor ?? theme.colorScheme.primary, width: 1.5)
         : null;
 
     return LayoutBuilder(
@@ -574,7 +591,6 @@ class _RoundedDropdownRow<T> extends StatelessWidget {
     final labelStyle = (theme.textTheme.titleMedium ?? theme.textTheme.bodyLarge)
         ?.copyWith(
       color: item.labelColor ?? theme.colorScheme.onSurface,
-      fontWeight: item.labelColor != null ? FontWeight.bold : null,
     );
 
     return Row(

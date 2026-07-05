@@ -184,6 +184,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       }
     });
     unawaited(_persistLastViewedJournal(journalId));
+
+    if (!keepCurrent &&
+        displayTarget == null &&
+        journalId != allJournalEntriesScope) {
+      unawaited(_createEntry());
+    }
   }
 
   Future<void> _toggleViewAllJournals(List<Journal> displayJournals) async {
@@ -2645,7 +2651,6 @@ class _JournalEntryListTile extends StatelessWidget {
   }
 }
 
-/// Semi-transparent frosted bar over the geometric texture background.
 class _JournalBarBackdrop extends StatelessWidget {
   const _JournalBarBackdrop({required this.child});
 
@@ -2653,15 +2658,9 @@ class _JournalBarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).scaffoldBackgroundColor.withValues(
-      alpha: 0.8,
-    );
-
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-        child: Material(color: color, child: child),
-      ),
+    return Material(
+      type: MaterialType.transparency,
+      child: child,
     );
   }
 }

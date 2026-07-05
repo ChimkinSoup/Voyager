@@ -20,22 +20,17 @@ class EnterToSubmitScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: const {
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.enter) {
+          if (_textFieldHasFocus()) return KeyEventResult.ignored;
+          onSubmit();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
       },
-      child: Actions(
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              if (_textFieldHasFocus()) return null;
-              onSubmit();
-              return null;
-            },
-          ),
-        },
-        child: child,
-      ),
+      child: child,
     );
   }
 }

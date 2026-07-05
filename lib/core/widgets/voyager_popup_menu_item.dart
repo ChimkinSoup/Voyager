@@ -21,7 +21,7 @@ Future<T?> showVoyagerMenu<T>({
     shadowColor: menuStyle.shadowColor,
     surfaceTintColor: menuStyle.surfaceTintColor,
     menuPadding: menuPadding,
-    clipBehavior: Clip.antiAlias,
+    clipBehavior: Clip.none,
     items: items,
   );
 }

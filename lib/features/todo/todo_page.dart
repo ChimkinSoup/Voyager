@@ -12,6 +12,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -45,8 +46,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
   List<String>? _optimisticActiveTaskOrder;
   final _completionOverrides = <String, bool>{};
   final _taskOverrides = <String, TodoTask>{};
+  final GlobalKey _taskListKey = GlobalKey();
   var _completedExpanded = true;
   var _showAllTasks = false;
+  // Cache subtask stats futures by task ID to avoid re-querying the DB on
+  // every rebuild (e.g. during drag-to-scroll), which would cause
+  // FutureBuilder to restart and create visible jank.
+  final _subtaskStatsCache = <String, Future<({int completed, int total})>>{};
+  // Stores the last resolved result so FutureBuilders can use it as
+  // initialData — preventing a blank frame on widget remount after reorder.
+  final _subtaskResultsCache = <String, ({int completed, int total})>{};
 
   @override
   void initState() {
@@ -347,8 +356,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
       remoteSync.pushTodoTaskNow(task);
     }
     if (!mounted) return;
+    // A sort batch only changes sortOrder within one list — do a minimal,
+    // targeted invalidation. Do NOT invalidate todoListsProvider or
+    // allTodoTasksProvider; those trigger broad provider reloads that cause
+    // unrelated task rows to flicker their subtext.
     ref.invalidate(todoTasksProvider(listId));
-    _invalidateTodoListData();
+    ref.invalidate(todoListStatsProvider);
+    // Subtask cache is unaffected by a reorder — keep it so FutureBuilders
+    // don't restart and flash the subtask count badge.
   }
 
   void _applySortBatchOptimistic(TodoSortBatch batch, List<TodoTask> activeTasks) {
@@ -445,17 +460,26 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
   }
 
-  Future<({int completed, int total})> _subtaskStats(String taskId) async {
-    final subtasks = await ref
-        .read(todoRepositoryProvider)
-        .listSubtasks(taskId);
-    return (
-      completed: subtasks.where((s) => s.completed).length,
-      total: subtasks.length,
-    );
+  Future<({int completed, int total})> _subtaskStats(String taskId) {
+    return _subtaskStatsCache.putIfAbsent(taskId, () async {
+      final subtasks = await ref
+          .read(todoRepositoryProvider)
+          .listSubtasks(taskId);
+      final result = (
+        completed: subtasks.where((s) => s.completed).length,
+        total: subtasks.length,
+      );
+      // Store the result so it can be used as FutureBuilder.initialData,
+      // preventing a blank frame when _TaskRow is remounted after a reorder.
+      _subtaskResultsCache[taskId] = result;
+      return result;
+    });
   }
 
-  void _invalidateTodoListData({String? listId}) {
+  ({int completed, int total})? _subtaskStatsData(String taskId) =>
+      _subtaskResultsCache[taskId];
+
+  void _invalidateTodoListData({String? listId, bool preserveSubtaskCache = false}) {
     ref.invalidate(todoTasksProvider);
     if (listId != null) {
       ref.invalidate(todoTasksProvider(listId));
@@ -463,6 +487,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
     ref.invalidate(allTodoTasksProvider);
     ref.invalidate(todoListsProvider);
     ref.invalidate(todoListStatsProvider);
+    if (!preserveSubtaskCache) {
+      // Subtask counts may have changed; clear the cached futures so the next
+      // build fetches fresh data.
+      _subtaskStatsCache.clear();
+      _subtaskResultsCache.clear();
+    }
   }
 
   int? _listColorFor(String listId, List<TodoListModel> lists) {
@@ -601,19 +631,23 @@ class _TodoPageState extends ConsumerState<TodoPage>
     setState(() {
       _applySortBatchOptimistic(batch, active);
     });
-    await _persistSortBatch(batch, _selectedListId!);
-    final updated = batch.tasks.firstWhere(
-      (t) => t.id == moved.id,
-      orElse: () => moved,
-    );
-    logTodoSortDebug(
-      ref.read(todoSortDebugLoggerProvider),
-      'MANUAL_REORDER',
-      task: updated,
-      details:
-          'listId=${_selectedListId!} oldIndex=$oldIndex newIndex=$newIndex, '
-          'sortOrder: ${moved.sortOrder} → ${updated.sortOrder}',
-    );
+    // Yield to the event loop so the optimistic UI updates render first,
+    // before we hit the database and potentially block the frame.
+    unawaited(Future.delayed(Duration.zero, () async {
+      await _persistSortBatch(batch, _selectedListId!);
+      final updated = batch.tasks.firstWhere(
+        (t) => t.id == moved.id,
+        orElse: () => moved,
+      );
+      logTodoSortDebug(
+        ref.read(todoSortDebugLoggerProvider),
+        'MANUAL_REORDER',
+        task: updated,
+        details:
+            'listId=${_selectedListId!} oldIndex=$oldIndex newIndex=$newIndex, '
+            'sortOrder: ${moved.sortOrder} → ${updated.sortOrder}',
+      );
+    }));
   }
 
   List<TodoTask> _applyOptimisticActiveOrder(List<TodoTask> active) {
@@ -694,7 +728,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
               children: [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -811,117 +845,108 @@ class _TodoPageState extends ConsumerState<TodoPage>
                         ),
                         const SizedBox(height: 8),
                         Expanded(
-                          child: KeepAliveSingleChildScrollView(
+                          child: KeepAliveCustomScrollView(
                             storageKey: ShellPageStorageKeys.todoTaskList,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (active.isNotEmpty)
-                                  if (_showAllTasks)
-                                    ...active.map(
-                                      (task) => _TaskRow(
-                                        key: ValueKey(task.id),
-                                        task: task,
-                                        isSelected: task.id == _selectedTaskId,
-                                        listColor: _listColorFor(
-                                          task.listId,
-                                          lists,
+                            cacheExtent: 10000.0,
+                            slivers: [
+                              if (active.isNotEmpty)
+                                if (_showAllTasks)
+                                  SliverList(
+                                    delegate: SliverChildListDelegate([
+                                      for (final task in active)
+                                        _TaskRow(
+                                          key: ValueKey(task.id),
+                                          task: task,
+                                          isSelected: task.id == _selectedTaskId,
+                                          listColor: _listColorFor(task.listId, lists),
+                                          subtaskStats: _subtaskStats(task.id),
+                                          subtaskStatsData: _subtaskStatsData(task.id),
+                                          onToggle: (v) => _toggleTask(task, v),
+                                          onStar: () => _toggleStar(
+                                            task,
+                                            _activeInList(active, task.listId),
+                                          ),
+                                          onEdit: () => _openEditPanel(task),
                                         ),
-                                        subtaskStats: _subtaskStats(task.id),
-                                        onToggle: (v) => _toggleTask(task, v),
-                                        onStar: () => _toggleStar(
-                                          task,
-                                          _activeInList(active, task.listId),
+                                    ]),
+                                  )
+                                else
+                                  SliverReorderableList(
+                                    key: _taskListKey,
+                                    proxyDecorator: (child, index, animation) {
+                                      return ClampToTargetBounds(
+                                        targetKey: _taskListKey,
+                                        child: Material(
+                                          type: MaterialType.transparency,
+                                          child: child,
                                         ),
-                                        onEdit: () => _openEditPanel(task),
-                                      ),
-                                    )
-                                  else
-                                    ReorderableListView(
-                                      shrinkWrap: true,
-                                      physics:
-                                          const NeverScrollableScrollPhysics(),
-                                      buildDefaultDragHandles: false,
-                                      onReorderItem: (oldIndex, newIndex) =>
-                                          _reorderActiveTasks(
-                                            active,
-                                            oldIndex,
-                                            newIndex,
-                                          ),
-                                      children: [
-                                        for (var i = 0; i < active.length; i++)
-                                          ReorderableDragStartListener(
-                                            key: ValueKey(active[i].id),
-                                            index: i,
-                                            child: _TaskRow(
-                                              task: active[i],
-                                              isSelected:
-                                                  active[i].id == _selectedTaskId,
-                                              listColor:
-                                                  currentList?.colorValue,
-                                              subtaskStats: _subtaskStats(
-                                                active[i].id,
-                                              ),
-                                              onToggle: (v) => _toggleTask(
-                                                active[i],
-                                                v,
-                                              ),
-                                              onStar: () => _toggleStar(
-                                                active[i],
-                                                active,
-                                              ),
-                                              onEdit: () => _openEditPanel(active[i]),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                if (!effectiveHideCompleted &&
-                                    completed.isNotEmpty) ...[
-                                  const Divider(height: 32),
-                                  InkWell(
-                                    onTap: () => setState(
-                                      () => _completedExpanded =
-                                          !_completedExpanded,
-                                    ),
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        8,
-                                        8,
-                                        8,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              'Completed (${completed.length})',
-                                              style: Theme.of(
-                                                context,
-                                              ).textTheme.titleSmall,
-                                            ),
-                                          ),
-                                          Icon(
-                                            _completedExpanded
-                                                ? PhosphorIconsRegular.caretUp
-                                                : PhosphorIconsRegular
-                                                      .caretDown,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                      );
+                                    },
+                                    onReorderItem: (oldIndex, newIndex) {
+                                      _reorderActiveTasks(active, oldIndex, newIndex);
+                                    },
+                                    itemCount: active.length,
+                                    itemBuilder: (context, i) {
+                                      return ReorderableDragStartListener(
+                                        key: ValueKey(active[i].id),
+                                        index: i,
+                                        child: _TaskRow(
+                                          task: active[i],
+                                          isSelected: active[i].id == _selectedTaskId,
+                                          listColor: currentList?.colorValue,
+                                          subtaskStats: _subtaskStats(active[i].id),
+                                          subtaskStatsData: _subtaskStatsData(active[i].id),
+                                          onToggle: (v) => _toggleTask(active[i], v),
+                                          onStar: () => _toggleStar(active[i], active),
+                                          onEdit: () => _openEditPanel(active[i]),
+                                        ),
+                                      );
+                                    },
                                   ),
-                                  if (_completedExpanded)
-                                    ...completed.map(
-                                      (task) => _TaskRow(
+                              if (!effectiveHideCompleted && completed.isNotEmpty)
+                                SliverToBoxAdapter(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      const Divider(height: 32),
+                                      InkWell(
+                                        onTap: () => setState(
+                                          () => _completedExpanded = !_completedExpanded,
+                                        ),
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  'Completed (${completed.length})',
+                                                  style: Theme.of(context).textTheme.titleSmall,
+                                                ),
+                                              ),
+                                              Icon(
+                                                _completedExpanded
+                                                    ? PhosphorIconsRegular.caretUp
+                                                    : PhosphorIconsRegular.caretDown,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (!effectiveHideCompleted && completed.isNotEmpty && _completedExpanded)
+                                SliverList(
+                                  delegate: SliverChildListDelegate([
+                                    for (final task in completed)
+                                      _TaskRow(
                                         key: ValueKey(task.id),
                                         task: task,
                                         isSelected: task.id == _selectedTaskId,
-                                        listColor: _listColorFor(
-                                          task.listId,
-                                          lists,
-                                        ),
+                                        listColor: _listColorFor(task.listId, lists),
                                         subtaskStats: _subtaskStats(task.id),
+                                        subtaskStatsData: _subtaskStatsData(task.id),
                                         onToggle: (v) => _toggleTask(task, v),
                                         onStar: () => _toggleStar(
                                           task,
@@ -929,10 +954,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                         ),
                                         onEdit: () => _openEditPanel(task),
                                       ),
-                                    ),
-                                ],
-                              ],
-                            ),
+                                  ]),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -1120,6 +1144,7 @@ class _TaskRow extends StatefulWidget {
     required this.onStar,
     required this.onEdit,
     required this.subtaskStats,
+    this.subtaskStatsData,
     this.listColor,
   });
 
@@ -1129,6 +1154,9 @@ class _TaskRow extends StatefulWidget {
   final VoidCallback onStar;
   final VoidCallback onEdit;
   final Future<({int completed, int total})> subtaskStats;
+  /// Last known resolved value for [subtaskStats]. Passed as [FutureBuilder.initialData]
+  /// so remounted rows never show a blank frame while awaiting the future.
+  final ({int completed, int total})? subtaskStatsData;
   final int? listColor;
 
   @override
@@ -1139,9 +1167,11 @@ class _TaskRowState extends State<_TaskRow>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animController;
   late final Animation<double> _checkScale;
-  late final Animation<double> _strikeProgress;
+
   var _displayCompleted = false;
   var _animatingComplete = false;
+  
+  ({int completed, int total})? _cachedStats;
 
   @override
   void initState() {
@@ -1173,10 +1203,7 @@ class _TaskRowState extends State<_TaskRow>
             curve: const Interval(0, 0.55, curve: Curves.linear),
           ),
         );
-    _strikeProgress = CurvedAnimation(
-      parent: _animController,
-      curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
-    );
+
     if (widget.task.completed) {
       _animController.value = 1.0;
     }
@@ -1239,39 +1266,8 @@ class _TaskRowState extends State<_TaskRow>
     return local.isBefore(now);
   }
 
-  List<Widget> _metadataWidgets(
-    String? dueLabel,
-    bool dueDatePast,
-    ({int completed, int total})? stats,
-    bool hasNotes,
-    Color? metadataColor,
-    Color overdueColor,
-  ) {
-    final widgets = <Widget>[];
-    if (dueLabel != null) {
-      widgets.add(
-        Text(
-          dueLabel,
-          style: dueDatePast ? TextStyle(color: overdueColor) : null,
-        ),
-      );
-    }
-    if (stats != null && stats.total > 0) {
-      if (widgets.isNotEmpty) widgets.add(const Text(' · '));
-      widgets.add(Text('${stats.completed} | ${stats.total}'));
-    }
-    if (hasNotes) {
-      if (widgets.isNotEmpty) widgets.add(const Text(' · '));
-      widgets.add(
-        Icon(
-          PhosphorIconsRegular.note,
-          size: 10,
-          color: metadataColor,
-        ),
-      );
-    }
-    return widgets;
-  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -1285,7 +1281,7 @@ class _TaskRowState extends State<_TaskRow>
       context,
     ).colorScheme.onSurface.withValues(alpha: 0.55);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOut,
@@ -1333,65 +1329,128 @@ class _TaskRowState extends State<_TaskRow>
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (_displayCompleted)
-                          Positioned.fill(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: AnimatedBuilder(
-                                animation: _strikeProgress,
-                                builder: (context, _) {
-                                  return FractionallySizedBox(
-                                    widthFactor: _strikeProgress.value.clamp(
-                                      0.0,
-                                      1.0,
-                                    ),
-                                    alignment: Alignment.centerLeft,
-                                    child: Container(
-                                      height: 1.5,
-                                      color: strikeColor,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
                       ],
                     ),
-                    FutureBuilder(
-                      future: widget.subtaskStats,
-                      builder: (context, snapshot) {
+                    Builder(
+                      builder: (context) {
                         final metadataColor = Theme.of(context)
                             .colorScheme
                             .onSurface
                             .withValues(alpha: 0.72);
-                        final metadata = _metadataWidgets(
-                          dueLabel,
-                          dueDatePast,
-                          snapshot.data,
-                          widget.task.notes?.trim().isNotEmpty == true,
-                          metadataColor,
-                          Theme.of(context).colorScheme.error,
+                        final overdueColor =
+                            Theme.of(context).colorScheme.error;
+                        final textStyle = Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  fontSize: 10,
+                                  color: metadataColor,
+                                ) ??
+                            TextStyle(fontSize: 10, color: metadataColor);
+
+                        // Stable metadata: never depends on the Future.
+                        final stableWidgets = <Widget>[];
+                        if (dueLabel != null) {
+                          stableWidgets.add(
+                            Text(
+                              dueLabel,
+                              style: dueDatePast
+                                  ? TextStyle(color: overdueColor)
+                                  : null,
+                            ),
+                          );
+                        }
+                        final hasNotes =
+                            widget.task.notes?.trim().isNotEmpty == true;
+                        if (hasNotes) {
+                          if (stableWidgets.isNotEmpty) {
+                            stableWidgets.add(const Text(' · '));
+                          }
+                          stableWidgets.add(
+                            Icon(
+                              PhosphorIconsRegular.note,
+                              size: 10,
+                              color: metadataColor,
+                            ),
+                          );
+                        }
+
+                        // Subtask count: depends on the Future; never hides
+                        // stable widgets when it's loading.
+                        final subtaskWidget = FutureBuilder(
+                          future: widget.subtaskStats,
+                          initialData: widget.subtaskStatsData,
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData) {
+                              _cachedStats = snapshot.data;
+                            }
+                            final stats =
+                                snapshot.hasData ? snapshot.data : _cachedStats;
+                            if (stats == null || stats.total == 0) {
+                              return const SizedBox.shrink();
+                            }
+                            final needsSep = stableWidgets.isNotEmpty;
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (needsSep) const Text(' · '),
+                                Text('${stats.completed} | ${stats.total}'),
+                              ],
+                            );
+                          },
                         );
-                        if (metadata.isEmpty) return const SizedBox.shrink();
+
+                        final hasStable = stableWidgets.isNotEmpty;
+                        // Always show the row if there's any stable content.
+                        // Subtask badge sits alongside it.
+                        if (!hasStable) {
+                          // Only subtask badge; still need to show it.
+                          return FutureBuilder(
+                            future: widget.subtaskStats,
+                            initialData: widget.subtaskStatsData,
+                            builder: (context, snapshot) {
+                              if (snapshot.hasData) {
+                                _cachedStats = snapshot.data;
+                              }
+                              final stats = snapshot.hasData
+                                  ? snapshot.data
+                                  : _cachedStats;
+                              if (stats == null || stats.total == 0) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: DefaultTextStyle(
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: textStyle,
+                                  child: Text(
+                                    '${stats.completed} | ${stats.total}',
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }
+
                         return Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: DefaultTextStyle(
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  fontSize: 10,
-                                  color: metadataColor,
-                                ) ??
-                                TextStyle(fontSize: 10, color: metadataColor),
+                            style: textStyle,
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
-                              children: metadata,
+                              children: [
+                                ...stableWidgets,
+                                subtaskWidget,
+                              ],
                             ),
                           ),
                         );
                       },
                     ),
+
                   ],
                 ),
               ),

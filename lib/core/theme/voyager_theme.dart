@@ -156,8 +156,9 @@ class VoyagerTheme {
       popupMenuTheme: VoyagerMenuTheme.popupMenuTheme(
         textTheme: textTheme,
         onSurface: colorScheme.onSurface,
+        accentColor: colorScheme.primary,
       ),
-      menuTheme: VoyagerMenuTheme.menuTheme(),
+      menuTheme: VoyagerMenuTheme.menuTheme(accentColor: colorScheme.primary),
       menuButtonTheme: MenuButtonThemeData(
         style: ButtonStyle(
           shape: WidgetStatePropertyAll(

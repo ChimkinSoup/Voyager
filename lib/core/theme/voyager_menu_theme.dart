@@ -12,8 +12,10 @@ abstract final class VoyagerMenuTheme {
 
   static const Radius _itemHighlightRadius = Radius.circular(radius);
 
-  static RoundedRectangleBorder get shape => RoundedRectangleBorder(
+  static OutlinedBorder shape([Color? accentColor]) => _GlowBorder(
     borderRadius: menuBorderRadius,
+    side: accentColor != null ? BorderSide(color: accentColor, width: 2.0) : BorderSide.none,
+    glowColor: accentColor?.withValues(alpha: 0.6),
   );
 
   static VoyagerMenuItemPosition positionFor(int index, int count) {
@@ -40,39 +42,38 @@ abstract final class VoyagerMenuTheme {
       ? const EdgeInsets.symmetric(horizontal: 12)
       : const EdgeInsets.symmetric(horizontal: 16);
 
-  static MenuStyle menuStyle({Color? color}) => MenuStyle(
+  static MenuStyle menuStyle({Color? color, Color? accentColor}) => MenuStyle(
     backgroundColor: WidgetStatePropertyAll(color ?? menuColor),
     surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-    elevation: const WidgetStatePropertyAll(8),
-    shadowColor: WidgetStatePropertyAll(
-      Colors.black.withValues(alpha: 0.45),
-    ),
-    shape: WidgetStatePropertyAll(shape),
-    padding: WidgetStatePropertyAll(EdgeInsets.zero),
+    elevation: const WidgetStatePropertyAll(0),
+    shadowColor: const WidgetStatePropertyAll(Colors.transparent),
+    shape: WidgetStatePropertyAll(shape(accentColor)),
+    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
   );
 
   static PopupMenuThemeData popupMenuTheme({
     required TextTheme textTheme,
     required Color onSurface,
+    Color? accentColor,
   }) => PopupMenuThemeData(
     color: menuColor,
     surfaceTintColor: Colors.transparent,
-    elevation: 8,
-    shadowColor: Colors.black.withValues(alpha: 0.45),
-    shape: shape,
+    elevation: 0,
+    shadowColor: Colors.transparent,
+    shape: shape(accentColor),
     menuPadding: EdgeInsets.zero,
     textStyle: textTheme.bodyLarge,
     labelTextStyle: WidgetStatePropertyAll(textTheme.bodyLarge),
     iconColor: onSurface,
   );
 
-  static DropdownMenuThemeData dropdownMenuTheme(TextTheme textTheme) =>
+  static DropdownMenuThemeData dropdownMenuTheme(TextTheme textTheme, {Color? accentColor}) =>
       DropdownMenuThemeData(
         textStyle: textTheme.bodyLarge,
-        menuStyle: menuStyle(),
+        menuStyle: menuStyle(accentColor: accentColor),
       );
 
-  static MenuThemeData menuTheme() => MenuThemeData(style: menuStyle());
+  static MenuThemeData menuTheme({Color? accentColor}) => MenuThemeData(style: menuStyle(accentColor: accentColor));
 
   static ({
     Color color,
@@ -86,11 +87,34 @@ abstract final class VoyagerMenuTheme {
     final popup = theme.popupMenuTheme;
     return (
       color: popup.color ?? menuColor,
-      shape: popup.shape ?? shape,
-      elevation: popup.elevation ?? 8,
-      shadowColor: popup.shadowColor ?? Colors.black.withValues(alpha: 0.45),
+      shape: popup.shape ?? shape(theme.colorScheme.primary),
+      elevation: popup.elevation ?? 0,
+      shadowColor: popup.shadowColor ?? Colors.transparent,
       surfaceTintColor: popup.surfaceTintColor ?? Colors.transparent,
       menuPadding: popup.menuPadding ?? EdgeInsets.zero,
     );
+  }
+}
+
+class _GlowBorder extends RoundedRectangleBorder {
+  const _GlowBorder({
+    super.borderRadius,
+    super.side,
+    this.glowColor,
+  });
+
+  final Color? glowColor;
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    if (glowColor != null) {
+      final Paint paint = Paint()
+        ..color = glowColor!
+        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 16.0);
+
+      final RRect rrect = borderRadius.resolve(textDirection).toRRect(rect);
+      canvas.drawRRect(rrect, paint);
+    }
+    super.paint(canvas, rect, textDirection: textDirection);
   }
 }
