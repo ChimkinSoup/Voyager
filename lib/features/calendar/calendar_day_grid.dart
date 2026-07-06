@@ -7,6 +7,53 @@ import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
+List<List<CalendarEvent?>> calendarPackWeekEvents(
+  List<DateTime> weekDates,
+  List<CalendarEvent> allEvents,
+) {
+  final weekEvents = allEvents.where((e) {
+    return weekDates.any((day) => calendarEventOccursOnDay(e, day));
+  }).toList();
+  
+  weekEvents.sort((a, b) {
+    final aStart = a.start.toLocal();
+    final bStart = b.start.toLocal();
+    final startCmp = aStart.compareTo(bStart);
+    if (startCmp != 0) return startCmp;
+    
+    final aDuration = a.end.difference(a.start);
+    final bDuration = b.end.difference(b.start);
+    return bDuration.compareTo(aDuration);
+  });
+  
+  final result = List<List<CalendarEvent?>>.generate(7, (_) => []);
+  
+  for (final event in weekEvents) {
+    int availableRow = 0;
+    while (true) {
+      bool canFit = true;
+      for (int c = 0; c < 7; c++) {
+        if (calendarEventOccursOnDay(event, weekDates[c])) {
+           if (result[c].length > availableRow && result[c][availableRow] != null) {
+              canFit = false;
+              break;
+           }
+        }
+      }
+      if (canFit) break;
+      availableRow++;
+    }
+    
+    for (int c = 0; c < 7; c++) {
+      if (calendarEventOccursOnDay(event, weekDates[c])) {
+         while (result[c].length <= availableRow) result[c].add(null);
+         result[c][availableRow] = event;
+      }
+    }
+  }
+  return result;
+}
+
 class CalendarDayIndicator {
   const CalendarDayIndicator({
     required this.day,
@@ -53,7 +100,7 @@ const calendarAdjacentMonthTextOpacity = 0.20;
 const calendarAdjacentMonthBorderOpacity = 0.10;
 
 /// Fill alpha for month-view event pills (background tint over the cell).
-const calendarEventBarFillAlpha = 0.58;
+const calendarEventBarFillAlpha = 1.0;
 
 /// Fill alpha for day-view event tiles.
 const calendarDayEventTileFillAlpha = 0.48;
@@ -65,11 +112,13 @@ const calendarEventGradientEndSaturationScale = 0.4;
 LinearGradient calendarEventFillGradient(
   Color base, {
   double alpha = calendarEventBarFillAlpha,
+  Alignment begin = Alignment.topLeft,
+  Alignment end = Alignment.bottomRight,
 }) {
   final hsv = HSVColor.fromColor(base);
   final nativeSaturation = hsv.saturation;
   final start = hsv.toColor().withValues(alpha: alpha);
-  final end = hsv
+  final endColor = hsv
       .withSaturation(
         (nativeSaturation * calendarEventGradientEndSaturationScale).clamp(
           0.0,
@@ -79,9 +128,9 @@ LinearGradient calendarEventFillGradient(
       .toColor()
       .withValues(alpha: alpha);
   return LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [start, end],
+    begin: begin,
+    end: end,
+    colors: [start, endColor],
   );
 }
 
@@ -89,9 +138,11 @@ BoxDecoration calendarEventFillDecoration(
   Color base, {
   double alpha = calendarEventBarFillAlpha,
   BorderRadius? borderRadius,
+  Alignment begin = Alignment.topLeft,
+  Alignment end = Alignment.bottomRight,
 }) {
   return BoxDecoration(
-    gradient: calendarEventFillGradient(base, alpha: alpha),
+    gradient: calendarEventFillGradient(base, alpha: alpha, begin: begin, end: end),
     borderRadius: borderRadius,
   );
 }
@@ -205,17 +256,21 @@ class CalendarDayCell extends StatelessWidget {
     this.entryOpacity = 1,
     this.dayNumberOpacity = 1,
     this.frozenEntryLayoutHeight,
+    this.isFirstColumn = false,
+    this.isLastColumn = false,
   });
 
   final DateTime date;
   final DateTime month;
-  final List<CalendarEvent> events;
+  final List<CalendarEvent?> events;
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
   final MonthDayCellStyle style;
   final VoidCallback? onTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
   final bool isSelected;
+  final bool isFirstColumn;
+  final bool isLastColumn;
 
   /// When false, todo icons are hidden (e.g. during view morph animations).
   final bool showTodoIcons;
@@ -330,11 +385,10 @@ class CalendarDayCell extends StatelessWidget {
     final showTodos =
         inMonth && showTodoIcons && todoMarkers.isNotEmpty;
 
-    return ClipRect(
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          Column(
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Opacity(
@@ -374,20 +428,30 @@ class CalendarDayCell extends StatelessWidget {
                             if (i > 0) const SizedBox(height: 1),
                             SizedBox(
                               height: barHeight,
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final eventFontSize =
-                                      calendarMonthEventFontSize(
-                                    barHeight: barHeight,
-                                    style: style,
-                                  );
-                                  return CalendarDayEventBar(
-                                    event: events[i],
-                                    fontSize: eventFontSize,
-                                    height: barHeight,
-                                  );
-                                },
-                              ),
+                              child: i < events.length && events[i] != null
+                                  ? LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final eventFontSize =
+                                            calendarMonthEventFontSize(
+                                          barHeight: barHeight,
+                                          style: style,
+                                        );
+                                        final event = events[i]!;
+                                        return CalendarDayEventBar(
+                                          event: event,
+                                          date: date,
+                                          fontSize: eventFontSize,
+                                          height: barHeight,
+                                          isStart: !calendarEventOccursOnDay(event, date.subtract(const Duration(days: 1))),
+                                          isEnd: !calendarEventOccursOnDay(event, date.add(const Duration(days: 1))),
+                                          isFirstColumn: isFirstColumn,
+                                          isLastColumn: isLastColumn,
+                                          cellMargin: style.cellMargin,
+                                          cellPadding: style.cellPadding,
+                                        );
+                                      },
+                                    )
+                                  : null,
                             ),
                           ],
                         ],
@@ -408,8 +472,7 @@ class CalendarDayCell extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildCompactCellContent(bool inMonth) {
@@ -434,7 +497,7 @@ class CalendarDayCell extends StatelessWidget {
         if (inMonth && events.isNotEmpty) ...[
           const SizedBox(height: 1),
           CalendarFadedEventDots(
-            events: events,
+            events: events.where((e) => e != null).cast<CalendarEvent>().toList(),
             dotSize: style.eventDotSize,
             maxDots: style.maxEventLines,
             baseOpacity: entryOpacity,
@@ -479,8 +542,10 @@ class CalendarDayNumber extends StatelessWidget {
     final muted = mutedWhenAdjacent && date.month != month.month;
     final mutedColor = calendarAdjacentMonthColor(context);
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    final isCompact = fontSize <= 9;
-    final diameter = fontSize + (isCompact ? 5 : 8);
+    // Smoothly scale the circle padding based on fontSize (7 = year view, 15 = month view)
+    final paddingT = ((fontSize - 7) / (15 - 7)).clamp(0.0, 1.0);
+    final padding = 5 + 3 * paddingT;
+    final diameter = fontSize + padding;
     final showSelection = isSelected && !isToday && !muted;
 
     Color textColor;
@@ -524,7 +589,7 @@ class CalendarDayNumber extends StatelessWidget {
     );
 
     return Center(
-      child: isCompact && isToday
+      child: (fontSize <= 9) && isToday
           ? Transform.translate(
               offset: const Offset(0, -0.5),
               child: dayNumber,
@@ -697,6 +762,7 @@ class MorphDayEventStack extends StatefulWidget {
   const MorphDayEventStack({
     super.key,
     required this.events,
+    required this.date,
     required this.styleT,
     required this.inMonth,
     required this.maxWidth,
@@ -708,7 +774,8 @@ class MorphDayEventStack extends StatefulWidget {
     this.opacity = 1,
   });
 
-  final List<CalendarEvent> events;
+  final List<CalendarEvent?> events;
+  final DateTime date;
   final double styleT;
   final bool inMonth;
   final double maxWidth;
@@ -868,12 +935,13 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       opacity: widget.opacity.clamp(0.0, 1.0),
       child: RepaintBoundary(
         child: Stack(
-          clipBehavior: Clip.hardEdge,
+          clipBehavior: Clip.none,
           children: [
             for (var i = count - 1; i >= MorphDayEventStack.maxYearDots; i--)
-            _buildEventMarker(
-              event: widget.events[i],
-              index: i,
+              if (widget.events[i] != null)
+                _buildEventMarker(
+                  event: widget.events[i]!,
+                  index: i,
               dotSize: yearDotSize,
               reverseMove: reverseMove,
               yearEventsTop: yearEventsTop,
@@ -885,9 +953,10 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
               yearX: 0,
             ),
           for (var i = 0; i < count && i < MorphDayEventStack.maxYearDots; i++)
-            _buildEventMarker(
-              event: widget.events[i],
-              index: i,
+            if (widget.events[i] != null)
+              _buildEventMarker(
+                event: widget.events[i]!,
+                index: i,
               dotSize: yearDotSize,
               reverseMove: reverseMove,
               yearEventsTop: yearEventsTop,
@@ -918,6 +987,21 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     required double frozenEventFontSize,
   }) {
     final isDotSlot = index < MorphDayEventStack.maxYearDots;
+    
+    final isStart = !calendarEventOccursOnDay(event, widget.date.subtract(const Duration(days: 1)));
+    final isEnd = !calendarEventOccursOnDay(event, widget.date.add(const Duration(days: 1)));
+    // isStart/isEnd sides extend into the cell padding to exactly match
+    // CalendarDayEventBar (left: -cellPadding.left). Without this the morph
+    // layer bar would be narrower than the regular-grid bar at t=0, producing
+    // an instant visual snap when the morph takes over.
+    final bridgeLeft = isStart
+        ? MonthDayCellStyle.full.cellPadding.left
+        : MonthDayCellStyle.full.cellMargin.left + MonthDayCellStyle.full.cellPadding.left + 1.0;
+    final bridgeRight = isEnd
+        ? MonthDayCellStyle.full.cellPadding.right
+        : MonthDayCellStyle.full.cellMargin.right + MonthDayCellStyle.full.cellPadding.right + 1.0;
+    final currentBridgeLeft = lerpDouble(bridgeLeft, 0, shrinkEased)!;
+    final currentBridgeRight = lerpDouble(bridgeRight, 0, shrinkEased)!;
 
     if (!isDotSlot) {
       final shrinkT = shrinkEased;
@@ -926,46 +1010,58 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
         final ownY = frozenMonthEventsTop + index * frozenBarStride;
         return _eventPill(
           event: event,
-          left: 0,
+          date: widget.date,
+          left: -bridgeLeft,
           top: ownY.clamp(
             0.0,
             (widget.cellHeight - frozenBarHeight)
                 .clamp(0.0, widget.cellHeight),
           ),
-          width: widget.maxWidth,
+          width: widget.maxWidth + bridgeLeft + bridgeRight,
           height: frozenBarHeight,
           eventFontSize: frozenEventFontSize,
           expandT: 1.0,
+          currentBridgeLeft: bridgeLeft,
+          currentBridgeRight: bridgeRight,
+          roundLeft: isStart,
+          roundRight: isEnd,
         );
       }
 
-      final width = lerpDouble(widget.maxWidth, 0, shrinkT)!;
+      // Only shrink height (not width) so there is no horizontal snap at the
+      // start of the month→year transition. Width follows the cell naturally
+      // via widget.maxWidth; opacity fades the bar out smoothly.
       final height = lerpDouble(frozenBarHeight, 0, shrinkT)!;
       final ownY = frozenMonthEventsTop + index * frozenBarStride;
-      if (width < 0.25 || height < 0.25) {
-        return const SizedBox.shrink();
-      }
+      if (height < 0.25) return const SizedBox.shrink();
 
       return _eventPill(
         event: event,
-        left: (widget.maxWidth - width) / 2,
+        date: widget.date,
+        left: -currentBridgeLeft,
         top: (ownY + (frozenBarHeight - height) / 2).clamp(
           0.0,
           (widget.cellHeight - height).clamp(0.0, widget.cellHeight),
         ),
-        width: width,
+        width: widget.maxWidth + currentBridgeLeft + currentBridgeRight,
         height: height,
         eventFontSize: frozenEventFontSize,
         expandT: 1.0 - shrinkT,
         opacity: 1.0 - shrinkT,
         showText: false,
+        currentBridgeLeft: currentBridgeLeft,
+        currentBridgeRight: currentBridgeRight,
+        roundLeft: isStart,
+        roundRight: isEnd,
       );
     }
 
     final shrinkT = shrinkEased;
     final barY = frozenMonthEventsTop + index * frozenBarStride;
 
-    final width = lerpDouble(widget.maxWidth, dotSize, shrinkT)!;
+    // Only shrink height (not width) to avoid an instant horizontal snap at
+    // the start of the month→year / end of year→month transition. Bar opacity
+    // fades out so the switch to _yearEventDot at shrinkT≥1 is seamless.
     final height = lerpDouble(frozenBarHeight, dotSize, shrinkT)!;
     final shrinkTop = barY + (frozenBarHeight - height) / 2;
 
@@ -986,20 +1082,29 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     final textOpacity = shrinkT > 0.85
         ? 0.0
         : ((1.0 - shrinkT - 0.15) / 0.7).clamp(0.0, 1.0);
+    final barOpacity = (1.0 - shrinkT).clamp(0.0, 1.0);
 
     return _eventPill(
       event: event,
-      left: (widget.maxWidth - width) / 2 + x,
+      date: widget.date,
+      // x is 0 during the bar phase (reverseMove is 0 until shrinkT≥1),
+      // so left simplifies to -currentBridgeLeft.
+      left: x - currentBridgeLeft,
       top: y.clamp(
         0.0,
         (widget.cellHeight - height).clamp(0.0, widget.cellHeight),
       ),
-      width: width,
+      width: widget.maxWidth + currentBridgeLeft + currentBridgeRight,
       height: height,
       textOpacity: textOpacity,
       eventFontSize: frozenEventFontSize,
       expandT: 1.0 - shrinkT,
-      showText: textOpacity > 0,
+      opacity: barOpacity,
+      showText: isStart && textOpacity > 0,
+      currentBridgeLeft: currentBridgeLeft,
+      currentBridgeRight: currentBridgeRight,
+      roundLeft: isStart,
+      roundRight: isEnd,
     );
   }
 
@@ -1025,6 +1130,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
 
   Widget _eventPill({
     required CalendarEvent event,
+    required DateTime date,
     required double left,
     required double top,
     required double width,
@@ -1034,12 +1140,43 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     double textOpacity = 1.0,
     double opacity = 1.0,
     bool showText = true,
+    required double currentBridgeLeft,
+    required double currentBridgeRight,
+    // Whether this side of the bar is a true event boundary (not bridging into
+    // a neighbouring cell). Drives corner rounding independently of the bridge
+    // pixel extent so that padding-only extensions don't remove rounding.
+    bool roundLeft = true,
+    bool roundRight = true,
   }) {
     final color = Color(event.colorValue);
+    
+    final startDay = DateUtils.dateOnly(event.start.toLocal());
+    final endDay = DateUtils.dateOnly(event.end.toLocal());
+    final currentDay = DateUtils.dateOnly(date.toLocal());
+    final totalDays = endDay.difference(startDay).inDays + 1;
+    final dayIndex = currentDay.difference(startDay).inDays;
+
+    var beginAlign = Alignment.topLeft;
+    var endAlign = Alignment.bottomRight;
+    if (totalDays > 1) {
+      final beginX = -1.0 - (dayIndex * 2.0);
+      final endX = beginX + (totalDays * 2.0);
+      beginAlign = Alignment(beginX, 0.0);
+      endAlign = Alignment(endX, 0.0);
+    }
+
+    final leftRadius = roundLeft ? height / 2 : 0.0;
+    final rightRadius = roundRight ? height / 2 : 0.0;
+
     Widget content = DecoratedBox(
       decoration: calendarEventFillDecoration(
         color,
-        borderRadius: BorderRadius.circular(height / 2),
+        borderRadius: BorderRadius.horizontal(
+          left: Radius.circular(leftRadius),
+          right: Radius.circular(rightRadius),
+        ),
+        begin: beginAlign,
+        end: endAlign,
       ),
       child: showText && textOpacity > 0
           ? Align(
@@ -1068,7 +1205,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     }
 
     return Positioned(
-      left: left.clamp(0.0, widget.maxWidth - width),
+      left: left,
       top: top,
       width: width,
       height: height,
@@ -1082,33 +1219,88 @@ class CalendarDayEventBar extends StatelessWidget {
   const CalendarDayEventBar({
     super.key,
     required this.event,
+    required this.date,
     required this.fontSize,
     this.height,
+    this.isStart = true,
+    this.isEnd = true,
+    this.isFirstColumn = false,
+    this.isLastColumn = false,
+    this.cellMargin = EdgeInsets.zero,
+    this.cellPadding = EdgeInsets.zero,
   });
 
   final CalendarEvent event;
+  final DateTime date;
   final double fontSize;
   final double? height;
+  final bool isStart;
+  final bool isEnd;
+  final bool isFirstColumn;
+  final bool isLastColumn;
+  final EdgeInsets cellMargin;
+  final EdgeInsets cellPadding;
 
   static double heightFor(double fontSize) => fontSize + 4;
 
   @override
   Widget build(BuildContext context) {
     final barHeight = height ?? heightFor(fontSize);
-    return Container(
-      height: barHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: calendarEventFillDecoration(
-        Color(event.colorValue),
-        borderRadius: BorderRadius.circular(barHeight / 2),
-      ),
-      alignment: Alignment.centerLeft,
-      child: Text(
-        event.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppFonts.style(fontSize: fontSize, height: 1),
-      ),
+    
+    final startDay = DateUtils.dateOnly(event.start.toLocal());
+    final endDay = DateUtils.dateOnly(event.end.toLocal());
+    final currentDay = DateUtils.dateOnly(date.toLocal());
+    final totalDays = endDay.difference(startDay).inDays + 1;
+    final dayIndex = currentDay.difference(startDay).inDays;
+
+    var beginAlign = Alignment.topLeft;
+    var endAlign = Alignment.bottomRight;
+    if (totalDays > 1) {
+      final beginX = -1.0 - (dayIndex * 2.0);
+      final endX = beginX + (totalDays * 2.0);
+      beginAlign = Alignment(beginX, 0.0);
+      endAlign = Alignment(endX, 0.0);
+    }
+    
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          top: 0,
+          bottom: 0,
+          left: isStart 
+              ? -cellPadding.left 
+              : isFirstColumn 
+                  ? -cellPadding.left 
+                  : -cellMargin.left - cellPadding.left - 2.0,
+          right: isEnd 
+              ? -cellPadding.right 
+              : isLastColumn 
+                  ? -cellPadding.right 
+                  : -cellMargin.right - cellPadding.right - 2.0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: calendarEventFillDecoration(
+              Color(event.colorValue),
+              borderRadius: BorderRadius.horizontal(
+                left: isStart ? Radius.circular(barHeight / 2) : Radius.zero,
+                right: isEnd ? Radius.circular(barHeight / 2) : Radius.zero,
+              ),
+              begin: beginAlign,
+              end: endAlign,
+            ),
+            alignment: Alignment.centerLeft,
+            child: isStart 
+              ? Text(
+                  event.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.style(fontSize: fontSize, height: 1),
+                )
+              : null,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1584,6 +1776,11 @@ class MonthDayGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cells = monthGridDates(month, weekStartsMonday: weekStartsMonday);
+    
+    final packedWeeks = List.generate(6, (row) {
+      if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
+      return calendarPackWeekEvents(cells.sublist(row * 7, row * 7 + 7), events);
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1609,10 +1806,8 @@ class MonthDayGrid extends StatelessWidget {
                     final inMonth =
                         date.month == month.month && date.year == month.year;
                     final dayEvents = inMonth
-                        ? events
-                            .where((e) => calendarEventOnDay(e, date))
-                            .toList()
-                        : const <CalendarEvent>[];
+                        ? packedWeeks[row][col]
+                        : const <CalendarEvent?>[];
                     final dayIndicators = indicators
                         .where((i) => calendarSameDay(i.day, date))
                         .take(3)
@@ -1635,6 +1830,8 @@ class MonthDayGrid extends StatelessWidget {
                         showTodoIcons: showTodoIcons,
                         style: style,
                         isSelected: isSelected,
+                        isFirstColumn: col == 0,
+                        isLastColumn: col == 6,
                         onTap: onDayTap == null ? null : () => onDayTap!(date),
                         onEntryTap: onEntryTap,
                       ),

@@ -46,7 +46,7 @@ const calendarWeekTaskBarHeight = 18.0;
 const calendarWeekPxPerHour = 60.0;
 
 /// Minimum pinned all-day shelf height in the week timeline.
-const calendarWeekAllDayShelfHeight = 24.0;
+const calendarWeekAllDayShelfHeight = 22.0;
 
 /// Height of one all-day event row in the pinned shelf.
 const calendarWeekAllDayEventRowHeight = 22.0;
@@ -95,7 +95,11 @@ double calendarWeekAllDayShelfHeightFor({
   var maxCount = 0;
   for (final day in weekDays) {
     final count = events
-        .where((e) => calendarEventOnDay(e, day) && e.isFullDay)
+        .where((e) =>
+            calendarEventOnDay(e, day) &&
+            (e.isFullDay ||
+                DateUtils.dateOnly(e.start.toLocal()) !=
+                    DateUtils.dateOnly(e.end.toLocal())))
         .length;
     if (count > maxCount) maxCount = count;
   }
@@ -163,6 +167,7 @@ List<CalendarTodoMarker> buildCalendarTodoMarkers(
 }
 
 bool calendarTodoOnDay(CalendarTodoMarker marker, DateTime day) {
+  if (marker.completed) return false;
   final due = marker.dueDate.toLocal();
   return due.year == day.year && due.month == day.month && due.day == day.day;
 }
@@ -338,7 +343,7 @@ class CalendarWeekTaskBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(marker.colorValue);
+    final color = Color(marker.colorValue).withAlpha(255);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -349,9 +354,9 @@ class CalendarWeekTaskBar extends StatelessWidget {
             final width = constraints.maxWidth;
             final height = constraints.maxHeight;
             final decoration = BoxDecoration(
-              color: color.withValues(alpha: marker.completed ? 0.25 : 0.58),
+              color: color.withValues(alpha: marker.completed ? 0.5 : 1.0),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: color.withValues(alpha: 0.85)),
+              border: Border.all(color: color),
             );
 
             if (width < 18) {
@@ -426,49 +431,120 @@ class CalendarWeekEventBlock extends StatelessWidget {
   const CalendarWeekEventBlock({
     super.key,
     required this.event,
+    this.day,
+    this.margin = 0,
+    this.isFirstColumn = false,
+    this.isLastColumn = false,
     required this.onTap,
   });
 
   final CalendarEvent event;
+  final DateTime? day;
+  final double margin;
+  final bool isFirstColumn;
+  final bool isLastColumn;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(event.colorValue);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final showText = constraints.maxWidth >= 12;
-            return Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: constraints.maxWidth < 24 ? 2 : 6,
-                vertical: 4,
+    final color = Color(event.colorValue).withAlpha(255);
+
+    bool bridgeLeft = false;
+    bool bridgeRight = false;
+    bool isStart = true;
+    var beginAlign = Alignment.topLeft;
+    var endAlign = Alignment.bottomRight;
+
+    if (day != null) {
+      final startDay = DateUtils.dateOnly(event.start.toLocal());
+      final endDay = DateUtils.dateOnly(event.end.toLocal());
+      final currentDay = DateUtils.dateOnly(day!);
+
+      final totalDays = endDay.difference(startDay).inDays + 1;
+      final dayIndex = currentDay.difference(startDay).inDays;
+
+      if (totalDays > 1) {
+        isStart = currentDay.isAtSameMomentAs(startDay);
+        final isEnd = currentDay.isAtSameMomentAs(endDay);
+
+        bridgeLeft = !isStart && !isFirstColumn;
+        bridgeRight = !isEnd && !isLastColumn;
+
+        final beginX = -2.0 * dayIndex - 1.0;
+        final endX = 2.0 * (totalDays - dayIndex) - 1.0;
+        beginAlign = Alignment(beginX, -1.0);
+        endAlign = Alignment(endX, 1.0);
+      }
+    }
+
+    final radius = weekViewDayCellStyle.borderRadius;
+    final leftRadius = bridgeLeft ? 0.0 : radius;
+    final rightRadius = bridgeRight ? 0.0 : radius;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final overlap = 2.0;
+        final extraLeft = bridgeLeft ? margin + overlap : 0.0;
+        final extraRight = bridgeRight ? margin + overlap : 0.0;
+        final totalWidth = constraints.maxWidth + extraLeft + extraRight;
+        // Show the title at the event's start day, and also at the first
+        // visible column when the event continues from the previous week.
+        // bridgeLeft is false whenever this column has a rounded left cap,
+        // which is exactly the set of columns where the title should appear.
+        final showText = !bridgeLeft && totalWidth >= 12;
+
+        return OverflowBox(
+          maxWidth: totalWidth,
+          minWidth: totalWidth,
+          alignment: bridgeLeft && bridgeRight
+              ? Alignment.center
+              : bridgeLeft
+                  ? Alignment.centerRight
+                  : bridgeRight
+                      ? Alignment.centerLeft
+                      : Alignment.center,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(leftRadius),
+                topRight: Radius.circular(rightRadius),
+                bottomLeft: Radius.circular(leftRadius),
+                bottomRight: Radius.circular(rightRadius),
               ),
-              decoration: calendarEventFillDecoration(
-                color,
-                alpha: calendarEventBarFillAlpha,
-                borderRadius: BorderRadius.circular(6),
+              child: Container(
+                width: totalWidth,
+                height: constraints.maxHeight,
+                padding: EdgeInsets.symmetric(
+                  horizontal: totalWidth < 24 ? 2 : 6,
+                  vertical: 4,
+                ),
+                decoration: calendarEventFillDecoration(
+                  color,
+                  alpha: calendarEventBarFillAlpha,
+                  begin: beginAlign,
+                  end: endAlign,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(leftRadius),
+                    topRight: Radius.circular(rightRadius),
+                    bottomLeft: Radius.circular(leftRadius),
+                    bottomRight: Radius.circular(rightRadius),
+                  ),
+                ),
+                child: showText
+                    ? Text(
+                        event.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: Colors.white),
+                      )
+                    : const SizedBox.shrink(),
               ),
-              child: showText
-                  ? Text(
-                      event.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppFonts.style(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        height: 1.1,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

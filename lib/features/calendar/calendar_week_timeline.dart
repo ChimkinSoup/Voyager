@@ -330,6 +330,69 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                     return Stack(
                       clipBehavior: Clip.hardEdge,
                       children: [
+                        // ── Bordered day-column rectangles (fixed background) ──
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: AnimatedBuilder(
+                              animation: _entryFade,
+                              builder: (context, _) {
+                                return CustomPaint(
+                                  painter: CalendarWeekDayColumnBorderPainter(
+                                    borderedRects: borderedDayRects,
+                                    color: divider,
+                                    borderRadius: borderRadius,
+                                    todayIndex: todayIndex >= 0 ? todayIndex : null,
+                                    todayFillColor: accentColor.withValues(
+                                      alpha: 0.28 * _entryFade.value,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+
+                        // ── Hour-line grid (fixed viewport overlay) ──
+                        Positioned(
+                          left: 0,
+                          top: columnTop + allDayShelfHeight,
+                          right: 0,
+                          height: timelineViewportHeight,
+                          child: IgnorePointer(
+                            child: AnimatedBuilder(
+                              animation: _scrollController,
+                              builder: (context, _) {
+                                return CustomPaint(
+                                  painter: CalendarWeekTimeGridPainter(
+                                    scrollOffset: calendarWeekEffectiveScrollOffset(
+                                      _scrollController,
+                                      widget.initialScrollOffset ??
+                                          _scrollController.initialScrollOffset,
+                                    ),
+                                    allDayShelfHeight: 0,
+                                    borderedClipRects: borderedDayRects
+                                        .map(
+                                          (rect) => Rect.fromLTRB(
+                                            rect.left,
+                                            0,
+                                            rect.right,
+                                            timelineViewportHeight,
+                                          ),
+                                        )
+                                        .toList(),
+                                    borderRadius: borderRadius,
+                                    lineColor: divider.withValues(alpha: 0.45),
+                                    labelColor: onSurfaceVariant,
+                                    hourLabelBuilder: _hourLabel,
+                                    timelineScrollPadding:
+                                        calendarWeekTimelineScrollPadding,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+
                         // ── Pinned all-day shelf (always visible) ──
                         for (var i = 0; i < 7; i++)
                           Positioned(
@@ -337,17 +400,14 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                             top: columnTop,
                             width: borderedDayRects[i].width,
                             height: allDayShelfHeight,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(borderRadius),
-                                topRight: Radius.circular(borderRadius),
-                              ),
-                              child: _AllDayShelfColumn(
-                                day: weekDays[i],
-                                events: widget.events,
-                                onEventTap: widget.onEventTap,
-                                entryFade: _entryFade,
-                              ),
+                            child: _AllDayShelfColumn(
+                              day: weekDays[i],
+                              events: widget.events,
+                              margin: margin,
+                              isFirstColumn: i == 0,
+                              isLastColumn: i == 6,
+                              onEventTap: widget.onEventTap,
+                              entryFade: _entryFade,
                             ),
                           ),
 
@@ -395,68 +455,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                           ),
                         ),
 
-                        // ── Hour-line grid (fixed viewport overlay) ──
-                        Positioned(
-                          left: 0,
-                          top: columnTop + allDayShelfHeight,
-                          right: 0,
-                          height: timelineViewportHeight,
-                          child: IgnorePointer(
-                            child: AnimatedBuilder(
-                              animation: _scrollController,
-                              builder: (context, _) {
-                                return CustomPaint(
-                                  painter: CalendarWeekTimeGridPainter(
-                                    scrollOffset: calendarWeekEffectiveScrollOffset(
-                                      _scrollController,
-                                      widget.initialScrollOffset ??
-                                          _scrollController.initialScrollOffset,
-                                    ),
-                                    allDayShelfHeight: 0,
-                                    borderedClipRects: borderedDayRects
-                                        .map(
-                                          (rect) => Rect.fromLTRB(
-                                            rect.left,
-                                            0,
-                                            rect.right,
-                                            timelineViewportHeight,
-                                          ),
-                                        )
-                                        .toList(),
-                                    borderRadius: borderRadius,
-                                    lineColor: divider.withValues(alpha: 0.45),
-                                    labelColor: onSurfaceVariant,
-                                    hourLabelBuilder: _hourLabel,
-                                    timelineScrollPadding:
-                                        calendarWeekTimelineScrollPadding,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
 
-                        // ── Bordered day-column rectangles (fixed overlay) ──
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: AnimatedBuilder(
-                              animation: _entryFade,
-                              builder: (context, _) {
-                                return CustomPaint(
-                                  painter: CalendarWeekDayColumnBorderPainter(
-                                    borderedRects: borderedDayRects,
-                                    color: divider,
-                                    borderRadius: borderRadius,
-                                    todayIndex: todayIndex >= 0 ? todayIndex : null,
-                                    todayFillColor: accentColor.withValues(
-                                      alpha: 0.28 * _entryFade.value,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
 
                         // ── All-day shelf accent line (flush below pinned events) ──
                         Positioned(
@@ -491,19 +490,25 @@ class _AllDayShelfColumn extends StatelessWidget {
   const _AllDayShelfColumn({
     required this.day,
     required this.events,
+    required this.margin,
+    required this.isFirstColumn,
+    required this.isLastColumn,
     required this.onEventTap,
     required this.entryFade,
   });
 
   final DateTime day;
   final List<CalendarEvent> events;
+  final double margin;
+  final bool isFirstColumn;
+  final bool isLastColumn;
   final CalendarWeekEventTap onEventTap;
   final Animation<double> entryFade;
 
   @override
   Widget build(BuildContext context) {
     final allDay = events
-        .where((e) => calendarEventOnDay(e, day) && e.isFullDay)
+        .where((e) => calendarEventOnDay(e, day) && (e.isFullDay || DateUtils.dateOnly(e.start.toLocal()) != DateUtils.dateOnly(e.end.toLocal())))
         .toList()
       ..sort((a, b) => a.start.compareTo(b.start));
 
@@ -513,17 +518,16 @@ class _AllDayShelfColumn extends StatelessWidget {
         for (var i = 0; i < allDay.length; i++)
           SizedBox(
             height: calendarWeekAllDayEventRowHeight,
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: i < allDay.length - 1 ? 2 : 0,
-              ),
-              child: FadeTransition(
-                opacity: entryFade,
-                child: CalendarWeekEventBlock(
-                  key: ValueKey('allday-${allDay[i].id}'),
-                  event: allDay[i],
-                  onTap: () => onEventTap(allDay[i]),
-                ),
+            child: FadeTransition(
+              opacity: entryFade,
+              child: CalendarWeekEventBlock(
+                key: ValueKey('allday-${allDay[i].id}'),
+                event: allDay[i],
+                day: day,
+                margin: margin,
+                isFirstColumn: isFirstColumn,
+                isLastColumn: isLastColumn,
+                onTap: () => onEventTap(allDay[i]),
               ),
             ),
           ),

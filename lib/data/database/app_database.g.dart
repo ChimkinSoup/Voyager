@@ -6477,6 +6477,21 @@ class $SettingsTableTable extends SettingsTable
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _devSlowCalendarAnimationsMeta =
+      const VerificationMeta('devSlowCalendarAnimations');
+  @override
+  late final GeneratedColumn<bool> devSlowCalendarAnimations =
+      GeneratedColumn<bool>(
+        'dev_slow_calendar_animations',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("dev_slow_calendar_animations" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _devTodoSortDebugLogMeta =
       const VerificationMeta('devTodoSortDebugLog');
   @override
@@ -6722,6 +6737,7 @@ class $SettingsTableTable extends SettingsTable
     devShowCacheStatus,
     devShowCalendarZoomPrewarm,
     devShowCalendarInstantViewSwitch,
+    devSlowCalendarAnimations,
     devTodoSortDebugLog,
     devJournalDebugLog,
     devForceConflictUi,
@@ -7034,6 +7050,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('dev_slow_calendar_animations')) {
+      context.handle(
+        _devSlowCalendarAnimationsMeta,
+        devSlowCalendarAnimations.isAcceptableOrUnknown(
+          data['dev_slow_calendar_animations']!,
+          _devSlowCalendarAnimationsMeta,
+        ),
+      );
+    }
     if (data.containsKey('dev_todo_sort_debug_log')) {
       context.handle(
         _devTodoSortDebugLogMeta,
@@ -7332,6 +7357,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}dev_show_calendar_instant_view_switch'],
       )!,
+      devSlowCalendarAnimations: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_slow_calendar_animations'],
+      )!,
       devTodoSortDebugLog: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}dev_todo_sort_debug_log'],
@@ -7445,6 +7474,7 @@ class SettingsTableData extends DataClass
   final bool devShowCacheStatus;
   final bool devShowCalendarZoomPrewarm;
   final bool devShowCalendarInstantViewSwitch;
+  final bool devSlowCalendarAnimations;
   final bool devTodoSortDebugLog;
   final bool devJournalDebugLog;
   final bool devForceConflictUi;
@@ -7497,6 +7527,7 @@ class SettingsTableData extends DataClass
     required this.devShowCacheStatus,
     required this.devShowCalendarZoomPrewarm,
     required this.devShowCalendarInstantViewSwitch,
+    required this.devSlowCalendarAnimations,
     required this.devTodoSortDebugLog,
     required this.devJournalDebugLog,
     required this.devForceConflictUi,
@@ -7589,6 +7620,9 @@ class SettingsTableData extends DataClass
     );
     map['dev_show_calendar_instant_view_switch'] = Variable<bool>(
       devShowCalendarInstantViewSwitch,
+    );
+    map['dev_slow_calendar_animations'] = Variable<bool>(
+      devSlowCalendarAnimations,
     );
     map['dev_todo_sort_debug_log'] = Variable<bool>(devTodoSortDebugLog);
     map['dev_journal_debug_log'] = Variable<bool>(devJournalDebugLog);
@@ -7698,6 +7732,7 @@ class SettingsTableData extends DataClass
       devShowCacheStatus: Value(devShowCacheStatus),
       devShowCalendarZoomPrewarm: Value(devShowCalendarZoomPrewarm),
       devShowCalendarInstantViewSwitch: Value(devShowCalendarInstantViewSwitch),
+      devSlowCalendarAnimations: Value(devSlowCalendarAnimations),
       devTodoSortDebugLog: Value(devTodoSortDebugLog),
       devJournalDebugLog: Value(devJournalDebugLog),
       devForceConflictUi: Value(devForceConflictUi),
@@ -7800,6 +7835,9 @@ class SettingsTableData extends DataClass
       devShowCalendarInstantViewSwitch: serializer.fromJson<bool>(
         json['devShowCalendarInstantViewSwitch'],
       ),
+      devSlowCalendarAnimations: serializer.fromJson<bool>(
+        json['devSlowCalendarAnimations'],
+      ),
       devTodoSortDebugLog: serializer.fromJson<bool>(
         json['devTodoSortDebugLog'],
       ),
@@ -7897,6 +7935,9 @@ class SettingsTableData extends DataClass
       'devShowCalendarInstantViewSwitch': serializer.toJson<bool>(
         devShowCalendarInstantViewSwitch,
       ),
+      'devSlowCalendarAnimations': serializer.toJson<bool>(
+        devSlowCalendarAnimations,
+      ),
       'devTodoSortDebugLog': serializer.toJson<bool>(devTodoSortDebugLog),
       'devJournalDebugLog': serializer.toJson<bool>(devJournalDebugLog),
       'devForceConflictUi': serializer.toJson<bool>(devForceConflictUi),
@@ -7970,6 +8011,7 @@ class SettingsTableData extends DataClass
     bool? devShowCacheStatus,
     bool? devShowCalendarZoomPrewarm,
     bool? devShowCalendarInstantViewSwitch,
+    bool? devSlowCalendarAnimations,
     bool? devTodoSortDebugLog,
     bool? devJournalDebugLog,
     bool? devForceConflictUi,
@@ -8043,6 +8085,8 @@ class SettingsTableData extends DataClass
     devShowCalendarInstantViewSwitch:
         devShowCalendarInstantViewSwitch ??
         this.devShowCalendarInstantViewSwitch,
+    devSlowCalendarAnimations:
+        devSlowCalendarAnimations ?? this.devSlowCalendarAnimations,
     devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
     devJournalDebugLog: devJournalDebugLog ?? this.devJournalDebugLog,
     devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
@@ -8178,6 +8222,9 @@ class SettingsTableData extends DataClass
           data.devShowCalendarInstantViewSwitch.present
           ? data.devShowCalendarInstantViewSwitch.value
           : this.devShowCalendarInstantViewSwitch,
+      devSlowCalendarAnimations: data.devSlowCalendarAnimations.present
+          ? data.devSlowCalendarAnimations.value
+          : this.devSlowCalendarAnimations,
       devTodoSortDebugLog: data.devTodoSortDebugLog.present
           ? data.devTodoSortDebugLog.value
           : this.devTodoSortDebugLog,
@@ -8273,6 +8320,7 @@ class SettingsTableData extends DataClass
           ..write(
             'devShowCalendarInstantViewSwitch: $devShowCalendarInstantViewSwitch, ',
           )
+          ..write('devSlowCalendarAnimations: $devSlowCalendarAnimations, ')
           ..write('devTodoSortDebugLog: $devTodoSortDebugLog, ')
           ..write('devJournalDebugLog: $devJournalDebugLog, ')
           ..write('devForceConflictUi: $devForceConflictUi, ')
@@ -8334,6 +8382,7 @@ class SettingsTableData extends DataClass
     devShowCacheStatus,
     devShowCalendarZoomPrewarm,
     devShowCalendarInstantViewSwitch,
+    devSlowCalendarAnimations,
     devTodoSortDebugLog,
     devJournalDebugLog,
     devForceConflictUi,
@@ -8391,6 +8440,7 @@ class SettingsTableData extends DataClass
           other.devShowCalendarZoomPrewarm == this.devShowCalendarZoomPrewarm &&
           other.devShowCalendarInstantViewSwitch ==
               this.devShowCalendarInstantViewSwitch &&
+          other.devSlowCalendarAnimations == this.devSlowCalendarAnimations &&
           other.devTodoSortDebugLog == this.devTodoSortDebugLog &&
           other.devJournalDebugLog == this.devJournalDebugLog &&
           other.devForceConflictUi == this.devForceConflictUi &&
@@ -8450,6 +8500,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> devShowCacheStatus;
   final Value<bool> devShowCalendarZoomPrewarm;
   final Value<bool> devShowCalendarInstantViewSwitch;
+  final Value<bool> devSlowCalendarAnimations;
   final Value<bool> devTodoSortDebugLog;
   final Value<bool> devJournalDebugLog;
   final Value<bool> devForceConflictUi;
@@ -8502,6 +8553,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowCacheStatus = const Value.absent(),
     this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.devShowCalendarInstantViewSwitch = const Value.absent(),
+    this.devSlowCalendarAnimations = const Value.absent(),
     this.devTodoSortDebugLog = const Value.absent(),
     this.devJournalDebugLog = const Value.absent(),
     this.devForceConflictUi = const Value.absent(),
@@ -8555,6 +8607,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowCacheStatus = const Value.absent(),
     this.devShowCalendarZoomPrewarm = const Value.absent(),
     this.devShowCalendarInstantViewSwitch = const Value.absent(),
+    this.devSlowCalendarAnimations = const Value.absent(),
     this.devTodoSortDebugLog = const Value.absent(),
     this.devJournalDebugLog = const Value.absent(),
     this.devForceConflictUi = const Value.absent(),
@@ -8608,6 +8661,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? devShowCacheStatus,
     Expression<bool>? devShowCalendarZoomPrewarm,
     Expression<bool>? devShowCalendarInstantViewSwitch,
+    Expression<bool>? devSlowCalendarAnimations,
     Expression<bool>? devTodoSortDebugLog,
     Expression<bool>? devJournalDebugLog,
     Expression<bool>? devForceConflictUi,
@@ -8681,6 +8735,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (devShowCalendarInstantViewSwitch != null)
         'dev_show_calendar_instant_view_switch':
             devShowCalendarInstantViewSwitch,
+      if (devSlowCalendarAnimations != null)
+        'dev_slow_calendar_animations': devSlowCalendarAnimations,
       if (devTodoSortDebugLog != null)
         'dev_todo_sort_debug_log': devTodoSortDebugLog,
       if (devJournalDebugLog != null)
@@ -8752,6 +8808,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? devShowCacheStatus,
     Value<bool>? devShowCalendarZoomPrewarm,
     Value<bool>? devShowCalendarInstantViewSwitch,
+    Value<bool>? devSlowCalendarAnimations,
     Value<bool>? devTodoSortDebugLog,
     Value<bool>? devJournalDebugLog,
     Value<bool>? devForceConflictUi,
@@ -8814,6 +8871,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       devShowCalendarInstantViewSwitch:
           devShowCalendarInstantViewSwitch ??
           this.devShowCalendarInstantViewSwitch,
+      devSlowCalendarAnimations:
+          devSlowCalendarAnimations ?? this.devSlowCalendarAnimations,
       devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
       devJournalDebugLog: devJournalDebugLog ?? this.devJournalDebugLog,
       devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
@@ -8979,6 +9038,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         devShowCalendarInstantViewSwitch.value,
       );
     }
+    if (devSlowCalendarAnimations.present) {
+      map['dev_slow_calendar_animations'] = Variable<bool>(
+        devSlowCalendarAnimations.value,
+      );
+    }
     if (devTodoSortDebugLog.present) {
       map['dev_todo_sort_debug_log'] = Variable<bool>(
         devTodoSortDebugLog.value,
@@ -9100,6 +9164,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write(
             'devShowCalendarInstantViewSwitch: $devShowCalendarInstantViewSwitch, ',
           )
+          ..write('devSlowCalendarAnimations: $devSlowCalendarAnimations, ')
           ..write('devTodoSortDebugLog: $devTodoSortDebugLog, ')
           ..write('devJournalDebugLog: $devJournalDebugLog, ')
           ..write('devForceConflictUi: $devForceConflictUi, ')
@@ -13327,6 +13392,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> devShowCacheStatus,
       Value<bool> devShowCalendarZoomPrewarm,
       Value<bool> devShowCalendarInstantViewSwitch,
+      Value<bool> devSlowCalendarAnimations,
       Value<bool> devTodoSortDebugLog,
       Value<bool> devJournalDebugLog,
       Value<bool> devForceConflictUi,
@@ -13381,6 +13447,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> devShowCacheStatus,
       Value<bool> devShowCalendarZoomPrewarm,
       Value<bool> devShowCalendarInstantViewSwitch,
+      Value<bool> devSlowCalendarAnimations,
       Value<bool> devTodoSortDebugLog,
       Value<bool> devJournalDebugLog,
       Value<bool> devForceConflictUi,
@@ -13579,6 +13646,11 @@ class $$SettingsTableTableFilterComposer
         column: $table.devShowCalendarInstantViewSwitch,
         builder: (column) => ColumnFilters(column),
       );
+
+  ColumnFilters<bool> get devSlowCalendarAnimations => $composableBuilder(
+    column: $table.devSlowCalendarAnimations,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get devTodoSortDebugLog => $composableBuilder(
     column: $table.devTodoSortDebugLog,
@@ -13847,6 +13919,11 @@ class $$SettingsTableTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<bool> get devSlowCalendarAnimations => $composableBuilder(
+    column: $table.devSlowCalendarAnimations,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get devTodoSortDebugLog => $composableBuilder(
     column: $table.devTodoSortDebugLog,
     builder: (column) => ColumnOrderings(column),
@@ -14109,6 +14186,11 @@ class $$SettingsTableTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<bool> get devSlowCalendarAnimations => $composableBuilder(
+    column: $table.devSlowCalendarAnimations,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get devTodoSortDebugLog => $composableBuilder(
     column: $table.devTodoSortDebugLog,
     builder: (column) => column,
@@ -14268,6 +14350,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowCalendarZoomPrewarm = const Value.absent(),
                 Value<bool> devShowCalendarInstantViewSwitch =
                     const Value.absent(),
+                Value<bool> devSlowCalendarAnimations = const Value.absent(),
                 Value<bool> devTodoSortDebugLog = const Value.absent(),
                 Value<bool> devJournalDebugLog = const Value.absent(),
                 Value<bool> devForceConflictUi = const Value.absent(),
@@ -14326,6 +14409,7 @@ class $$SettingsTableTableTableManager
                 devShowCalendarZoomPrewarm: devShowCalendarZoomPrewarm,
                 devShowCalendarInstantViewSwitch:
                     devShowCalendarInstantViewSwitch,
+                devSlowCalendarAnimations: devSlowCalendarAnimations,
                 devTodoSortDebugLog: devTodoSortDebugLog,
                 devJournalDebugLog: devJournalDebugLog,
                 devForceConflictUi: devForceConflictUi,
@@ -14382,6 +14466,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowCalendarZoomPrewarm = const Value.absent(),
                 Value<bool> devShowCalendarInstantViewSwitch =
                     const Value.absent(),
+                Value<bool> devSlowCalendarAnimations = const Value.absent(),
                 Value<bool> devTodoSortDebugLog = const Value.absent(),
                 Value<bool> devJournalDebugLog = const Value.absent(),
                 Value<bool> devForceConflictUi = const Value.absent(),
@@ -14440,6 +14525,7 @@ class $$SettingsTableTableTableManager
                 devShowCalendarZoomPrewarm: devShowCalendarZoomPrewarm,
                 devShowCalendarInstantViewSwitch:
                     devShowCalendarInstantViewSwitch,
+                devSlowCalendarAnimations: devSlowCalendarAnimations,
                 devTodoSortDebugLog: devTodoSortDebugLog,
                 devJournalDebugLog: devJournalDebugLog,
                 devForceConflictUi: devForceConflictUi,
