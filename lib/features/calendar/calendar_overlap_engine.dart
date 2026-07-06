@@ -1,4 +1,5 @@
 import 'dart:math' show max;
+import 'package:flutter/material.dart';
 
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
@@ -68,7 +69,7 @@ List<_OverlapItem> _overlapItemsForDay({
   var index = 0;
 
   for (final event in events) {
-    if (!calendarEventOnDay(event, day) || event.isFullDay) continue;
+    if (!calendarEventOnDay(event, day) || event.isFullDay || DateUtils.dateOnly(event.start.toLocal()) != DateUtils.dateOnly(event.end.toLocal())) continue;
     final start = event.start.toLocal();
     items.add(
       _OverlapItem(

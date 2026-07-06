@@ -223,6 +223,8 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowCalendarInstantViewSwitch =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get devSlowCalendarAnimations =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get devTodoSortDebugLog =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get devJournalDebugLog =>
@@ -312,7 +314,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -564,6 +566,12 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.devShowJournalRemotePullButton,
+        );
+      }
+      if (from < 32) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.devSlowCalendarAnimations,
         );
       }
     },

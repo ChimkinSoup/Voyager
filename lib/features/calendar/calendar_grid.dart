@@ -223,8 +223,8 @@ class DayHourGrid extends StatelessWidget {
     final dayEvents =
         events.where((e) => calendarEventOnDay(e, day)).toList()
           ..sort((a, b) => a.start.compareTo(b.start));
-    final fullDayEvents = dayEvents.where((e) => e.isFullDay).toList();
-    final timedEvents = dayEvents.where((e) => !e.isFullDay).toList();
+    final fullDayEvents = dayEvents.where((e) => e.isFullDay || DateUtils.dateOnly(e.start.toLocal()) != DateUtils.dateOnly(e.end.toLocal())).toList();
+    final timedEvents = dayEvents.where((e) => !e.isFullDay && DateUtils.dateOnly(e.start.toLocal()) == DateUtils.dateOnly(e.end.toLocal())).toList();
     final dayTodos = calendarTodoMarkersForDay(todoMarkers, day);
 
     return Column(

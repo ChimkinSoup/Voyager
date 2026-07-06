@@ -6,6 +6,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -14,6 +15,7 @@ import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/calendar/calendar_event_panel.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
+import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
@@ -34,10 +36,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
 
-  _CalendarSidebarKind _sidebarKind = _CalendarSidebarKind.none;
+  _CalendarSidebarKind _sidebarKind = _CalendarSidebarKind.event;
   CalendarEvent? _sidebarEvent;
   DateTime? _sidebarEventInitialDate;
   TodoTask? _sidebarTodo;
+
+  DateTime _computeDefaultEventDate() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, now.hour + 1);
+  }
 
   final _calendarAreaKey = GlobalKey();
 
@@ -88,9 +95,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarTodoMarker>? _weekMorphTodos;
 
   static const _sidebarWidth = 350.0;
-  static const _zoomDuration = Duration(milliseconds: 600);
-  static const _weekMorphDuration = Duration(milliseconds: 600);
-  static const _chainedMorphDuration = Duration(milliseconds: 400);
+  static const _baseZoomDuration = Duration(milliseconds: 600);
+  static const _baseWeekMorphDuration = Duration(milliseconds: 600);
+  static const _baseChainedMorphDuration = Duration(milliseconds: 400);
+  static const _calendarAnimationSlowFactor = 10;
+
+  Duration get _zoomDuration => _scaledMorphDuration(_baseZoomDuration);
+  Duration get _weekMorphDuration => _scaledMorphDuration(_baseWeekMorphDuration);
+  Duration get _chainedMorphDuration =>
+      _scaledMorphDuration(_baseChainedMorphDuration);
+
+  Duration _scaledMorphDuration(Duration base) {
+    if (!ref.read(devSettingsProvider).slowCalendarAnimations) return base;
+    return Duration(
+      milliseconds: base.inMilliseconds * _calendarAnimationSlowFactor,
+    );
+  }
+
+  void _syncMorphAnimationDurations() {
+    _zoomController.duration = _zoomDuration;
+    _weekMorphController.duration = _weekMorphDuration;
+  }
 
   bool _isChainedWeekToYear = false;
   bool _isChainedYearToWeek = false;
@@ -112,6 +137,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _weekTimelineScrollController.addListener(_onWeekTimelineScrolled);
     final now = DateTime.now();
     _lastViewedMonth = DateTime(now.year, now.month, 1);
+    _sidebarEventInitialDate = _computeDefaultEventDate();
   }
 
   void _disposeMorphListener() {
@@ -319,11 +345,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _openEventSidebar(event: entry.event);
   }
 
-  void _closeSidebar() {
+  void _resetSidebar() {
     setState(() {
-      _sidebarKind = _CalendarSidebarKind.none;
+      _sidebarKind = _CalendarSidebarKind.event;
       _sidebarEvent = null;
-      _sidebarEventInitialDate = null;
+      _sidebarEventInitialDate = _computeDefaultEventDate();
       _sidebarTodo = null;
     });
   }
@@ -347,7 +373,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
     await ref.read(calendarRepositoryProvider).upsertEvent(saved);
     ref.invalidate(calendarEventsProvider);
-    if (mounted) _closeSidebar();
+    if (mounted) _resetSidebar();
   }
 
   Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
@@ -1404,6 +1430,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         fontSize: calendarWeekWeekdayFontSize,
       );
 
+      final chained = _isChainedWeekToYear || _isChainedYearToWeek;
+      final morphEvents = chained ? const <CalendarEvent>[] : activeEvents;
+      final morphIndicators = chained ? const <CalendarDayIndicator>[] : activeIndicators;
+      final morphTodos = chained ? const <CalendarTodoMarker>[] : activeTodos;
+
       final morphLayer = _MonthWeekMorphLayer(
         key: ValueKey(_weekMorphGeneration),
         controller: _weekMorphController,
@@ -1421,14 +1452,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         monthWeekdayStyle: monthWeekdayStyle,
         weekWeekdayStyle: weekWeekdayStyle,
         monthTitleStyle: monthTitleStyle,
-        events: activeEvents,
-        indicators: activeIndicators,
-        todoMarkers: activeTodos,
+        events: morphEvents,
+        indicators: morphIndicators,
+        todoMarkers: morphTodos,
         inactiveMonthRows: _buildInactiveMonthRows(
           context: context,
-          events: activeEvents,
-          indicators: activeIndicators,
-          todoMarkers: activeTodos,
+          events: morphEvents,
+          indicators: morphIndicators,
+          todoMarkers: morphTodos,
           weekStartsMonday: weekStartsMonday,
           morphMonth: morphMonth,
           hiddenWeekRow: weekRow,
@@ -1611,26 +1642,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Spacer(),
-            if (ref.watch(devSettingsProvider).showCalendarInstantViewSwitch) ...[
-              OutlinedButton(
-                onPressed: () => _instantSwitchToWeekView(
-                  ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true,
-                ),
-                child: const Text('Week'),
-              ),
-              const SizedBox(height: 4),
-              OutlinedButton(
-                onPressed: () => _instantSwitchToMonthView(
-                  ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true,
-                ),
-                child: const Text('Month'),
-              ),
-              const SizedBox(height: 4),
-              OutlinedButton(
-                onPressed: _instantSwitchToYearView,
-                child: const Text('Year'),
-              ),
-            ],
           ],
         );
       case _CalendarSidebarKind.event:
@@ -1642,7 +1653,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           event: _sidebarEvent,
           initialDate: _sidebarEventInitialDate ?? _focused,
           onSave: _saveSidebarEvent,
-          onCancel: _closeSidebar,
+          onCancel: _resetSidebar,
         );
       case _CalendarSidebarKind.todo:
         final task = _sidebarTodo;
@@ -1659,7 +1670,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           onClose: () {
             ref.invalidate(calendarTodoMarkersProvider);
             ref.invalidate(allTodoTasksProvider);
-            _closeSidebar();
+            _resetSidebar();
           },
           onChanged: () {
             ref.invalidate(calendarTodoMarkersProvider);
@@ -1668,7 +1679,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           onDeleted: () {
             ref.invalidate(calendarTodoMarkersProvider);
             ref.invalidate(allTodoTasksProvider);
-            _closeSidebar();
+            _resetSidebar();
           },
           onToggleStar: () async {
             final updated = task.copyWith(starred: !task.starred);
@@ -1685,6 +1696,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<DevSettingsController>(devSettingsProvider, (previous, next) {
+      if (previous?.slowCalendarAnimations != next.slowCalendarAnimations) {
+        _syncMorphAnimationDurations();
+      }
+    });
+
     final eventsAsync = ref.watch(calendarEventsProvider);
     final todosAsync = ref.watch(calendarTodoMarkersProvider);
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
@@ -1706,6 +1723,23 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 Row(
                   children: [
                     _buildViewModeSelector(weekStartsMonday),
+                    if (ref.watch(devSettingsProvider).showCalendarInstantViewSwitch) ...[
+                      const SizedBox(width: 8),
+                      const Text('Instant Switch:', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const SizedBox(width: 4),
+                      TextButton(
+                        onPressed: () => _instantSwitchToWeekView(weekStartsMonday),
+                        child: const Text('W'),
+                      ),
+                      TextButton(
+                        onPressed: () => _instantSwitchToMonthView(weekStartsMonday),
+                        child: const Text('M'),
+                      ),
+                      TextButton(
+                        onPressed: _instantSwitchToYearView,
+                        child: const Text('Y'),
+                      ),
+                    ],
                     const Spacer(),
                     if (_isWeekMorphing)
                       _buildMorphFocusHeader(context, weekStartsMonday)
@@ -2340,6 +2374,13 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
       widget.monthTitleStyle,
       _monthName,
     );
+    
+    final packedWeeks = List.generate(6, (row) {
+      return calendarPackWeekEvents(
+        widget.dates.sublist(row * 7, row * 7 + 7),
+        widget.events,
+      );
+    });
 
     _cellChildren = [
       for (var i = 0; i < 42; i++)
@@ -2351,10 +2392,8 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             month: widget.morphMonth,
             events: widget.dates[i].month == widget.morphMonth.month &&
                     widget.dates[i].year == widget.morphMonth.year
-                ? widget.events
-                    .where((e) => calendarEventOnDay(e, widget.dates[i]))
-                    .toList()
-                : const <CalendarEvent>[],
+                ? packedWeeks[i ~/ 7][i % 7]
+                : const <CalendarEvent?>[],
             todoMarkers:
                 widget.dates[i].month == widget.morphMonth.month &&
                     widget.dates[i].year == widget.morphMonth.year
@@ -2530,7 +2569,7 @@ class _MorphCell extends StatelessWidget {
 
   final DateTime date;
   final DateTime month;
-  final List<CalendarEvent> events;
+  final List<CalendarEvent?> events;
   final List<CalendarTodoMarker> todoMarkers;
 
   static const _compactFontSize = 7.0;
@@ -2628,9 +2667,7 @@ class _MorphCell extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: Padding(
+      child: Padding(
           padding: EdgeInsets.lerp(
             _compactCellPadding,
             _fullCellPadding,
@@ -2643,9 +2680,10 @@ class _MorphCell extends StatelessWidget {
               final chained = progress.chainedYearWeekTransition;
               final dotsOpacity = chained ? progress.yearEventDotsOpacity : 1.0;
               final showEvents = events.isNotEmpty && inMonth;
+              final actualEventCount = events.where((e) => e != null).length;
               final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
                 morphReverse: progress.morphReverse,
-                eventCount: events.length,
+                eventCount: actualEventCount,
                 styleT: styleT,
               );
               final layoutDayLayoutSize = _dayLayoutDiameter(_fullFontSize)
@@ -2667,11 +2705,13 @@ class _MorphCell extends StatelessWidget {
               )!;
 
               if (yearDotsSettled) {
-                final todoOverlay = _morphTodoOverlay(
-                  progress: progress,
-                  styleT: styleT,
-                  inMonth: inMonth,
-                );
+                final todoOverlay = chained
+                    ? null
+                    : _morphTodoOverlay(
+                        progress: progress,
+                        styleT: styleT,
+                        inMonth: inMonth,
+                      );
                 return Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
@@ -2694,7 +2734,7 @@ class _MorphCell extends StatelessWidget {
                             Opacity(
                               opacity: dotsOpacity.clamp(0.0, 1.0),
                               child: CalendarDayEventDots(
-                                events: events,
+                                events: events.where((e) => e != null).cast<CalendarEvent>().toList(),
                                 dotSize:
                                     MonthDayCellStyle.compact.eventDotSize,
                                 maxDots:
@@ -2710,15 +2750,16 @@ class _MorphCell extends StatelessWidget {
                 );
               }
 
-              final todoOverlay = _morphTodoOverlay(
-                progress: progress,
-                styleT: styleT,
-                inMonth: inMonth,
-              );
+              final todoOverlay = chained
+                  ? null
+                  : _morphTodoOverlay(
+                      progress: progress,
+                      styleT: styleT,
+                      inMonth: inMonth,
+                    );
 
-              return ClipRect(
-                child: Stack(
-                  clipBehavior: Clip.hardEdge,
+              return Stack(
+                  clipBehavior: Clip.none,
                   children: [
                     Align(
                       alignment: cellAlignment,
@@ -2736,7 +2777,12 @@ class _MorphCell extends StatelessWidget {
                       Positioned.fill(
                         child: MorphDayEventStack(
                           events: events,
-                          styleT: styleT,
+                          date: date,
+                          // During a chained week↔year transition styleT rises
+                          // from 0→1, which would grow year dots into bars while
+                          // they fade out. Clamping to 0 keeps them as settled
+                          // year dots; opacity (dotsOpacity) handles the fade.
+                          styleT: chained ? 0.0 : styleT,
                           inMonth: inMonth,
                           maxWidth: constraints.maxWidth,
                           cellHeight: constraints.maxHeight,
@@ -2753,12 +2799,10 @@ class _MorphCell extends StatelessWidget {
                       ),
                     ?todoOverlay,
                   ],
-                ),
-              );
+                );
             },
           ),
         ),
-      ),
     );
   }
 }

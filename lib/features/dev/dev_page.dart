@@ -19,6 +19,7 @@ import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 final devVerboseSyncProvider = StateProvider<bool>((ref) => false);
+final devShowTimeSelectorHitboxesProvider = StateProvider<bool>((ref) => DevFlags.showTimeSelectorHitboxes);
 
 class DevPage extends ConsumerWidget {
   const DevPage({super.key});
@@ -54,6 +55,15 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.verboseSync = v;
             ref.read(devVerboseSyncProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Show time selector hitboxes'),
+          subtitle: const Text('Show 50% red boxes over the invisible scroll hitboxes in the time picker.'),
+          value: ref.watch(devShowTimeSelectorHitboxesProvider),
+          onChanged: (v) {
+            DevFlags.showTimeSelectorHitboxes = v;
+            ref.read(devShowTimeSelectorHitboxesProvider.notifier).state = v;
           },
         ),
         SwitchListTile(

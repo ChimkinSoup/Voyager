@@ -18,6 +18,7 @@ class DevSettingsController extends ChangeNotifier {
   bool showCacheStatus = false;
   bool showCalendarZoomPrewarm = false;
   bool showCalendarInstantViewSwitch = false;
+  bool slowCalendarAnimations = false;
 
   bool devForceConflictUi = false;
   bool showConflictDocumentIds = false;
@@ -44,6 +45,10 @@ class DevSettingsController extends ChangeNotifier {
     if (showCalendarInstantViewSwitch !=
         settings.devShowCalendarInstantViewSwitch) {
       showCalendarInstantViewSwitch = settings.devShowCalendarInstantViewSwitch;
+      changed = true;
+    }
+    if (slowCalendarAnimations != settings.devSlowCalendarAnimations) {
+      slowCalendarAnimations = settings.devSlowCalendarAnimations;
       changed = true;
     }
 
@@ -86,6 +91,13 @@ class DevSettingsController extends ChangeNotifier {
     await _persist();
   }
 
+  Future<void> setSlowCalendarAnimations(bool value) async {
+    if (slowCalendarAnimations == value) return;
+    slowCalendarAnimations = value;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> setDevForceConflictUi(bool value) async {
     if (devForceConflictUi == value) return;
     devForceConflictUi = value;
@@ -116,6 +128,7 @@ class DevSettingsController extends ChangeNotifier {
         devShowCacheStatus: showCacheStatus,
         devShowCalendarZoomPrewarm: showCalendarZoomPrewarm,
         devShowCalendarInstantViewSwitch: showCalendarInstantViewSwitch,
+        devSlowCalendarAnimations: slowCalendarAnimations,
         devForceConflictUi: devForceConflictUi,
         devShowConflictDocumentIds: showConflictDocumentIds,
         devShowJournalRemotePullButton: showJournalRemotePullButton,

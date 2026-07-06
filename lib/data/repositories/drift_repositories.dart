@@ -888,6 +888,7 @@ class DriftSettingsRepository implements SettingsRepository {
       devShowCacheStatus: row.devShowCacheStatus,
       devShowCalendarZoomPrewarm: row.devShowCalendarZoomPrewarm,
       devShowCalendarInstantViewSwitch: row.devShowCalendarInstantViewSwitch,
+      devSlowCalendarAnimations: row.devSlowCalendarAnimations,
       devTodoSortDebugLog: row.devTodoSortDebugLog,
       devJournalDebugLog: row.devJournalDebugLog,
       devForceConflictUi: row.devForceConflictUi,
@@ -949,6 +950,7 @@ class DriftSettingsRepository implements SettingsRepository {
             devShowCalendarZoomPrewarm: Value(settings.devShowCalendarZoomPrewarm),
             devShowCalendarInstantViewSwitch:
                 Value(settings.devShowCalendarInstantViewSwitch),
+            devSlowCalendarAnimations: Value(settings.devSlowCalendarAnimations),
             devTodoSortDebugLog: Value(settings.devTodoSortDebugLog),
             devJournalDebugLog: Value(settings.devJournalDebugLog),
             devForceConflictUi: Value(settings.devForceConflictUi),

@@ -1,71 +1,79 @@
 import 'package:flutter/material.dart';
-import 'package:voyager/core/widgets/voyager_time_picker_spinner.dart';
+import 'package:flutter/services.dart';
+import 'voyager_time_picker_spinner.dart';
 
-// Generates times in 15 minute increments
-List<TimeOfDay> _generateTimes() {
-  final times = <TimeOfDay>[];
-  for (var h = 0; h < 24; h++) {
-    for (var m = 0; m < 60; m += 15) {
-      times.add(TimeOfDay(hour: h, minute: m));
-    }
-  }
-  return times;
-}
-
-class TimeRangeResult {
-  final TimeOfDay start;
-  final TimeOfDay end;
-  const TimeRangeResult(this.start, this.end);
-}
 
 class TimeRangePopover extends StatefulWidget {
+  final DateTime initialStart;
+  final DateTime initialEnd;
+  final ValueChanged<DateTimeRange>? onChanged;
+
   const TimeRangePopover({
     super.key,
     required this.initialStart,
     required this.initialEnd,
+    this.onChanged,
   });
-
-  final TimeOfDay initialStart;
-  final TimeOfDay initialEnd;
 
   @override
   State<TimeRangePopover> createState() => _TimeRangePopoverState();
 }
 
 class _TimeRangePopoverState extends State<TimeRangePopover> {
-  late TimeOfDay _start;
-  late TimeOfDay _end;
+  late DateTime _startDt;
+  late DateTime _endDt;
+  late Duration _duration;
 
   late final TextEditingController _startController;
   late final TextEditingController _endController;
-  late final TextEditingController _durationController;
-
+  
   late final FocusNode _startFocus;
   late final FocusNode _endFocus;
-  late final FocusNode _durationFocus;
+
+  bool _activeIsStart = true;
+  bool _startSelectAllNextTap = false;
+  bool _endSelectAllNextTap = false;
+
+  bool _canPop = false;
 
   @override
   void initState() {
     super.initState();
-    _start = widget.initialStart;
-    _end = widget.initialEnd;
+    _startDt = widget.initialStart;
+    _endDt = widget.initialEnd;
+    _duration = _endDt.difference(_startDt);
+    if (_duration.isNegative) _duration = const Duration(hours: 1);
     
     _startController = TextEditingController();
     _endController = TextEditingController();
-    _durationController = TextEditingController();
 
     _startFocus = FocusNode();
     _endFocus = FocusNode();
-    _durationFocus = FocusNode();
+
+    _startFocus.addListener(() {
+      if (_startFocus.hasFocus) {
+        setState(() => _activeIsStart = true);
+        _startSelectAllNextTap = true;
+      } else {
+        _startController.text = _formatTime(_startDt);
+      }
+    });
+    _endFocus.addListener(() {
+      if (_endFocus.hasFocus) {
+        setState(() => _activeIsStart = false);
+        _endSelectAllNextTap = true;
+      } else {
+        _endController.text = _formatTime(_endDt);
+      }
+    });
 
     _startController.addListener(_onStartTextChanged);
     _endController.addListener(_onEndTextChanged);
-    _durationController.addListener(_onDurationTextChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _startController.text = _start.format(context);
-        _endController.text = _end.format(context);
+        _startController.text = _formatTime(_startDt);
+        _endController.text = _formatTime(_endDt);
         _startFocus.requestFocus();
       }
     });
@@ -75,288 +83,370 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
   void dispose() {
     _startController.dispose();
     _endController.dispose();
-    _durationController.dispose();
     _startFocus.dispose();
     _endFocus.dispose();
-    _durationFocus.dispose();
     super.dispose();
   }
 
-  TimeOfDay? _parseTime(String query) {
-    query = query.toLowerCase().trim();
-    if (query.isEmpty) return null;
-    final allTimes = _generateTimes();
-    for (var t in allTimes) {
-      final formatted = t.format(context).toLowerCase();
-      final relaxedFormatted = formatted.replaceAll(RegExp(r'[\s:]'), '');
-      final relaxedQuery = query.replaceAll(RegExp(r'[\s:]'), '');
-      if (relaxedFormatted.startsWith(relaxedQuery) || formatted.startsWith(query)) {
-        return t;
-      }
-    }
-    return null;
+  String _formatTime(DateTime dt) {
+    return TimeOfDay.fromDateTime(dt).format(context);
   }
 
-  Duration? _parseDuration(String query) {
+  DateTime? _parseTime(String query, DateTime referenceTime) {
     query = query.toLowerCase().trim();
     if (query.isEmpty) return null;
-    int totalMinutes = 0;
-    
-    final hMatch = RegExp(r'(\d+)\s*h').firstMatch(query);
-    if (hMatch != null) {
-      totalMinutes += int.parse(hMatch.group(1)!) * 60;
+
+    final clean = query.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (clean.isEmpty) return null;
+
+    bool? isPM;
+    if (clean.endsWith('pm') || clean.endsWith('p')) {
+      isPM = true;
+    } else if (clean.endsWith('am') || clean.endsWith('a')) {
+      isPM = false;
     }
-    final mMatch = RegExp(r'(\d+)\s*m').firstMatch(query);
-    if (mMatch != null) {
-      totalMinutes += int.parse(mMatch.group(1)!);
+
+    String numPart = clean.replaceAll(RegExp(r'[a-z]'), '');
+    if (numPart.isEmpty) return null;
+
+    int hour = 0;
+    int minute = 0;
+
+    if (numPart.length <= 2) {
+      hour = int.parse(numPart);
+      minute = 0;
+    } else if (numPart.length == 3) {
+      hour = int.parse(numPart.substring(0, 1));
+      minute = int.parse(numPart.substring(1, 3));
+    } else if (numPart.length == 4) {
+      hour = int.parse(numPart.substring(0, 2));
+      minute = int.parse(numPart.substring(2, 4));
+    } else {
+      return null;
+    }
+
+    if (minute > 59) return null;
+
+    if (hour > 12 && isPM == null) {
+       if (hour > 23) return null;
+       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, hour, minute);
     }
     
-    if (totalMinutes == 0) {
-      final numMatch = RegExp(r'^(\d+)$').firstMatch(query);
-      if (numMatch != null) {
-        totalMinutes = int.parse(numMatch.group(1)!);
-      }
+    if (hour > 12) return null;
+
+    if (isPM != null) {
+       int h24 = hour % 12;
+       if (isPM) h24 += 12;
+       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, h24, minute);
+    } else {
+       int h24 = hour % 12;
+       int t1 = h24; 
+       int t2 = h24 + 12; 
+       
+       double refH = referenceTime.hour + referenceTime.minute / 60.0;
+       double t1Diff = (t1 + (minute/60.0) - refH + 24) % 24;
+       double t2Diff = (t2 + (minute/60.0) - refH + 24) % 24;
+       
+       if (t1Diff < t2Diff) {
+         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t1, minute);
+       } else {
+         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t2, minute);
+       }
     }
-    
-    if (totalMinutes > 0) return Duration(minutes: totalMinutes);
-    return null;
   }
 
   void _onStartTextChanged() {
     if (!_startFocus.hasFocus) return;
-    final parsed = _parseTime(_startController.text);
-    if (parsed != null && parsed != _start) {
-      _updateStartMaintainDuration(parsed, updateText: false);
+    final parsed = _parseTime(_startController.text, _startDt);
+    if (parsed != null && parsed != _startDt) {
+      _applyStartDt(parsed, updateText: false);
     }
   }
 
   void _onEndTextChanged() {
     if (!_endFocus.hasFocus) return;
-    final parsed = _parseTime(_endController.text);
-    if (parsed != null && parsed != _end) {
-      setState(() {
-        _end = parsed;
-      });
+    final parsed = _parseTime(_endController.text, _endDt);
+    if (parsed != null && parsed != _endDt) {
+      _applyEndDt(parsed, updateText: false);
     }
   }
 
-  void _onDurationTextChanged() {
-    if (!_durationFocus.hasFocus) return;
-    final parsed = _parseDuration(_durationController.text);
-    if (parsed != null) {
-      _applyDuration(parsed);
-    }
-  }
-
-  void _updateStartMaintainDuration(TimeOfDay newStart, {bool updateText = true}) {
-    final startDt = DateTime(2000, 1, 1, _start.hour, _start.minute);
-    final endDt = DateTime(2000, 1, 1, _end.hour, _end.minute);
-    var endDtAdjusted = endDt;
-    if (endDt.isBefore(startDt)) {
-      endDtAdjusted = endDt.add(const Duration(days: 1));
-    }
-    final duration = endDtAdjusted.difference(startDt);
-
+  void _applyStartDt(DateTime newStartDt, {bool updateText = true}) {
     setState(() {
-      _start = newStart;
-      final newStartDt = DateTime(2000, 1, 1, newStart.hour, newStart.minute);
-      final newEndDt = newStartDt.add(duration);
-      _end = TimeOfDay.fromDateTime(newEndDt);
+      _startDt = newStartDt;
+      _endDt = _startDt.add(_duration);
       
       if (updateText) {
-        _startController.text = _start.format(context);
+        _startController.text = _formatTime(_startDt);
       }
       if (!_endFocus.hasFocus) {
-        _endController.text = _end.format(context);
+        _endController.text = _formatTime(_endDt);
       }
     });
+    widget.onChanged?.call(DateTimeRange(start: _startDt, end: _endDt));
+  }
+
+  void _applyEndDt(DateTime newEndDt, {bool updateText = true}) {
+    setState(() {
+      _endDt = newEndDt;
+      
+      // Failsafe: if end is pushed before start, push start backwards to maintain a minimum 1-hour duration
+      if (_endDt.difference(_startDt) < const Duration(hours: 1)) {
+         _startDt = _endDt.subtract(const Duration(hours: 1));
+      }
+      _duration = _endDt.difference(_startDt);
+      
+      if (updateText) {
+        _endController.text = _formatTime(_endDt);
+      }
+      if (!_startFocus.hasFocus) {
+        _startController.text = _formatTime(_startDt);
+      }
+    });
+    widget.onChanged?.call(DateTimeRange(start: _startDt, end: _endDt));
+  }
+
+  void _onStartSpinnerChanged(DateTime newTime) {
+    _startFocus.requestFocus();
+    setState(() => _activeIsStart = true);
+    _applyStartDt(newTime, updateText: true);
+  }
+
+  void _onEndSpinnerChanged(DateTime newTime) {
+    _endFocus.requestFocus();
+    setState(() => _activeIsStart = false);
+    _applyEndDt(newTime, updateText: true);
   }
 
   void _applyDuration(Duration dur) {
-    final startDt = DateTime(2000, 1, 1, _start.hour, _start.minute);
-    final newEndDt = startDt.add(dur);
     setState(() {
-      _end = TimeOfDay.fromDateTime(newEndDt);
-      if (!_endFocus.hasFocus) {
-        _endController.text = _end.format(context);
-      }
+      _activeIsStart = false;
+      _applyEndDt(_startDt.add(dur), updateText: true);
+      _endFocus.requestFocus();
     });
   }
 
   void _submit() {
-    Navigator.of(context).pop(TimeRangeResult(_start, _end));
+    if (!mounted) return;
+    setState(() => _canPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(DateTimeRange(start: _startDt, end: _endDt));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final durations = [
-      {'label': '15m', 'duration': const Duration(minutes: 15)},
-      {'label': '30m', 'duration': const Duration(minutes: 30)},
-      {'label': '45m', 'duration': const Duration(minutes: 45)},
-      {'label': '1h', 'duration': const Duration(hours: 1)},
-      {'label': '1.5h', 'duration': const Duration(hours: 1, minutes: 30)},
+      {'label': '15 m', 'duration': const Duration(minutes: 15)},
+      {'label': '30 m', 'duration': const Duration(minutes: 30)},
+      {'label': '45 m', 'duration': const Duration(minutes: 45)},
+      {'label': '1 h', 'duration': const Duration(hours: 1)},
       {'label': '2h', 'duration': const Duration(hours: 2)},
     ];
 
-    final normalTextStyle = theme.textTheme.titleLarge?.copyWith(
+    final activeNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
       color: Color.lerp(theme.colorScheme.primary, Colors.grey, 0.7)?.withValues(alpha: 0.4),
     );
-    final highlightTextStyle = theme.textTheme.titleLarge?.copyWith(
+    final activeHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
       color: theme.colorScheme.primary,
       fontWeight: FontWeight.bold,
     );
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Zone A: Smart Inputs
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _startController,
-                  focusNode: _startFocus,
-                  style: theme.textTheme.titleMedium,
-                  decoration: InputDecoration(
-                    hintText: 'Start...',
-                    hintStyle: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) {
-                    _endFocus.requestFocus();
-                  },
-                ),
-              ),
-              Icon(Icons.arrow_forward, size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _endController,
-                  focusNode: _endFocus,
-                  style: theme.textTheme.titleMedium,
-                  decoration: InputDecoration(
-                    hintText: 'End...',
-                    hintStyle: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) {
-                    _submit();
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        // Zone B: Scrollable Wheels side-by-side
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              VoyagerTimePickerSpinner(
-                time: _start,
-                minutesInterval: 5,
-                normalTextStyle: normalTextStyle,
-                highlightedTextStyle: highlightTextStyle,
-                spacing: 12, // slightly tighter
-                itemHeight: 40,
-                onTimeChange: (time) {
-                  _updateStartMaintainDuration(time, updateText: !_startFocus.hasFocus);
-                },
-              ),
-              const SizedBox(width: 8),
-              Icon(Icons.arrow_forward, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.3)),
-              const SizedBox(width: 8),
-              VoyagerTimePickerSpinner(
-                time: _end,
-                minutesInterval: 5,
-                normalTextStyle: normalTextStyle,
-                highlightedTextStyle: highlightTextStyle,
-                spacing: 12,
-                itemHeight: 40,
-                onTimeChange: (time) {
-                  setState(() {
-                    _end = time;
-                    if (!_endFocus.hasFocus) {
-                      _endController.text = _end.format(context);
-                    }
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        // Zone C: Durations
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: durations.map((d) {
-                    return ActionChip(
-                      label: Text(d['label'] as String, style: const TextStyle(fontSize: 12)),
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        _applyDuration(d['duration'] as Duration);
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 60,
-                child: TextField(
-                  controller: _durationController,
-                  focusNode: _durationFocus,
-                  style: theme.textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                  decoration: InputDecoration(
-                    hintText: 'e.g. 45m',
-                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.2)),
-                    ),
-                  ),
-                  onSubmitted: (_) {
-                    _submit();
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        InkWell(
-          onTap: _submit,
-          child: Container(
-            height: 48,
-            alignment: Alignment.center,
-            child: Text('Done', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
-          ),
-        ),
-      ],
+    final inactiveNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
     );
+    final inactiveHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+      fontWeight: FontWeight.bold,
+    );
+
+    return PopScope(
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (mounted) {
+          setState(() => _canPop = true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.of(context).pop(DateTimeRange(start: _startDt, end: _endDt));
+          });
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.primary, width: 2),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withValues(alpha: 0.6),
+            blurRadius: 16,
+            spreadRadius: 4,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: _activeIsStart ? 1.0 : 0.25,
+                    child: TextField(
+                      textAlign: TextAlign.center,
+                      controller: _startController,
+                      focusNode: _startFocus,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: _activeIsStart ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Start...',
+                        hintStyle: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onTap: () {
+                        if (_startSelectAllNextTap) {
+                          _startController.selection = TextSelection(baseOffset: 0, extentOffset: _startController.text.length);
+                          _startSelectAllNextTap = false;
+                        }
+                      },
+                      onSubmitted: (_) {
+                        _endFocus.requestFocus();
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward, size: 16, color: theme.colorScheme.primary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: !_activeIsStart ? 1.0 : 0.25,
+                    child: TextField(
+                      textAlign: TextAlign.center,
+                      controller: _endController,
+                      focusNode: _endFocus,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: !_activeIsStart ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'End...',
+                        hintStyle: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onTap: () {
+                        if (_endSelectAllNextTap) {
+                          _endController.selection = TextSelection(baseOffset: 0, extentOffset: _endController.text.length);
+                          _endSelectAllNextTap = false;
+                        }
+                      },
+                      onSubmitted: (_) {
+                        _submit();
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: _activeIsStart ? 1.0 : 0.25,
+                  child: VoyagerTimePickerSpinner(
+                    time: _startDt,
+                    minutesInterval: 5,
+                    isActive: _activeIsStart,
+                    normalTextStyle: _activeIsStart ? activeNormalTextStyle : inactiveNormalTextStyle,
+                    highlightedTextStyle: _activeIsStart ? activeHighlightTextStyle : inactiveHighlightTextStyle,
+                    spacing: 4,
+                    itemHeight: 40,
+                    onInteraction: () {
+                      if (!_activeIsStart) {
+                        setState(() => _activeIsStart = true);
+                        _startFocus.requestFocus();
+                      }
+                    },
+                    onTimeChange: _onStartSpinnerChanged,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(Icons.arrow_forward, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 2),
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: !_activeIsStart ? 1.0 : 0.25,
+                  child: VoyagerTimePickerSpinner(
+                    time: _endDt,
+                    minutesInterval: 5,
+                    isActive: !_activeIsStart,
+                    normalTextStyle: !_activeIsStart ? activeNormalTextStyle : inactiveNormalTextStyle,
+                    highlightedTextStyle: !_activeIsStart ? activeHighlightTextStyle : inactiveHighlightTextStyle,
+                    spacing: 4,
+                    itemHeight: 40,
+                    onInteraction: () {
+                      if (_activeIsStart) {
+                        setState(() => _activeIsStart = false);
+                        _endFocus.requestFocus();
+                      }
+                    },
+                    onTimeChange: _onEndSpinnerChanged,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: durations.map((d) {
+                return ActionChip(
+                  label: Text(d['label'] as String, style: const TextStyle(fontSize: 13)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: Colors.transparent,
+                  side: BorderSide(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                  onPressed: () {
+                    _applyDuration(d['duration'] as Duration);
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          const Divider(height: 1),
+          InkWell(
+            onTap: _submit,
+            child: Container(
+              height: 48,
+              alignment: Alignment.center,
+              child: Text('Done', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    ));
   }
 }

@@ -35,6 +35,7 @@ class AppSettings {
     this.devShowCacheStatus = false,
     this.devShowCalendarZoomPrewarm = false,
     this.devShowCalendarInstantViewSwitch = false,
+    this.devSlowCalendarAnimations = false,
     this.devTodoSortDebugLog = false,
     this.devJournalDebugLog = false,
     this.devForceConflictUi = false,
@@ -87,6 +88,7 @@ class AppSettings {
   final bool devShowCacheStatus;
   final bool devShowCalendarZoomPrewarm;
   final bool devShowCalendarInstantViewSwitch;
+  final bool devSlowCalendarAnimations;
   final bool devTodoSortDebugLog;
   final bool devJournalDebugLog;
   final bool devForceConflictUi;
@@ -135,6 +137,7 @@ class AppSettings {
     bool? devShowCacheStatus,
     bool? devShowCalendarZoomPrewarm,
     bool? devShowCalendarInstantViewSwitch,
+    bool? devSlowCalendarAnimations,
     bool? devTodoSortDebugLog,
     bool? devJournalDebugLog,
     bool? devForceConflictUi,
@@ -222,6 +225,8 @@ class AppSettings {
           devShowCalendarZoomPrewarm ?? this.devShowCalendarZoomPrewarm,
       devShowCalendarInstantViewSwitch: devShowCalendarInstantViewSwitch ??
           this.devShowCalendarInstantViewSwitch,
+      devSlowCalendarAnimations:
+          devSlowCalendarAnimations ?? this.devSlowCalendarAnimations,
       devTodoSortDebugLog: devTodoSortDebugLog ?? this.devTodoSortDebugLog,
       devJournalDebugLog: devJournalDebugLog ?? this.devJournalDebugLog,
       devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,

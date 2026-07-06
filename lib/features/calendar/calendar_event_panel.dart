@@ -44,6 +44,9 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   late int _colorValue;
   late EventRecurrence _recurrence;
   String? _titleError;
+  bool _isDatePopoverOpen = false;
+  bool _isTimePopoverOpen = false;
+  final _timePillKey = GlobalKey();
 
   @override
   void initState() {
@@ -56,7 +59,13 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.tab &&
           !HardwareKeyboard.instance.isShiftPressed) {
-        _notesFocusNode.requestFocus();
+        _titleFocusNode.unfocus();
+        if (!_isFullDay) {
+          final timeContext = _timePillKey.currentContext;
+          if (timeContext != null) {
+            _openTimePopover(timeContext);
+          }
+        }
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -142,12 +151,41 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     });
   }
 
+  Future<void> _openTimePopover(BuildContext buttonContext) async {
+    setState(() => _isTimePopoverOpen = true);
+    final result = await showContextualPopover<DateTimeRange>(
+      context: context,
+      buttonContext: buttonContext,
+      width: 360, // Wider to fit two spinners
+      builder: (ctx) => TimeRangePopover(
+        initialStart: _start,
+        initialEnd: _end,
+        onChanged: (DateTimeRange range) {
+          setState(() {
+            _start = range.start;
+            _end = range.end;
+          });
+        },
+      ),
+    );
+    setState(() => _isTimePopoverOpen = false);
+    if (result != null) {
+      setState(() {
+        _start = result.start;
+        _end = result.end;
+      });
+    }
+    // After closing the time popover, ensure nothing has focus
+    // so EnterToSubmitScope can catch the next Enter keypress.
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: EnterToSubmitScope(
           onSubmit: _submit,
           child: Column(
@@ -165,10 +203,16 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.close),
                     tooltip: 'Close',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
@@ -197,123 +241,119 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                         ),
                       ],
                       const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                        child: Wrap(
-                          spacing: 4.0,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            // Date
-                            Builder(
-                              builder: (buttonContext) => SelectorPill(
-                                label: DateFormat('EEE, MMM d').format(_start),
+                      Row(
+                        children: [
+                          // Date
+                          Builder(
+                            builder: (buttonContext) {
+                              final isMultiDay = _start.year != _end.year ||
+                                  _start.month != _end.month ||
+                                  _start.day != _end.day;
+                              final dateFormat = isMultiDay
+                                  ? DateFormat('MMM d')
+                                  : DateFormat('EEE, MMM d');
+                              final label = isMultiDay
+                                  ? '${dateFormat.format(_start)} -> ${dateFormat.format(_end)}'
+                                  : dateFormat.format(_start);
+
+                              return SelectorPill(
+                                isActive: _isDatePopoverOpen,
+                                label: label,
                                 onTap: () async {
-                                  final date =
-                                      await showContextualPopover<DateTime>(
+                                  setState(() => _isDatePopoverOpen = true);
+                                  final dateRange =
+                                      await showContextualPopover<DateTimeRange>(
                                     context: context,
                                     buttonContext: buttonContext,
-                                    height: 380, // Taller for date picker
+                                    width: 320,
+                                    height: 380,
                                     builder: (ctx) => DateSelectorPopover(
-                                      initialDate: _start,
-                                      // onAddEndDate: () {}, // Not fully implemented in smart row yet
+                                      initialStartDate: _start,
+                                      initialEndDate: _end,
                                     ),
                                   );
-                                  if (date != null) {
+                                  setState(() => _isDatePopoverOpen = false);
+                                  if (dateRange != null) {
                                     setState(() {
                                       _start = DateTime(
-                                        date.year,
-                                        date.month,
-                                        date.day,
+                                        dateRange.start.year,
+                                        dateRange.start.month,
+                                        dateRange.start.day,
                                         _start.hour,
                                         _start.minute,
                                       );
                                       _end = DateTime(
-                                        date.year,
-                                        date.month,
-                                        date.day,
+                                        dateRange.end.year,
+                                        dateRange.end.month,
+                                        dateRange.end.day,
                                         _end.hour,
                                         _end.minute,
                                       );
                                     });
                                   }
                                 },
-                              ),
-                            ),
-                            if (!_isFullDay) ...[
-                              const SizedBox(width: 12),
-                              // Combined Time Range Pill
-                              Builder(
-                                builder: (buttonContext) => SelectorPill(
-                                  onTap: () async {
-                                    final result = await showContextualPopover<TimeRangeResult>(
-                                      context: context,
-                                      buttonContext: buttonContext,
-                                      width: 360, // Wider to fit two spinners
-                                      builder: (ctx) => TimeRangePopover(
-                                        initialStart: TimeOfDay.fromDateTime(_start),
-                                        initialEnd: TimeOfDay.fromDateTime(_end),
+                              );
+                            },
+                          ),
+                          if (!_isFullDay) ...[
+                            const SizedBox(width: 8),
+                            // Combined time range pill
+                            Builder(
+                              key: _timePillKey,
+                              builder: (buttonContext) => SelectorPill(
+                                isActive: _isTimePopoverOpen,
+                                onTap: () => _openTimePopover(buttonContext),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      TimeOfDay.fromDateTime(_start)
+                                          .format(context),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                        fontWeight: FontWeight.w500,
                                       ),
-                                    );
-                                    if (result != null) {
-                                      setState(() {
-                                        _start = DateTime(
-                                          _start.year,
-                                          _start.month,
-                                          _start.day,
-                                          result.start.hour,
-                                          result.start.minute,
-                                        );
-                                        _end = DateTime(
-                                          _end.year,
-                                          _end.month,
-                                          _end.day,
-                                          result.end.hour,
-                                          result.end.minute,
-                                        );
-                                        // Auto-adjust end date if duration goes past midnight
-                                        if (_end.isBefore(_start)) {
-                                          _end = _end.add(const Duration(days: 1));
-                                        }
-                                      });
-                                    }
-                                  },
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        TimeOfDay.fromDateTime(_start).format(context),
-                                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                              color: Theme.of(context).colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
                                       ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                                        child: Icon(Icons.arrow_forward,
-                                            size: 14,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface
-                                                .withValues(alpha: 0.5)),
+                                      child: Icon(
+                                        Icons.arrow_forward,
+                                        size: 14,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.5),
                                       ),
-                                      Text(
-                                        TimeOfDay.fromDateTime(_end).format(context),
-                                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                              color: Theme.of(context).colorScheme.onSurface,
-                                              fontWeight: FontWeight.w500,
-                                            ),
+                                    ),
+                                    Text(
+                                      TimeOfDay.fromDateTime(_end)
+                                          .format(context),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                        fontWeight: FontWeight.w500,
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
+                            ),
                           ],
-                        ),
+                        ],
                       ),
                       SwitchListTile(
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 12.0),
+                        contentPadding: EdgeInsets.zero,
                         title: const Text('All day'),
                         value: _isFullDay,
                         onChanged: (v) => setState(() => _isFullDay = v),
