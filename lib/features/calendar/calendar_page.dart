@@ -507,8 +507,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     return idx ~/ 7;
   }
 
-  /// Anchor for month→week morph: saved week when visible in [visibleMonth],
-  /// else focused day when it lies in that month, otherwise the 1st.
   DateTime _weekMorphAnchorDate(DateTime visibleMonth, bool weekStartsMonday) {
     final saved = _lastViewedWeekStart;
     if (saved != null) {
@@ -524,6 +522,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       return _focused;
     }
     return visibleMonth;
+  }
+
+  DateTime? _highlightedWeekStart(bool weekStartsMonday) {
+    if (_mode != CalendarViewMode.month) return null;
+    final visibleMonth = DateTime(_focused.year, _focused.month, 1);
+    final anchor = _weekMorphAnchorDate(visibleMonth, weekStartsMonday);
+    return _weekStart(anchor, weekStartsMonday);
   }
 
   void _onMonthToWeek(bool weekStartsMonday) {
@@ -1297,7 +1302,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     int? hiddenWeekRow,
     bool showMonthChrome = true,
     bool monthNavigation = false,
+    DateTime? highlightedWeekStart,
+    double weekHighlightOpacity = 1,
   }) {
+    final editingEventId = _sidebarKind == _CalendarSidebarKind.event
+        ? _sidebarEvent?.id
+        : null;
     return CalendarGrid(
       mode: mode,
       focused: focused,
@@ -1312,6 +1322,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       onTodoTap: _openTodoSidebar,
       onWeekSlotTap: _openWeekSlotSidebar,
       onEntryTap: _handleEntryTap,
+      editingEventId: editingEventId,
       hiddenMonth: hiddenMonth,
       hiddenWeekRow: hiddenWeekRow,
       showMonthChrome: showMonthChrome,
@@ -1322,6 +1333,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           ? () => _shiftFocus(1, weekStartsMonday: weekStartsMonday)
           : null,
       weekTimelineScrollController: _weekTimelineScrollController,
+      highlightedWeekStart: highlightedWeekStart,
+      weekHighlightOpacity: weekHighlightOpacity,
     );
   }
 
@@ -1613,6 +1626,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             mode: CalendarViewMode.month,
             focused: morphMonth,
             monthNavigation: true,
+            highlightedWeekStart: _highlightedWeekStart(weekStartsMonday),
           ),
           morphOverlay: morphLayer,
         );
@@ -1632,6 +1646,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           ? DateTime(_focused.year, 1, 1)
           : _focused,
       monthNavigation: _mode == CalendarViewMode.month,
+      highlightedWeekStart: _highlightedWeekStart(weekStartsMonday),
     );
   }
 
@@ -3059,6 +3074,10 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             indicators: widget.indicators,
             todoMarkers: widget.todoMarkers,
             frozenEntryLayoutHeight: _frozenEntryLayoutHeight,
+            highlightedWeekStart: _weekStart(
+              widget.anchor,
+              widget.weekStartsMonday,
+            ),
           ),
         ),
     ];
@@ -3273,6 +3292,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
     required this.indicators,
     required this.todoMarkers,
     required this.frozenEntryLayoutHeight,
+    required this.highlightedWeekStart,
   });
 
   final DateTime date;
@@ -3281,6 +3301,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
   final double frozenEntryLayoutHeight;
+  final DateTime highlightedWeekStart;
 
   @override
   Widget build(BuildContext context) {
@@ -3324,6 +3345,12 @@ class _MonthWeekMorphCell extends StatelessWidget {
         : const <CalendarTodoMarker>[];
 
     final progress = _WeekMorphProgress.of(context);
+    final weekHighlightAlpha = calendarFocusedWeekHighlightAlpha(
+      date: date,
+      month: month,
+      weekStart: highlightedWeekStart,
+      opacity: progress.monthEntryOpacity,
+    );
 
     return CalendarDayCell(
       date: date,
@@ -3336,6 +3363,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
       entryOpacity: progress.monthEntryOpacity,
       dayNumberOpacity: (1.0 - t).clamp(0.0, 1.0),
       frozenEntryLayoutHeight: frozenEntryLayoutHeight,
+      weekHighlightAlpha: weekHighlightAlpha,
       adjacentTextT: inMonth ? null : t,
       adjacentBorderT: inMonth ? null : Curves.easeOutCubic.transform(t),
       style: MonthDayCellStyle(

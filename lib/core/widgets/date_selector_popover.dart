@@ -145,6 +145,13 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
+  bool _isQuickChipSelected(DateTime chipDate) {
+    if (_firstSelected == null) return false;
+    final end = _secondSelected ?? _firstSelected!;
+    if (!_isSameDay(_firstSelected!, end)) return false;
+    return _isSameDay(_firstSelected!, chipDate);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -224,12 +231,32 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: chips.map((c) {
+                    final chipDate = c['date'] as DateTime;
+                    final isSelected = _isQuickChipSelected(chipDate);
                     return Padding(
                       padding: const EdgeInsets.only(right: 6.0),
                       child: ActionChip(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                        label: Text(c['label'] as String),
-                        onPressed: () => _submitQuickAction(c['date'] as DateTime),
+                        label: Text(
+                          c['label'] as String,
+                          style: TextStyle(
+                            color: isSelected
+                                ? theme.colorScheme.onPrimary
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        backgroundColor: isSelected
+                            ? theme.colorScheme.primary
+                            : Colors.transparent,
+                        side: isSelected
+                            ? BorderSide(color: theme.colorScheme.primary, width: 1)
+                            : BorderSide(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.2,
+                                ),
+                                width: 1,
+                              ),
+                        onPressed: () => _submitQuickAction(chipDate),
                       ),
                     );
                   }).toList(),

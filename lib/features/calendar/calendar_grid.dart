@@ -119,7 +119,10 @@ class CalendarGrid extends StatelessWidget {
     this.onTodoTap,
     this.onWeekSlotTap,
     this.onEntryTap,
+    this.editingEventId,
     this.weekTimelineScrollController,
+    this.highlightedWeekStart,
+    this.weekHighlightOpacity = 1,
   });
 
   final CalendarViewMode mode;
@@ -156,7 +159,10 @@ class CalendarGrid extends StatelessWidget {
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onWeekSlotTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+  final String? editingEventId;
   final ScrollController? weekTimelineScrollController;
+  final DateTime? highlightedWeekStart;
+  final double weekHighlightOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +176,7 @@ class CalendarGrid extends StatelessWidget {
         onSlotTap: onWeekSlotTap,
         weekStartsMonday: weekStartsMonday,
         scrollController: weekTimelineScrollController,
+        editingEventId: editingEventId,
       ),
       CalendarViewMode.month => _MonthGrid(
         focused: focused,
@@ -179,12 +186,15 @@ class CalendarGrid extends StatelessWidget {
         showTodoIcons: showTodoIcons,
         onDayTap: onDayTap,
         onEntryTap: onEntryTap,
+        editingEventId: editingEventId,
         weekStartsMonday: weekStartsMonday,
         dayGridKey: monthDayGridKey,
         hiddenWeekRow: hiddenWeekRow,
         showMonthChrome: showMonthChrome,
         onPreviousMonth: onPreviousMonth,
         onNextMonth: onNextMonth,
+        highlightedWeekStart: highlightedWeekStart,
+        weekHighlightOpacity: weekHighlightOpacity,
       ),
       CalendarViewMode.year => _YearGrid(
         focused: focused,
@@ -656,11 +666,14 @@ class _MonthGrid extends StatelessWidget {
     required this.onDayTap,
     required this.weekStartsMonday,
     this.onEntryTap,
+    this.editingEventId,
     this.dayGridKey,
     this.hiddenWeekRow,
     this.showMonthChrome = true,
     this.onPreviousMonth,
     this.onNextMonth,
+    this.highlightedWeekStart,
+    this.weekHighlightOpacity = 1,
   });
 
   final DateTime focused;
@@ -670,6 +683,7 @@ class _MonthGrid extends StatelessWidget {
   final bool showTodoIcons;
   final void Function(DateTime day) onDayTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+  final String? editingEventId;
   final bool weekStartsMonday;
 
   /// Optional key placed on the inner [MonthDayGrid] for measurement.
@@ -678,6 +692,8 @@ class _MonthGrid extends StatelessWidget {
   final bool showMonthChrome;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
+  final DateTime? highlightedWeekStart;
+  final double weekHighlightOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -722,7 +738,10 @@ class _MonthGrid extends StatelessWidget {
                 style: MonthDayCellStyle.full,
                 onDayTap: onDayTap,
                 onEntryTap: onEntryTap,
+                editingEventId: editingEventId,
                 hiddenWeekRow: hiddenWeekRow,
+                highlightedWeekStart: highlightedWeekStart,
+                weekHighlightOpacity: weekHighlightOpacity,
               ),
             ),
           ],
@@ -742,6 +761,7 @@ class _WeekGrid extends StatelessWidget {
     required this.onSlotTap,
     required this.weekStartsMonday,
     this.scrollController,
+    this.editingEventId,
   });
 
   final DateTime focused;
@@ -752,6 +772,7 @@ class _WeekGrid extends StatelessWidget {
   final void Function(DateTime day, DateTime time)? onSlotTap;
   final bool weekStartsMonday;
   final ScrollController? scrollController;
+  final String? editingEventId;
 
   @override
   Widget build(BuildContext context) {
@@ -769,6 +790,7 @@ class _WeekGrid extends StatelessWidget {
       onEventTap: onEventTap ?? (_) {},
       onTodoTap: onTodoTap ?? (_) {},
       onSlotTap: onSlotTap ?? (_, _) {},
+      editingEventId: editingEventId,
       ),
     );
   }

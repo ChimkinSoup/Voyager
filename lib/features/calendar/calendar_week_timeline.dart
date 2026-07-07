@@ -124,6 +124,7 @@ class CalendarWeekTimeline extends StatefulWidget {
     this.scrollController,
     this.showWeekdayHeader = true,
     this.entryFadeEnabled = true,
+    this.editingEventId,
   });
 
   final DateTime weekStart;
@@ -138,6 +139,7 @@ class CalendarWeekTimeline extends StatefulWidget {
   final ScrollController? scrollController;
   final bool showWeekdayHeader;
   final bool entryFadeEnabled;
+  final String? editingEventId;
 
   @override
   State<CalendarWeekTimeline> createState() => _CalendarWeekTimelineState();
@@ -254,6 +256,12 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
           events: widget.events,
           weekDays: weekDays,
         );
+        final packedAllDayShelf = calendarPackWeekAllDayShelf(
+          events: widget.events,
+          weekDays: weekDays,
+        );
+        final allDayShelfRowCount =
+            calendarWeekAllDayShelfRowCount(packedAllDayShelf);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -352,47 +360,6 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                           ),
                         ),
 
-                        // ── Hour-line grid (fixed viewport overlay) ──
-                        Positioned(
-                          left: 0,
-                          top: columnTop + allDayShelfHeight,
-                          right: 0,
-                          height: timelineViewportHeight,
-                          child: IgnorePointer(
-                            child: AnimatedBuilder(
-                              animation: _scrollController,
-                              builder: (context, _) {
-                                return CustomPaint(
-                                  painter: CalendarWeekTimeGridPainter(
-                                    scrollOffset: calendarWeekEffectiveScrollOffset(
-                                      _scrollController,
-                                      widget.initialScrollOffset ??
-                                          _scrollController.initialScrollOffset,
-                                    ),
-                                    allDayShelfHeight: 0,
-                                    borderedClipRects: borderedDayRects
-                                        .map(
-                                          (rect) => Rect.fromLTRB(
-                                            rect.left,
-                                            0,
-                                            rect.right,
-                                            timelineViewportHeight,
-                                          ),
-                                        )
-                                        .toList(),
-                                    borderRadius: borderRadius,
-                                    lineColor: divider.withValues(alpha: 0.45),
-                                    labelColor: onSurfaceVariant,
-                                    hourLabelBuilder: _hourLabel,
-                                    timelineScrollPadding:
-                                        calendarWeekTimelineScrollPadding,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-
                         // ── Pinned all-day shelf (always visible) ──
                         for (var i = 0; i < 7; i++)
                           Positioned(
@@ -402,12 +369,14 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                             height: allDayShelfHeight,
                             child: _AllDayShelfColumn(
                               day: weekDays[i],
-                              events: widget.events,
+                              columnEvents: packedAllDayShelf[i],
+                              rowCount: allDayShelfRowCount,
                               margin: margin,
                               isFirstColumn: i == 0,
                               isLastColumn: i == 6,
                               onEventTap: widget.onEventTap,
                               entryFade: _entryFade,
+                              editingEventId: widget.editingEventId,
                             ),
                           ),
 
@@ -448,6 +417,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                       interactive: widget.interactive,
                                       borderRadius: borderRadius,
                                       entryFade: _entryFade,
+                                      editingEventId: widget.editingEventId,
                                     ),
                                 ],
                               ),
@@ -455,7 +425,46 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                           ),
                         ),
 
-
+                        // ── Hour-line grid (above events, below accent line) ──
+                        Positioned(
+                          left: 0,
+                          top: columnTop + allDayShelfHeight,
+                          right: 0,
+                          height: timelineViewportHeight,
+                          child: IgnorePointer(
+                            child: AnimatedBuilder(
+                              animation: _scrollController,
+                              builder: (context, _) {
+                                return CustomPaint(
+                                  painter: CalendarWeekTimeGridPainter(
+                                    scrollOffset: calendarWeekEffectiveScrollOffset(
+                                      _scrollController,
+                                      widget.initialScrollOffset ??
+                                          _scrollController.initialScrollOffset,
+                                    ),
+                                    allDayShelfHeight: 0,
+                                    borderedClipRects: borderedDayRects
+                                        .map(
+                                          (rect) => Rect.fromLTRB(
+                                            rect.left,
+                                            0,
+                                            rect.right,
+                                            timelineViewportHeight,
+                                          ),
+                                        )
+                                        .toList(),
+                                    borderRadius: borderRadius,
+                                    lineColor: divider.withValues(alpha: 0.45),
+                                    labelColor: onSurfaceVariant,
+                                    hourLabelBuilder: _hourLabel,
+                                    timelineScrollPadding:
+                                        calendarWeekTimelineScrollPadding,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
 
                         // ── All-day shelf accent line (flush below pinned events) ──
                         Positioned(
@@ -489,47 +498,49 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
 class _AllDayShelfColumn extends StatelessWidget {
   const _AllDayShelfColumn({
     required this.day,
-    required this.events,
+    required this.columnEvents,
+    required this.rowCount,
     required this.margin,
     required this.isFirstColumn,
     required this.isLastColumn,
     required this.onEventTap,
     required this.entryFade,
+    this.editingEventId,
   });
 
   final DateTime day;
-  final List<CalendarEvent> events;
+  final List<CalendarEvent?> columnEvents;
+  final int rowCount;
   final double margin;
   final bool isFirstColumn;
   final bool isLastColumn;
   final CalendarWeekEventTap onEventTap;
   final Animation<double> entryFade;
+  final String? editingEventId;
 
   @override
   Widget build(BuildContext context) {
-    final allDay = events
-        .where((e) => calendarEventOnDay(e, day) && (e.isFullDay || DateUtils.dateOnly(e.start.toLocal()) != DateUtils.dateOnly(e.end.toLocal())))
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < allDay.length; i++)
+        for (var i = 0; i < rowCount; i++)
           SizedBox(
             height: calendarWeekAllDayEventRowHeight,
-            child: FadeTransition(
-              opacity: entryFade,
-              child: CalendarWeekEventBlock(
-                key: ValueKey('allday-${allDay[i].id}'),
-                event: allDay[i],
-                day: day,
-                margin: margin,
-                isFirstColumn: isFirstColumn,
-                isLastColumn: isLastColumn,
-                onTap: () => onEventTap(allDay[i]),
-              ),
-            ),
+            child: i < columnEvents.length && columnEvents[i] != null
+                ? FadeTransition(
+                    opacity: entryFade,
+                    child: CalendarWeekEventBlock(
+                      key: ValueKey('allday-${columnEvents[i]!.id}-$i'),
+                      event: columnEvents[i]!,
+                      day: day,
+                      margin: margin,
+                      isFirstColumn: isFirstColumn,
+                      isLastColumn: isLastColumn,
+                      highlighted: editingEventId == columnEvents[i]!.id,
+                      onTap: () => onEventTap(columnEvents[i]!),
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
       ],
     );
@@ -547,6 +558,7 @@ class _DayTimedColumn extends StatelessWidget {
     required this.interactive,
     required this.borderRadius,
     required this.entryFade,
+    this.editingEventId,
   });
 
   final DateTime day;
@@ -559,6 +571,7 @@ class _DayTimedColumn extends StatelessWidget {
   final bool interactive;
   final double borderRadius;
   final Animation<double> entryFade;
+  final String? editingEventId;
 
   @override
   Widget build(BuildContext context) {
@@ -599,6 +612,8 @@ class _DayTimedColumn extends StatelessWidget {
                         : CalendarWeekEventBlock(
                             key: ValueKey('event-${slot.entry.event!.id}'),
                             event: slot.entry.event!,
+                            highlighted:
+                                editingEventId == slot.entry.event!.id,
                             onTap: () => onEventTap(slot.entry.event!),
                           ),
                   ),
