@@ -9,6 +9,7 @@ class SelectorPill extends StatelessWidget {
     this.isActive = false,
     this.icon,
     this.dense = false,
+    this.accentColor,
   }) : assert(label != null || child != null);
 
   final String? label;
@@ -20,9 +21,13 @@ class SelectorPill extends StatelessWidget {
   /// Tighter padding and smaller label text for compact toolbars.
   final bool dense;
 
+  /// Active border color — defaults to [ColorScheme.primary].
+  final Color? accentColor;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = accentColor ?? theme.colorScheme.primary;
     final backgroundColor = theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5);
     final foregroundColor = theme.colorScheme.onSurface;
 
@@ -31,7 +36,7 @@ class SelectorPill extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: isActive
-            ? BorderSide(color: theme.colorScheme.primary, width: 1)
+            ? BorderSide(color: accent, width: 1)
             : BorderSide.none,
       ),
       clipBehavior: Clip.antiAlias,

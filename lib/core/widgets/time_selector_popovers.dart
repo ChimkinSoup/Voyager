@@ -35,6 +35,22 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
   bool _endSelectAllNextTap = false;
 
   bool _canPop = false;
+  Duration? _selectedDuration;
+
+  static const _presetDurations = [
+    Duration(minutes: 15),
+    Duration(minutes: 30),
+    Duration(minutes: 45),
+    Duration(hours: 1),
+    Duration(hours: 2),
+  ];
+
+  Duration? _matchingPresetDuration(Duration duration) {
+    for (final preset in _presetDurations) {
+      if (preset == duration) return preset;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -43,6 +59,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     _endDt = widget.initialEnd;
     _duration = _endDt.difference(_startDt);
     if (_duration.isNegative) _duration = const Duration(hours: 1);
+    _selectedDuration = _matchingPresetDuration(_duration);
     
     _startController = TextEditingController();
     _endController = TextEditingController();
@@ -182,6 +199,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
       if (!_endFocus.hasFocus) {
         _endController.text = _formatTime(_endDt);
       }
+      _selectedDuration = _matchingPresetDuration(_duration);
     });
     widget.onChanged?.call(DateTimeRange(start: _startDt, end: _endDt));
   }
@@ -195,6 +213,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
          _startDt = _endDt.subtract(const Duration(hours: 1));
       }
       _duration = _endDt.difference(_startDt);
+      _selectedDuration = _matchingPresetDuration(_duration);
       
       if (updateText) {
         _endController.text = _formatTime(_endDt);
@@ -220,6 +239,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
 
   void _applyDuration(Duration dur) {
     setState(() {
+      _selectedDuration = dur;
       _activeIsStart = false;
       _applyEndDt(_startDt.add(dur), updateText: true);
       _endFocus.requestFocus();
@@ -232,6 +252,80 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Navigator.of(context).pop(DateTimeRange(start: _startDt, end: _endDt));
     });
+  }
+
+  Widget _timeField({
+    required ThemeData theme,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required bool isActive,
+    required String hintText,
+    required VoidCallback onTap,
+    required ValueChanged<String> onSubmitted,
+  }) {
+    final accent = theme.colorScheme.primary;
+    final fieldTheme = theme.copyWith(
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: false,
+        isDense: true,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        errorBorder: InputBorder.none,
+        focusedErrorBorder: InputBorder.none,
+      ),
+      splashFactory: NoSplash.splashFactory,
+      highlightColor: Colors.transparent,
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isActive
+              ? accent
+              : theme.colorScheme.onSurface.withValues(alpha: 0.2),
+          width: isActive ? 2 : 1,
+        ),
+      ),
+      child: Theme(
+        data: fieldTheme,
+        child: Material(
+          type: MaterialType.transparency,
+          child: TextField(
+            textAlign: TextAlign.center,
+            controller: controller,
+            focusNode: focusNode,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: isActive
+                  ? accent
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+            decoration: InputDecoration(
+              hintText: hintText,
+              hintStyle: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+              isCollapsed: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+            ),
+            onTap: onTap,
+            onSubmitted: onSubmitted,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -296,30 +390,22 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 150),
                     opacity: _activeIsStart ? 1.0 : 0.25,
-                    child: TextField(
-                      textAlign: TextAlign.center,
+                    child: _timeField(
+                      theme: theme,
                       controller: _startController,
                       focusNode: _startFocus,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: _activeIsStart ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Start...',
-                        hintStyle: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
+                      isActive: _activeIsStart,
+                      hintText: 'Start...',
                       onTap: () {
                         if (_startSelectAllNextTap) {
-                          _startController.selection = TextSelection(baseOffset: 0, extentOffset: _startController.text.length);
+                          _startController.selection = TextSelection(
+                            baseOffset: 0,
+                            extentOffset: _startController.text.length,
+                          );
                           _startSelectAllNextTap = false;
                         }
                       },
-                      onSubmitted: (_) {
-                        _endFocus.requestFocus();
-                      },
+                      onSubmitted: (_) => _endFocus.requestFocus(),
                     ),
                   ),
                 ),
@@ -330,30 +416,22 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 150),
                     opacity: !_activeIsStart ? 1.0 : 0.25,
-                    child: TextField(
-                      textAlign: TextAlign.center,
+                    child: _timeField(
+                      theme: theme,
                       controller: _endController,
                       focusNode: _endFocus,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: !_activeIsStart ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'End...',
-                        hintStyle: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                      ),
+                      isActive: !_activeIsStart,
+                      hintText: 'End...',
                       onTap: () {
                         if (_endSelectAllNextTap) {
-                          _endController.selection = TextSelection(baseOffset: 0, extentOffset: _endController.text.length);
+                          _endController.selection = TextSelection(
+                            baseOffset: 0,
+                            extentOffset: _endController.text.length,
+                          );
                           _endSelectAllNextTap = false;
                         }
                       },
-                      onSubmitted: (_) {
-                        _submit();
-                      },
+                      onSubmitted: (_) => _submit(),
                     ),
                   ),
                 ),
@@ -420,17 +498,30 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
               runSpacing: 8,
               alignment: WrapAlignment.center,
               children: durations.map((d) {
+                final duration = d['duration'] as Duration;
+                final isSelected = _selectedDuration == duration;
                 return ActionChip(
-                  label: Text(d['label'] as String, style: const TextStyle(fontSize: 13)),
+                  label: Text(
+                    d['label'] as String,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isSelected
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.onSurface,
+                    ),
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
                   visualDensity: VisualDensity.compact,
-                  backgroundColor: Colors.transparent,
-                  side: BorderSide(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
+                  backgroundColor:
+                      isSelected ? theme.colorScheme.primary : Colors.transparent,
+                  side: isSelected
+                      ? BorderSide(color: theme.colorScheme.primary, width: 1)
+                      : BorderSide(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
                   onPressed: () {
-                    _applyDuration(d['duration'] as Duration);
+                    _applyDuration(duration);
                   },
                 );
               }).toList(),

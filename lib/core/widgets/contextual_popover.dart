@@ -6,15 +6,18 @@ class ContextualPopover extends StatelessWidget {
     required this.child,
     this.width = 220,
     this.height,
+    this.accentColor,
   });
 
   final Widget child;
   final double width;
   final double? height;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = accentColor ?? theme.colorScheme.primary;
     // Dark Scaffold Base #1B1B22 with subtle colored shadow
     return Container(
       width: width,
@@ -24,7 +27,7 @@ class ContextualPopover extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.primary.withValues(alpha: 0.15),
+            color: accent.withValues(alpha: 0.15),
             blurRadius: 16,
             blurStyle: BlurStyle.outer,
           ),
@@ -51,6 +54,7 @@ Future<T?> showContextualPopover<T>({
   required WidgetBuilder builder,
   double width = 220,
   double? height,
+  Color? accentColor,
 }) async {
   final button = buttonContext.findRenderObject() as RenderBox?;
   if (button == null) return null;
@@ -67,6 +71,7 @@ Future<T?> showContextualPopover<T>({
       builder: builder,
       width: width,
       height: height,
+      accentColor: accentColor,
       capturedThemes: InheritedTheme.capture(
           from: context, to: Navigator.of(context).context),
     ),
@@ -79,6 +84,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
     required this.builder,
     required this.width,
     this.height,
+    this.accentColor,
     required this.capturedThemes,
   });
 
@@ -86,6 +92,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
   final WidgetBuilder builder;
   final double width;
   final double? height;
+  final Color? accentColor;
   final CapturedThemes capturedThemes;
 
   @override
@@ -103,6 +110,21 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
       Animation<double> secondaryAnimation) {
+    Widget popover = ContextualPopover(
+      width: width,
+      height: height,
+      accentColor: accentColor,
+      child: builder(context),
+    );
+    if (accentColor != null) {
+      final base = Theme.of(context);
+      popover = Theme(
+        data: base.copyWith(
+          colorScheme: base.colorScheme.copyWith(primary: accentColor),
+        ),
+        child: popover,
+      );
+    }
     return capturedThemes.wrap(
       CustomSingleChildLayout(
         delegate: _PopoverLayoutDelegate(
@@ -116,11 +138,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
             scale: Tween<double>(begin: 0.95, end: 1.0).animate(
               CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
             ),
-            child: ContextualPopover(
-              width: width,
-              height: height,
-              child: builder(context),
-            ),
+            child: popover,
           ),
         ),
       ),

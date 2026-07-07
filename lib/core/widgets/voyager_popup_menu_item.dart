@@ -9,13 +9,16 @@ Future<T?> showVoyagerMenu<T>({
   required List<PopupMenuEntry<T>> items,
   BoxConstraints? constraints,
   EdgeInsetsGeometry menuPadding = EdgeInsets.zero,
+  Color? accentColor,
 }) {
-  final menuStyle = VoyagerMenuTheme.showMenuStyle(Theme.of(context));
+  final theme = Theme.of(context);
+  final menuStyle = VoyagerMenuTheme.showMenuStyle(theme);
+  final accent = accentColor ?? theme.colorScheme.primary;
   return showMenu<T>(
     context: context,
     position: position,
     constraints: constraints,
-    shape: menuStyle.shape,
+    shape: accentColor != null ? VoyagerMenuTheme.shape(accent) : menuStyle.shape,
     color: menuStyle.color,
     elevation: menuStyle.elevation,
     shadowColor: menuStyle.shadowColor,

@@ -15,23 +15,42 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
     super.onSaved,
     super.enabled = true,
     this.isExpanded = false,
+    this.accentColor,
   }) : assert(items.isNotEmpty),
        super(
          builder: (field) {
            final dropdown = field.widget as VoyagerDropdownButtonFormField<T>;
+           final accent = dropdown.accentColor;
+           var fieldDecoration = decoration.applyDefaults(
+             Theme.of(field.context).inputDecorationTheme,
+           ).copyWith(
+             enabled: dropdown.enabled,
+             errorText: field.errorText,
+           );
+           if (accent != null) {
+             fieldDecoration = fieldDecoration.copyWith(
+               floatingLabelStyle: Theme.of(field.context)
+                   .textTheme
+                   .labelLarge
+                   ?.copyWith(color: accent),
+               focusedBorder: OutlineInputBorder(
+                 borderRadius: BorderRadius.circular(14),
+                 borderSide: BorderSide(
+                   color: accent.withValues(alpha: 0.95),
+                   width: 1.8,
+                 ),
+               ),
+             );
+           }
            return InputDecorator(
-             decoration: decoration.applyDefaults(
-               Theme.of(field.context).inputDecorationTheme,
-             ).copyWith(
-               enabled: dropdown.enabled,
-               errorText: field.errorText,
-             ),
+             decoration: fieldDecoration,
              isEmpty: field.value == null,
              child: _VoyagerDropdownFieldControl<T>(
                field: field,
                items: items,
                enabled: dropdown.enabled,
                isExpanded: isExpanded,
+               accentColor: dropdown.accentColor,
                onChanged: (value) {
                  field.didChange(value);
                  onChanged?.call(value);
@@ -45,6 +64,7 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
   final InputDecoration decoration;
   final ValueChanged<T?>? onChanged;
   final bool isExpanded;
+  final Color? accentColor;
 }
 
 class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
@@ -54,6 +74,7 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
     required this.enabled,
     required this.isExpanded,
     required this.onChanged,
+    this.accentColor,
   });
 
   final FormFieldState<T> field;
@@ -61,6 +82,7 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
   final bool enabled;
   final bool isExpanded;
   final ValueChanged<T?> onChanged;
+  final Color? accentColor;
 
   @override
   State<_VoyagerDropdownFieldControl<T>> createState() =>
@@ -100,6 +122,7 @@ class _VoyagerDropdownFieldControlState<T>
         minWidth: buttonRect.width,
         maxWidth: buttonRect.width,
       ),
+      accentColor: widget.accentColor,
       items: [
         for (var i = 0; i < enabledItems.length; i++)
           VoyagerPopupMenuItem<T>(

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
@@ -157,6 +158,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       context: context,
       buttonContext: buttonContext,
       width: 360, // Wider to fit two spinners
+      accentColor: Color(_colorValue),
       builder: (ctx) => TimeRangePopover(
         initialStart: _start,
         initialEnd: _end,
@@ -182,24 +184,66 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final isEditing = widget.event != null;
+    final accent = Color(_colorValue);
+    final baseTheme = Theme.of(context);
+    final eventTheme = baseTheme.copyWith(
+      colorScheme: baseTheme.colorScheme.copyWith(primary: accent),
+      popupMenuTheme: VoyagerMenuTheme.popupMenuTheme(
+        textTheme: baseTheme.textTheme,
+        onSurface: baseTheme.colorScheme.onSurface,
+        accentColor: accent,
+      ),
+      menuTheme: VoyagerMenuTheme.menuTheme(accentColor: accent),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return null;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return accent.withValues(alpha: 0.45);
+          }
+          return null;
+        }),
+      ),
+      inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
+        floatingLabelStyle:
+            baseTheme.textTheme.labelLarge?.copyWith(color: accent),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: accent.withValues(alpha: 0.95),
+            width: 1.8,
+          ),
+        ),
+      ),
+    );
+    final cardShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+    );
+    final card = Card(
       margin: EdgeInsets.zero,
+      shape: isEditing
+          ? cardShape.copyWith(
+              side: BorderSide(
+                color: Color(_colorValue).withValues(alpha: 0.6),
+                width: 3,
+              ),
+            )
+          : cardShape,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-        child: EnterToSubmitScope(
-          onSubmit: _submit,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.event == null ? 'New event' : 'Edit event',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  IconButton(
+        child: Theme(
+          data: eventTheme,
+          child: EnterToSubmitScope(
+            onSubmit: _submit,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
                     onPressed: widget.onCancel,
                     icon: const Icon(Icons.close),
                     tooltip: 'Close',
@@ -210,56 +254,57 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                       height: 32,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      LabeledTextField(
-                        label: 'Title',
-                        controller: _titleController,
-                        focusNode: _titleFocusNode,
-                        autofocus: true,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _submit(),
-                        onChanged: (_) {
-                          if (_titleError != null) {
-                            setState(() => _titleError = null);
-                          }
-                        },
-                      ),
-                      if (_titleError != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          _titleError!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 14),
+                        LabeledTextField(
+                          label: 'Title',
+                          controller: _titleController,
+                          focusNode: _titleFocusNode,
+                          autofocus: true,
+                          textInputAction: TextInputAction.done,
+                          accentColor: accent,
+                          onSubmitted: (_) => _submit(),
+                          onChanged: (_) {
+                            if (_titleError != null) {
+                              setState(() => _titleError = null);
+                            }
+                          },
                         ),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          // Date
-                          Builder(
-                            builder: (buttonContext) {
-                              final isMultiDay = _start.year != _end.year ||
-                                  _start.month != _end.month ||
-                                  _start.day != _end.day;
-                              final dateFormat = isMultiDay
-                                  ? DateFormat('MMM d')
-                                  : DateFormat('EEE, MMM d');
-                              final label = isMultiDay
-                                  ? '${dateFormat.format(_start)} -> ${dateFormat.format(_end)}'
-                                  : dateFormat.format(_start);
+                        if (_titleError != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _titleError!,
+                            style: TextStyle(
+                              color: baseTheme.colorScheme.error,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            // Date
+                            Builder(
+                              builder: (buttonContext) {
+                                final isMultiDay = _start.year != _end.year ||
+                                    _start.month != _end.month ||
+                                    _start.day != _end.day;
+                                final dateFormat = isMultiDay
+                                    ? DateFormat('MMM d')
+                                    : DateFormat('EEE, MMM d');
+                                final label = isMultiDay
+                                    ? '${dateFormat.format(_start)} -> ${dateFormat.format(_end)}'
+                                    : dateFormat.format(_start);
 
-                              return SelectorPill(
-                                isActive: _isDatePopoverOpen,
-                                label: label,
-                                onTap: () async {
+                                return SelectorPill(
+                                  isActive: _isDatePopoverOpen,
+                                  label: label,
+                                  accentColor: accent,
+                                  onTap: () async {
                                   setState(() => _isDatePopoverOpen = true);
                                   final dateRange =
                                       await showContextualPopover<DateTimeRange>(
@@ -267,6 +312,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                     buttonContext: buttonContext,
                                     width: 320,
                                     height: 380,
+                                    accentColor: accent,
                                     builder: (ctx) => DateSelectorPopover(
                                       initialStartDate: _start,
                                       initialEndDate: _end,
@@ -302,6 +348,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                               key: _timePillKey,
                               builder: (buttonContext) => SelectorPill(
                                 isActive: _isTimePopoverOpen,
+                                accentColor: accent,
                                 onTap: () => _openTimePopover(buttonContext),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -352,16 +399,26 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                           ],
                         ],
                       ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('All day'),
-                        value: _isFullDay,
-                        onChanged: (v) => setState(() => _isFullDay = v),
+                      Padding(
+                        // Match SelectorPill horizontal inset so "All day" aligns with date text.
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('All day'),
+                            const SizedBox(width: 12),
+                            Switch(
+                              value: _isFullDay,
+                              onChanged: (v) => setState(() => _isFullDay = v),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       VoyagerDropdownButtonFormField<EventRecurrence>(
                         decoration: const InputDecoration(labelText: 'Repeat'),
                         initialValue: _recurrence,
+                        accentColor: accent,
                         items: EventRecurrence.values
                             .map(
                               (value) => DropdownMenuItem(
@@ -383,6 +440,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                         maxLines: 3,
                         keyboardType: TextInputType.multiline,
                         textInputAction: TextInputAction.newline,
+                        accentColor: accent,
                       ),
                       const SizedBox(height: 12),
                       ColorPickerField(
@@ -396,24 +454,42 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: widget.onCancel,
-                    child: const Text('Cancel'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: _submit,
-                    child: const Text('Save'),
-                  ),
-                ],
-              ),
-            ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: widget.onCancel,
+                      child: const Text('Cancel'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: _submit,
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+
+    if (!isEditing) return card;
+
+    final glowColor = Color(_colorValue).withValues(alpha: 0.6);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: glowColor,
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: card,
     );
   }
 }

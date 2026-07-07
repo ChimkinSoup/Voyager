@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 
 class VoyagerTimePickerSpinner extends StatefulWidget {
@@ -36,42 +35,50 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
   late FixedExtentScrollController _minuteController;
   late FixedExtentScrollController _amPmController;
 
-  late int _currentHourIndex; // 0-11
-  late int _currentMinuteIndex; // e.g. 0-11 for 5 min intervals
-  late int _currentAmPmIndex; // 0 for AM, 1 for PM
-
+  late int _currentHourIndex;
+  late int _currentMinuteIndex;
+  late int _currentAmPmIndex;
   late int _minuteItemsCount;
-
   late DateTime _currentDate;
+
+  // Tracks the snapped item index for each wheel — used to highlight the
+  // selected row without subscribing every item to the scroll animation.
+  late int _displayHourItem;
+  late int _displayMinuteItem;
+  late int _displayAmPmItem;
 
   @override
   void initState() {
     super.initState();
     _currentDate = widget.time;
     _minuteItemsCount = 60 ~/ widget.minutesInterval;
-    
+
     int hour12 = _currentDate.hour % 12;
     if (hour12 == 0) hour12 = 12;
-    _currentHourIndex = hour12 - 1; 
-    
+    _currentHourIndex = hour12 - 1;
+
     int initialMinute = _currentDate.minute;
     _currentMinuteIndex = (initialMinute / widget.minutesInterval).round() % _minuteItemsCount;
-    
+
     _currentAmPmIndex = _currentDate.hour >= 12 ? 1 : 0;
 
     final initialHourOffset = 12000 + _currentHourIndex;
     final initialMinuteOffset = (_minuteItemsCount * 1000) + _currentMinuteIndex;
-    
+
     _hourController = FixedExtentScrollController(initialItem: initialHourOffset);
     _minuteController = FixedExtentScrollController(initialItem: initialMinuteOffset);
     _amPmController = FixedExtentScrollController(initialItem: _currentAmPmIndex);
+
+    _displayHourItem = initialHourOffset;
+    _displayMinuteItem = initialMinuteOffset;
+    _displayAmPmItem = _currentAmPmIndex;
   }
 
   @override
   void didUpdateWidget(covariant VoyagerTimePickerSpinner oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.time != widget.time) {
-      _currentDate = widget.time; // Sync internal date
+      _currentDate = widget.time;
       int h = (_hourController.hasClients ? _hourController.selectedItem % 12 : _currentHourIndex) + 1;
       int m = (_minuteController.hasClients ? _minuteController.selectedItem % _minuteItemsCount : _currentMinuteIndex) * widget.minutesInterval;
       int ap = _amPmController.hasClients ? _amPmController.selectedItem.clamp(0, 1) : _currentAmPmIndex;
@@ -84,26 +91,31 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
         int targetHourIndex = targetHour12 - 1;
         int targetMinuteIndex = (widget.time.minute / widget.minutesInterval).round() % _minuteItemsCount;
         int targetAmPmIndex = widget.time.hour >= 12 ? 1 : 0;
-        
+
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _isProgrammaticScroll = true;
           if (_hourController.hasClients) {
-            int currentHourItem = _hourController.selectedItem;
-            int diff = targetHourIndex - (currentHourItem % 12);
+            int current = _hourController.selectedItem;
+            int diff = targetHourIndex - (current % 12);
             if (diff > 6) diff -= 12;
             if (diff < -6) diff += 12;
-            _hourController.jumpToItem(currentHourItem + diff);
+            final next = current + diff;
+            _hourController.jumpToItem(next);
+            _displayHourItem = next;
           }
           if (_minuteController.hasClients) {
-            int currentMinItem = _minuteController.selectedItem;
-            int diff = targetMinuteIndex - (currentMinItem % _minuteItemsCount);
-            if (diff > (_minuteItemsCount~/2)) diff -= _minuteItemsCount;
-            if (diff < -(_minuteItemsCount~/2)) diff += _minuteItemsCount;
-            _minuteController.jumpToItem(currentMinItem + diff);
+            int current = _minuteController.selectedItem;
+            int diff = targetMinuteIndex - (current % _minuteItemsCount);
+            if (diff > (_minuteItemsCount ~/ 2)) diff -= _minuteItemsCount;
+            if (diff < -(_minuteItemsCount ~/ 2)) diff += _minuteItemsCount;
+            final next = current + diff;
+            _minuteController.jumpToItem(next);
+            _displayMinuteItem = next;
           }
           if (_amPmController.hasClients && _amPmController.selectedItem != targetAmPmIndex) {
             _amPmController.jumpToItem(targetAmPmIndex);
+            _displayAmPmItem = targetAmPmIndex;
           }
           _isProgrammaticScroll = false;
         });
@@ -124,19 +136,14 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
     int h = (_hourController.selectedItem % 12) + 1;
     int m = (_minuteController.selectedItem % _minuteItemsCount) * widget.minutesInterval;
     int ap = _amPmController.selectedItem.clamp(0, 1);
-    
+
     int hour24 = h % 12;
-    if (ap == 1) {
-      hour24 += 12;
-    }
+    if (ap == 1) hour24 += 12;
 
     _currentDate = DateTime(_currentDate.year, _currentDate.month, _currentDate.day, hour24, m);
     widget.onTimeChange(_currentDate);
   }
 
-
-  // To handle the minute roll-over to hour, we need to compare the new selected item with the old one
-  // and see if we crossed a full cycle.
   int _lastMinuteItem = 0;
   bool _isMinuteInitialized = false;
 
@@ -150,15 +157,9 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
       _lastMinuteItem = index;
       _isMinuteInitialized = true;
     } else {
-      // If user scrolls up by 1 (e.g. 55 -> 0), index increases
-      // Wait, scrolling down (finger moves up, list moves down) -> index increases.
-      // 55 is index 11, 0 is index 12. So diff is +1.
-      
-      // We only care about crossing a boundary.
-      // Every time we cross a multiple of _minuteItemsCount, we add or subtract to the hour.
       int oldCycle = _lastMinuteItem ~/ _minuteItemsCount;
       if (_lastMinuteItem < 0 && _lastMinuteItem % _minuteItemsCount != 0) oldCycle -= 1;
-      
+
       int newCycle = index ~/ _minuteItemsCount;
       if (index < 0 && index % _minuteItemsCount != 0) newCycle -= 1;
 
@@ -166,7 +167,7 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
       if (cycleDiff != 0) {
         _jumpHourBy(cycleDiff);
       }
-      
+
       _lastMinuteItem = index;
     }
     _onTimeChanged();
@@ -185,20 +186,16 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
       _lastHourItem = index;
       _isHourInitialized = true;
     } else {
-      // The hour wheel shows 1-12. Index 0 is 1:00, index 10 is 11:00, index 11 is 12:00.
-      // A 12-hour cycle boundary happens between 11:00 and 12:00 (index 10 and 11).
-      // We shift the index by 1 so that index 11 becomes 12, making it a clean multiple of 12.
       int oldAdjusted = _lastHourItem + 1;
       int oldCycle = oldAdjusted ~/ 12;
       if (oldAdjusted < 0 && oldAdjusted % 12 != 0) oldCycle -= 1;
-      
+
       int newAdjusted = index + 1;
       int newCycle = newAdjusted ~/ 12;
       if (newAdjusted < 0 && newAdjusted % 12 != 0) newCycle -= 1;
 
       int cycleDiff = newCycle - oldCycle;
       if (cycleDiff != 0) {
-        // We crossed a 12-hour boundary! Add 12 hours to our tracked date.
         _currentDate = _currentDate.add(Duration(hours: 12 * cycleDiff));
         _toggleAmPm(cycleDiff);
       }
@@ -209,12 +206,8 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
 
   void _jumpHourBy(int amount) {
     if (amount == 0) return;
-    int currentHourItem = _hourController.selectedItem;
-    int nextHourItem = currentHourItem + amount;
-    
-    // We use animateToItem so it's smooth
     _hourController.animateToItem(
-      nextHourItem,
+      _hourController.selectedItem + amount,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
     );
@@ -232,8 +225,10 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
     }
   }
 
+  // Each item is built once per snap change — no per-frame AnimatedBuilder.
   Widget _buildWheel({
     required FixedExtentScrollController controller,
+    required int selectedItem,
     required Widget Function(BuildContext, int, bool) builder,
     required ValueChanged<int> onSelectedItemChanged,
     int? itemCount,
@@ -242,13 +237,12 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
     Widget wheel = SizedBox(
       width: width,
       child: NotificationListener<ScrollNotification>(
-        onNotification: (scrollNotification) {
-          if (scrollNotification is ScrollStartNotification || scrollNotification is ScrollUpdateNotification) {
-            if (!_isProgrammaticScroll) {
-              widget.onInteraction?.call();
-            }
+        onNotification: (n) {
+          if ((n is ScrollStartNotification || n is ScrollUpdateNotification) &&
+              !_isProgrammaticScroll) {
+            widget.onInteraction?.call();
           }
-          return false; // let the notification bubble up
+          return false;
         },
         child: ListWheelScrollView.useDelegate(
           controller: controller,
@@ -256,40 +250,16 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
           physics: const _HighFrictionFixedExtentScrollPhysics(),
           perspective: 0.005,
           onSelectedItemChanged: onSelectedItemChanged,
-          childDelegate: itemCount != null
-              ? ListWheelChildBuilderDelegate(
-                  builder: (context, index) {
-                    return AnimatedBuilder(
-                      animation: controller,
-                      builder: (context, child) {
-                        int selected = controller.hasClients ? (controller.offset / widget.itemHeight).round() : controller.initialItem;
-                        return builder(context, index, index == selected);
-                      }
-                    );
-                  },
-                  childCount: itemCount,
-                )
-              : ListWheelChildBuilderDelegate(
-                  builder: (context, index) {
-                    return AnimatedBuilder(
-                      animation: controller,
-                      builder: (context, child) {
-                        int selected = controller.hasClients ? (controller.offset / widget.itemHeight).round() : controller.initialItem;
-                        return builder(context, index, index == selected);
-                      }
-                    );
-                  },
-                  childCount: null,
-                ),
+          childDelegate: ListWheelChildBuilderDelegate(
+            builder: (ctx, index) => builder(ctx, index, index == selectedItem),
+            childCount: itemCount,
+          ),
         ),
       ),
     );
 
     if (DevFlags.showTimeSelectorHitboxes) {
-      return Container(
-        color: Colors.red.withValues(alpha: 0.5),
-        child: wheel,
-      );
+      return Container(color: Colors.red.withValues(alpha: 0.5), child: wheel);
     }
     return wheel;
   }
@@ -308,18 +278,13 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
         );
 
     return SizedBox(
-      height: widget.itemHeight * 4, // 1 center + 1.5 top + 1.5 bottom
+      height: widget.itemHeight * 4,
       child: ShaderMask(
         shaderCallback: (Rect bounds) {
           return const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.transparent,
-              Colors.black,
-              Colors.black,
-              Colors.transparent,
-            ],
+            colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
             stops: [0.0, 0.25, 0.75, 1.0],
           ).createShader(bounds);
         },
@@ -331,19 +296,19 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
             Stack(
               alignment: Alignment.center,
               children: [
-                Text(
-                  ':',
-                  style: widget.isActive ? highlightStyle : normalStyle,
-                ),
+                Text(':', style: widget.isActive ? highlightStyle : normalStyle),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Hours
                     _buildWheel(
                       width: 50,
                       controller: _hourController,
-                      onSelectedItemChanged: _onHourSelectedItemChanged,
-                      builder: (context, index, isSelected) {
+                      selectedItem: _displayHourItem,
+                      onSelectedItemChanged: (index) {
+                        if (!_isProgrammaticScroll) setState(() => _displayHourItem = index);
+                        _onHourSelectedItemChanged(index);
+                      },
+                      builder: (ctx, index, isSelected) {
                         int h = (index % 12) + 1;
                         return Center(
                           child: Text(
@@ -353,19 +318,22 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
                         );
                       },
                     ),
-                    // Minutes
                     _buildWheel(
                       width: 50,
                       controller: _minuteController,
-                      onSelectedItemChanged: _onMinuteSelectedItemChanged,
-                      builder: (context, index, isSelected) {
+                      selectedItem: _displayMinuteItem,
+                      onSelectedItemChanged: (index) {
+                        if (!_isProgrammaticScroll) setState(() => _displayMinuteItem = index);
+                        _onMinuteSelectedItemChanged(index);
+                      },
+                      builder: (ctx, index, isSelected) {
                         int m = (index % _minuteItemsCount) * widget.minutesInterval;
                         TextStyle? style = isSelected ? highlightStyle : normalStyle;
                         if (widget.isActive && m % 30 == 0 && highlightStyle != null) {
-                          Color baseColor = highlightStyle.color ?? Colors.white;
-                          Color lighterAccent = Color.lerp(baseColor, Colors.white, 0.4) ?? Colors.white;
+                          Color base = highlightStyle.color ?? Colors.white;
+                          Color lighter = Color.lerp(base, Colors.white, 0.4) ?? Colors.white;
                           style = highlightStyle.copyWith(
-                            color: isSelected ? lighterAccent : lighterAccent.withValues(alpha: 0.7),
+                            color: isSelected ? lighter : lighter.withValues(alpha: 0.7),
                           );
                         }
                         return Center(
@@ -381,19 +349,20 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
               ],
             ),
             SizedBox(width: widget.spacing),
-            // AM/PM (not infinite)
             _buildWheel(
               controller: _amPmController,
+              selectedItem: _displayAmPmItem,
               itemCount: 2,
               onSelectedItemChanged: (index) {
-                if (_isProgrammaticScroll) return;
-                _onTimeChanged();
+                if (!_isProgrammaticScroll) {
+                  setState(() => _displayAmPmItem = index.clamp(0, 1));
+                  _onTimeChanged();
+                }
               },
-              builder: (context, index, isSelected) {
-                String label = index == 0 ? 'AM' : 'PM';
+              builder: (ctx, index, isSelected) {
                 return Center(
                   child: Text(
-                    label,
+                    index == 0 ? 'AM' : 'PM',
                     style: isSelected ? highlightStyle : normalStyle,
                   ),
                 );
@@ -416,7 +385,6 @@ class _HighFrictionFixedExtentScrollPhysics extends FixedExtentScrollPhysics {
 
   @override
   Simulation? createBallisticSimulation(ScrollMetrics position, double velocity) {
-    // Reduce the velocity to simulate much higher friction, causing it to stop spinning faster.
     return super.createBallisticSimulation(position, velocity * 0.4);
   }
 }
