@@ -359,6 +359,7 @@ class CalendarDayCell extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(style.borderRadius),
+      canRequestFocus: false,
       child: cell,
     );
   }
@@ -463,8 +464,8 @@ class CalendarDayCell extends StatelessWidget {
                                           date: date,
                                           fontSize: eventFontSize,
                                           height: barHeight,
-                                          isStart: !calendarEventOccursOnDay(event, date.subtract(const Duration(days: 1))),
-                                          isEnd: !calendarEventOccursOnDay(event, date.add(const Duration(days: 1))),
+                                          isStart: calendarEventBarStartsOnDay(event, date),
+                                          isEnd: calendarEventBarEndsOnDay(event, date),
                                           isFirstColumn: isFirstColumn,
                                           isLastColumn: isLastColumn,
                                           cellMargin: style.cellMargin,
@@ -1038,8 +1039,8 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
   }) {
     final isDotSlot = index < MorphDayEventStack.maxYearDots;
     
-    final isStart = !calendarEventOccursOnDay(event, widget.date.subtract(const Duration(days: 1)));
-    final isEnd = !calendarEventOccursOnDay(event, widget.date.add(const Duration(days: 1)));
+    final isStart = calendarEventBarStartsOnDay(event, widget.date);
+    final isEnd = calendarEventBarEndsOnDay(event, widget.date);
     // isStart/isEnd sides extend into the cell padding to exactly match
     // CalendarDayEventBar (left: -cellPadding.left). Without this the morph
     // layer bar would be narrower than the regular-grid bar at t=0, producing
@@ -1329,6 +1330,7 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
                 borderRadius: widget.borderRadius,
                 splashColor: widget.eventColor.withValues(alpha: 0.2),
                 highlightColor: widget.eventColor.withValues(alpha: 0.12),
+                canRequestFocus: false,
                 child: child,
               ),
             ),
@@ -1437,6 +1439,7 @@ class _CalendarDayOverflowBadge extends StatelessWidget {
           child: InkWell(
             onTap: onTap == null ? null : () => onTap!(badgeContext),
             borderRadius: BorderRadius.circular(4),
+            canRequestFocus: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(4, 1, 2, 1),
               child: Text(

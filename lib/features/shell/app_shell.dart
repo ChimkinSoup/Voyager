@@ -97,6 +97,7 @@ class _ShellBranchChangeFlusherState extends State<_ShellBranchChangeFlusher> {
   void didUpdateWidget(covariant _ShellBranchChangeFlusher oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.branchIndex != widget.branchIndex) {
+      FocusManager.instance.primaryFocus?.unfocus();
       unawaited(PendingFlushRegistry.instance.flushAll());
     }
   }

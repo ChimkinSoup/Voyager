@@ -40,6 +40,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   CalendarEvent? _sidebarEvent;
   DateTime? _sidebarEventInitialDate;
   TodoTask? _sidebarTodo;
+  bool _focusEventTitle = false;
 
   DateTime _computeDefaultEventDate() {
     final now = DateTime.now();
@@ -190,8 +191,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _weekMorphAnchor = null;
   }
 
-  /// Month grid to restore when leaving week view (last viewed month this session).
+  /// Month grid to restore when leaving week view.
   DateTime _monthTargetForWeekReturn() {
+    if (_mode == CalendarViewMode.week) {
+      return DateTime(_focused.year, _focused.month, 1);
+    }
     final saved = _lastViewedMonth;
     if (saved != null) {
       return DateTime(saved.year, saved.month, 1);
@@ -312,12 +316,24 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
   }
 
-  void _openEventSidebar({CalendarEvent? event, DateTime? day}) {
+  void _openEventSidebar({
+    CalendarEvent? event,
+    DateTime? day,
+    bool focusTitle = true,
+  }) {
     setState(() {
       _sidebarKind = _CalendarSidebarKind.event;
       _sidebarEvent = event;
       _sidebarEventInitialDate = day ?? _focused;
       _sidebarTodo = null;
+      _focusEventTitle = focusTitle;
+    });
+    if (!focusTitle) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_focusEventTitle) {
+        setState(() => _focusEventTitle = false);
+      }
     });
   }
 
@@ -351,6 +367,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _sidebarEvent = null;
       _sidebarEventInitialDate = _computeDefaultEventDate();
       _sidebarTodo = null;
+      _focusEventTitle = false;
     });
   }
 
@@ -378,6 +395,92 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   Future<void> _openEditor({CalendarEvent? event, DateTime? day}) async {
     _openEventSidebar(event: event, day: day);
+  }
+
+  bool _isOnCurrentPeriod(bool weekStartsMonday) {
+    final now = DateTime.now();
+    if (_dayViewDate != null) {
+      return calendarSameDay(_dayViewDate!, now);
+    }
+    return switch (_mode) {
+      CalendarViewMode.week => calendarDateInWeek(
+        now,
+        _weekStart(_focused, weekStartsMonday),
+      ),
+      CalendarViewMode.month =>
+        _focused.year == now.year && _focused.month == now.month,
+      CalendarViewMode.year => _focused.year == now.year,
+    };
+  }
+
+  String _goToTodayTooltip() {
+    if (_dayViewDate != null) return 'Today';
+    return switch (_mode) {
+      CalendarViewMode.week => 'This week',
+      CalendarViewMode.month => 'This month',
+      CalendarViewMode.year => 'This year',
+    };
+  }
+
+  void _goToToday({required bool weekStartsMonday}) {
+    if (_isOnCurrentPeriod(weekStartsMonday)) return;
+    _abortMorphAnimation();
+    final now = DateTime.now();
+    setState(() {
+      _isZooming = false;
+      _morphReverse = false;
+      _clearMorphCache();
+      _isWeekMorphing = false;
+      _weekMorphForward = true;
+      _clearWeekMorphCache();
+      if (_dayViewDate != null) {
+        _dayViewDate = DateTime(now.year, now.month, now.day);
+        _focused = DateTime(now.year, now.month, 1);
+        return;
+      }
+      _focused = switch (_mode) {
+        CalendarViewMode.week => now,
+        CalendarViewMode.month => DateTime(now.year, now.month, 1),
+        CalendarViewMode.year => DateTime(now.year, 1, 1),
+      };
+      if (_mode == CalendarViewMode.month) {
+        _rememberViewedMonth(_focused);
+      } else if (_mode == CalendarViewMode.week) {
+        _rememberViewedWeek(_focused, weekStartsMonday);
+        _rememberViewedMonth(DateTime(_focused.year, _focused.month, 1));
+      }
+    });
+    if (_mode == CalendarViewMode.week) {
+      _weekTimelineScrollOffset = calendarWeekDefaultScrollOffset();
+      if (_weekTimelineScrollController.hasClients) {
+        _weekTimelineScrollController.jumpTo(_weekTimelineScrollOffset);
+      }
+    }
+  }
+
+  Widget _buildGoToTodayButton(bool weekStartsMonday) {
+    final onCurrent = _isOnCurrentPeriod(weekStartsMonday);
+    final enabled = !_isZooming && !_isWeekMorphing && !onCurrent;
+    final colorScheme = Theme.of(context).colorScheme;
+    final disabledColor = colorScheme.onSurface.withValues(alpha: 0.38);
+
+    return ExcludeFocus(
+      child: IconButton(
+        onPressed: enabled
+            ? () => _goToToday(weekStartsMonday: weekStartsMonday)
+            : null,
+        tooltip: _goToTodayTooltip(),
+        visualDensity: VisualDensity.compact,
+        style: IconButton.styleFrom(
+          foregroundColor: colorScheme.onSurface,
+          disabledForegroundColor: disabledColor,
+        ),
+        icon: Icon(
+          PhosphorIconsRegular.clock,
+          color: enabled ? colorScheme.onSurface : disabledColor,
+        ),
+      ),
+    );
   }
 
   Future<void> _syncGoogle() async {
@@ -421,6 +524,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         _rememberViewedMonth(_focused);
       } else if (_mode == CalendarViewMode.week) {
         _rememberViewedWeek(_focused, weekStartsMonday);
+        _rememberViewedMonth(DateTime(_focused.year, _focused.month, 1));
       }
     });
   }
@@ -508,6 +612,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   DateTime _weekMorphAnchorDate(DateTime visibleMonth, bool weekStartsMonday) {
+    final now = DateTime.now();
+    if (visibleMonth.year == now.year && visibleMonth.month == now.month) {
+      return DateTime(now.year, now.month, now.day);
+    }
     final saved = _lastViewedWeekStart;
     if (saved != null) {
       final weekStart = _weekStart(saved, weekStartsMonday);
@@ -1201,14 +1309,18 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          onPressed: () => _shiftFocus(-1, weekStartsMonday: weekStartsMonday),
-          icon: const Icon(PhosphorIconsRegular.caretLeft),
+        ExcludeFocus(
+          child: IconButton(
+            onPressed: () => _shiftFocus(-1, weekStartsMonday: weekStartsMonday),
+            icon: const Icon(PhosphorIconsRegular.caretLeft),
+          ),
         ),
         label,
-        IconButton(
-          onPressed: () => _shiftFocus(1, weekStartsMonday: weekStartsMonday),
-          icon: const Icon(PhosphorIconsRegular.caretRight),
+        ExcludeFocus(
+          child: IconButton(
+            onPressed: () => _shiftFocus(1, weekStartsMonday: weekStartsMonday),
+            icon: const Icon(PhosphorIconsRegular.caretRight),
+          ),
         ),
       ],
     );
@@ -1667,6 +1779,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           ),
           event: _sidebarEvent,
           initialDate: _sidebarEventInitialDate ?? _focused,
+          focusTitleOnOpen: _focusEventTitle,
           onSave: _saveSidebarEvent,
           onCancel: _resetSidebar,
         );
@@ -1738,6 +1851,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 Row(
                   children: [
                     _buildViewModeSelector(weekStartsMonday),
+                    _buildGoToTodayButton(weekStartsMonday),
                     if (ref.watch(devSettingsProvider).showCalendarInstantViewSwitch) ...[
                       const SizedBox(width: 8),
                       const Text('Instant Switch:', style: TextStyle(fontSize: 10, color: Colors.grey)),
@@ -2920,6 +3034,7 @@ class _ViewModeSegmentedControl extends StatelessWidget {
         onTap: () => onSelectionChanged({mode}),
         borderRadius: borderRadius,
         splashFactory: NoSplash.splashFactory,
+        canRequestFocus: false,
         child: child,
       );
     }

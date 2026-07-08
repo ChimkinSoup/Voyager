@@ -17,11 +17,20 @@ double _swatchVisualRadius(double layoutRadius) =>
     layoutRadius * _swatchVisualScale;
 
 /// Height for a palette grid showing [visibleRows] of swatches.
-double paletteViewportHeight(double swatchRadius, {int visibleRows = 3}) {
+///
+/// When [clipPartialNextRow] is true, the height fits exactly [visibleRows]
+/// rows in a scrollable grid without revealing any of the next row.
+double paletteViewportHeight(
+  double swatchRadius, {
+  int visibleRows = 3,
+  bool clipPartialNextRow = false,
+}) {
   if (visibleRows <= 0) return 0;
   final visualDiameter = _swatchVisualRadius(swatchRadius) * 2;
   final cell = visualDiameter + _paletteSpacing;
-  return visibleRows * cell - _paletteSpacing + 32.0;
+  var height = visibleRows * cell - _paletteSpacing + 32.0;
+  if (clipPartialNextRow) height -= _paletteSpacing;
+  return height;
 }
 
 /// Sizes a palette grid inside a 4:3 box that grows with color count.
