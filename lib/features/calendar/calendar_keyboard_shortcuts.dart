@@ -104,6 +104,10 @@ class _CalendarKeyboardShortcutsState extends State<CalendarKeyboardShortcuts> {
     if (delta == null) return false;
 
     widget.onNavigate(delta);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      FocusManager.instance.primaryFocus?.unfocus();
+    });
     return true;
   }
 

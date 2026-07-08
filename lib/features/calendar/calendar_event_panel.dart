@@ -23,12 +23,14 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
     required this.initialDate,
     required this.onSave,
     required this.onCancel,
+    this.focusTitleOnOpen = false,
   });
 
   final CalendarEvent? event;
   final DateTime initialDate;
   final ValueChanged<Map<String, dynamic>> onSave;
   final VoidCallback onCancel;
+  final bool focusTitleOnOpen;
 
   @override
   ConsumerState<CalendarEventPanel> createState() => _CalendarEventPanelState();
@@ -95,6 +97,11 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     final settings = ref.read(settingsProvider).valueOrNull;
     _colorValue = e?.colorValue ?? (settings?.accentColor ?? 0xFF7C9EFF);
     _recurrence = e?.recurrence ?? EventRecurrence.none;
+    _scheduleTitleFocusIfNeeded();
+  }
+
+  void _scheduleTitleFocusIfNeeded() {
+    if (!widget.focusTitleOnOpen) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _titleFocusNode.requestFocus();
     });
@@ -122,6 +129,9 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _colorValue = e?.colorValue ?? (settings?.accentColor ?? 0xFF7C9EFF);
       _recurrence = e?.recurrence ?? EventRecurrence.none;
       _titleError = null;
+    }
+    if (widget.focusTitleOnOpen && !oldWidget.focusTitleOnOpen) {
+      _scheduleTitleFocusIfNeeded();
     }
   }
 
@@ -265,7 +275,6 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                           label: 'Title',
                           controller: _titleController,
                           focusNode: _titleFocusNode,
-                          autofocus: true,
                           textInputAction: TextInputAction.done,
                           accentColor: accent,
                           onSubmitted: (_) => _submit(),
@@ -447,7 +456,11 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                         label: 'Event color',
                         value: _colorValue,
                         swatchRadius: 20,
-                        maxHeight: 160,
+                        maxHeight: paletteViewportHeight(
+                          20,
+                          visibleRows: 4,
+                          clipPartialNextRow: true,
+                        ),
                         onChanged: (value) => setState(() => _colorValue = value),
                       ),
                     ],

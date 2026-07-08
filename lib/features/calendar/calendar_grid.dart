@@ -576,14 +576,16 @@ class MonthTitleHeader extends StatelessWidget {
       child: Icon(icon, size: navIconSize),
     );
     if (onPressed != null && opacity >= 1) {
-      return IconButton(
-        onPressed: onPressed,
-        icon: iconChild,
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(
-          width: navTapSize,
-          height: navTapSize,
+      return ExcludeFocus(
+        child: IconButton(
+          onPressed: onPressed,
+          icon: iconChild,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(
+            width: navTapSize,
+            height: navTapSize,
+          ),
         ),
       );
     }
@@ -883,6 +885,7 @@ class _YearGrid extends StatelessWidget {
         ),
         child: InkWell(
           onTap: () => onMonthTap(monthDate),
+          canRequestFocus: false,
           child: Padding(
             padding: const EdgeInsets.all(6),
             child: Column(
