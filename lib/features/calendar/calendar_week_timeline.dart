@@ -358,13 +358,19 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
 
     final minutes = (timelineY / calendarWeekPxPerHour * 60).floor();
     final clampedMinutes = minutes.clamp(0, 24 * 60 - 1);
+    
+    int roundedMinutes = ((clampedMinutes + 15) ~/ 30) * 30;
+    if (roundedMinutes >= 24 * 60) {
+      roundedMinutes = 24 * 60 - 30;
+    }
+
     final day = widget.weekStart.add(Duration(days: dayIndex));
     final time = DateTime(
       day.year,
       day.month,
       day.day,
-      clampedMinutes ~/ 60,
-      clampedMinutes % 60,
+      roundedMinutes ~/ 60,
+      roundedMinutes % 60,
     );
     widget.onSlotTap(day, time);
   }
