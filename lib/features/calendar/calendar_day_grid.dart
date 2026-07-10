@@ -8,6 +8,57 @@ import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
+// =============================================================================
+// CalendarEventTapState — coordinates multi-day animation + popup anchor rect
+// =============================================================================
+
+/// Shared mutable state for all event-tap interactions within one calendar
+/// page.  Hold an instance in the page state, expose it via
+/// [CalendarEventTapScope], and read [tapAnchorRect] before opening a popup.
+class CalendarEventTapState extends ChangeNotifier {
+  String? _animatingEventId;
+  Rect? _tapAnchorRect;
+
+  String? get animatingEventId => _animatingEventId;
+  Rect? get tapAnchorRect => _tapAnchorRect;
+
+  /// Called by the tapped [CalendarInteractiveEventTap] segment.  Broadcasts
+  /// the event ID so other segments of the same multi-day event animate, and
+  /// records [widgetRect] (global screen coordinates) for popup anchoring.
+  void notifyEventTap({required String eventId, required Rect widgetRect}) {
+    _animatingEventId = eventId;
+    _tapAnchorRect = widgetRect;
+    notifyListeners();
+  }
+}
+
+/// Plain [InheritedWidget] that carries [CalendarEventTapState] down the tree.
+///
+/// Using a plain [InheritedWidget] (not [InheritedNotifier]) means the
+/// framework does NOT add its own listener to the notifier, which would
+/// otherwise schedule spurious rebuilds and interfere with our synchronous
+/// manual listeners.
+class CalendarEventTapScope extends InheritedWidget {
+  const CalendarEventTapScope({
+    super.key,
+    required this.tapState,
+    required super.child,
+  });
+
+  final CalendarEventTapState tapState;
+
+  @override
+  bool updateShouldNotify(CalendarEventTapScope oldWidget) =>
+      oldWidget.tapState != tapState;
+
+  /// Returns the [CalendarEventTapState] using the O(1) inherited-element
+  /// cache — without registering a rebuild dependency.
+  static CalendarEventTapState? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<CalendarEventTapScope>()?.tapState;
+}
+
+// =============================================================================
+
 List<List<CalendarEvent?>> calendarPackWeekEvents(
   List<DateTime> weekDates,
   List<CalendarEvent> allEvents,
@@ -1248,7 +1299,15 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
   }
 }
 
-/// Scale pulse on tap plus optional glow while an event is being edited.
+/// Scale pulse on tap.  When [eventId] is provided, all visible segments of
+/// the same multi-day event animate simultaneously via [CalendarEventTapScope].
+///
+/// [isSegmentStart] / [isSegmentEnd] control the scale pivot so that all
+/// segments of a multi-day bar squish toward their shared boundaries:
+///   • start cap   → pivot at right edge (Alignment.centerRight)
+///   • end cap     → pivot at left edge  (Alignment.centerLeft)
+///   • bridge      → no scale (pivot is irrelevant, boundaries stay fixed)
+///   • single day  → pivot at center     (Alignment.center)
 class CalendarInteractiveEventTap extends StatefulWidget {
   const CalendarInteractiveEventTap({
     super.key,
@@ -1256,7 +1315,12 @@ class CalendarInteractiveEventTap extends StatefulWidget {
     required this.eventColor,
     required this.borderRadius,
     this.onTap,
+    // [highlighted] kept for API compatibility but no longer applies a glow —
+    // the popup container glows instead.
     this.highlighted = false,
+    this.eventId,
+    this.isSegmentStart = true,
+    this.isSegmentEnd = true,
   });
 
   final Widget child;
@@ -1264,6 +1328,11 @@ class CalendarInteractiveEventTap extends StatefulWidget {
   final BorderRadius borderRadius;
   final VoidCallback? onTap;
   final bool highlighted;
+  final String? eventId;
+  /// Whether this segment is the leftmost cap of the event bar.
+  final bool isSegmentStart;
+  /// Whether this segment is the rightmost cap of the event bar.
+  final bool isSegmentEnd;
 
   @override
   State<CalendarInteractiveEventTap> createState() =>
@@ -1274,6 +1343,26 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _scale;
+  CalendarEventTapState? _tapState;
+  bool _isTapping = false;
+
+  /// The scale pivot depends on which cap this segment is:
+  ///   start-only  → right edge stays fixed  (Alignment.centerRight)
+  ///   end-only    → left edge stays fixed   (Alignment.centerLeft)
+  ///   both (single day) → center            (Alignment.center)
+  ///   bridge      → doesn't matter; scale is disabled
+  Alignment get _scaleAlignment {
+    final start = widget.isSegmentStart;
+    final end = widget.isSegmentEnd;
+    if (start && end) return Alignment.center;
+    if (start) return Alignment.centerRight;
+    if (end) return Alignment.centerLeft;
+    return Alignment.center; // bridge — unused
+  }
+
+  /// Bridge segments (neither start nor end) don't scale so they act as a
+  /// fixed connection point between the two outer caps.
+  bool get _shouldScale => widget.isSegmentStart || widget.isSegmentEnd;
 
   @override
   void initState() {
@@ -1282,57 +1371,88 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
       vsync: this,
       duration: const Duration(milliseconds: 140),
     );
+    final curved =
+        CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
     _scale = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.92), weight: 45),
       TweenSequenceItem(tween: Tween(begin: 0.92, end: 1.0), weight: 55),
-    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    ]).animate(curved);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newState = CalendarEventTapScope.maybeOf(context);
+    if (newState != _tapState) {
+      _tapState?.removeListener(_onTapStateChanged);
+      _tapState = newState;
+      _tapState?.addListener(_onTapStateChanged);
+    }
   }
 
   @override
   void dispose() {
+    _tapState?.removeListener(_onTapStateChanged);
     _controller.dispose();
     super.dispose();
   }
 
+  /// Called when any event is tapped anywhere in the calendar. If the
+  /// animating event ID matches ours and this instance didn't initiate the
+  /// tap, run the animation without calling [onTap].
+  void _onTapStateChanged() {
+    if (!mounted || _isTapping) return;
+    if (widget.eventId != null &&
+        _tapState?.animatingEventId == widget.eventId) {
+      _controller.forward(from: 0);
+    }
+  }
+
   Future<void> _handleTap() async {
-    if (widget.onTap == null) return;
+    if (widget.onTap == null || _isTapping) return;
+    _isTapping = true;
+
+    // Broadcast the event ID so every other segment of the same multi-day
+    // event plays the animation simultaneously, and record the widget rect for
+    // popup anchoring.  Always call notifyEventTap even if the render box is
+    // unavailable (animation sync still works; popup just falls back to cursor).
+    if (widget.eventId != null && _tapState != null) {
+      final box = context.findRenderObject() as RenderBox?;
+      final rect = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : Rect.zero;
+      _tapState!.notifyEventTap(
+        eventId: widget.eventId!,
+        widgetRect: rect,
+      );
+    }
+
     await _controller.forward(from: 0);
     if (!mounted) return;
+    _isTapping = false;
     widget.onTap!();
   }
 
   @override
   Widget build(BuildContext context) {
-    final glowColor = widget.eventColor.withValues(alpha: 0.6);
     return AnimatedBuilder(
-      animation: _scale,
+      animation: _controller,
       builder: (context, child) {
+        // Start/end caps squish inward toward the shared inner boundary so
+        // the whole bar appears to press as one cohesive unit.
+        // Bridge segments keep scale = 1.0 so the boundary never opens up.
         return Transform.scale(
-          scale: _scale.value,
-          alignment: Alignment.center,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
+          scale: _shouldScale ? _scale.value : 1.0,
+          alignment: _scaleAlignment,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onTap == null ? null : _handleTap,
               borderRadius: widget.borderRadius,
-              boxShadow: widget.highlighted
-                  ? [
-                      BoxShadow(
-                        color: glowColor,
-                        blurRadius: 10,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: widget.onTap == null ? null : _handleTap,
-                borderRadius: widget.borderRadius,
-                splashColor: widget.eventColor.withValues(alpha: 0.2),
-                highlightColor: widget.eventColor.withValues(alpha: 0.12),
-                canRequestFocus: false,
-                child: child,
-              ),
+              splashColor: widget.eventColor.withValues(alpha: 0.2),
+              highlightColor: widget.eventColor.withValues(alpha: 0.12),
+              canRequestFocus: false,
+              child: child,
             ),
           ),
         );
@@ -1523,6 +1643,9 @@ class CalendarDayEventBar extends StatelessWidget {
             borderRadius: borderRadius,
             highlighted: highlighted,
             onTap: onTap,
+            eventId: event.id,
+            isSegmentStart: isStart,
+            isSegmentEnd: isEnd,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               decoration: calendarEventFillDecoration(

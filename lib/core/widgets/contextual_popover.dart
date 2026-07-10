@@ -9,6 +9,9 @@ class ContextualPopover extends StatelessWidget {
     this.accentColor,
   });
 
+  static const _radius = 12.0;
+  static const _borderWidth = 3.0;
+
   final Widget child;
   final double width;
   final double? height;
@@ -18,18 +21,24 @@ class ContextualPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = accentColor ?? theme.colorScheme.primary;
-    // Dark Scaffold Base #1B1B22 with subtle colored shadow
+    final innerRadius = _radius - _borderWidth;
+
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
         color: const Color(0xFF1B1B22),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(_radius),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: 0.15),
-            blurRadius: 16,
-            blurStyle: BlurStyle.outer,
+            color: accent.withValues(alpha: 0.50),
+            blurRadius: 14,
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: accent.withValues(alpha: 0.22),
+            blurRadius: 22,
+            spreadRadius: 1,
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.3),
@@ -38,9 +47,16 @@ class ContextualPopover extends StatelessWidget {
           ),
         ],
       ),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(_radius),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.85),
+          width: _borderWidth,
+        ),
+      ),
       child: Material(
         type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(innerRadius),
         clipBehavior: Clip.antiAlias,
         child: child,
       ),
@@ -78,6 +94,131 @@ Future<T?> showContextualPopover<T>({
   );
 }
 
+/// Shows a contextual popover anchored to [targetRect] (in screen/global
+/// coordinates).  Unlike [showContextualPopover], this variant does not need a
+/// [BuildContext] for the anchor widget — pass any [Rect] you have (e.g.
+/// derived from a [PointerDownEvent.position]).
+Future<T?> showContextualPopoverAt<T>({
+  required BuildContext context,
+  required Rect targetRect,
+  required WidgetBuilder builder,
+  double width = 220,
+  double? height,
+  Color? accentColor,
+}) async {
+  final overlay =
+      Navigator.of(context).overlay?.context.findRenderObject() as RenderBox?;
+  if (overlay == null) return null;
+
+  // Convert global screen coordinates → overlay-local coordinates.
+  final overlayOrigin = overlay.localToGlobal(Offset.zero);
+  final localRect = targetRect.translate(-overlayOrigin.dx, -overlayOrigin.dy);
+
+  return Navigator.of(context).push<T>(
+    _ContextualPopoverRoute<T>(
+      targetRect: localRect,
+      builder: builder,
+      width: width,
+      height: height,
+      accentColor: accentColor,
+      capturedThemes: InheritedTheme.capture(
+          from: context, to: Navigator.of(context).context),
+    ),
+  );
+}
+
+/// Hosts a [ContextualPopover] whose accent border/glow can be updated by
+/// descendants via [ContextualPopoverAccent.update].
+class ContextualPopoverAccentHost extends StatefulWidget {
+  const ContextualPopoverAccentHost({
+    super.key,
+    required this.child,
+    required this.width,
+    this.height,
+    this.accentColor,
+  });
+
+  final Widget child;
+  final double width;
+  final double? height;
+  final Color? accentColor;
+
+  @override
+  State<ContextualPopoverAccentHost> createState() =>
+      _ContextualPopoverAccentHostState();
+}
+
+class _ContextualPopoverAccentHostState extends State<ContextualPopoverAccentHost> {
+  late Color? _accentColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _accentColor = widget.accentColor;
+  }
+
+  @override
+  void didUpdateWidget(covariant ContextualPopoverAccentHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.accentColor != oldWidget.accentColor) {
+      _accentColor = widget.accentColor;
+    }
+  }
+
+  void setAccent(Color color) {
+    if (_accentColor == color) return;
+    setState(() => _accentColor = color);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget popover = ContextualPopover(
+      width: widget.width,
+      height: widget.height,
+      accentColor: _accentColor,
+      child: widget.child,
+    );
+    if (_accentColor != null) {
+      final base = Theme.of(context);
+      popover = Theme(
+        data: base.copyWith(
+          colorScheme: base.colorScheme.copyWith(primary: _accentColor),
+        ),
+        child: popover,
+      );
+    }
+    return _ContextualPopoverAccentScope(
+      setAccent: setAccent,
+      child: popover,
+    );
+  }
+}
+
+class _ContextualPopoverAccentScope extends InheritedWidget {
+  const _ContextualPopoverAccentScope({
+    required this.setAccent,
+    required super.child,
+  });
+
+  final void Function(Color color) setAccent;
+
+  static _ContextualPopoverAccentScope? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_ContextualPopoverAccentScope>();
+  }
+
+  @override
+  bool updateShouldNotify(_ContextualPopoverAccentScope oldWidget) => false;
+}
+
+/// Updates the accent border/glow of the enclosing [ContextualPopoverAccentHost].
+abstract final class ContextualPopoverAccent {
+  static void update(BuildContext context, Color color) {
+    final scope = _ContextualPopoverAccentScope.maybeOf(context);
+    scope?.setAccent(color);
+  }
+}
+
 class _ContextualPopoverRoute<T> extends PopupRoute<T> {
   _ContextualPopoverRoute({
     required this.targetRect,
@@ -110,21 +251,12 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
       Animation<double> secondaryAnimation) {
-    Widget popover = ContextualPopover(
+    Widget popover = ContextualPopoverAccentHost(
       width: width,
       height: height,
       accentColor: accentColor,
       child: builder(context),
     );
-    if (accentColor != null) {
-      final base = Theme.of(context);
-      popover = Theme(
-        data: base.copyWith(
-          colorScheme: base.colorScheme.copyWith(primary: accentColor),
-        ),
-        child: popover,
-      );
-    }
     return capturedThemes.wrap(
       CustomSingleChildLayout(
         delegate: _PopoverLayoutDelegate(

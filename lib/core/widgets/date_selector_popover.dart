@@ -207,23 +207,10 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
           _handleKeyEvent(event);
           return KeyEventResult.handled;
         },
-        child: Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            border: Border.all(color: theme.colorScheme.primary, width: 2),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                blurRadius: 16,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
               const SizedBox(height: 8),
               // Zone A: Quick Actions
               SingleChildScrollView(
@@ -479,7 +466,6 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
             ],
           ),
         ),
-      ),
     );
   }
 }

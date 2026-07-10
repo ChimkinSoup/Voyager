@@ -10,6 +10,7 @@ class SelectorPill extends StatelessWidget {
     this.icon,
     this.dense = false,
     this.accentColor,
+    this.ellipsize = true,
   }) : assert(label != null || child != null);
 
   final String? label;
@@ -23,6 +24,9 @@ class SelectorPill extends StatelessWidget {
 
   /// Active border color — defaults to [ColorScheme.primary].
   final Color? accentColor;
+
+  /// When false, label text is never truncated with an ellipsis.
+  final bool ellipsize;
 
   @override
   Widget build(BuildContext context) {
@@ -54,17 +58,37 @@ class SelectorPill extends StatelessWidget {
                 Icon(icon, size: dense ? 14 : 16, color: foregroundColor),
                 SizedBox(width: dense ? 4 : 6),
               ],
-              child ??
-                  Text(
-                    label ?? '',
-                    style: (dense
-                            ? theme.textTheme.labelMedium
-                            : theme.textTheme.labelLarge)
-                        ?.copyWith(
-                      color: foregroundColor,
-                      fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+              if (ellipsize)
+                Flexible(
+                  child: child ??
+                      Text(
+                        label ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: (dense
+                                ? theme.textTheme.labelMedium
+                                : theme.textTheme.labelLarge)
+                            ?.copyWith(
+                          color: foregroundColor,
+                          fontWeight:
+                              isActive ? FontWeight.bold : FontWeight.w500,
+                        ),
+                      ),
+                )
+              else
+                child ??
+                    Text(
+                      label ?? '',
+                      maxLines: 1,
+                      style: (dense
+                              ? theme.textTheme.labelMedium
+                              : theme.textTheme.labelLarge)
+                          ?.copyWith(
+                        color: foregroundColor,
+                        fontWeight:
+                            isActive ? FontWeight.bold : FontWeight.w500,
+                      ),
                     ),
-                  ),
             ],
           ),
         ),
