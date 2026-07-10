@@ -34,6 +34,8 @@ export 'calendar_todo_markers.dart'
         calendarWeekHeaderGap,
         calendarWeekHeaderTopPadding,
         calendarWeekWeekdayFontSize,
+        calendarWeekDayDateLabelFontSize,
+        calendarWeekDayDateLabelGap,
         calendarWeekDefaultScrollOffset,
         calendarWeekEffectiveScrollOffset;
 export 'calendar_day_entries.dart'
@@ -48,9 +50,14 @@ export 'calendar_week_timeline.dart'
         CalendarWeekLayoutMetrics,
         CalendarWeekDayColumnBorderPainter,
         CalendarWeekTimeGridPainter,
+        CalendarWeekDayDateLabel,
         calendarWeekBorderedDayColumnRects,
         calendarWeekMorphBorderedDayColumnRects,
         calendarWeekMorphBorderRadius,
+        calendarWeekDayDateLabelRowHeight,
+        calendarWeekDayDateLabelReservedHeight,
+        calendarWeekDayDateLabelRowTopInArea,
+        calendarWeekTimelineHeaderBlockHeight,
         calendarWeekHourLineClipPath,
         calendarWeekHourLabel;
 export 'calendar_day_grid.dart'
@@ -123,6 +130,7 @@ class CalendarGrid extends StatelessWidget {
     this.weekTimelineScrollController,
     this.highlightedWeekStart,
     this.weekHighlightOpacity = 1,
+    this.weekEntryFadeEnabled = true,
   });
 
   final CalendarViewMode mode;
@@ -163,6 +171,7 @@ class CalendarGrid extends StatelessWidget {
   final ScrollController? weekTimelineScrollController;
   final DateTime? highlightedWeekStart;
   final double weekHighlightOpacity;
+  final bool weekEntryFadeEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +186,7 @@ class CalendarGrid extends StatelessWidget {
         weekStartsMonday: weekStartsMonday,
         scrollController: weekTimelineScrollController,
         editingEventId: editingEventId,
+        entryFadeEnabled: weekEntryFadeEnabled,
       ),
       CalendarViewMode.month => _MonthGrid(
         focused: focused,
@@ -764,6 +774,7 @@ class _WeekGrid extends StatelessWidget {
     required this.weekStartsMonday,
     this.scrollController,
     this.editingEventId,
+    this.entryFadeEnabled = true,
   });
 
   final DateTime focused;
@@ -775,6 +786,7 @@ class _WeekGrid extends StatelessWidget {
   final bool weekStartsMonday;
   final ScrollController? scrollController;
   final String? editingEventId;
+  final bool entryFadeEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -793,6 +805,7 @@ class _WeekGrid extends StatelessWidget {
       onTodoTap: onTodoTap ?? (_) {},
       onSlotTap: onSlotTap ?? (_, _) {},
       editingEventId: editingEventId,
+      entryFadeEnabled: entryFadeEnabled,
       ),
     );
   }

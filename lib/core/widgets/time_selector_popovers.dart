@@ -365,19 +365,6 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
           });
         }
       },
-      child: Container(
-        decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.colorScheme.primary, width: 2),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withValues(alpha: 0.6),
-            blurRadius: 16,
-            spreadRadius: 4,
-          ),
-        ],
-      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -538,6 +525,6 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
           ),
         ],
       ),
-    ));
+    );
   }
 }

@@ -1,1 +1,0 @@
-Make weely view highlight the current day

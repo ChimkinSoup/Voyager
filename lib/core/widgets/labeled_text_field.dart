@@ -21,6 +21,9 @@ class LabeledTextField extends StatefulWidget {
     this.keyboardType,
     this.textInputAction,
     this.accentColor,
+    this.dense = false,
+    this.borderRadius,
+    this.alignLabelToTop,
   });
 
   final String label;
@@ -45,6 +48,9 @@ class LabeledTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final Color? accentColor;
+  final bool dense;
+  final double? borderRadius;
+  final bool? alignLabelToTop;
 
   @override
   State<LabeledTextField> createState() => _LabeledTextFieldState();
@@ -114,7 +120,9 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     final accent = widget.accentColor ?? theme.colorScheme.primary;
     final showLabel = widget.showLabel && widget.label.isNotEmpty;
     final contentPadding = widget.contentPadding ??
-        const EdgeInsets.symmetric(horizontal: 16, vertical: 18);
+        (widget.dense
+            ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
+            : const EdgeInsets.symmetric(horizontal: 16, vertical: 18));
     // When a real floating label is showing, its resting (unfocused, empty)
     // position sits exactly where a hint would print — so only reveal a hint
     // once the label has floated out of the way (focused or has content),
@@ -131,7 +139,9 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       hasContent: _hasText,
       enabled: widget.enabled,
       contentPadding: contentPadding,
-      alignLabelToTop: widget.expands || (widget.maxLines ?? 1) > 1,
+      alignLabelToTop: widget.alignLabelToTop ??
+          (widget.expands || (widget.maxLines ?? 1) > 1),
+      borderRadius: widget.borderRadius ?? (widget.dense ? 12 : 18),
       child: TextField(
         controller: widget.controller,
         focusNode: _focusNode,
@@ -150,9 +160,11 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
             : TextAlignVertical.center,
         style: theme.textTheme.bodyLarge?.copyWith(
           color: theme.colorScheme.onSurface,
+          height: widget.dense ? 1.0 : null,
         ),
         cursorColor: accent,
         decoration: InputDecoration(
+          isDense: widget.dense,
           hintText: effectiveHint,
           contentPadding: contentPadding,
           filled: false,

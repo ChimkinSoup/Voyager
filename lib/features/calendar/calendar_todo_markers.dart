@@ -72,6 +72,12 @@ const calendarWeekHeaderTopPadding = 14.0;
 /// Weekday label font size in the week timeline (smaller than month view).
 const calendarWeekWeekdayFontSize = 11.0;
 
+/// Font size for the pinned "MMM d" date row below week day columns.
+const calendarWeekDayDateLabelFontSize = 11.0;
+
+/// Gap between bordered day columns and the date label row.
+const calendarWeekDayDateLabelGap = 4.0;
+
 /// Top/bottom padding inside the scrollable timeline so hour labels are not clipped.
 const calendarWeekTimelineScrollPadding = 24.0;
 
@@ -538,6 +544,9 @@ class CalendarWeekEventBlock extends StatelessWidget {
             borderRadius: borderRadius,
             highlighted: highlighted,
             onTap: onTap,
+            eventId: event.id,
+            isSegmentStart: !bridgeLeft,
+            isSegmentEnd: !bridgeRight,
             child: Container(
               width: totalWidth,
               height: constraints.maxHeight,
