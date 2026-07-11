@@ -528,3 +528,308 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     );
   }
 }
+
+class TimeSelectorPopover extends StatefulWidget {
+  final DateTime initialTime;
+  final ValueChanged<DateTime>? onChanged;
+
+  const TimeSelectorPopover({
+    super.key,
+    required this.initialTime,
+    this.onChanged,
+  });
+
+  @override
+  State<TimeSelectorPopover> createState() => _TimeSelectorPopoverState();
+}
+
+class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
+  late DateTime _timeDt;
+  late final TextEditingController _timeController;
+  late final FocusNode _timeFocus;
+  bool _selectAllNextTap = false;
+  bool _canPop = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timeDt = widget.initialTime;
+    _timeController = TextEditingController();
+    _timeFocus = FocusNode();
+
+    _timeFocus.addListener(() {
+      if (_timeFocus.hasFocus) {
+        _selectAllNextTap = true;
+      } else {
+        _timeController.text = _formatTime(_timeDt);
+      }
+    });
+
+    _timeController.addListener(_onTimeTextChanged);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _timeController.text = _formatTime(_timeDt);
+        _timeFocus.requestFocus();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timeController.dispose();
+    _timeFocus.dispose();
+    super.dispose();
+  }
+
+  String _formatTime(DateTime dt) {
+    return TimeOfDay.fromDateTime(dt).format(context);
+  }
+
+  DateTime? _parseTime(String query, DateTime referenceTime) {
+    query = query.toLowerCase().trim();
+    if (query.isEmpty) return null;
+
+    final clean = query.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (clean.isEmpty) return null;
+
+    bool? isPM;
+    if (clean.endsWith('pm') || clean.endsWith('p')) {
+      isPM = true;
+    } else if (clean.endsWith('am') || clean.endsWith('a')) {
+      isPM = false;
+    }
+
+    String numPart = clean.replaceAll(RegExp(r'[a-z]'), '');
+    if (numPart.isEmpty) return null;
+
+    int hour = 0;
+    int minute = 0;
+
+    if (numPart.length <= 2) {
+      hour = int.parse(numPart);
+      minute = 0;
+    } else if (numPart.length == 3) {
+      hour = int.parse(numPart.substring(0, 1));
+      minute = int.parse(numPart.substring(1, 3));
+    } else if (numPart.length == 4) {
+      hour = int.parse(numPart.substring(0, 2));
+      minute = int.parse(numPart.substring(2, 4));
+    } else {
+      return null;
+    }
+
+    if (minute > 59) return null;
+
+    if (hour > 12 && isPM == null) {
+       if (hour > 23) return null;
+       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, hour, minute);
+    }
+    
+    if (hour > 12) return null;
+
+    if (isPM != null) {
+       int h24 = hour % 12;
+       if (isPM) h24 += 12;
+       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, h24, minute);
+    } else {
+       int h24 = hour % 12;
+       int t1 = h24; 
+       int t2 = h24 + 12; 
+       
+       double refH = referenceTime.hour + referenceTime.minute / 60.0;
+       double t1Diff = (t1 + (minute/60.0) - refH + 24) % 24;
+       double t2Diff = (t2 + (minute/60.0) - refH + 24) % 24;
+       
+       if (t1Diff < t2Diff) {
+         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t1, minute);
+       } else {
+         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t2, minute);
+       }
+    }
+  }
+
+  void _onTimeTextChanged() {
+    if (!_timeFocus.hasFocus) return;
+    final parsed = _parseTime(_timeController.text, _timeDt);
+    if (parsed != null && parsed != _timeDt) {
+      _applyTimeDt(parsed, updateText: false);
+    }
+  }
+
+  void _applyTimeDt(DateTime newTimeDt, {bool updateText = true}) {
+    setState(() {
+      _timeDt = newTimeDt;
+      if (updateText) {
+        _timeController.text = _formatTime(_timeDt);
+      }
+    });
+    widget.onChanged?.call(_timeDt);
+  }
+
+  void _onSpinnerChanged(DateTime newTime) {
+    _timeFocus.requestFocus();
+    _applyTimeDt(newTime, updateText: true);
+  }
+
+  void _submit() {
+    if (!mounted) return;
+    setState(() => _canPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(_timeDt);
+    });
+  }
+
+  Widget _timeField({
+    required ThemeData theme,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String hintText,
+    required VoidCallback onTap,
+    required ValueChanged<String> onSubmitted,
+  }) {
+    final accent = theme.colorScheme.primary;
+    final fieldTheme = theme.copyWith(
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: false,
+        isDense: true,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        errorBorder: InputBorder.none,
+        focusedErrorBorder: InputBorder.none,
+      ),
+      splashFactory: NoSplash.splashFactory,
+      highlightColor: Colors.transparent,
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: accent,
+          width: 2,
+        ),
+      ),
+      child: Theme(
+        data: fieldTheme,
+        child: Material(
+          type: MaterialType.transparency,
+          child: TextField(
+            textAlign: TextAlign.center,
+            controller: controller,
+            focusNode: focusNode,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: accent,
+            ),
+            decoration: InputDecoration(
+              hintText: hintText,
+              hintStyle: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+              isCollapsed: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 8,
+              ),
+            ),
+            onTap: onTap,
+            onSubmitted: onSubmitted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    final activeNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
+      color: Color.lerp(theme.colorScheme.primary, Colors.grey, 0.7)?.withValues(alpha: 0.4),
+    );
+    final activeHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
+      color: theme.colorScheme.primary,
+      fontWeight: FontWeight.bold,
+    );
+
+    return PopScope(
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (mounted) {
+          setState(() => _canPop = true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.of(context).pop(_timeDt);
+          });
+        }
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _timeField(
+                    theme: theme,
+                    controller: _timeController,
+                    focusNode: _timeFocus,
+                    hintText: 'Time...',
+                    onTap: () {
+                      if (_selectAllNextTap) {
+                        _timeController.selection = TextSelection(
+                          baseOffset: 0,
+                          extentOffset: _timeController.text.length,
+                        );
+                        _selectAllNextTap = false;
+                      }
+                    },
+                    onSubmitted: (_) => _submit(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                VoyagerTimePickerSpinner(
+                  time: _timeDt,
+                  minutesInterval: 5,
+                  isActive: true,
+                  normalTextStyle: activeNormalTextStyle,
+                  highlightedTextStyle: activeHighlightTextStyle,
+                  spacing: 4,
+                  itemHeight: 40,
+                  onTimeChange: _onSpinnerChanged,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          InkWell(
+            onTap: _submit,
+            child: Container(
+              height: 48,
+              alignment: Alignment.center,
+              child: Text('Done', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -889,50 +889,52 @@ class _YearGrid extends StatelessWidget {
 
     return KeyedSubtree(
       key: tileKey,
-      child: Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        color: calendarPanelBackgroundColor(context),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: InkWell(
-          onTap: () => onMonthTap(monthDate),
-          canRequestFocus: false,
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _mmmmFormat.format(monthDate),
-                  style: MonthTitleHeader.yearTileMonthNameStyle(context),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textHeightBehavior: MonthTitleHeader.titleTextHeightBehavior,
-                ),
-                const SizedBox(height: MonthTitleHeader.titleGap),
-                WeekdayHeaderRow(
-                  weekStartsMonday: weekStartsMonday,
-                  useSingleLetterLabels: true,
-                  labelStyle: calendarWeekdayLabelStyle(
-                    context,
-                    fontSize: MonthDayCellStyle.compact.fontSize,
+      child: RepaintBoundary(
+        child: Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          color: calendarPanelBackgroundColor(context),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: InkWell(
+            onTap: () => onMonthTap(monthDate),
+            canRequestFocus: false,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _mmmmFormat.format(monthDate),
+                    style: MonthTitleHeader.yearTileMonthNameStyle(context),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textHeightBehavior: MonthTitleHeader.titleTextHeightBehavior,
                   ),
-                ),
-                const SizedBox(height: monthDayGridWeekdayHeaderGap),
-                Expanded(
-                  child: MonthDayGrid(
-                    key: dayGridKey,
-                    month: monthDate,
-                    events: events,
-                    indicators: indicators,
+                  const SizedBox(height: MonthTitleHeader.titleGap),
+                  WeekdayHeaderRow(
                     weekStartsMonday: weekStartsMonday,
-                    style: MonthDayCellStyle.compact,
+                    useSingleLetterLabels: true,
+                    labelStyle: calendarWeekdayLabelStyle(
+                      context,
+                      fontSize: MonthDayCellStyle.compact.fontSize,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: monthDayGridWeekdayHeaderGap),
+                  Expanded(
+                    child: MonthDayGrid(
+                      key: dayGridKey,
+                      month: monthDate,
+                      events: events,
+                      indicators: indicators,
+                      weekStartsMonday: weekStartsMonday,
+                      style: MonthDayCellStyle.compact,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

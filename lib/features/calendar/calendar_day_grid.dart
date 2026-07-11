@@ -98,7 +98,7 @@ List<List<CalendarEvent?>> calendarPackWeekEvents(
     
     for (int c = 0; c < 7; c++) {
       if (calendarEventOccursOnDay(event, weekDates[c])) {
-         while (result[c].length <= availableRow) result[c].add(null);
+         while (result[c].length <= availableRow) { result[c].add(null); }
          result[c][availableRow] = event;
       }
     }
@@ -564,13 +564,30 @@ class CalendarDayCell extends StatelessWidget {
                 ),
               ),
             ),
-          if (showTodos)
+          if (showTodos && todoMarkers.isNotEmpty)
             Positioned(
               right: 0,
               bottom: 0,
               child: Opacity(
                 opacity: entryOpacity.clamp(0.0, 1.0),
-                child: CalendarDayTodoIcons(markers: todoMarkers),
+                child: Builder(
+                  builder: (todoContext) {
+                    return GestureDetector(
+                      onTap: onEntryTap == null ? null : () {
+                        _showTodoPopover(
+                          badgeContext: todoContext,
+                          todos: todoMarkers,
+                          onEntryTap: onEntryTap!,
+                        );
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.all(2.0),
+                        child: CalendarDayTodoIcons(markers: todoMarkers),
+                      ),
+                    );
+                  }
+                ),
               ),
             ),
         ],
@@ -609,7 +626,24 @@ class CalendarDayCell extends StatelessWidget {
           const SizedBox(height: 1),
           Opacity(
             opacity: entryOpacity.clamp(0.0, 1.0),
-            child: CalendarDayTodoIcons(markers: todoMarkers),
+            child: Builder(
+              builder: (todoContext) {
+                return GestureDetector(
+                  onTap: onEntryTap == null ? null : () {
+                    _showTodoPopover(
+                      badgeContext: todoContext,
+                      todos: todoMarkers,
+                      onEntryTap: onEntryTap!,
+                    );
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.all(2.0),
+                    child: CalendarDayTodoIcons(markers: todoMarkers),
+                  ),
+                );
+              }
+            ),
           ),
         ],
       ],
@@ -1489,6 +1523,67 @@ Future<void> _showOverflowEventsPopover({
   );
 }
 
+Future<void> _showTodoPopover({
+  required BuildContext badgeContext,
+  required List<CalendarTodoMarker> todos,
+  required void Function(CalendarDayEntry entry) onEntryTap,
+}) {
+  return showContextualPopover<void>(
+    context: badgeContext,
+    buttonContext: badgeContext,
+    width: 240,
+    builder: (popoverContext) {
+      return CalendarDayTodoPopover(
+        todos: todos,
+        onTodoTap: (todo) {
+          Navigator.of(popoverContext).pop();
+          onEntryTap(CalendarDayEntry.todo(todo));
+        },
+      );
+    },
+  );
+}
+
+class CalendarDayTodoPopover extends StatelessWidget {
+  const CalendarDayTodoPopover({
+    super.key,
+    required this.todos,
+    required this.onTodoTap,
+  });
+
+  final List<CalendarTodoMarker> todos;
+  final ValueChanged<CalendarTodoMarker> onTodoTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final todo in todos)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () => onTodoTap(todo),
+                  child: Container(
+                    height: 24,
+                    alignment: Alignment.centerLeft,
+                    child: CalendarDayTodoTile(marker: todo),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class CalendarDayOverflowEventsPopover extends StatelessWidget {
   const CalendarDayOverflowEventsPopover({
     super.key,
@@ -2150,11 +2245,40 @@ class MonthDayGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cells = monthGridDates(month, weekStartsMonday: weekStartsMonday);
-    
-    final packedWeeks = List.generate(6, (row) {
-      if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
-      return calendarPackWeekEvents(cells.sublist(row * 7, row * 7 + 7), events);
-    });
+
+    // Compact (year-tile) cells only render event dots and filter out null
+    // slots anyway — the packed-row layout data is irrelevant. Skip the
+    // expensive O(N × 7 × 6) calendarPackWeekEvents call and use a cheap
+    // per-day filter instead.
+    //
+    // Pre-normalize event dates once so [calendarEventOccursOnDayNormalized]
+    // can skip the repeated [toLocal()] + [DateUtils.dateOnly()] allocations
+    // in the inner 42-cell loop (year view: 12 tiles × 42 cells × N events).
+    final List<List<List<CalendarEvent?>>> packedWeeks;
+    if (style.isCompactLayout) {
+      final normalizedEvents = normalizeCalendarEvents(events);
+      packedWeeks = List.generate(6, (row) {
+        if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
+        return List.generate(7, (col) {
+          final date = cells[row * 7 + col];
+          if (date.month != month.month || date.year != month.year) {
+            return const <CalendarEvent?>[];
+          }
+          // Use date-only local once per cell; the normalized struct already
+          // holds the pre-computed local start/end dates for each event.
+          final localDay = DateUtils.dateOnly(date.toLocal());
+          return [
+            for (final n in normalizedEvents)
+              if (calendarEventOccursOnDayNormalized(n, localDay)) n.event,
+          ];
+        });
+      });
+    } else {
+      packedWeeks = List.generate(6, (row) {
+        if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
+        return calendarPackWeekEvents(cells.sublist(row * 7, row * 7 + 7), events);
+      });
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

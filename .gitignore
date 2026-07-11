@@ -13,6 +13,7 @@
 dart_defines.json
 .swiftpm/
 migrate_working_dir/
+graphify-out/cost.json
 
 # IntelliJ related
 *.iml

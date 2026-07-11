@@ -70,8 +70,7 @@ class SelectorPill extends StatelessWidget {
                                 : theme.textTheme.labelLarge)
                             ?.copyWith(
                           color: foregroundColor,
-                          fontWeight:
-                              isActive ? FontWeight.bold : FontWeight.w500,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                 )
@@ -85,8 +84,7 @@ class SelectorPill extends StatelessWidget {
                               : theme.textTheme.labelLarge)
                           ?.copyWith(
                         color: foregroundColor,
-                        fontWeight:
-                            isActive ? FontWeight.bold : FontWeight.w500,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
             ],

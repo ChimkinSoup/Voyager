@@ -1,6 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 
+// =============================================================================
+// NormalizedCalendarEvent — pre-computed date-only local start/end.
+//
+// Wraps a [CalendarEvent] and caches [DateUtils.dateOnly(event.start.toLocal())]
+// and the equivalent end value so the year-view hot path avoids re-allocating
+// DateTime objects on every [calendarEventOccursOnDay] call.
+// =============================================================================
+
+class NormalizedCalendarEvent {
+  NormalizedCalendarEvent(this.event)
+      : startLocal = DateUtils.dateOnly(event.start.toLocal()),
+        endLocal = DateUtils.dateOnly(event.end.toLocal());
+
+  final CalendarEvent event;
+
+  /// [event.start] converted to local time and truncated to date-only.
+  final DateTime startLocal;
+
+  /// [event.end] converted to local time and truncated to date-only.
+  final DateTime endLocal;
+
+  /// Pre-computed duration in whole days (endLocal − startLocal).
+  int get durationDays => endLocal.difference(startLocal).inDays;
+}
+
+/// Normalizes [events] into a [NormalizedCalendarEvent] list.
+///
+/// Call this once per render cycle (e.g., at the top of [MonthDayGrid.build]
+/// for the compact/year-tile path) so each event's local dates are computed
+/// exactly once rather than once per checked day.
+List<NormalizedCalendarEvent> normalizeCalendarEvents(
+  List<CalendarEvent> events,
+) =>
+    [for (final e in events) NormalizedCalendarEvent(e)];
+
+/// Fast variant of [calendarEventOccursOnDay] that reads pre-computed
+/// [NormalizedCalendarEvent] fields instead of calling [.toLocal()] and
+/// [DateUtils.dateOnly] on every invocation.
+bool calendarEventOccursOnDayNormalized(
+  NormalizedCalendarEvent n,
+  DateTime localDay, // must already be date-only local
+) {
+  if (localDay.isBefore(n.startLocal)) return false;
+
+  if (n.event.recurrence == EventRecurrence.none) {
+    return localDay == n.startLocal ||
+        (localDay.isAfter(n.startLocal) && !localDay.isAfter(n.endLocal));
+  }
+
+  final durationDays = n.durationDays;
+
+  switch (n.event.recurrence) {
+    case EventRecurrence.daily:
+      return true;
+    case EventRecurrence.weekly:
+      for (int i = 0; i <= durationDays; i++) {
+        if (localDay.weekday ==
+            n.startLocal.add(Duration(days: i)).weekday) {
+          return true;
+        }
+      }
+      return false;
+    case EventRecurrence.monthly:
+      for (int i = 0; i <= durationDays; i++) {
+        if (localDay.day == n.startLocal.add(Duration(days: i)).day) {
+          return true;
+        }
+      }
+      return false;
+    case EventRecurrence.yearly:
+      for (int i = 0; i <= durationDays; i++) {
+        final d = n.startLocal.add(Duration(days: i));
+        if (localDay.month == d.month && localDay.day == d.day) return true;
+      }
+      return false;
+    case EventRecurrence.none:
+      return localDay == n.startLocal ||
+          (localDay.isAfter(n.startLocal) && !localDay.isAfter(n.endLocal));
+  }
+}
+
 bool calendarEventOccursOnDay(CalendarEvent event, DateTime day) {
   final localDay = DateUtils.dateOnly(day.toLocal());
   final startLocal = DateUtils.dateOnly(event.start.toLocal());

@@ -4,14 +4,22 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 class DateSelectorPopover extends StatefulWidget {
+  final DateTime initialStartDate;
+  final DateTime initialEndDate;
+  final bool singleDateMode;
+  final bool inlineMode;
+  final ValueChanged<DateTime>? onDateSelected;
+  final Color? accentColor;
+
   const DateSelectorPopover({
     super.key,
     required this.initialStartDate,
     required this.initialEndDate,
+    this.singleDateMode = false,
+    this.inlineMode = false,
+    this.onDateSelected,
+    this.accentColor,
   });
-
-  final DateTime initialStartDate;
-  final DateTime initialEndDate;
 
   @override
   State<DateSelectorPopover> createState() => _DateSelectorPopoverState();
@@ -51,6 +59,26 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant DateSelectorPopover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialStartDate != oldWidget.initialStartDate || widget.initialEndDate != oldWidget.initialEndDate) {
+      if (widget.initialStartDate != _firstSelected) {
+        _firstSelected = widget.initialStartDate;
+        if (_focusedMonth.year != _firstSelected!.year || _focusedMonth.month != _firstSelected!.month) {
+          _focusedMonth = DateTime(_firstSelected!.year, _firstSelected!.month, 1);
+        }
+      }
+      if (widget.initialStartDate.year != widget.initialEndDate.year ||
+          widget.initialStartDate.month != widget.initialEndDate.month ||
+          widget.initialStartDate.day != widget.initialEndDate.day) {
+        _secondSelected = widget.initialEndDate;
+      } else {
+        _secondSelected = null;
+      }
+    }
+  }
+
   void _previousMonth() {
     setState(() {
       _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month - 1, 1);
@@ -66,17 +94,25 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
   void _handleDateTap(DateTime date) {
     setState(() {
       _hoveredDate = date;
-      if (_firstSelected == null) {
+      if (widget.singleDateMode) {
         _firstSelected = date;
-      } else if (_secondSelected == null) {
         _secondSelected = date;
-        _submit();
       } else {
-        // Reset selection
-        _firstSelected = date;
-        _secondSelected = null;
+        if (_firstSelected == null) {
+          _firstSelected = date;
+        } else if (_secondSelected == null) {
+          _secondSelected = date;
+        } else {
+          // Reset selection
+          _firstSelected = date;
+          _secondSelected = null;
+        }
       }
     });
+    
+    if (widget.singleDateMode || _secondSelected != null) {
+      _submit();
+    }
   }
 
   void _submitQuickAction(DateTime date) {
@@ -89,10 +125,14 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
 
   void _submit() {
     if (!mounted) return;
+    DateTime start = _firstSelected ?? _hoveredDate;
+    if (widget.inlineMode) {
+      widget.onDateSelected?.call(start);
+      return;
+    }
     setState(() => _canPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        DateTime start = _firstSelected ?? _hoveredDate;
         DateTime end = _secondSelected ?? start;
         if (end.isBefore(start)) {
           final temp = start;
@@ -155,6 +195,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = widget.accentColor ?? theme.colorScheme.primary;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -181,6 +222,274 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
       }
     }
 
+    Widget content = Focus(
+      focusNode: _focusNode,
+      onKeyEvent: (node, event) {
+        _handleKeyEvent(event);
+        return KeyEventResult.handled;
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 8),
+          // Zone A: Quick Actions
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: chips.map((c) {
+                final chipDate = c['date'] as DateTime;
+                final isSelected = _isQuickChipSelected(chipDate);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: ActionChip(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                    label: Text(
+                      c['label'] as String,
+                      style: TextStyle(
+                        color: isSelected
+                            ? theme.colorScheme.onPrimary
+                            : theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    backgroundColor: isSelected
+                        ? accent
+                        : Colors.transparent,
+                    side: isSelected
+                        ? BorderSide(color: accent, width: 1)
+                        : BorderSide(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.2,
+                            ),
+                            width: 1,
+                          ),
+                    onPressed: () => _submitQuickAction(chipDate),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          // Zone B: The Micro-Grid
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(PhosphorIconsRegular.caretLeft, size: 16),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: _previousMonth,
+                ),
+                Text(
+                  DateFormat.yMMMM().format(_focusedMonth),
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(PhosphorIconsRegular.caretRight, size: 16),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: _nextMonth,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 16),
+              child: GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  mainAxisSpacing: 0,
+                  crossAxisSpacing: 0,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: 42, // 7x6 matrix
+                itemBuilder: (context, index) {
+                  final date = startDate.add(Duration(days: index));
+                  final isCurrentMonth = date.month == _focusedMonth.month;
+                  final isToday = _isSameDay(date, today);
+                  
+                  bool isSelected = false;
+                  bool isInRange = false;
+                  bool isRangeStart = false;
+                  bool isRangeEnd = false;
+
+                  if (minDate != null && maxDate != null) {
+                    if (_isSameDay(date, minDate)) {
+                      isSelected = true;
+                      isRangeStart = !_isSameDay(minDate, maxDate);
+                    }
+                    if (_isSameDay(date, maxDate)) {
+                      isSelected = true;
+                      isRangeEnd = !_isSameDay(minDate, maxDate);
+                    }
+                    if (date.isAfter(minDate) && date.isBefore(maxDate)) {
+                      isInRange = true;
+                    }
+                  }
+
+                  final isHovered = _isSameDay(date, _hoveredDate);
+
+                  Color textColor = theme.colorScheme.onSurface;
+                  if (!isCurrentMonth) {
+                    textColor = textColor.withValues(alpha: 0.3);
+                  }
+                  if (isSelected) {
+                    textColor = theme.colorScheme.onPrimary;
+                  }
+
+                  final highlightColor = Color.alphaBlend(
+                    accent.withValues(alpha: 0.7),
+                    theme.colorScheme.surface,
+                  );
+
+                  final bool isFirstDayOfWeek = index % 7 == 0;
+                  final bool isLastDayOfWeek = index % 7 == 6;
+
+                  return Center(
+                    child: SizedBox(
+                      height: 36,
+                      width: double.infinity,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: [
+                          // 1. Bridging Layer (Row with Expanded)
+                          if (isInRange || isRangeStart || isRangeEnd)
+                            Positioned.fill(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // Left Zone
+                                  Expanded(
+                                    child: Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        if ((isInRange || isRangeEnd) && !isRangeStart)
+                                          Positioned(
+                                            top: 0,
+                                            bottom: 0,
+                                            left: 0, // NEVER extend left! Prevents painting over previous cell
+                                            right: -1, // overlap center slightly
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: highlightColor,
+                                                borderRadius: BorderRadius.only(
+                                                  topLeft: Radius.circular(isFirstDayOfWeek ? 100 : 0),
+                                                  bottomLeft: Radius.circular(isFirstDayOfWeek ? 100 : 0),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Right Zone
+                                  Expanded(
+                                    child: Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        if ((isInRange || isRangeStart) && !isRangeEnd)
+                                          Positioned(
+                                            top: 0,
+                                            bottom: 0,
+                                            left: -1, // overlap center slightly
+                                            right: isLastDayOfWeek ? 0 : -16, // Bridge securely to next cell
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: highlightColor,
+                                                borderRadius: BorderRadius.only(
+                                                  topRight: Radius.circular(isLastDayOfWeek ? 100 : 0),
+                                                  bottomRight: Radius.circular(isLastDayOfWeek ? 100 : 0),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          
+                          // 2. Uniform Background for Translucent Circle
+                          if (isInRange || isRangeStart || isRangeEnd)
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: highlightColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+
+                          // 3. The actual day circle (Button & Text)
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isSelected 
+                                  ? accent 
+                                  : Colors.transparent,
+                              border: (isHovered && _showHoverRing) 
+                                  ? Border.all(color: theme.colorScheme.onSurface, width: 2) 
+                                  : null,
+                              shape: BoxShape.circle,
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Material(
+                              color: Colors.transparent, // Let Container handle the background color securely
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() { _showHoverRing = false; });
+                                  _handleDateTap(date);
+                                },
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        '${date.day}',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: textColor,
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (isToday && !isSelected)
+                                        Container(
+                                          width: 4,
+                                          height: 4,
+                                          margin: const EdgeInsets.only(top: 1),
+                                          decoration: BoxDecoration(
+                                            color: accent,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (widget.inlineMode) return content;
+
     return PopScope(
       canPop: _canPop,
       onPopInvokedWithResult: (didPop, result) {
@@ -188,284 +497,11 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
         if (mounted) {
           setState(() => _canPop = true);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              DateTime start = _firstSelected ?? _hoveredDate;
-              DateTime end = _secondSelected ?? start;
-              if (end.isBefore(start)) {
-                final temp = start;
-                start = end;
-                end = temp;
-              }
-              Navigator.of(context).pop(DateTimeRange(start: start, end: end));
-            }
+            if (mounted) Navigator.of(context).pop();
           });
         }
       },
-      child: Focus(
-        focusNode: _focusNode,
-        onKeyEvent: (node, event) {
-          _handleKeyEvent(event);
-          return KeyEventResult.handled;
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-              const SizedBox(height: 8),
-              // Zone A: Quick Actions
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: chips.map((c) {
-                    final chipDate = c['date'] as DateTime;
-                    final isSelected = _isQuickChipSelected(chipDate);
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6.0),
-                      child: ActionChip(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                        label: Text(
-                          c['label'] as String,
-                          style: TextStyle(
-                            color: isSelected
-                                ? theme.colorScheme.onPrimary
-                                : theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        backgroundColor: isSelected
-                            ? theme.colorScheme.primary
-                            : Colors.transparent,
-                        side: isSelected
-                            ? BorderSide(color: theme.colorScheme.primary, width: 1)
-                            : BorderSide(
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.2,
-                                ),
-                                width: 1,
-                              ),
-                        onPressed: () => _submitQuickAction(chipDate),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Divider(height: 1),
-              // Zone B: The Micro-Grid
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: const Icon(PhosphorIconsRegular.caretLeft, size: 16),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _previousMonth,
-                    ),
-                    Text(
-                      DateFormat.yMMMM().format(_focusedMonth),
-                      style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    IconButton(
-                      icon: const Icon(PhosphorIconsRegular.caretRight, size: 16),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: _nextMonth,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 12, right: 12, bottom: 16),
-                  child: GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 7,
-                      mainAxisSpacing: 0,
-                      crossAxisSpacing: 0,
-                      childAspectRatio: 1.0,
-                    ),
-                    itemCount: 42, // 7x6 matrix
-                    itemBuilder: (context, index) {
-                      final date = startDate.add(Duration(days: index));
-                      final isCurrentMonth = date.month == _focusedMonth.month;
-                      final isToday = _isSameDay(date, today);
-                      
-                      bool isSelected = false;
-                      bool isInRange = false;
-                      bool isRangeStart = false;
-                      bool isRangeEnd = false;
-
-                      if (minDate != null && maxDate != null) {
-                        if (_isSameDay(date, minDate)) {
-                          isSelected = true;
-                          isRangeStart = !_isSameDay(minDate, maxDate);
-                        }
-                        if (_isSameDay(date, maxDate)) {
-                          isSelected = true;
-                          isRangeEnd = !_isSameDay(minDate, maxDate);
-                        }
-                        if (date.isAfter(minDate) && date.isBefore(maxDate)) {
-                          isInRange = true;
-                        }
-                      }
-
-                      final isHovered = _isSameDay(date, _hoveredDate);
-
-                      Color textColor = theme.colorScheme.onSurface;
-                      if (!isCurrentMonth) {
-                        textColor = textColor.withValues(alpha: 0.3);
-                      }
-                      if (isSelected) {
-                        textColor = theme.colorScheme.onPrimary;
-                      }
-
-                      final highlightColor = Color.alphaBlend(
-                        theme.colorScheme.primary.withValues(alpha: 0.7),
-                        theme.colorScheme.surface,
-                      );
-
-                      final bool isFirstDayOfWeek = index % 7 == 0;
-                      final bool isLastDayOfWeek = index % 7 == 6;
-
-                      return Center(
-                        child: SizedBox(
-                          height: 36,
-                          width: double.infinity,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            alignment: Alignment.center,
-                            children: [
-                              // 1. Bridging Layer (Row with Expanded)
-                              if (isInRange || isRangeStart || isRangeEnd)
-                                Positioned.fill(
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      // Left Zone
-                                      Expanded(
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                            if ((isInRange || isRangeEnd) && !isRangeStart)
-                                              Positioned(
-                                                top: 0,
-                                                bottom: 0,
-                                                left: 0, // NEVER extend left! Prevents painting over previous cell
-                                                right: -1, // overlap center slightly
-                                                child: Container(
-                                                  decoration: BoxDecoration(
-                                                    color: highlightColor,
-                                                    borderRadius: BorderRadius.only(
-                                                      topLeft: Radius.circular(isFirstDayOfWeek ? 100 : 0),
-                                                      bottomLeft: Radius.circular(isFirstDayOfWeek ? 100 : 0),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Right Zone
-                                      Expanded(
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                            if ((isInRange || isRangeStart) && !isRangeEnd)
-                                              Positioned(
-                                                top: 0,
-                                                bottom: 0,
-                                                left: -1, // overlap center slightly
-                                                right: isLastDayOfWeek ? 0 : -16, // Bridge securely to next cell
-                                                child: Container(
-                                                  decoration: BoxDecoration(
-                                                    color: highlightColor,
-                                                    borderRadius: BorderRadius.only(
-                                                      topRight: Radius.circular(isLastDayOfWeek ? 100 : 0),
-                                                      bottomRight: Radius.circular(isLastDayOfWeek ? 100 : 0),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              
-                              // 2. Uniform Background for Translucent Circle
-                              if (isInRange || isRangeStart || isRangeEnd)
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: highlightColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-
-                              // 3. The actual day circle (Button & Text)
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: isSelected 
-                                      ? theme.colorScheme.primary 
-                                      : Colors.transparent,
-                                  border: (isHovered && _showHoverRing) 
-                                      ? Border.all(color: theme.colorScheme.onSurface, width: 2) 
-                                      : null,
-                                  shape: BoxShape.circle,
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: Material(
-                                  color: Colors.transparent, // Let Container handle the background color securely
-                                  child: InkWell(
-                                    onTap: () {
-                                      setState(() { _showHoverRing = false; });
-                                      _handleDateTap(date);
-                                    },
-                                    child: Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            '${date.day}',
-                                            style: theme.textTheme.bodyMedium?.copyWith(
-                                              color: textColor,
-                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                            ),
-                                          ),
-                                          if (isToday && !isSelected)
-                                            Container(
-                                              width: 4,
-                                              height: 4,
-                                              margin: const EdgeInsets.only(top: 1),
-                                              decoration: BoxDecoration(
-                                                color: theme.colorScheme.primary,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      child: content,
     );
   }
 }

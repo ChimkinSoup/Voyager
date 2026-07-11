@@ -364,6 +364,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                               builder: (ctx) => DateSelectorPopover(
                                 initialStartDate: _start,
                                 initialEndDate: _end,
+                                accentColor: accent,
                               ),
                             );
                             setState(() => _isDatePopoverOpen = false);

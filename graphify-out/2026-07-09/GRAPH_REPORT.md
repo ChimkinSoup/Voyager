@@ -1,18 +1,13 @@
-# Graph Report - Voyager  (2026-07-09)
+# Graph Report - .  (2026-07-09)
 
 ## Corpus Check
-- 302 files · ~238,463 words
+- 317 files · ~238,457 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5990 nodes · 8391 edges · 337 communities (205 shown, 132 thin omitted)
+- 5989 nodes · 8391 edges · 336 communities (204 shown, 132 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 47 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
-
-## Graph Freshness
-- Built from commit: `583fa7df`
-- Run `git rev-parse HEAD` and compare to check if the graph is stale.
-- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - Database Data
@@ -374,7 +369,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (337 total, 132 thin omitted)
+## Communities (336 total, 132 thin omitted)
 
 ### Community 0 - "Database Data"
 Cohesion: 0.01
@@ -1184,9 +1179,9 @@ Nodes (3): BorderedRoundedDropdown, RoundedDropdown, _RoundedDropdownState
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `any` connect `Domain Services` to `Windows Cpp`?**
-  _High betweenness centrality (0.174) - this node is a cross-community bridge._
+  _High betweenness centrality (0.172) - this node is a cross-community bridge._
 - **Why does `MethodCodec` connect `Windows Ephemeral` to `Windows Cpp`, `Windows Ephemeral`, `Windows Ephemeral`, `Windows Ephemeral`, `Windows Ephemeral`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+  _High betweenness centrality (0.017) - this node is a cross-community bridge._
 - **Why does `Win32Window` connect `Windows Runner` to `Windows Cpp`?**
   _High betweenness centrality (0.012) - this node is a cross-community bridge._
 - **What connects `s`, `ops`, `pos` to the rest of the system?**

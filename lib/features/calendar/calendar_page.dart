@@ -17,7 +17,7 @@ import 'package:voyager/features/calendar/calendar_event_panel.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
-import 'package:voyager/features/todo/todo_edit_panel.dart';
+import 'package:voyager/features/calendar/calendar_todo_panel.dart';
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
 final _mmmmFormat = DateFormat.MMMM();
@@ -433,23 +433,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     await showContextualPopoverAt(
       context: context,
       targetRect: rect,
-      width: _popupWidth,
-      builder: (ctx) => _TodoPopupContent(
-        initialTask: task,
+      width: _eventPopupWidth,
+      builder: (ctx) => CalendarTodoPanel(
+        key: ValueKey(task.id),
+        task: task,
         lists: lists,
         listColors: listColors,
-        onClose: () {
-          ref.invalidate(calendarTodoMarkersProvider);
-          ref.invalidate(allTodoTasksProvider);
+        focusTitleOnOpen: true,
+        onSave: (updatedTask) async {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-        },
-        onChanged: () {
+          await ref.read(todoRepositoryProvider).upsertTask(updatedTask);
+          await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updatedTask);
           ref.invalidate(calendarTodoMarkersProvider);
           ref.invalidate(allTodoTasksProvider);
         },
-        onDeleted: () {
-          ref.invalidate(calendarTodoMarkersProvider);
-          ref.invalidate(allTodoTasksProvider);
+        onCancel: () {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
         },
       ),
@@ -2032,60 +2030,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 }
 
-// =============================================================================
-// _TodoPopupContent — stateful wrapper so star-toggle rebuilds inside popup
-// =============================================================================
 
-class _TodoPopupContent extends ConsumerStatefulWidget {
-  const _TodoPopupContent({
-    required this.initialTask,
-    required this.lists,
-    required this.listColors,
-    required this.onClose,
-    required this.onChanged,
-    required this.onDeleted,
-  });
-
-  final TodoTask initialTask;
-  final List<TodoListModel> lists;
-  final Map<String, int?> listColors;
-  final VoidCallback onClose;
-  final VoidCallback onChanged;
-  final VoidCallback onDeleted;
-
-  @override
-  ConsumerState<_TodoPopupContent> createState() => _TodoPopupContentState();
-}
-
-class _TodoPopupContentState extends ConsumerState<_TodoPopupContent> {
-  late TodoTask _task;
-
-  @override
-  void initState() {
-    super.initState();
-    _task = widget.initialTask;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TodoEditPanel(
-      key: ValueKey(_task.id),
-      task: _task,
-      listColor: widget.listColors[_task.listId],
-      lists: widget.lists,
-      onClose: widget.onClose,
-      onChanged: widget.onChanged,
-      onDeleted: widget.onDeleted,
-      onToggleStar: () async {
-        final updated = _task.copyWith(starred: !_task.starred);
-        await ref.read(todoRepositoryProvider).upsertTask(updated);
-        ref.invalidate(calendarTodoMarkersProvider);
-        ref.invalidate(allTodoTasksProvider);
-        if (mounted) setState(() => _task = updated);
-      },
-    );
-  }
-}
 
 // =============================================================================
 // Shared style helpers (used by _CalendarPageState and CalendarMorphWarmup)
