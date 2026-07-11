@@ -650,6 +650,7 @@ class DriftTrackerRepository implements TrackerRepository {
             defaultBool: Value(tracker.defaultBool),
             enumOptionsJson: Value(jsonEncode(tracker.enumOptions)),
             defaultEnumOption: Value(tracker.defaultEnumOption),
+            trackingStyle: Value(tracker.trackingStyle?.name),
             createdAt: Value(tracker.createdAt),
             updatedAt: Value(tracker.updatedAt),
             deletedAt: Value(tracker.deletedAt),
@@ -671,7 +672,7 @@ class DriftTrackerRepository implements TrackerRepository {
   Future<List<TrackerValue>> listValues(String trackerId) async {
     final rows = await (_db.select(
       _db.trackerValuesTable,
-    )..where((t) => t.trackerId.equals(trackerId))).get();
+    )..where((t) => t.trackerId.equals(trackerId) & t.deletedAt.isNull())).get();
     return rows.map(_mapValue).toList();
   }
 
@@ -692,6 +693,16 @@ class DriftTrackerRepository implements TrackerRepository {
             deletedAt: Value(value.deletedAt),
           ),
         );
+  }
+
+  @override
+  Future<void> softDeleteValue(String id) async {
+    await (_db.update(_db.trackerValuesTable)..where((t) => t.id.equals(id))).write(
+      TrackerValuesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
   }
 
   @override
@@ -821,6 +832,9 @@ class DriftTrackerRepository implements TrackerRepository {
     defaultBool: row.defaultBool,
     enumOptions: List<String>.from(jsonDecode(row.enumOptionsJson) as List),
     defaultEnumOption: row.defaultEnumOption,
+    trackingStyle: row.trackingStyle == null
+        ? null
+        : TrackerStyle.values.byName(row.trackingStyle!),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,

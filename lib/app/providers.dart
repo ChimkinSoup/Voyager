@@ -33,6 +33,7 @@ import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -337,12 +338,18 @@ final journalEntriesProvider = FutureProvider((ref) {
   return ref.watch(lazyLoadProvider).loadRecentEntries();
 });
 
+final allJournalEntriesProvider = FutureProvider((ref) {
+  ref.keepAlive();
+  return ref.watch(journalRepositoryProvider).getAllEntries(includeDeleted: false);
+});
+
 /// Journal entry list scope: [allJournalEntriesScope] for recent entries across
 /// all journals, otherwise a specific journal id for that journal's full list.
 const allJournalEntriesScope = '__all__';
 
 void invalidateJournalEntryProviders(Ref ref) {
   ref.invalidate(journalEntriesProvider);
+  ref.invalidate(allJournalEntriesProvider);
   ref.invalidate(journalListEntriesProvider);
   ref.invalidate(journalEntryCountsProvider);
   ref.invalidate(journalAllEntryIdsProvider);
@@ -450,6 +457,30 @@ final trackersProvider = FutureProvider((ref) {
 final trackerValuesProvider = FutureProvider.family((ref, String trackerId) {
   ref.keepAlive();
   return ref.watch(trackerRepositoryProvider).listValues(trackerId);
+});
+
+/// Number of daily trackers that have no entry recorded for today's local date.
+/// Used by [StatisticsActionFab] to trigger its glow animation.
+final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
+  ref.keepAlive();
+  final trackers = await ref.watch(trackersProvider.future);
+  final today = DateTime.now();
+  final todayLocal = DateTime(today.year, today.month, today.day);
+  final dailyTrackers = trackers.where(
+    (t) => t.cadence == TrackerCadence.daily && t.deletedAt == null,
+  );
+  var pending = 0;
+  for (final tracker in dailyTrackers) {
+    final values = await ref.watch(trackerValuesProvider(tracker.id).future);
+    final hasToday = values.any(
+      (v) =>
+          v.periodStart.year == todayLocal.year &&
+          v.periodStart.month == todayLocal.month &&
+          v.periodStart.day == todayLocal.day,
+    );
+    if (!hasToday) pending++;
+  }
+  return pending;
 });
 
 final rankingConfigsProvider = FutureProvider((ref) {

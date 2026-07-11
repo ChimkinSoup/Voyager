@@ -143,6 +143,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
           (widget.expands || (widget.maxLines ?? 1) > 1),
       borderRadius: widget.borderRadius ?? (widget.dense ? 12 : 18),
       child: TextField(
+        contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
         controller: widget.controller,
         focusNode: _focusNode,
         expands: widget.expands,

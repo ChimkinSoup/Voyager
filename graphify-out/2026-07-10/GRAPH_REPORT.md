@@ -1,16 +1,16 @@
-# Graph Report - Voyager  (2026-07-09)
+# Graph Report - Voyager  (2026-07-10)
 
 ## Corpus Check
-- 302 files · ~238,463 words
+- 304 files · ~244,373 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5990 nodes · 8391 edges · 337 communities (205 shown, 132 thin omitted)
+- 6203 nodes · 8656 edges · 358 communities (219 shown, 139 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 47 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `583fa7df`
+- Built from commit: `794466ea`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -200,164 +200,185 @@
 - Anagram List1
 - Cache Features
 - Calendar Features
-- Theme App
+- Widget
 - Widgets Rounded
 - Chart Weather
 - Android Gradlew
 - Deinterleave Evens
-- Shell Features
+- WeatherApiClient
 - Dev Flags
 - Utils Ids
 - Utils Journal
 - Google Desktop
 - Constants Todo
-- Client Weather
+- PLAN.md
 - Mainactivity Android
 - Calendar Customclipper
-- Tool Geometric
-- App Providers
+- High-Level Design: Voyager Weekly Calendar View
+- IMPORT_EXPORT.md
 - Constants App
-- Widgets Rounded
-- Iterable Features
+- trackerRepositoryProvider
+- @visibleForTesting
 - Constants Default
-- Repositories Data
+- package:intl/intl.dart
 - Domain Services
 - Calendar Features
 - Features Shell
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
-- Database Data
+- ADR 001: Local-First Data Model
+- ADR 002: Sync Protocol Boundaries
+- ADR 003: Module Structure
+- enums.dart
+- firebase_options.dart
+- Voyager
+- Intent
+- package:flutter/foundation.dart
+- TIME_SELECTOR.md
+- dart:ui
+- RoundedDropdown
+- package:voyager/core/widgets/color_picker_field.dart
+- graphify.md
+- graphify.md
+- FEEDBACK.md
+- Iterable
+- SyncConflictRepository
+- accentColor
+- addedAt
+- alertOnPeriodicPrompts
+- alertTimeHour
+- birthYear
+- body
+- boolValue
+- cadence
+- calendarNavigateLeftKey
+- calendarNavigateRightKey
+- collection
+- collectionName
+- colorEnd
+- colorPaletteJson
+- colorStart
+- colorValue
+- completed
+- configId
+- createdAt
+- customQuote
+- customStartupPage
+- defaultBool
+- defaultEnumOption
+- defaultInt
+- deletedAt
+- detectedAt
+- devForceConflictUi
+- deviceId
+- devJournalDebugLog
+- devOpenWeatherApiKey
+- devShowCacheStatus
+- devShowCalendarInstantViewSwitch
+- devShowCalendarZoomPrewarm
+- devShowConflictDocumentIds
+- devShowJournalRemotePullButton
+- devShowSyncDownloads
+- devShowSyncLocalSaves
+- devShowSyncUploads
+- devSlowCalendarAnimations
+- devTodoSortDebugLog
+- devUseDirectOpenWeather
+- documentId
+- dueDate
+- dueDateSetAt
+- end
+- entryDate
+- enumOptionsJson
+- enumValue
+- externalId
+- geometricTextureFocalPointX
+- geometricTextureFocalPointY
+- geometricTextureFocalSpread
+- geometricTextureIntensity
+- geometricTextureScale
+- geometricTextureVariationFloor
+- guidedJournaling
+- guidedPrompt
+- hideCompletedTasks
+- id
+- integerCap
+- intValue
+- isFullDay
+- journalEntryListWidth
+- journalHotkey
+- journalId
+- lastSeenNavPage
+- lastViewedJournalId
+- lastViewedTodoListId
+- listId
+- localPayloadJson
+- localText
+- localTitle
+- maxValue
+- mood
+- name
+- navPageOrderJson
+- notes
+- parentTaskId
+- periodStart
+- preStarSortOrder
+- promptCycleDays
+- quoteId
+- rankingColorEnd
+- rankingColorStart
+- recurrence
+- remotePayloadJson
+- remoteText
+- remoteTitle
+- richBodyJson
+- showOnCalendar
+- showQuotes
+- sortOrder
+- source
+- starred
+- start
+- startupPageMode
+- tag
+- tagsJson
+- timelineModeYearZero
 - None Map
 - None Rect
 - None Set
 - None Size
 - None String
 - None
+- timestamp
+- title
+- todoHotkey
+- trackerId
+- type
+- updatedAt
+- value
+- version
+- weatherChartCurveTension
+- weatherChartRainColor
+- weatherChartTempColor
+- weatherConditionCode
+- weatherFetchedAt
+- weatherForecastJson
+- weatherIcon
+- weatherLat
+- weatherLocationLabel
+- weatherLocationUpdatedAt
+- weatherLon
+- weatherTempC
+- weekStartsOnMonday
 
 ## God Nodes (most connected - your core abstractions)
-1. `remoteSyncServiceProvider` - 58 edges
+1. `remoteSyncServiceProvider` - 59 edges
 2. `journalRepositoryProvider` - 31 edges
-3. `todoRepositoryProvider` - 28 edges
-4. `settingsProvider` - 26 edges
+3. `settingsProvider` - 28 edges
+4. `todoRepositoryProvider` - 27 edges
 5. `FlutterEngine` - 26 edges
 6. `DartProject` - 25 edges
 7. `Win32Window` - 22 edges
 8. `MethodCodec` - 19 edges
 9. `_JournalPageState` - 18 edges
-10. `_VoyagerBootstrapState` - 17 edges
+10. `settingsRepositoryProvider` - 17 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `build` --references--> `currentWeatherProvider`  [EXTRACTED]
@@ -374,19 +395,19 @@
 ## Import Cycles
 - None detected.
 
-## Communities (337 total, 132 thin omitted)
+## Communities (358 total, 139 thin omitted)
 
 ### Community 0 - "Database Data"
 Cohesion: 0.01
-Nodes (285): BoolColumn get, _, _accentColorMeta, actualTableName, _addedAtMeta, _alertOnPeriodicPromptsMeta, _alertTimeHourMeta, _alias (+277 more)
+Nodes (293): BoolColumn get, _, _accentColorMeta, actualTableName, _addedAtMeta, _alertOnPeriodicPromptsMeta, _alertTimeHourMeta, _alias (+285 more)
 
 ### Community 1 - "Calendar Features"
 Cohesion: 0.01
-Nodes (255): AnimationStatusListener?, _, _abortMorphAnimation, adjacentColor, _advanceWarmup, anchor, _applyYearTransform, areaSize (+247 more)
+Nodes (249): AnimationStatusListener?, _, _abortMorphAnimation, adjacentColor, _advanceWarmup, anchor, _applyYearTransform, areaSize (+241 more)
 
 ### Community 2 - "Calendar Day"
 Cohesion: 0.01
-Nodes (214): BorderRadius, adjacentBorderT, adjacentTextT, alpha, _animatingEventId, available, barHeight, barStride (+206 more)
+Nodes (217): BorderRadius, adjacentBorderT, adjacentTextT, alpha, _animatingEventId, available, barHeight, barStride (+209 more)
 
 ### Community 3 - "Journal Features"
 Cohesion: 0.01
@@ -406,7 +427,7 @@ Nodes (87): CharacterOpRegistry get, _activeDebouncers, _activelyEditedDocuments
 
 ### Community 7 - "Todo Features"
 Cohesion: 0.02
-Nodes (85): _animating, _applyPendingNotesMerge, build, _buildHeader, _clearDueDate, _close, color, _compactIconButtonStyle (+77 more)
+Nodes (87): _animating, _applyPendingNotesMerge, build, _buildHeader, _clearDueDate, _close, color, _compactIconButtonStyle (+79 more)
 
 ### Community 8 - "Repositories Domain"
 Cohesion: 0.03
@@ -417,8 +438,8 @@ Cohesion: 0.03
 Nodes (66): calendar_day_entries.dart, calendar_day_grid.dart, calendar_todo_markers.dart, calendar_week_timeline.dart, allDay, build, _buildMonthTile, calendarPanelBackgroundColor (+58 more)
 
 ### Community 10 - "App Dev"
-Cohesion: 0.04
-Nodes (60): class, devGeometricTexturePanelOpenProvider, geometricShaderProvider, geometricTextureParamsProvider, build, buildScrollbar, createState, didChangeAppLifecycleState (+52 more)
+Cohesion: 0.12
+Nodes (16): buildScrollbar, createState, didChangeAppLifecycleState, dispose, _flushAllPendingEdits, initState, _NoScrollbarScrollBehavior, onWindowClose (+8 more)
 
 ### Community 11 - "Todo Features"
 Cohesion: 0.03
@@ -426,7 +447,7 @@ Nodes (64): CurvedAnimation, _activeInList, _animController, _applyListMoveOptim
 
 ### Community 12 - "Models Domain"
 Cohesion: 0.03
-Nodes (64): accentColor, alertOnPeriodicPrompts, alertTimeHour, birthYear, calendarNavigateLeftKey, calendarNavigateRightKey, colorPalette, copyWith (+56 more)
+Nodes (68): accentColor, alertOnPeriodicPrompts, alertTimeHour, birthYear, calendarNavigateLeftKey, calendarNavigateRightKey, colorPalette, copyWith (+60 more)
 
 ### Community 13 - "Calendar Markers"
 Cohesion: 0.03
@@ -442,39 +463,39 @@ Nodes (62): countEntriesByJournal, _db, deleteAllEntries, deleteAllEvents, delet
 
 ### Community 16 - "Sync Weather"
 Cohesion: 0.05
-Nodes (53): _, @DriftDatabase, fakes/fake_weather_api_client.dart, SyncEngine, AppDatabase, InMemorySyncRepository, package:drift/native.dart, package:flutter_test/flutter_test.dart (+45 more)
+Nodes (56): _, @DriftDatabase, fakes/fake_weather_api_client.dart, SyncEngine, AppDatabase, InMemorySyncRepository, DriftSettingsRepository, SettingsRepository (+48 more)
 
 ### Community 17 - "Todo Task"
 Cohesion: 0.03
 Nodes (59): activeTasks, activeTopLevelTasks, applyDueDateChange, applyNewUndatedTask, applyNormalizeUnstarredIfNeeded, applyReorder, _applyStar, applyStarToggle (+51 more)
 
 ### Community 18 - "App Providers"
-Cohesion: 0.04
-Nodes (56): AsyncValue, all, allJournalEntriesScope, buildCalendarTodoMarkers, controller, db, dispose, engine (+48 more)
+Cohesion: 0.03
+Nodes (58): AsyncValue, all, allJournalEntriesScope, buildCalendarTodoMarkers, controller, db, dispose, engine (+50 more)
 
 ### Community 19 - "Analytics Features"
-Cohesion: 0.04
-Nodes (55): trackerRepositoryProvider, trackerValuesProvider, CalendarViewMode, HeatmapMode, TrackerCadence, TrackerType, _cadence, _capController (+47 more)
+Cohesion: 0.05
+Nodes (43): _cadence, _capController, _colorEnd, _colorStart, _colorValue, config, configs, createState (+35 more)
 
 ### Community 20 - "Merger Services"
-Cohesion: 0.04
-Nodes (48): dart:convert, CrdtDocumentResolver, _merger, _mergeSyncOperations, resolvePayload, appSettingsWithGeometricTextureParams, copyWith, geometricTextureParamsFromSettings (+40 more)
+Cohesion: 0.05
+Nodes (44): dart:convert, CrdtDocumentResolver, _merger, _mergeSyncOperations, resolvePayload, list, loadQuotesFromAssets, raw (+36 more)
 
 ### Community 21 - "Search Features"
-Cohesion: 0.04
-Nodes (54): journalListEntriesProvider, journalWriteCoordinatorProvider, searchServiceProvider, build, _moveEntryToJournal, _prefetchInitialJournalEntries, _selectJournal, _toggleViewAllJournals (+46 more)
+Cohesion: 0.06
+Nodes (31): _accentColor, _bodyController, _bodyFocusNode, _coordinator, createState, dispose, entry, initState (+23 more)
 
 ### Community 22 - "Todo Features"
-Cohesion: 0.07
-Nodes (54): ConsumerState, ConsumerStatefulWidget, colorPaletteProvider, journalEntryCacheInvalidatorProvider, remoteSyncServiceProvider, todoListsProvider, todoRepositoryProvider, build (+46 more)
+Cohesion: 0.06
+Nodes (64): ConsumerState, ConsumerStatefulWidget, colorPaletteProvider, remoteSyncServiceProvider, todoListsProvider, todoRepositoryProvider, build, VoyagerApp (+56 more)
 
 ### Community 23 - "Text Widgets"
 Cohesion: 0.04
-Nodes (53): accentColor, _applyHighlightText, build, contentPadding, controller, createState, cursorColor, decoration (+45 more)
+Nodes (51): accentColor, _applyHighlightText, build, contentPadding, controller, createState, cursorColor, decoration (+43 more)
 
 ### Community 24 - "Windows Runner"
-Cohesion: 0.07
-Nodes (48): Point, HWND, LPARAM, LRESULT, UINT, WPARAM, FlutterWindow, flutter_controller_ (+40 more)
+Cohesion: 0.18
+Nodes (13): Point, Size, wchar_t, wstring, Scale(), Create, Destroy, Win32Window::Win32Window() (+5 more)
 
 ### Community 25 - "Widgets Color"
 Cohesion: 0.04
@@ -497,8 +518,8 @@ Cohesion: 0.05
 Nodes (44): FixedExtentScrollController, FixedExtentScrollPhysics, _amPmController, applyTo, build, _buildWheel, createBallisticSimulation, createState (+36 more)
 
 ### Community 30 - "Calendar Features"
-Cohesion: 0.05
-Nodes (42): double?, CalendarDayEntry, build, CalendarDayEntryBar, entry, fontSize, height, onTap (+34 more)
+Cohesion: 0.06
+Nodes (31): assigned, _buildClusters, CalendarOverlapSlot, clusterColumns, clusters, column, columnEnds, dayEnd (+23 more)
 
 ### Community 31 - "Widgets Datetime"
 Cohesion: 0.05
@@ -509,36 +530,36 @@ Cohesion: 0.05
 Nodes (42): ForecastPeriod?, 0, bucketHours, buckets, buildDayForecastChartSeries, chartBucketHour, chartBucketRangeCenteredOn, currentTimeChartHour (+34 more)
 
 ### Community 33 - "Windows Cpp"
-Cohesion: 0.10
-Nodes (12): map, string, vector, EncodableValue, EncodableValue, EncodableValue, EncodableValue, EncodableValue (+4 more)
+Cohesion: 0.13
+Nodes (11): string, vector, EncodableValue, EncodableValue, EncodableValue, EncodableValue, EncodableValue, EncodableValue (+3 more)
 
 ### Community 34 - "Shell Features"
 Cohesion: 0.05
-Nodes (40): accent, branchIndex, child, color, createState, didUpdateWidget, dispose, event (+32 more)
+Nodes (37): accent, branchIndex, child, color, createState, dispose, event, glow (+29 more)
 
 ### Community 35 - "Import Export"
-Cohesion: 0.05
-Nodes (38): class MockDocumentReference extends, Exception, DriftJournalRepository, JournalRepository, archive, DataImportService, _db, extractZipIsolate (+30 more)
+Cohesion: 0.07
+Nodes (31): class MockDocumentReference extends, DocumentReference, Exception, FirebaseFirestore, package:fake_cloud_firestore/fake_cloud_firestore.dart, package:voyager/data/remote/firestore_sync_repository.dart, package:voyager/features/settings/services/data_export_service.dart, package:voyager/features/settings/services/data_import_service.dart (+23 more)
 
 ### Community 36 - "Todo List"
-Cohesion: 0.05
-Nodes (37): build, createState, dispose, initialColor, initState, _nameController, palette, _selectedColor (+29 more)
+Cohesion: 0.03
+Nodes (60): weatherIconData, createState, DevRemotePurgeSection, _DevRemotePurgeSectionState, dispose, _entryIdController, _purgeEntry, _purging (+52 more)
 
 ### Community 37 - "Sync Firestore"
 Cohesion: 0.05
 Nodes (39): body, CrdtTextFields, _dateToFirestore, _dateToFirestoreRequired, firestoreDocumentIdForLocal, fromJournalPayload, fromTodoPayload, id (+31 more)
 
 ### Community 38 - "Windows Ephemeral"
-Cohesion: 0.07
-Nodes (28): FlutterDesktopViewControllerRef, FlutterDesktopViewRef, WindowProcDelegate, FlutterViewController, controller_, ForceRedraw, HandleTopLevelWindowProc, view_id (+20 more)
+Cohesion: 0.06
+Nodes (31): FlutterDesktopViewControllerRef, FlutterDesktopViewRef, WindowProcDelegate, FlutterViewController, controller_, ForceRedraw, HandleTopLevelWindowProc, view_id (+23 more)
 
 ### Community 39 - "Sync Engine"
 Cohesion: 0.05
-Nodes (38): BackgroundSyncOrchestrator, backoffMultiplier, _calendarRepository, cancelScheduledDocumentSync, _crdtResolver, _debouncer, _debouncerFor, _delayForAttempt (+30 more)
+Nodes (40): BackgroundSyncOrchestrator, backoffMultiplier, _calendarRepository, cancelScheduledDocumentSync, _crdtResolver, _debouncer, _debouncerFor, _delayForAttempt (+32 more)
 
 ### Community 40 - "Calendar Event"
-Cohesion: 0.05
-Nodes (37): DateTimeRange, build, _buildPayload, CalendarEventPanel, _CalendarEventPanelState, _closingAfterSave, _colorValue, createState (+29 more)
+Cohesion: 0.06
+Nodes (32): DateTimeRange, build, _buildPayload, _closingAfterSave, _colorValue, createState, _discard, dispose (+24 more)
 
 ### Community 41 - "Sync Conflict"
 Cohesion: 0.06
@@ -546,27 +567,27 @@ Nodes (36): syncConflictsProvider, collection, detectedAt, documentId, id, local
 
 ### Community 42 - "Calendar Features"
 Cohesion: 0.05
-Nodes (38): CalendarDayCell, CalendarDayEventBar, CalendarDayEventDots, CalendarDayIndicatorDots, CalendarDayNumber, _CalendarDayOverflowBadge, CalendarDayOverflowEventsPopover, CalendarFadedEventDots (+30 more)
+Nodes (39): CalendarDayCell, CalendarDayEventBar, CalendarDayEventDots, CalendarDayIndicatorDots, CalendarDayNumber, _CalendarDayOverflowBadge, CalendarDayOverflowEventsPopover, CalendarDayTodoPopover (+31 more)
 
 ### Community 43 - "Features Dev"
-Cohesion: 0.07
-Nodes (34): authRepositoryProvider, build, createState, dispose, _emailController, _error, _formatAuthError, _googleSignIn (+26 more)
+Cohesion: 0.09
+Nodes (25): authRepositoryProvider, build, createState, dispose, _emailController, _error, _formatAuthError, _googleSignIn (+17 more)
 
 ### Community 44 - "Models Domain"
 Cohesion: 0.05
 Nodes (36): buildDailyForecastSummaries, byDay, conditionCode, dailySummaries, date, day, days, description (+28 more)
 
 ### Community 45 - "Todo Features"
-Cohesion: 0.07
-Nodes (30): journalDebugLoggerProvider, todoSortDebugLoggerProvider, weatherIconData, _CacheStatusItemList, _CacheStatusSummary, compact, snapshot, build (+22 more)
+Cohesion: 0.08
+Nodes (24): build, createState, dispose, initialColor, initState, _nameController, palette, _selectedColor (+16 more)
 
 ### Community 46 - "Sync Conflict"
-Cohesion: 0.07
-Nodes (31): detectJournalEntryConflict, detectTodoTaskConflict, isConflict, _isCorruptedOpChain, _isHardMetadataCollision, _isHardTodoMetadataCollision, _merger, payloadJson (+23 more)
+Cohesion: 0.08
+Nodes (22): _apiKey, _http, _periodFromForecastItem, refreshForecast, refreshWeather, package:voyager/core/utils/ids.dart, package:voyager/domain/services/openweather_mapper.dart, package:voyager/domain/todo/todo_task_sorting.dart (+14 more)
 
 ### Community 47 - "Time Widgets"
-Cohesion: 0.06
-Nodes (35): _activeIsStart, _applyDuration, _applyEndDt, _applyStartDt, build, _canPop, createState, dispose (+27 more)
+Cohesion: 0.05
+Nodes (45): _activeIsStart, _applyDuration, _applyEndDt, _applyStartDt, _applyTimeDt, build, _canPop, createState (+37 more)
 
 ### Community 48 - "Domain Services"
 Cohesion: 0.06
@@ -577,16 +598,16 @@ Cohesion: 0.06
 Nodes (34): _append, applySettings, _appStartMarker, bodyDraftEntryIds, bodyFocused, bodyText, clearLog, enabled (+26 more)
 
 ### Community 50 - "Windows Ephemeral"
-Cohesion: 0.08
-Nodes (23): AccessibilityMode, GpuPreference, UIThreadPolicy, FlutterViewId, HWND, LPARAM, LRESULT, optional (+15 more)
+Cohesion: 0.14
+Nodes (12): AccessibilityMode, GpuPreference, UIThreadPolicy, DartProject, aot_library_path_, assets_path_, dart_entrypoint_, dart_entrypoint_arguments_ (+4 more)
 
 ### Community 51 - "Widgets Text"
 Cohesion: 0.06
 Nodes (33): FocusNode get, InputCounterWidgetBuilder?, accentColor, autofocus, build, buildCounter, controller, createState (+25 more)
 
 ### Community 52 - "Weather Features"
-Cohesion: 0.06
-Nodes (31): formatTime12Hour, formatTimeOfDay12Hour, jm, local, now, AppSettings, _apiKeyController, build (+23 more)
+Cohesion: 0.15
+Nodes (13): AppSettings, build, _controller, createState, didUpdateWidget, dispose, _error, initState (+5 more)
 
 ### Community 53 - "Widgets Field"
 Cohesion: 0.06
@@ -601,8 +622,8 @@ Cohesion: 0.10
 Nodes (23): StreamHandlerCancel, StreamHandlerListen, EventSink, EndOfStreamInternal, ErrorInternal, SuccessInternal, string, T (+15 more)
 
 ### Community 56 - "Windows Ephemeral"
-Cohesion: 0.07
-Nodes (24): GeneratedPluginRegistrant, Keep, BinaryMessenger, Send, SetMessageHandler, FlutterEngine, engine_, GetRegistrarForPlugin (+16 more)
+Cohesion: 0.10
+Nodes (18): GeneratedPluginRegistrant, Keep, FlutterEngine, engine_, GetRegistrarForPlugin, next_frame_callback_, owns_engine_, ProcessExternalWindowMessage (+10 more)
 
 ### Community 57 - "Widgets Notched"
 Cohesion: 0.06
@@ -621,8 +642,8 @@ Cohesion: 0.07
 Nodes (30): DateFormat, weatherForecastLastDayProvider, DailyForecastSummary, createState, _DailyCard, day, dayFormat, forecast (+22 more)
 
 ### Community 61 - "Journal Features"
-Cohesion: 0.07
-Nodes (30): journalsProvider, allJournals, assigner, changeJournalListColor, choice, color, controller, created (+22 more)
+Cohesion: 0.08
+Nodes (24): allJournals, assigner, choice, color, controller, created, defaultColor, deleteJournalList (+16 more)
 
 ### Community 62 - "Sync Activity"
 Cohesion: 0.06
@@ -633,8 +654,8 @@ Cohesion: 0.06
 Nodes (30): body, byCreated, byDate, colorValue, compareJournalEntriesNewestFirst, copyWith, customQuote, entryDate (+22 more)
 
 ### Community 64 - "Platform Keyboard"
-Cohesion: 0.07
-Nodes (25): configureDesktopWindow, desktopWindowChromeActive, _desktopWindowConfigured, exception, installWindowsKeyboardWorkaround, _isKnownWindowsKeyboardDesync, message, previous (+17 more)
+Cohesion: 0.06
+Nodes (38): _, GoRouter, journalDebugLoggerProvider, todoSortDebugLoggerProvider, build, build, DevJournalDebugSection, _showLogDialog (+30 more)
 
 ### Community 65 - "Database Users"
 Cohesion: 0.13
@@ -653,8 +674,8 @@ Cohesion: 0.07
 Nodes (27): appendOperation, claimCalendarLock, claimWeatherFetchLock, _collection, deleteDocument, deleteOperationsForDocument, _doc, _firestore (+19 more)
 
 ### Community 69 - "Windows Ephemeral"
-Cohesion: 0.10
-Nodes (19): MessageHandler, BasicMessageChannel, codec_, messenger_, name_, BinaryReply, string, T (+11 more)
+Cohesion: 0.11
+Nodes (17): BinaryMessengerImpl, handlers_, messenger_, Send, SetMessageHandler, BinaryMessageHandler, FlutterDesktopMessengerRef, BinaryMessenger (+9 more)
 
 ### Community 70 - "Widgets Geometric"
 Cohesion: 0.08
@@ -665,8 +686,8 @@ Cohesion: 0.07
 Nodes (25): addListener, advance, applyToLocalText, bufferWhileEditing, clearDocument, collection, documentId, documentKey (+17 more)
 
 ### Community 72 - "Calendar Features"
-Cohesion: 0.12
-Nodes (27): _PalettePickDialog, _PalettePickDialogState, _CreateNameColorDialog, _CreateNameColorDialogState, DesktopWindowFrame, _DesktopWindowFrameState, CalendarInteractiveEventTap, _CalendarInteractiveEventTapState (+19 more)
+Cohesion: 0.10
+Nodes (33): _PalettePickDialog, _PalettePickDialogState, _CreateNameColorDialog, _CreateNameColorDialogState, DateSelectorPopover, _DateSelectorPopoverState, DateTimeSelectorPopover, _DateTimeSelectorPopoverState (+25 more)
 
 ### Community 73 - "Domain Services"
 Cohesion: 0.07
@@ -681,28 +702,28 @@ Cohesion: 0.08
 Nodes (19): EncodableValueVariant, any, decodeColorPaletteJson, encodeColorPaletteJson, formatColorHex, jsonEncode, normalizeColorValue, normalized (+11 more)
 
 ### Community 76 - "Main App"
-Cohesion: 0.08
-Nodes (25): authNotifierProvider, databaseProvider, deviceIdProvider, _bootstrap, build, configureDesktopWindow, createState, dispose (+17 more)
+Cohesion: 0.10
+Nodes (19): configureDesktopWindow, createState, dispose, _hotkeys, initializeApp, initState, main, _onAuthStateChanged (+11 more)
 
 ### Community 77 - "Widgets Date"
-Cohesion: 0.08
-Nodes (24): FocusNode, build, _canPop, createState, DateSelectorPopover, _DateSelectorPopoverState, dispose, _firstSelected (+16 more)
+Cohesion: 0.07
+Nodes (27): FocusNode, accentColor, build, _canPop, createState, didUpdateWidget, dispose, _firstSelected (+19 more)
 
 ### Community 78 - "Features Shell"
-Cohesion: 0.09
-Nodes (24): weatherForecastProvider, _advance, build, createState, dispose, _done, _frame, initState (+16 more)
+Cohesion: 0.06
+Nodes (31): _closingAfterSave, _completed, createState, didUpdateWidget, _discard, dispose, _dueDate, focusTitleOnOpen (+23 more)
 
 ### Community 79 - "Calendar Features"
 Cohesion: 0.08
-Nodes (23): _, allDay, allDayEvent, available, calendarDayEntriesForDay, CalendarDayEntryKind, calendarVisibleEntryCount, clamp (+15 more)
+Nodes (24): _, allDay, allDayEvent, available, calendarDayEntriesForDay, CalendarDayEntryKind, calendarVisibleEntryCount, clamp (+16 more)
 
 ### Community 80 - "Sync Journal"
-Cohesion: 0.09
-Nodes (21): id, OutOfSyncJournalEntryPurge, OutOfSyncJournalEntryTarget, purgeAll, purgeOne, searchHint, targets, title (+13 more)
+Cohesion: 0.04
+Nodes (56): id, OutOfSyncJournalEntryPurge, OutOfSyncJournalEntryTarget, purgeAll, purgeOne, searchHint, targets, title (+48 more)
 
 ### Community 81 - "Domain Services"
-Cohesion: 0.08
-Nodes (23): _deviceId, fetchForecastIfNeeded, isCacheStale, isForecastCacheStale, _lockDuration, mergeForecastLocally, _persistCache, _persistForecast (+15 more)
+Cohesion: 0.04
+Nodes (48): FirebaseFunctions?, _call, CloudFunctionWeatherClient, _firestore, FirestoreWeatherReader, _functions, getCurrentWeather, _httpCallable (+40 more)
 
 ### Community 82 - "Shell Shortcuts"
 Cohesion: 0.09
@@ -713,28 +734,28 @@ Cohesion: 0.09
 Nodes (22): bool?, boolValue, cadence, colorEnd, colorStart, colorValue, configId, copyWith (+14 more)
 
 ### Community 84 - "Cloud Data"
-Cohesion: 0.09
-Nodes (22): DocumentReference, FirebaseFirestore, FirebaseFunctions?, _call, _firestore, FirestoreWeatherReader, _functions, getCurrentWeather (+14 more)
+Cohesion: 0.08
+Nodes (23): A. Journal — create and propagate, Automated tests (CI / local), B. Journal — concurrent edit (CRDT stress), C. Journal — metadata, Check import/export works, especially for todo lists, and deleting journals keeps journal count consistent, CRDT / journal body checks, D. Todo — create and propagate, E. Todo — reorder and star (+15 more)
 
 ### Community 85 - "Journal Features"
-Cohesion: 0.10
-Nodes (22): journalRepositoryProvider, build, created, createState, _deleteJournal, _entryCounts, initState, _journals (+14 more)
+Cohesion: 0.07
+Nodes (27): accentColor, build, _canPop, createState, _currentDateTime, didChangeDependencies, dispose, _focusRequested (+19 more)
 
 ### Community 86 - "Widgets Desktop"
 Cohesion: 0.09
 Nodes (22): build, buttonHeight, buttonRadius, buttonWidth, createState, DesktopWindowTitleBar, _DesktopWindowTitleBarState, dispose (+14 more)
 
 ### Community 87 - "Domain Calendar"
-Cohesion: 0.09
-Nodes (22): a, _areConsecutiveCalendarDays, b, calendarEventBarEndsOnDay, calendarEventBarsBridge, calendarEventBarStartsOnDay, calendarEventOccursOnDay, current (+14 more)
+Cohesion: 0.08
+Nodes (25): a, _areConsecutiveCalendarDays, b, calendarEventBarEndsOnDay, calendarEventBarsBridge, calendarEventBarStartsOnDay, calendarEventOccursOnDay, calendarEventOccursOnDayNormalized (+17 more)
 
 ### Community 88 - "Windows Ephemeral"
 Cohesion: 0.09
 Nodes (20): nanoseconds, FlutterDesktopEngineRef, FlutterDesktopPluginRegistrarRef, function, HWND, LPARAM, LRESULT, optional (+12 more)
 
 ### Community 89 - "Client Data"
-Cohesion: 0.10
-Nodes (19): Client, FirebaseAuth, _apiKey, _http, _periodFromForecastItem, refreshForecast, refreshWeather, _auth (+11 more)
+Cohesion: 0.17
+Nodes (11): Client, FirebaseAuth, _auth, call, _http, HttpCallableClient, projectId, region (+3 more)
 
 ### Community 90 - "Dev Cache"
 Cohesion: 0.09
@@ -749,28 +770,28 @@ Cohesion: 0.13
 Nodes (15): chartBucketHour(), firestore_1, forecastBucketKey(), formatDateKey(), localPartsFromUtc(), localTodayKey(), mergeForecastArchive(), parseBucketDateKey() (+7 more)
 
 ### Community 93 - "Features Page"
-Cohesion: 0.13
-Nodes (22): allTodoTasksProvider, dataExportServiceProvider, dataImportServiceProvider, settingsProvider, settingsRepositoryProvider, todoListStatsProvider, todoTasksProvider, didUpdateWidget (+14 more)
+Cohesion: 0.09
+Nodes (24): weatherForecastProvider, _advance, build, createState, dispose, _done, _frame, initState (+16 more)
 
 ### Community 94 - "Dev Features"
-Cohesion: 0.12
-Nodes (21): calendarRepositoryProvider, syncActivityProvider, _saveSidebarEvent, build, _confirmDeleteAllCalendarEvents, _confirmDeleteAllEntries, _confirmResetJournals, DevPage (+13 more)
+Cohesion: 0.07
+Nodes (38): ConsumerWidget, cacheStatusSnapshotProvider, calendarEventsProvider, calendarRepositoryProvider, calendarTodoMarkersProvider, devSettingsProvider, syncActivityProvider, build (+30 more)
 
 ### Community 95 - "Theme Menu"
 Cohesion: 0.09
 Nodes (21): dropdownMenuTheme, _GlowBorder, glowColor, _itemHighlightRadius, itemPadding, menuBorderRadius, menuColor, menuStyle (+13 more)
 
 ### Community 96 - "Registrar Windows"
-Cohesion: 0.10
-Nodes (15): GetRegistrar(), FlutterDesktopPluginRegistrarRef, set, T, unique_ptr, Plugin, PluginRegistrar, AddPlugin (+7 more)
+Cohesion: 0.05
+Nodes (31): map, function, TextureRegistrarImpl::UnregisterTexture(), set, unique_ptr, Plugin, PluginRegistrar, AddPlugin (+23 more)
 
 ### Community 97 - "Functions Src"
 Cohesion: 0.16
 Nodes (17): ArchiveDoc, archiveLocationMatches(), chartBucketHour(), clearForecastArchive(), forecastBucketKey(), ForecastPeriod, formatDateKey(), localPartsFromUtc() (+9 more)
 
 ### Community 98 - "Dev Settings"
-Cohesion: 0.10
-Nodes (20): applySettings, devForceConflictUi, loadFromSettings, _persist, setDevForceConflictUi, setShowCacheStatus, setShowCalendarInstantViewSwitch, setShowCalendarZoomPrewarm (+12 more)
+Cohesion: 0.11
+Nodes (18): applySettings, devForceConflictUi, loadFromSettings, _persist, setDevForceConflictUi, setShowCacheStatus, setShowCalendarInstantViewSwitch, setShowCalendarZoomPrewarm (+10 more)
 
 ### Community 99 - "Dev Todo"
 Cohesion: 0.10
@@ -797,29 +818,29 @@ Cohesion: 0.10
 Nodes (19): CacheItemStatus get, int get, checks, _checksEqual, _checksEqualLists, detail, idle, isFullyPrewarmed (+11 more)
 
 ### Community 105 - "Features Calendar"
-Cohesion: 0.15
-Nodes (18): ConsumerWidget, cacheStatusSnapshotProvider, calendarEventsProvider, calendarTodoMarkersProvider, devSettingsProvider, googleCalendarSyncProvider, build, CalendarPage (+10 more)
+Cohesion: 0.12
+Nodes (16): class, geometricShaderProvider, _GeometricBackground, appSettingsWithGeometricTextureParams, copyWith, geometricTextureParamsFromSettings, _advance, build (+8 more)
 
 ### Community 106 - "Widgets Clamp"
 Cohesion: 0.11
 Nodes (18): GlobalKey, GlobalKey get, attach, ClampToTargetBounds, createRenderObject, detach, _handleScroll, _hasAttemptedScrollLookup (+10 more)
 
 ### Community 107 - "Hotkey Features"
-Cohesion: 0.12
-Nodes (17): HotKey?, key, keyToken, modifiers, parseHotKey, parts, _physicalKey, createHotkeyService (+9 more)
+Cohesion: 0.18
+Nodes (18): authNotifierProvider, backgroundSyncOrchestratorProvider, databaseProvider, deviceIdProvider, lazyLoadProvider, liveSyncProvider, quotesLoadedProvider, shellDataWarmupProvider (+10 more)
 
 ### Community 108 - "Palette Color"
-Cohesion: 0.11
-Nodes (16): int? current,
-  Set, assign, nextColor, palette, PaletteAssigner, paletteFromItems, pickColorFromPalette, pickPaletteColorWithRef (+8 more)
+Cohesion: 0.12
+Nodes (14): int? current,
+  Set, assign, nextColor, palette, PaletteAssigner, paletteFromItems, pickColorFromPalette, pickPaletteColorWithRef (+6 more)
 
 ### Community 109 - "Dev Sync"
 Cohesion: 0.12
 Nodes (18): remoteSyncCompareServiceProvider, syncCompareLoggerProvider, build, _compareAllTodoLists, _compareJournalEntries, _compareTodoList, _comparing, createState (+10 more)
 
 ### Community 110 - "Domain Repositories"
-Cohesion: 0.11
-Nodes (17): DriftTodoRepository, DriftTrackerRepository, TodoRepository, TrackerRepository, isDue, longestJournalStreak, missedPeriods, _nextPeriod (+9 more)
+Cohesion: 0.06
+Nodes (35): detectJournalEntryConflict, detectTodoTaskConflict, isConflict, _isCorruptedOpChain, _isHardMetadataCollision, _isHardTodoMetadataCollision, _merger, payloadJson (+27 more)
 
 ### Community 111 - "Calendar Features"
 Cohesion: 0.11
@@ -834,16 +855,16 @@ Cohesion: 0.11
 Nodes (17): Animation, AnimationController, _animDuration, _barVisible, build, child, _controller, createState (+9 more)
 
 ### Community 114 - "Widgets Dropdown"
-Cohesion: 0.12
-Nodes (17): FormField, FormFieldState, InputDecoration?, accentColor, build, createState, decoration, enabled (+9 more)
+Cohesion: 0.09
+Nodes (22): FormField, FormFieldState, InputDecoration?, dark, VoyagerTheme, accentColor, build, createState (+14 more)
 
 ### Community 115 - "App Providers"
-Cohesion: 0.18
-Nodes (18): backgroundSyncOrchestratorProvider, journalAllEntryIdsProvider, journalEntryCountsProvider, lazyLoadProvider, liveSyncProvider, quoteBankProvider, quotesLoadedProvider, shellDataWarmupProvider (+10 more)
+Cohesion: 0.05
+Nodes (61): allTodoTasksProvider, dataExportServiceProvider, dataImportServiceProvider, journalAllEntryIdsProvider, journalEntryCacheInvalidatorProvider, journalEntryCountsProvider, journalListEntriesProvider, journalRepositoryProvider (+53 more)
 
 ### Community 116 - "Windows Ephemeral"
-Cohesion: 0.13
-Nodes (12): CopyBufferCallback, FlutterDesktopPixelBuffer, function, TextureRegistrarImpl::UnregisterTexture(), PixelBufferTexture, copy_buffer_callback_, FlutterDesktopTextureRegistrarRef, TextureRegistrarImpl (+4 more)
+Cohesion: 0.47
+Nodes (4): CopyBufferCallback, FlutterDesktopPixelBuffer, PixelBufferTexture, copy_buffer_callback_
 
 ### Community 117 - "Sync Debouncer"
 Cohesion: 0.12
@@ -870,12 +891,12 @@ Cohesion: 0.17
 Nodes (12): vector, ReplyManager::SendResponseData(), EngineMethodResult, codec_, reply_manager_, BinaryReply, string, T (+4 more)
 
 ### Community 123 - "Platform Widgets"
-Cohesion: 0.13
-Nodes (14): body, build, floatingActionButton, PlatformAdaptiveScaffold, build, child, createState, didUpdateWidget (+6 more)
+Cohesion: 0.22
+Nodes (9): build, child, createState, didUpdateWidget, _entry, initState, LocalOverlayWrapper, _LocalOverlayWrapperState (+1 more)
 
 ### Community 124 - "Shell Features"
-Cohesion: 0.12
-Nodes (15): icon, index, label, page, path, ShellDestination, shellDestinations, shellIndexForLocation (+7 more)
+Cohesion: 0.11
+Nodes (17): icon, index, label, order, page, path, result, ShellDestination (+9 more)
 
 ### Community 125 - "Windows Ephemeral"
 Cohesion: 0.24
@@ -899,33 +920,32 @@ Cohesion: 0.13
 Nodes (14): dependencies, firebase-admin, firebase-functions, devDependencies, typescript, engines, node, main (+6 more)
 
 ### Community 130 - "Dev Warmup"
-Cohesion: 0.13
-Nodes (13): begin, complete, fail, stateFor, _states, WarmupTracker, android, DefaultFirebaseOptions (+5 more)
+Cohesion: 0.25
+Nodes (7): begin, complete, fail, stateFor, _states, WarmupTracker, package:voyager/core/dev/cache_status.dart
 
 ### Community 131 - "Todo Task"
-Cohesion: 0.13
-Nodes (14): package:voyager/domain/todo/todo_task_sorting.dart, required String id,
-  bool, byId, dueDate, dueDateSetAt, id, main, now (+6 more)
+Cohesion: 0.19
+Nodes (4): optional, PluginRegistry, GetRegistrarForPlugin, RegisterPlugins()
 
 ### Community 132 - "Gradient Widgets"
-Cohesion: 0.14
-Nodes (13): BaseSliderTrackShape, accent, build, getPreferredRect, gradient, GradientSliderTrackShape, inactiveColor, MoodGradientSlider (+5 more)
+Cohesion: 0.10
+Nodes (18): BaseSliderTrackShape, Color, accent, build, getPreferredRect, gradient, GradientSliderTrackShape, inactiveColor (+10 more)
 
 ### Community 133 - "Models Analytics"
 Cohesion: 0.14
-Nodes (12): DateTime, StatisticTracker, build, HeatmapCalendar, month, tracker, values, package:voyager/domain/models/analytics_models.dart (+4 more)
+Nodes (12): DateTime, StatisticTracker, build, HeatmapCalendar, month, tracker, values, package:voyager/domain/services/analytics_service.dart (+4 more)
 
 ### Community 134 - "Models Domain"
 Cohesion: 0.14
 Nodes (13): colorValue, copyWith, end, EventRecurrence, EventSource, externalId, isFullDay, notes (+5 more)
 
 ### Community 135 - "Windows Ephemeral"
-Cohesion: 0.15
-Nodes (10): ClearPlugins, PluginRegistrarManager, GetInstance, OnRegistrarDestroyed, FlutterDesktopPluginRegistrarRef, FlutterDesktopPluginRegistrarRef, PluginRegistrar::PluginRegistrar(), PluginRegistrarManager::GetInstance() (+2 more)
+Cohesion: 0.14
+Nodes (15): devGeometricTexturePanelOpenProvider, geometricTextureParamsProvider, build, DevGeometricTextureSection, display, divisions, _GeometricTextureSlider, label (+7 more)
 
 ### Community 136 - "Platform Domain"
-Cohesion: 0.15
-Nodes (11): bool get, isAndroid, isWindows, VoyagerPlatform, copyWithDeleted, createdAt, deletedAt, id (+3 more)
+Cohesion: 0.07
+Nodes (30): HotKey?, configureDesktopWindow, desktopWindowChromeActive, _desktopWindowConfigured, exception, installWindowsKeyboardWorkaround, _isKnownWindowsKeyboardDesync, message (+22 more)
 
 ### Community 137 - "Domain Services"
 Cohesion: 0.15
@@ -944,8 +964,8 @@ Cohesion: 0.15
 Nodes (12): build, color, ColorCornerFlag, colorValue, JournalBookmarkFlag, JournalTitleCornerFlag, onSelected, paint (+4 more)
 
 ### Community 141 - "Weather Forecast"
-Cohesion: 0.15
-Nodes (10): refreshForecast, refreshWeather, package:voyager/domain/models/weather_models.dart, package:voyager/domain/services/weather_forecast_chart.dart, package:voyager/domain/services/weather_forecast_merge.dart, main, _period, main (+2 more)
+Cohesion: 0.50
+Nodes (3): package:voyager/domain/services/weather_forecast_chart.dart, main, _period
 
 ### Community 142 - "Windows Ephemeral"
 Cohesion: 0.22
@@ -956,24 +976,24 @@ Cohesion: 0.27
 Nodes (9): ResultHandlerError, ResultHandlerNotImplemented, ResultHandlerSuccess, string, T, MethodResultFunctions, on_error_, on_not_implemented_ (+1 more)
 
 ### Community 144 - "Widgets Selector"
-Cohesion: 0.17
-Nodes (11): IconData, accentColor, build, child, dense, ellipsize, icon, isActive (+3 more)
+Cohesion: 0.06
+Nodes (29): EditableText, IconData, body, build, floatingActionButton, PlatformAdaptiveScaffold, decoration, restingColor (+21 more)
 
 ### Community 145 - "Constants Google"
 Cohesion: 0.17
 Nodes (11): googleOAuthClientId, _googleOAuthClientIdRaw, googleOAuthClientSecret, _googleOAuthClientSecretRaw, googleOAuthRedirectPort, id, isGoogleOAuthClientSecretConfigured, isGoogleOAuthConfigured (+3 more)
 
 ### Community 146 - "Features Analytics"
-Cohesion: 0.18
-Nodes (11): build, cadence, createState, lastCompleted, maxValue, onSubmit, RankingPromptBanner, _RankingPromptBannerState (+3 more)
+Cohesion: 0.14
+Nodes (13): Files touched by this migration, How it works, Intentional exception: the inline todo-item rename field, Known limitations / non-goals, `LabeledTextField` (`lib/core/widgets/labeled_text_field.dart`), `TagHighlightedTextField` (`lib/core/widgets/tag_highlighted_text_field.dart`), Text box widget: `NotchedFieldBorder`, The notch math (+5 more)
 
 ### Community 147 - "Features Settings"
 Cohesion: 0.18
 Nodes (11): build, _captured, createState, current, dispose, _handleKeyEvent, initState, _KeyBindingDialog (+3 more)
 
 ### Community 148 - "Shell App"
-Cohesion: 0.22
-Nodes (10): Color, cachedCurrentWeatherProvider, currentWeatherProvider, build, _RailClockWeather, _RailClockWeatherState, accent, build (+2 more)
+Cohesion: 0.17
+Nodes (11): double?, CalendarDayEntry, build, CalendarDayEntryBar, entry, fontSize, height, onTap (+3 more)
 
 ### Community 149 - "Widgets Features"
 Cohesion: 0.18
@@ -988,28 +1008,28 @@ Cohesion: 0.18
 Nodes (10): cancelLabel, confirmed, confirmLabel, deleteAllLabel, DeleteContainerChoice, moveLabel, result, showConfirmDialog (+2 more)
 
 ### Community 152 - "Weather Fakes"
-Cohesion: 0.18
-Nodes (10): WeatherForecast, WeatherSnapshot, forecastCalls, forecastResult, geocodeCalls, geocodeResult, refreshCalls, refreshForecast (+2 more)
+Cohesion: 0.17
+Nodes (11): WeatherForecast, WeatherSnapshot, package:voyager/domain/repositories/weather_api_client.dart, forecastCalls, forecastResult, geocodeCalls, geocodeResult, refreshCalls (+3 more)
 
 ### Community 153 - "Features Settings"
-Cohesion: 0.18
-Nodes (10): archive, DataExportService, exportDataToZip, generateZipIsolate, journalData, _journalRepo, taskData, _todoRepo (+2 more)
+Cohesion: 0.12
+Nodes (15): dart:io, Future, clearLog, _enqueue, log, _logFileName, logFilePath, _maxLogBytes (+7 more)
 
 ### Community 154 - "Shell App"
-Cohesion: 0.20
-Nodes (9): _, GoRouter, auth, child, package:voyager/core/widgets/desktop_window_frame.dart, package:voyager/features/auth/login_page.dart, package:voyager/features/shell/app_shell.dart, package:voyager/features/shell/shell_destinations.dart (+1 more)
+Cohesion: 0.25
+Nodes (7): build, children, currentIndex, ShellBranchContainer, shellBranchContainerBuilder, package:go_router/go_router.dart, ShellNavigationContainerBuilder
 
 ### Community 155 - "Data Remote"
-Cohesion: 0.20
-Nodes (9): dart:io, _authorizationEndpoint, DesktopGoogleOAuth, redirectUri, _tokenEndpoint, package:oauth2/oauth2.dart, package:url_launcher/url_launcher.dart, static final Uri (+1 more)
+Cohesion: 0.10
+Nodes (19): MessageHandler, BasicMessageChannel, codec_, messenger_, name_, BinaryReply, string, T (+11 more)
 
 ### Community 156 - "Delta Scramble"
 Cohesion: 0.20
 Nodes (8): local, main, newRemote, newRemote2, oldRemote, oldRemote2, main, lib/core/sync/text_delta_injector.dart
 
 ### Community 157 - "Dev Sync"
-Cohesion: 0.20
-Nodes (9): Future, clearLog, _enqueue, log, _logFileName, logFilePath, _maxLogBytes, readLog (+1 more)
+Cohesion: 0.17
+Nodes (11): 1. Shader asset, 2. Loading, 3. Tunable parameters, 4. Widget → painter → GPU, 5. App-level composition, 6. UI that interacts with the background, 7. GPU warmup (avoid first-frame jank), 8. Failure modes (+3 more)
 
 ### Community 158 - "Windows Runner"
 Cohesion: 0.27
@@ -1036,12 +1056,12 @@ Cohesion: 0.22
 Nodes (8): dart:async, _callbacks, flushAll, instance, PendingFlushRegistry, register, unregister, static final
 
 ### Community 164 - "App Providers"
-Cohesion: 0.33
-Nodes (9): analyticsServiceProvider, journalEntriesProvider, periodicPromptServiceProvider, rankingConfigsProvider, rankingValuesProvider, trackersProvider, AnalyticsPage, build (+1 more)
-
-### Community 165 - "Icons Calendar"
 Cohesion: 0.22
 Nodes (8): calendar, debug, journal, manage, search, VoyagerIcons, package:flutter/widgets.dart, static const IconData
+
+### Community 165 - "Icons Calendar"
+Cohesion: 0.15
+Nodes (13): HWND, LPARAM, LRESULT, UINT, WPARAM, FlutterWindow, flutter_controller_, FlutterWindow::FlutterWindow() (+5 more)
 
 ### Community 166 - "Theme Spacing"
 Cohesion: 0.22
@@ -1051,53 +1071,57 @@ Nodes (8): compactListVerticalDensity, lg, md, sm, VoyagerSpacing, xl, xs, xxs
 Cohesion: 0.22
 Nodes (9): RankingConfig, RankingValue, TrackerValue, CalendarEvent, Journal, JournalEntry, SoftDeletable, TodoListModel (+1 more)
 
+### Community 168 - "Windows Ephemeral"
+Cohesion: 0.21
+Nodes (13): OnCreate, RECT, HWND, Win32Window, child_content_, GetClientArea, GetHandle, OnCreate (+5 more)
+
 ### Community 169 - "Windows Ephemeral"
-Cohesion: 0.31
-Nodes (7): EventChannel, codec_, messenger_, name_, string, T, unique_ptr
+Cohesion: 0.18
+Nodes (11): build, cadence, createState, lastCompleted, maxValue, onSubmit, RankingPromptBanner, _RankingPromptBannerState (+3 more)
 
 ### Community 170 - "Dev Logger"
-Cohesion: 0.25
-Nodes (8): ChangeNotifier, DevSettingsController, JournalDebugLogger, SyncCompareLogger, TodoSortDebugLogger, SyncActivityController, CalendarEventTapState, MonthZoomPrewarmTracker
+Cohesion: 0.13
+Nodes (14): ChangeNotifier, _auth, AuthNotifier, dispose, _isAuthenticated, _subscription, DevSettingsController, JournalDebugLogger (+6 more)
 
 ### Community 171 - "Widgets Enter"
-Cohesion: 0.25
-Nodes (7): EditableText, build, child, EnterToSubmitScope, onSubmit, _textFieldHasFocus, VoidCallback
+Cohesion: 0.50
+Nodes (3): package:voyager/core/utils/key_binding.dart, package:voyager/features/calendar/calendar_keyboard_shortcuts.dart, main
 
 ### Community 172 - "Gpusurfacetexture Windows"
 Cohesion: 0.39
 Nodes (5): FlutterDesktopGpuSurfaceDescriptor, FlutterDesktopGpuSurfaceType, ObtainDescriptorCallback, GpuSurfaceTexture, obtain_descriptor_callback_
 
 ### Community 173 - "Auth App"
-Cohesion: 0.25
-Nodes (7): _auth, AuthNotifier, dispose, _isAuthenticated, _subscription, package:voyager/domain/repositories/repositories.dart, StreamSubscription
+Cohesion: 0.17
+Nodes (10): FlutterViewId, HWND, LPARAM, LRESULT, optional, UINT, WPARAM, FlutterViewController::FlutterViewController() (+2 more)
 
 ### Community 174 - "Constants Todo"
 Cohesion: 0.25
 Nodes (7): firestoreId, legacyTodoListFirestoreId, legacyTodoListId, localId, todoListDocumentIdForFirestore, todoListDocumentIdFromFirestore, return
 
 ### Community 175 - "Shell Features"
-Cohesion: 0.25
-Nodes (7): build, children, currentIndex, ShellBranchContainer, shellBranchContainerBuilder, package:go_router/go_router.dart, ShellNavigationContainerBuilder
+Cohesion: 0.14
+Nodes (12): _authorizationEndpoint, DesktopGoogleOAuth, redirectUri, _tokenEndpoint, package:oauth2/oauth2.dart, package:url_launcher/url_launcher.dart, package:voyager/core/constants/google_auth_config.dart, package:voyager/data/remote/desktop_google_oauth.dart (+4 more)
 
 ### Community 176 - "Messenger Windows"
-Cohesion: 0.25
-Nodes (7): BinaryMessengerImpl, handlers_, messenger_, Send, SetMessageHandler, BinaryMessageHandler, FlutterDesktopMessengerRef
+Cohesion: 0.38
+Nodes (10): HWND, LPARAM, LRESULT, UINT, WPARAM, EnableFullDpiSupportIfAvailable(), GetThisFromHandle, MessageHandler (+2 more)
 
 ### Community 177 - "Features Calendar"
 Cohesion: 0.29
-Nodes (7): @visibleForTesting, calendarNavDeltaForEvent, calendarNavShortcutsEnabledForState, isTextInputFocused, isShellTabShortcutEvent, shellTabDeltaForEvent, shellTabShortcutsEnabledForState
+Nodes (6): build, QuickJournalPopup, QuickTodoPopup, package:voyager/features/journal/journal_page.dart, package:voyager/features/shell/shell_keyboard_shortcuts.dart, package:voyager/features/todo/todo_page.dart
 
 ### Community 178 - "Constants Hotkey"
 Cohesion: 0.29
 Nodes (6): defaultCalendarNavigateLeftKey, defaultCalendarNavigateRightKey, defaultJournalHotkey, defaultTodoHotkey, legacyJournalHotkey, legacyTodoHotkey
 
 ### Community 179 - "Sync Firestore"
-Cohesion: 0.29
-Nodes (6): FirestoreCollections, journalEntries, journals, syncOperations, todoLists, todoTasks
+Cohesion: 0.15
+Nodes (11): FirestoreCollections, journalEntries, journals, syncOperations, todoLists, todoTasks, AppFonts, applyTo (+3 more)
 
 ### Community 180 - "Features Hotkeys"
-Cohesion: 0.29
-Nodes (6): build, QuickJournalPopup, QuickTodoPopup, package:voyager/features/journal/journal_page.dart, package:voyager/features/shell/shell_keyboard_shortcuts.dart, package:voyager/features/todo/todo_page.dart
+Cohesion: 0.33
+Nodes (7): cachedCurrentWeatherProvider, currentWeatherProvider, build, _RailClockWeather, _RailClockWeatherState, build, _WeatherRailProbe
 
 ### Community 181 - "Method Windows"
 Cohesion: 0.48
@@ -1115,9 +1139,9 @@ Nodes (6): @immutable, CacheItemStatus, CacheStatusSnapshot, MonthZoomPrewarmChe
 Cohesion: 0.33
 Nodes (6): InheritedWidget, _ContextualPopoverAccentScope, CalendarEventTapScope, CalendarMorphYearDotsOpacity, _MorphProgress, _WeekMorphProgress
 
-### Community 185 - "Theme App"
-Cohesion: 0.33
-Nodes (5): AppFonts, applyTo, family, style, static const
+### Community 185 - "Widget"
+Cohesion: 0.22
+Nodes (8): bool get, copyWithDeleted, createdAt, deletedAt, id, isDeleted, updatedAt, version
 
 ### Community 186 - "Widgets Rounded"
 Cohesion: 0.40
@@ -1135,9 +1159,9 @@ Nodes (3): gradlew script, die(), warn()
 Cohesion: 0.40
 Nodes (4): evens, main, odds, s
 
-### Community 190 - "Shell Features"
-Cohesion: 0.40
-Nodes (5): Intent, _SubmitIntent, _BlockShellTabIntent, NextShellTabIntent, PreviousShellTabIntent
+### Community 190 - "WeatherApiClient"
+Cohesion: 0.33
+Nodes (9): analyticsServiceProvider, journalEntriesProvider, periodicPromptServiceProvider, rankingConfigsProvider, rankingValuesProvider, trackersProvider, AnalyticsPage, build (+1 more)
 
 ### Community 191 - "Dev Flags"
 Cohesion: 0.40
@@ -1152,48 +1176,100 @@ Cohesion: 0.40
 Nodes (4): colorForTag, extractTags, journalTagPattern, matches
 
 ### Community 194 - "Google Desktop"
-Cohesion: 0.40
-Nodes (4): package:voyager/core/constants/google_auth_config.dart, package:voyager/data/remote/desktop_google_oauth.dart, StateError, main
+Cohesion: 0.67
+Nodes (3): GeometricTextureParamsNotifier, GeometricTextureParams, StateNotifier
 
 ### Community 195 - "Constants Todo"
 Cohesion: 0.50
 Nodes (3): normalizeUnstarredSortOrder, starredSortOrderMax, unstarredSortOrderBase
 
-### Community 196 - "Client Weather"
-Cohesion: 0.50
-Nodes (4): CloudFunctionWeatherClient, DevOpenWeatherClient, WeatherApiClient, FakeWeatherApiClient
+### Community 196 - "PLAN.md"
+Cohesion: 0.22
+Nodes (8): AGENTS, Features, Frontend UI, Future Additions, High Level Overview, Low Level Design, Miscellaneous, Theme
 
 ### Community 198 - "Calendar Customclipper"
 Cohesion: 0.67
 Nodes (3): CustomClipper, _WeekTimedViewportClipper, Path
 
-### Community 200 - "App Providers"
-Cohesion: 0.67
-Nodes (3): GeometricTextureParamsNotifier, GeometricTextureParams, StateNotifier
+### Community 199 - "High-Level Design: Voyager Weekly Calendar View"
+Cohesion: 0.22
+Nodes (8): High-Level Design: Voyager Weekly Calendar View, I. System Overview, II. Visual Layout & Z-Index Stack, III. The Overlap Engine (Column Splitting), IV. Data Entity Specifications, The Zero-Duration Task Layout Logic, Todo Task Logic, V. User Interaction Flow
 
-### Community 202 - "Widgets Rounded"
+### Community 200 - "IMPORT_EXPORT.md"
+Cohesion: 0.25
+Nodes (7): 1. The Database Layer (Drift), 2. The Export Pipeline (`DataExportService`), 3. The Import Pipeline (`DataImportService`), 4. The Trickle Sync Engine (`OutboxSyncWorker`), 5. Testing Strategy, Integration Tests (Slow, End-to-End), Unit Tests (Fast, Isolated)
+
+### Community 202 - "trackerRepositoryProvider"
+Cohesion: 0.25
+Nodes (8): trackerRepositoryProvider, trackerValuesProvider, _createRanking, _createTracker, _RankingsSection, _TrackerCard, _TrackerCardState, _TrackerHeatmap
+
+### Community 203 - "@visibleForTesting"
+Cohesion: 0.29
+Nodes (7): @visibleForTesting, calendarNavDeltaForEvent, calendarNavShortcutsEnabledForState, isTextInputFocused, isShellTabShortcutEvent, shellTabDeltaForEvent, shellTabShortcutsEnabledForState
+
+### Community 205 - "package:intl/intl.dart"
+Cohesion: 0.29
+Nodes (6): formatTime12Hour, formatTimeOfDay12Hour, jm, local, now, package:intl/intl.dart
+
+### Community 212 - "ADR 001: Local-First Data Model"
+Cohesion: 0.33
+Nodes (5): ADR 001: Local-First Data Model, Consequences, Context, Decision, Status
+
+### Community 213 - "ADR 002: Sync Protocol Boundaries"
+Cohesion: 0.33
+Nodes (5): ADR 002: Sync Protocol Boundaries, Consequences, Context, Decision, Status
+
+### Community 214 - "ADR 003: Module Structure"
+Cohesion: 0.33
+Nodes (5): ADR 003: Module Structure, Consequences, Context, Decision, Status
+
+### Community 215 - "enums.dart"
+Cohesion: 0.33
+Nodes (5): CalendarViewMode, HeatmapMode, StartupPageMode, TrackerCadence, TrackerType
+
+### Community 216 - "firebase_options.dart"
+Cohesion: 0.33
+Nodes (5): android, DefaultFirebaseOptions, windows, package:firebase_core/firebase_core.dart, static const FirebaseOptions
+
+### Community 217 - "Voyager"
+Cohesion: 0.33
+Nodes (5): Architecture, Features, Setup, Testing, Voyager
+
+### Community 218 - "Intent"
+Cohesion: 0.40
+Nodes (5): Intent, _SubmitIntent, _BlockShellTabIntent, NextShellTabIntent, PreviousShellTabIntent
+
+### Community 219 - "package:flutter/foundation.dart"
+Cohesion: 0.40
+Nodes (4): isAndroid, isWindows, VoyagerPlatform, package:flutter/foundation.dart
+
+### Community 220 - "TIME_SELECTOR.md"
+Cohesion: 0.40
+Nodes (4): 1. The Container (The Anchored Popover), 2. The Internal Layout (Start Time Popup), 3. The Internal Layout (End Time / Duration Popup), The Execution Summary
+
+### Community 222 - "RoundedDropdown"
 Cohesion: 0.67
 Nodes (3): BorderedRoundedDropdown, RoundedDropdown, _RoundedDropdownState
 
 ## Knowledge Gaps
-- **4241 isolated node(s):** `s`, `ops`, `pos`, `main`, `s1` (+4236 more)
+- **4409 isolated node(s):** `s`, `ops`, `pos`, `main`, `s1` (+4404 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **132 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **139 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `any` connect `Domain Services` to `Windows Cpp`?**
-  _High betweenness centrality (0.174) - this node is a cross-community bridge._
-- **Why does `MethodCodec` connect `Windows Ephemeral` to `Windows Cpp`, `Windows Ephemeral`, `Windows Ephemeral`, `Windows Ephemeral`, `Windows Ephemeral`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
-- **Why does `Win32Window` connect `Windows Runner` to `Windows Cpp`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+- **Why does `FlutterEngine` connect `Windows Ephemeral` to `Windows Ephemeral`, `Todo Task`, `Windows Ephemeral`, `Windows Ephemeral`?**
+  _High betweenness centrality (0.013) - this node is a cross-community bridge._
+- **Why does `MethodResultFunctions` connect `Windows Ephemeral` to `Windows Cpp`, `Windows Ephemeral`?**
+  _High betweenness centrality (0.011) - this node is a cross-community bridge._
 - **What connects `s`, `ops`, `pos` to the rest of the system?**
-  _4241 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _4409 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Database Data` be split into smaller, more focused modules?**
-  _Cohesion score 0.006993006993006993 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.006802721088435374 - nodes in this community are weakly interconnected._
 - **Should `Calendar Features` be split into smaller, more focused modules?**
-  _Cohesion score 0.0078125 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.008 - nodes in this community are weakly interconnected._
 - **Should `Calendar Day` be split into smaller, more focused modules?**
-  _Cohesion score 0.009302325581395349 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.009174311926605505 - nodes in this community are weakly interconnected._
+- **Should `Journal Features` be split into smaller, more focused modules?**
+  _Cohesion score 0.014598540145985401 - nodes in this community are weakly interconnected._

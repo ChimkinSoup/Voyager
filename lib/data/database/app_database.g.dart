@@ -3748,6 +3748,17 @@ class $TrackersTableTable extends TrackersTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _trackingStyleMeta = const VerificationMeta(
+    'trackingStyle',
+  );
+  @override
+  late final GeneratedColumn<String> trackingStyle = GeneratedColumn<String>(
+    'tracking_style',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3794,6 +3805,7 @@ class $TrackersTableTable extends TrackersTable
     defaultBool,
     enumOptionsJson,
     defaultEnumOption,
+    trackingStyle,
     createdAt,
     updatedAt,
     deletedAt,
@@ -3893,6 +3905,15 @@ class $TrackersTableTable extends TrackersTable
         ),
       );
     }
+    if (data.containsKey('tracking_style')) {
+      context.handle(
+        _trackingStyleMeta,
+        trackingStyle.isAcceptableOrUnknown(
+          data['tracking_style']!,
+          _trackingStyleMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3968,6 +3989,10 @@ class $TrackersTableTable extends TrackersTable
         DriftSqlType.string,
         data['${effectivePrefix}default_enum_option'],
       ),
+      trackingStyle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tracking_style'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4002,6 +4027,7 @@ class TrackersTableData extends DataClass
   final bool defaultBool;
   final String enumOptionsJson;
   final String? defaultEnumOption;
+  final String? trackingStyle;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -4017,6 +4043,7 @@ class TrackersTableData extends DataClass
     required this.defaultBool,
     required this.enumOptionsJson,
     this.defaultEnumOption,
+    this.trackingStyle,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -4038,6 +4065,9 @@ class TrackersTableData extends DataClass
     map['enum_options_json'] = Variable<String>(enumOptionsJson);
     if (!nullToAbsent || defaultEnumOption != null) {
       map['default_enum_option'] = Variable<String>(defaultEnumOption);
+    }
+    if (!nullToAbsent || trackingStyle != null) {
+      map['tracking_style'] = Variable<String>(trackingStyle);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -4064,6 +4094,9 @@ class TrackersTableData extends DataClass
       defaultEnumOption: defaultEnumOption == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultEnumOption),
+      trackingStyle: trackingStyle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(trackingStyle),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -4091,6 +4124,7 @@ class TrackersTableData extends DataClass
       defaultEnumOption: serializer.fromJson<String?>(
         json['defaultEnumOption'],
       ),
+      trackingStyle: serializer.fromJson<String?>(json['trackingStyle']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -4111,6 +4145,7 @@ class TrackersTableData extends DataClass
       'defaultBool': serializer.toJson<bool>(defaultBool),
       'enumOptionsJson': serializer.toJson<String>(enumOptionsJson),
       'defaultEnumOption': serializer.toJson<String?>(defaultEnumOption),
+      'trackingStyle': serializer.toJson<String?>(trackingStyle),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -4129,6 +4164,7 @@ class TrackersTableData extends DataClass
     bool? defaultBool,
     String? enumOptionsJson,
     Value<String?> defaultEnumOption = const Value.absent(),
+    Value<String?> trackingStyle = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -4146,6 +4182,9 @@ class TrackersTableData extends DataClass
     defaultEnumOption: defaultEnumOption.present
         ? defaultEnumOption.value
         : this.defaultEnumOption,
+    trackingStyle: trackingStyle.present
+        ? trackingStyle.value
+        : this.trackingStyle,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -4177,6 +4216,9 @@ class TrackersTableData extends DataClass
       defaultEnumOption: data.defaultEnumOption.present
           ? data.defaultEnumOption.value
           : this.defaultEnumOption,
+      trackingStyle: data.trackingStyle.present
+          ? data.trackingStyle.value
+          : this.trackingStyle,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -4197,6 +4239,7 @@ class TrackersTableData extends DataClass
           ..write('defaultBool: $defaultBool, ')
           ..write('enumOptionsJson: $enumOptionsJson, ')
           ..write('defaultEnumOption: $defaultEnumOption, ')
+          ..write('trackingStyle: $trackingStyle, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -4217,6 +4260,7 @@ class TrackersTableData extends DataClass
     defaultBool,
     enumOptionsJson,
     defaultEnumOption,
+    trackingStyle,
     createdAt,
     updatedAt,
     deletedAt,
@@ -4236,6 +4280,7 @@ class TrackersTableData extends DataClass
           other.defaultBool == this.defaultBool &&
           other.enumOptionsJson == this.enumOptionsJson &&
           other.defaultEnumOption == this.defaultEnumOption &&
+          other.trackingStyle == this.trackingStyle &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -4253,6 +4298,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
   final Value<bool> defaultBool;
   final Value<String> enumOptionsJson;
   final Value<String?> defaultEnumOption;
+  final Value<String?> trackingStyle;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -4269,6 +4315,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     this.defaultBool = const Value.absent(),
     this.enumOptionsJson = const Value.absent(),
     this.defaultEnumOption = const Value.absent(),
+    this.trackingStyle = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -4286,6 +4333,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     this.defaultBool = const Value.absent(),
     this.enumOptionsJson = const Value.absent(),
     this.defaultEnumOption = const Value.absent(),
+    this.trackingStyle = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
@@ -4308,6 +4356,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     Expression<bool>? defaultBool,
     Expression<String>? enumOptionsJson,
     Expression<String>? defaultEnumOption,
+    Expression<String>? trackingStyle,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -4325,6 +4374,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
       if (defaultBool != null) 'default_bool': defaultBool,
       if (enumOptionsJson != null) 'enum_options_json': enumOptionsJson,
       if (defaultEnumOption != null) 'default_enum_option': defaultEnumOption,
+      if (trackingStyle != null) 'tracking_style': trackingStyle,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -4344,6 +4394,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     Value<bool>? defaultBool,
     Value<String>? enumOptionsJson,
     Value<String?>? defaultEnumOption,
+    Value<String?>? trackingStyle,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -4361,6 +4412,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
       defaultBool: defaultBool ?? this.defaultBool,
       enumOptionsJson: enumOptionsJson ?? this.enumOptionsJson,
       defaultEnumOption: defaultEnumOption ?? this.defaultEnumOption,
+      trackingStyle: trackingStyle ?? this.trackingStyle,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -4404,6 +4456,9 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     if (defaultEnumOption.present) {
       map['default_enum_option'] = Variable<String>(defaultEnumOption.value);
     }
+    if (trackingStyle.present) {
+      map['tracking_style'] = Variable<String>(trackingStyle.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4433,6 +4488,7 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
           ..write('defaultBool: $defaultBool, ')
           ..write('enumOptionsJson: $enumOptionsJson, ')
           ..write('defaultEnumOption: $defaultEnumOption, ')
+          ..write('trackingStyle: $trackingStyle, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -12364,6 +12420,7 @@ typedef $$TrackersTableTableCreateCompanionBuilder =
       Value<bool> defaultBool,
       Value<String> enumOptionsJson,
       Value<String?> defaultEnumOption,
+      Value<String?> trackingStyle,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
@@ -12382,6 +12439,7 @@ typedef $$TrackersTableTableUpdateCompanionBuilder =
       Value<bool> defaultBool,
       Value<String> enumOptionsJson,
       Value<String?> defaultEnumOption,
+      Value<String?> trackingStyle,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -12449,6 +12507,11 @@ class $$TrackersTableTableFilterComposer
 
   ColumnFilters<String> get defaultEnumOption => $composableBuilder(
     column: $table.defaultEnumOption,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get trackingStyle => $composableBuilder(
+    column: $table.trackingStyle,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12532,6 +12595,11 @@ class $$TrackersTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get trackingStyle => $composableBuilder(
+    column: $table.trackingStyle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -12604,6 +12672,11 @@ class $$TrackersTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get trackingStyle => $composableBuilder(
+    column: $table.trackingStyle,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -12660,6 +12733,7 @@ class $$TrackersTableTableTableManager
                 Value<bool> defaultBool = const Value.absent(),
                 Value<String> enumOptionsJson = const Value.absent(),
                 Value<String?> defaultEnumOption = const Value.absent(),
+                Value<String?> trackingStyle = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -12676,6 +12750,7 @@ class $$TrackersTableTableTableManager
                 defaultBool: defaultBool,
                 enumOptionsJson: enumOptionsJson,
                 defaultEnumOption: defaultEnumOption,
+                trackingStyle: trackingStyle,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -12694,6 +12769,7 @@ class $$TrackersTableTableTableManager
                 Value<bool> defaultBool = const Value.absent(),
                 Value<String> enumOptionsJson = const Value.absent(),
                 Value<String?> defaultEnumOption = const Value.absent(),
+                Value<String?> trackingStyle = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -12710,6 +12786,7 @@ class $$TrackersTableTableTableManager
                 defaultBool: defaultBool,
                 enumOptionsJson: enumOptionsJson,
                 defaultEnumOption: defaultEnumOption,
+                trackingStyle: trackingStyle,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,

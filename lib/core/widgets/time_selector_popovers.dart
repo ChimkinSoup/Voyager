@@ -295,6 +295,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
         child: Material(
           type: MaterialType.transparency,
           child: TextField(
+            contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,
@@ -718,6 +719,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
         child: Material(
           type: MaterialType.transparency,
           child: TextField(
+            contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,

@@ -1902,11 +1902,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<DevSettingsController>(devSettingsProvider, (previous, next) {
-      if (previous?.slowCalendarAnimations != next.slowCalendarAnimations) {
+    ref.listen<bool>(
+      devSettingsProvider.select((s) => s.slowCalendarAnimations),
+      (previous, next) {
         _syncMorphAnimationDurations();
-      }
-    });
+      },
+    );
 
     final eventsAsync = ref.watch(calendarEventsProvider);
     final todosAsync = ref.watch(calendarTodoMarkersProvider);

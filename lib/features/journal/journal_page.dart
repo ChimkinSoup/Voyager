@@ -3,9 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:intl/intl.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
-import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
-import 'package:voyager/core/widgets/time_selector_popovers.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,13 +12,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
-import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
@@ -28,11 +26,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
+
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
-import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -49,6 +47,7 @@ import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/features/journal/journal_list_actions.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
+import 'package:voyager/features/analytics/statistics_action_fab.dart';
 
 class JournalPage extends ConsumerStatefulWidget {
   const JournalPage({super.key});
@@ -633,17 +632,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
   }
   List<JournalEntry> _buildDisplayEntries(List<JournalEntry> entries) {
-    final persisted = sortJournalEntriesNewestFirst(
-      entries.where((entry) => 
-          !_pendingEntries.containsKey(entry.id) &&
-          !_optimisticallyHiddenEntryIds.contains(entry.id) &&
-          !_optimisticallyHiddenJournalIds.contains(entry.journalId)),
-    );
+    final persisted = entries.where((entry) => 
+        !_pendingEntries.containsKey(entry.id) &&
+        !_optimisticallyHiddenEntryIds.contains(entry.id) &&
+        !_optimisticallyHiddenJournalIds.contains(entry.journalId));
     final pending = [
       for (final id in _pendingEntryIds)
         if (_pendingEntries.containsKey(id)) _pendingEntries[id]!,
     ];
-    return [...pending, ...persisted];
+    return sortJournalEntriesNewestFirst([...pending, ...persisted]);
   }
 
   bool _entriesMatchScope(List<JournalEntry> entries, String entryListScope) {
@@ -1384,6 +1381,195 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _invalidateJournalEntryCaches();
   }
 
+  Future<void> _deleteEntryItem(JournalEntry entry) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete entry?',
+      message: 'This entry will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+    _logJournal('DELETE_ENTRY', details: 'id=${entry.id}');
+    if (_selectedEntryId == entry.id) {
+      await _flushActiveEntryEdits(refreshList: false);
+      if (!mounted) return;
+      setState(() {
+        _selectedEntryId = null;
+        _selectedEntry = null;
+        _titleController.clear();
+      });
+    }
+    await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
+    ref
+        .read(remoteSyncServiceProvider)
+        .pushJournalEntryNow(entry.copyWith(deletedAt: utcNow()));
+    _removePendingEntry(entry.id);
+    _invalidateJournalEntryCaches();
+  }
+
+  Future<void> _moveEntryItemToJournal(JournalEntry entry, String journalId) async {
+    if (entry.journalId == journalId) return;
+    final repo = ref.read(journalRepositoryProvider);
+    final existing = await repo.getEntry(entry.id);
+    if (existing == null) return;
+    final updated = existing.copyWith(journalId: journalId);
+    await repo.upsertEntry(updated);
+    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
+    if (!mounted) return;
+
+    if (_selectedEntryId == entry.id) {
+      setState(() => _selectedEntry = updated);
+    }
+
+    if (_viewAllJournals) {
+      _invalidateJournalEntryCaches();
+      return;
+    }
+
+    if (_selectedEntryId == entry.id) {
+      _optimisticallyHiddenEntryIds.add(entry.id);
+      final scope = entry.journalId;
+      final scopedEntries =
+          ref.read(journalListEntriesProvider(scope)).valueOrNull ??
+              const <JournalEntry>[];
+      final remaining = _buildDisplayEntries(scopedEntries)
+          .where((e) => e.journalId == scope && e.id != entry.id)
+          .toList();
+
+      final displayTarget =
+          remaining.isEmpty ? null : _prepareSelectedEntry(remaining.first);
+      setState(() {
+        if (displayTarget != null) {
+          _selectEntryFields(displayTarget);
+        } else {
+          _selectedEntryId = null;
+          _selectedEntry = null;
+          _titleController.clear();
+        }
+      });
+    }
+    _invalidateJournalEntryCaches();
+  }
+
+  void _showEntryStatistics(JournalEntry entry) {
+    final words = ref.read(analyticsServiceProvider).countWords(entry.body);
+    final chars = entry.body.length;
+    final readingTimeMin = (words / 200).ceil();
+    final sentences = entry.body.trim().isEmpty
+        ? 0
+        : entry.body.split(RegExp(r'[.!?]+(?:\s+|$)')).where((s) => s.trim().isNotEmpty).length;
+    final paragraphs = entry.body.trim().isEmpty
+        ? 0
+        : entry.body.split(RegExp(r'\n\s*\n')).where((p) => p.trim().isNotEmpty).length;
+
+    final formattedDate = DateFormat.yMMMMd().format(entry.entryDate.toLocal());
+    final formattedTime = formatTime12Hour(entry.entryDate.toLocal());
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(PhosphorIconsRegular.chartBar, color: theme.colorScheme.primary),
+              const SizedBox(width: 12),
+              const Text('Entry Statistics'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.title.isEmpty ? 'Untitled Entry' : entry.title,
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$formattedDate at $formattedTime',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildStatRow(ctx, 'Word count', '$words'),
+              _buildStatRow(ctx, 'Character count', '$chars'),
+              _buildStatRow(ctx, 'Sentences', '$sentences'),
+              _buildStatRow(ctx, 'Paragraphs', '$paragraphs'),
+              _buildStatRow(ctx, 'Reading time', '$readingTimeMin min'),
+              if (entry.mood != null)
+                _buildStatRow(ctx, 'Mood value', '${entry.mood}/10'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showChangeJournalDialog(
+    JournalEntry entry,
+    List<Journal> journals,
+  ) async {
+    final targetJournalId = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Move to Journal'),
+          content: SizedBox(
+            width: 300,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: journals.length,
+              itemBuilder: (context, index) {
+                final journal = journals[index];
+                return ListTile(
+                  leading: JournalBookmarkFlag(
+                    colorValue: _journalFlagColor(journal),
+                    size: 16,
+                  ),
+                  title: Text(journal.name),
+                  trailing: journal.id == entry.journalId
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () => Navigator.of(context).pop(journal.id),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+    if (targetJournalId != null && mounted) {
+      await _moveEntryItemToJournal(entry, targetJournalId);
+    }
+  }
+
+  Widget _buildStatRow(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: theme.textTheme.bodyMedium),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _editQuote() async {
     final entry = _selectedEntry;
     if (entry == null) return;
@@ -1704,12 +1890,32 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       key: ValueKey(entry.id),
                                       child: Builder(
                                         key: isSelected ? _selectedEntryKey : null,
-                                        builder: (context) => _JournalEntryListTile(
-                                          entry: entry,
-                                          isSelected: isSelected,
-                                          titlePreview: _listTitlePreview,
-                                          bodyPreview: _listBodyPreview,
-                                          onTap: () => unawaited(_loadEntry(entry)),
+                                        builder: (context) => ContextMenuRegion(
+                                          items: [
+                                            ContextMenuItem(
+                                              label: 'Statistics',
+                                              icon: PhosphorIconsRegular.chartBar,
+                                              onTap: () => _showEntryStatistics(entry),
+                                            ),
+                                            ContextMenuItem(
+                                              label: 'Change Journal',
+                                              icon: PhosphorIconsRegular.folder,
+                                              onTap: () => _showChangeJournalDialog(entry, displayJournals),
+                                            ),
+                                            ContextMenuItem(
+                                              label: 'Delete',
+                                              icon: PhosphorIconsRegular.trash,
+                                              isDestructive: true,
+                                              onTap: () => _deleteEntryItem(entry),
+                                            ),
+                                          ],
+                                          child: _JournalEntryListTile(
+                                            entry: entry,
+                                            isSelected: isSelected,
+                                            titlePreview: _listTitlePreview,
+                                            bodyPreview: _listBodyPreview,
+                                            onTap: () => unawaited(_loadEntry(entry)),
+                                          ),
                                         ),
                                       ),
                                     );
@@ -1834,6 +2040,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                               ),
                             ),
                           ),
+                        ),
+                        // Statistics FAB — glows when daily stats are pending
+                        Positioned(
+                          bottom: _entryListFooterHeight + 8,
+                          right: 12,
+                          child: const StatisticsActionFab(),
                         ),
                       ],
                     ),
@@ -2550,6 +2762,7 @@ extension on _JournalPageState {
 
 class _JournalEntryListTile extends StatelessWidget {
   const _JournalEntryListTile({
+    super.key,
     required this.entry,
     required this.isSelected,
     required this.titlePreview,
@@ -2582,71 +2795,71 @@ class _JournalEntryListTile extends StatelessWidget {
         vertical: VoyagerSpacing.xxs,
       ),
       child: ListTile(
-        dense: true,
-        visualDensity: const VisualDensity(
-          vertical: VoyagerSpacing.compactListVerticalDensity,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: VoyagerSpacing.md,
-          vertical: VoyagerSpacing.xs,
-        ),
-        tileColor: VoyagerListItemSurface.restingColor(context),
-        selectedTileColor: VoyagerListItemSurface.selectedColor(context),
-        selected: isSelected,
-        title: isSelected
-            ? ValueListenableBuilder<String>(
-                valueListenable: titlePreview,
-                builder: (context, title, _) {
-                  return Text(
-                    title.isEmpty ? 'Untitled' : title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: titleStyle,
-                  );
-                },
-              )
-            : Text(
-                entry.title.isEmpty ? 'Untitled' : entry.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: titleStyle,
-              ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isSelected)
-              ValueListenableBuilder<String>(
-                valueListenable: bodyPreview,
-                builder: (context, body, _) {
-                  final preview = firstSentencePreview(body);
-                  if (preview.isEmpty) return const SizedBox.shrink();
-                  return Text(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: previewStyle,
-                  );
-                },
-              )
-            else ...[
-              Builder(
-                builder: (context) {
-                  final preview = firstSentencePreview(entry.body);
-                  if (preview.isEmpty) return const SizedBox.shrink();
-                  return Text(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: previewStyle,
-                  );
-                },
-              ),
+          dense: true,
+          visualDensity: const VisualDensity(
+            vertical: VoyagerSpacing.compactListVerticalDensity,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: VoyagerSpacing.md,
+            vertical: VoyagerSpacing.xs,
+          ),
+          tileColor: VoyagerListItemSurface.restingColor(context),
+          selectedTileColor: VoyagerListItemSurface.selectedColor(context),
+          selected: isSelected,
+          title: isSelected
+              ? ValueListenableBuilder<String>(
+                  valueListenable: titlePreview,
+                  builder: (context, title, _) {
+                    return Text(
+                      title.isEmpty ? 'Untitled' : title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    );
+                  },
+                )
+              : Text(
+                  entry.title.isEmpty ? 'Untitled' : entry.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle,
+                ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isSelected)
+                ValueListenableBuilder<String>(
+                  valueListenable: bodyPreview,
+                  builder: (context, body, _) {
+                    final preview = firstSentencePreview(body);
+                    if (preview.isEmpty) return const SizedBox.shrink();
+                    return Text(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: previewStyle,
+                    );
+                  },
+                )
+              else ...[
+                Builder(
+                  builder: (context) {
+                    final preview = firstSentencePreview(entry.body);
+                    if (preview.isEmpty) return const SizedBox.shrink();
+                    return Text(
+                      preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: previewStyle,
+                    );
+                  },
+                ),
+              ],
+              Text('$dateLabel · $timeLabel', style: dateStyle),
             ],
-            Text('$dateLabel · $timeLabel', style: dateStyle),
-          ],
+          ),
+          onTap: onTap,
         ),
-        onTap: onTap,
-      ),
     );
   }
 }

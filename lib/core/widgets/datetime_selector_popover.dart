@@ -376,6 +376,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
         child: Material(
           type: MaterialType.transparency,
           child: TextField(
+            contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,

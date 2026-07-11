@@ -17,6 +17,7 @@ class StatisticTracker extends SoftDeletable {
     this.defaultBool = false,
     this.enumOptions = const [],
     this.defaultEnumOption,
+    this.trackingStyle,
   });
 
   final String name;
@@ -30,10 +31,21 @@ class StatisticTracker extends SoftDeletable {
   final List<String> enumOptions;
   final String? defaultEnumOption;
 
+  /// Null for boolean / enum trackers (always independent/heatmap).
+  /// For integer trackers, null is treated as [TrackerStyle.independent].
+  final TrackerStyle? trackingStyle;
+
+  /// The resolved visualisation style, applying defaults.
+  TrackerStyle? get effectiveTrackingStyle {
+    if (type != TrackerType.integer) return null;
+    return trackingStyle ?? TrackerStyle.independent;
+  }
+
   StatisticTracker copyWith({
     String? name,
     bool? showOnCalendar,
     DateTime? deletedAt,
+    TrackerStyle? trackingStyle,
   }) {
     return StatisticTracker(
       id: id,
@@ -50,6 +62,7 @@ class StatisticTracker extends SoftDeletable {
       defaultBool: defaultBool,
       enumOptions: enumOptions,
       defaultEnumOption: defaultEnumOption,
+      trackingStyle: trackingStyle ?? this.trackingStyle,
     );
   }
 }

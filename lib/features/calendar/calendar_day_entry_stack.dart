@@ -9,11 +9,13 @@ class CalendarDayEntryBar extends StatelessWidget {
     super.key,
     required this.entry,
     required this.fontSize,
+    required this.date,
     this.height,
     this.onTap,
   });
 
   final CalendarDayEntry entry;
+  final DateTime date;
   final double fontSize;
   final double? height;
   final VoidCallback? onTap;
@@ -29,6 +31,7 @@ class CalendarDayEntryBar extends StatelessWidget {
           )
         : CalendarDayEventBar(
             event: entry.event!,
+            date: date,
             fontSize: fontSize,
             height: height,
           );
