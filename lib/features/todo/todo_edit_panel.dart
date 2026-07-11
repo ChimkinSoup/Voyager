@@ -19,7 +19,12 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/datetime_selector_popover.dart';
+import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -114,6 +119,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   bool _isSessionReady = false;
+  bool _subtaskCreating = false;
+  bool _isDatePickerOpen = false;
 
   @override
   void didUpdateWidget(covariant TodoEditPanel oldWidget) {
@@ -830,7 +837,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   onSubmitted: _onTitleSubmitted,
                   onChanged: _scheduleTitleSave,
                   accentColor: listColor,
-                  contentPadding: const EdgeInsets.fromLTRB(16, 16, 56, 16),
+                  dense: true,
+                  borderRadius: 12,
+                  contentPadding: const EdgeInsets.fromLTRB(14, 15, 56, 15),
                 ),
                 if (widget.lists.isNotEmpty)
                   Positioned(
@@ -876,27 +885,63 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                OutlinedButton.icon(
-                  onPressed: _pickDueDateTime,
-                  icon: const Icon(VoyagerIcons.calendar, size: 18),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: listColor,
-                    side: BorderSide(color: listColor.withValues(alpha: 0.7)),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  label: Text(
-                    _dueDate == null ? 'Set due date' : _formatDue(_dueDate!),
-                  ),
-                ),
-                if (_dueDate != null)
+                Builder(builder: (context) {
+                  final localDue = _dueDate?.toLocal();
+                  final hasTime = localDue != null && (localDue.hour != 0 || localDue.minute != 0);
+                  final label = localDue == null 
+                      ? 'Set date & time'
+                      : DateFormat('EEE, MMM d').format(_dueDate!.toLocal()) + (hasTime ? ' at ${formatTime12Hour(_dueDate!.toLocal())}' : '');
+                  
+                  return SelectorPill(
+                    dense: false,
+                    ellipsize: false,
+                    isActive: _isDatePickerOpen,
+                    label: label,
+                    accentColor: listColor,
+                    onTap: () async {
+                      setState(() => _isDatePickerOpen = true);
+                      
+                      final initialDt = _dueDate != null && hasTime
+                          ? _dueDate!.toLocal()
+                          : (_dueDate != null 
+                              ? _dueDate!.toLocal().copyWith(hour: 12, minute: 0) // default time 12:00 PM if none
+                              : DateTime.now().toLocal());
+
+                      final pickedDt = await showContextualPopover<DateTime>(
+                        context: context,
+                        buttonContext: context,
+                        width: 500,
+                        height: 380,
+                        accentColor: listColor,
+                        builder: (ctx) => DateTimeSelectorPopover(
+                          initialDateTime: initialDt,
+                          accentColor: listColor,
+                          optionalTime: true,
+                          initialHasTime: hasTime,
+                        ),
+                      );
+                      
+                      if (mounted) setState(() => _isDatePickerOpen = false);
+                      
+                      if (pickedDt != null) {
+                        final newDue = pickedDt.toUtc();
+                        final previousDue = widget.task.dueDate;
+                        setState(() => _dueDate = newDue);
+                        widget.onTaskOptimistic?.call(
+                          widget.task.copyWith(dueDate: newDue, dueDateSetAt: utcNow()),
+                        );
+                        unawaited(_save(dueDate: newDue, reorderDueDate: previousDue != newDue));
+                      }
+                    },
+                  );
+                }),
+                if (_dueDate != null) ...[
                   TextButton(
                     onPressed: _clearDueDate,
                     style: TextButton.styleFrom(foregroundColor: listColor),
                     child: const Text('Reset due date'),
                   ),
+                ],
               ],
             ),
             const SizedBox(height: 16),
@@ -913,6 +958,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
                 accentColor: listColor,
+                dense: true,
+                borderRadius: 12,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
                 onChanged: (value) {
                   final notes = value.trim();
                   widget.onTaskOptimistic?.call(
@@ -947,6 +995,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                     controller: _subtaskController,
                     focusNode: _subtaskFocusNode,
                     accentColor: listColor,
+                    dense: true,
+                    borderRadius: 12,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
                     onSubmitted: (_) => _addSubtask(),
                   ),
                 ),

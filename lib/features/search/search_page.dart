@@ -9,8 +9,14 @@ import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:intl/intl.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/datetime_selector_popover.dart';
+import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -244,6 +250,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   RemoteSyncService? _remoteSync;
   JournalRepository? _journalRepository;
 
+  bool _isDatePickerOpen = false;
+
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
@@ -297,12 +305,30 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     await _save();
   }
 
-  Future<void> _changeEntryDate() async {
-    final picked = await showDateTimePickerDialog(
-      context,
-      initialDateTime: _entry.entryDate.toLocal(),
+  Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
+    final journal = widget.journals.cast<Journal?>().firstWhere(
+      (j) => j?.id == _entry.journalId,
+      orElse: () => null,
     );
-    if (picked == null || !mounted) return;
+    final accentColor = Color(
+      journal?.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32(),
+    );
+
+    setState(() => _isDatePickerOpen = true);
+    final pickedDt = await showContextualPopover<DateTime>(
+      context: context,
+      buttonContext: buttonContext,
+      width: 500,
+      height: 380,
+      accentColor: accentColor,
+      builder: (ctx) => DateTimeSelectorPopover(
+        initialDateTime: _entry.entryDate.toLocal(),
+        accentColor: accentColor,
+      ),
+    );
+    if (mounted) setState(() => _isDatePickerOpen = false);
+    if (pickedDt == null) return;
+    
     final helper = SearchEntrySaveHelper(
       coordinator: ref.read(journalWriteCoordinatorProvider),
       remoteSync: ref.read(remoteSyncServiceProvider),
@@ -315,7 +341,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       mood: _mood,
       weatherIcon: _weatherIcon,
       journalId: _entry.journalId,
-      entryDate: picked.toUtc(),
+      entryDate: pickedDt.toUtc(),
     );
     if (updated != null) {
       if (mounted) setState(() => _entry = updated);
@@ -344,11 +370,6 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     }
   }
 
-  String _entryDateTimeLabel(BuildContext context) {
-    final local = _entry.entryDate.toLocal();
-    final materialLocalizations = MaterialLocalizations.of(context);
-    return '${materialLocalizations.formatShortDate(local)} ${formatTime12Hour(local)}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -449,26 +470,17 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Flexible(
-                    child: OutlinedButton.icon(
-                      onPressed: _changeEntryDate,
-                      icon: Icon(
-                        VoyagerIcons.calendar,
-                        size: 18,
-                        color: _accentColor,
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _accentColor,
-                        side: BorderSide(
-                          color: _accentColor.withValues(alpha: 0.7),
-                        ),
-                      ),
-                      label: Text(
-                        _entryDateTimeLabel(context),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
+                  Builder(builder: (ctx) {
+                    final label = '${DateFormat.yMMMd().format(_entry.entryDate.toLocal())} at ${formatTime12Hour(_entry.entryDate.toLocal())}';
+                    return SelectorPill(
+                      dense: false,
+                      ellipsize: false,
+                      isActive: _isDatePickerOpen,
+                      label: label,
+                      accentColor: _accentColor,
+                      onTap: () => _changeEntryDateAndTime(ctx),
+                    );
+                  }),
                 ],
               ),
               const SizedBox(height: 12),

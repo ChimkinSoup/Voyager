@@ -1,6 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
+import 'package:intl/intl.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/datetime_selector_popover.dart';
+import 'package:voyager/core/widgets/time_selector_popovers.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +39,7 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/mood_gradient_slider.dart';
 import 'package:voyager/core/widgets/resizable_pane_divider.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -1230,6 +1236,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
   }
 
+  bool _isDatePickerOpen = false;
+
   void _scheduleMetadataSave() {
     _metadataSaveTimer?.cancel();
     _metadataSaveTimer = Timer(_localSaveDebounce, () {
@@ -1248,7 +1256,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _bodyFocusNode.requestFocus();
   }
 
-  Future<void> _changeEntryDate() async {
+  Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
     final entry = _selectedEntry;
     if (entry == null) return;
 
@@ -1256,18 +1264,33 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await _flushMetadataSave();
     if (!mounted) return;
 
-    final nextLocal = await showDateTimePickerDialog(
-      context,
-      initialDateTime: entry.entryDate.toLocal(),
+    final repo = ref.read(journalRepositoryProvider);
+    final journal = await repo.getJournal(entry.journalId);
+    final accentColor = Color(journal != null
+        ? _journalFlagColor(journal)
+        : Theme.of(context).colorScheme.primary.toARGB32());
+
+    setState(() => _isDatePickerOpen = true);
+    final pickedDt = await showContextualPopover<DateTime>(
+      context: context,
+      buttonContext: buttonContext,
+      width: 500,
+      height: 380,
+      accentColor: accentColor,
+      builder: (ctx) => DateTimeSelectorPopover(
+        initialDateTime: entry.entryDate.toLocal(),
+        accentColor: accentColor,
+      ),
     );
-    if (nextLocal == null) return;
+    if (mounted) setState(() => _isDatePickerOpen = false);
+    if (pickedDt == null) return;
+    
     if (!mounted) return;
 
-    final repo = ref.read(journalRepositoryProvider);
     final existing = await repo.getEntry(entry.id);
     if (existing == null) return;
 
-    final updated = existing.copyWith(entryDate: nextLocal.toUtc());
+    final updated = existing.copyWith(entryDate: pickedDt.toUtc());
     await repo.upsertEntry(updated);
     ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
     if (!mounted) return;
@@ -1334,14 +1357,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         }
       });
     }
-  }
-
-  String _entryDateTimeLabel(BuildContext context, DateTime dateTime) {
-    final local = dateTime.toLocal();
-    final materialLocalizations = MaterialLocalizations.of(context);
-    final date = materialLocalizations.formatShortDate(local);
-    final time = formatTime12Hour(local);
-    return '$date $time';
   }
 
   Future<void> _deleteEntry() async {
@@ -1935,32 +1950,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Flexible(
-                                  child: OutlinedButton.icon(
-                                    onPressed: _changeEntryDate,
-                                    icon: Icon(
-                                      VoyagerIcons.calendar,
-                                      size: 18,
-                                      color: accentColor,
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: accentColor,
-                                      side: BorderSide(
-                                        color: accentColor.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                      ),
-                                    ),
-                                    label: Text(
-                                      _entryDateTimeLabel(
-                                        context,
-                                        _selectedEntry!.entryDate,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ),
-                                ),
+                                Builder(builder: (ctx) {
+                                  final label = '${DateFormat.yMMMd().format(_selectedEntry!.entryDate.toLocal())} at ${formatTime12Hour(_selectedEntry!.entryDate.toLocal())}';
+                                  return SelectorPill(
+                                    dense: false,
+                                    ellipsize: false,
+                                    isActive: _isDatePickerOpen,
+                                    label: label,
+                                    accentColor: accentColor,
+                                    onTap: () => _changeEntryDateAndTime(ctx),
+                                  );
+                                }),
                                 const SizedBox(width: 8),
                                 if (ref.watch(devSettingsProvider).showJournalRemotePullButton) ...[
                                   IconButton(
