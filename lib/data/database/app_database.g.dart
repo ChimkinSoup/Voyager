@@ -6701,6 +6701,52 @@ class $SettingsTableTable extends SettingsTable
         requiredDuringInsert: false,
         defaultValue: const Constant(0.75),
       );
+  static const VerificationMeta _navPageOrderJsonMeta = const VerificationMeta(
+    'navPageOrderJson',
+  );
+  @override
+  late final GeneratedColumn<String> navPageOrderJson = GeneratedColumn<String>(
+    'nav_page_order_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _startupPageModeMeta = const VerificationMeta(
+    'startupPageMode',
+  );
+  @override
+  late final GeneratedColumn<String> startupPageMode = GeneratedColumn<String>(
+    'startup_page_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('first'),
+  );
+  static const VerificationMeta _customStartupPageMeta = const VerificationMeta(
+    'customStartupPage',
+  );
+  @override
+  late final GeneratedColumn<String> customStartupPage =
+      GeneratedColumn<String>(
+        'custom_startup_page',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastSeenNavPageMeta = const VerificationMeta(
+    'lastSeenNavPage',
+  );
+  @override
+  late final GeneratedColumn<String> lastSeenNavPage = GeneratedColumn<String>(
+    'last_seen_nav_page',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6755,6 +6801,10 @@ class $SettingsTableTable extends SettingsTable
     geometricTextureFocalPointX,
     geometricTextureFocalPointY,
     geometricTextureVariationFloor,
+    navPageOrderJson,
+    startupPageMode,
+    customStartupPage,
+    lastSeenNavPage,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7212,6 +7262,42 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('nav_page_order_json')) {
+      context.handle(
+        _navPageOrderJsonMeta,
+        navPageOrderJson.isAcceptableOrUnknown(
+          data['nav_page_order_json']!,
+          _navPageOrderJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('startup_page_mode')) {
+      context.handle(
+        _startupPageModeMeta,
+        startupPageMode.isAcceptableOrUnknown(
+          data['startup_page_mode']!,
+          _startupPageModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('custom_startup_page')) {
+      context.handle(
+        _customStartupPageMeta,
+        customStartupPage.isAcceptableOrUnknown(
+          data['custom_startup_page']!,
+          _customStartupPageMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_seen_nav_page')) {
+      context.handle(
+        _lastSeenNavPageMeta,
+        lastSeenNavPage.isAcceptableOrUnknown(
+          data['last_seen_nav_page']!,
+          _lastSeenNavPageMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7429,6 +7515,22 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.double,
         data['${effectivePrefix}geometric_texture_variation_floor'],
       )!,
+      navPageOrderJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}nav_page_order_json'],
+      ),
+      startupPageMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}startup_page_mode'],
+      )!,
+      customStartupPage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}custom_startup_page'],
+      ),
+      lastSeenNavPage: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_seen_nav_page'],
+      ),
     );
   }
 
@@ -7492,6 +7594,10 @@ class SettingsTableData extends DataClass
   final double geometricTextureFocalPointX;
   final double geometricTextureFocalPointY;
   final double geometricTextureVariationFloor;
+  final String? navPageOrderJson;
+  final String startupPageMode;
+  final String? customStartupPage;
+  final String? lastSeenNavPage;
   const SettingsTableData({
     required this.id,
     required this.accentColor,
@@ -7545,6 +7651,10 @@ class SettingsTableData extends DataClass
     required this.geometricTextureFocalPointX,
     required this.geometricTextureFocalPointY,
     required this.geometricTextureVariationFloor,
+    this.navPageOrderJson,
+    required this.startupPageMode,
+    this.customStartupPage,
+    this.lastSeenNavPage,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7667,6 +7777,16 @@ class SettingsTableData extends DataClass
     map['geometric_texture_variation_floor'] = Variable<double>(
       geometricTextureVariationFloor,
     );
+    if (!nullToAbsent || navPageOrderJson != null) {
+      map['nav_page_order_json'] = Variable<String>(navPageOrderJson);
+    }
+    map['startup_page_mode'] = Variable<String>(startupPageMode);
+    if (!nullToAbsent || customStartupPage != null) {
+      map['custom_startup_page'] = Variable<String>(customStartupPage);
+    }
+    if (!nullToAbsent || lastSeenNavPage != null) {
+      map['last_seen_nav_page'] = Variable<String>(lastSeenNavPage);
+    }
     return map;
   }
 
@@ -7760,6 +7880,16 @@ class SettingsTableData extends DataClass
       geometricTextureFocalPointX: Value(geometricTextureFocalPointX),
       geometricTextureFocalPointY: Value(geometricTextureFocalPointY),
       geometricTextureVariationFloor: Value(geometricTextureVariationFloor),
+      navPageOrderJson: navPageOrderJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(navPageOrderJson),
+      startupPageMode: Value(startupPageMode),
+      customStartupPage: customStartupPage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customStartupPage),
+      lastSeenNavPage: lastSeenNavPage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSeenNavPage),
     );
   }
 
@@ -7883,6 +8013,12 @@ class SettingsTableData extends DataClass
       geometricTextureVariationFloor: serializer.fromJson<double>(
         json['geometricTextureVariationFloor'],
       ),
+      navPageOrderJson: serializer.fromJson<String?>(json['navPageOrderJson']),
+      startupPageMode: serializer.fromJson<String>(json['startupPageMode']),
+      customStartupPage: serializer.fromJson<String?>(
+        json['customStartupPage'],
+      ),
+      lastSeenNavPage: serializer.fromJson<String?>(json['lastSeenNavPage']),
     );
   }
   @override
@@ -7973,6 +8109,10 @@ class SettingsTableData extends DataClass
       'geometricTextureVariationFloor': serializer.toJson<double>(
         geometricTextureVariationFloor,
       ),
+      'navPageOrderJson': serializer.toJson<String?>(navPageOrderJson),
+      'startupPageMode': serializer.toJson<String>(startupPageMode),
+      'customStartupPage': serializer.toJson<String?>(customStartupPage),
+      'lastSeenNavPage': serializer.toJson<String?>(lastSeenNavPage),
     };
   }
 
@@ -8029,6 +8169,10 @@ class SettingsTableData extends DataClass
     double? geometricTextureFocalPointX,
     double? geometricTextureFocalPointY,
     double? geometricTextureVariationFloor,
+    Value<String?> navPageOrderJson = const Value.absent(),
+    String? startupPageMode,
+    Value<String?> customStartupPage = const Value.absent(),
+    Value<String?> lastSeenNavPage = const Value.absent(),
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
@@ -8122,6 +8266,16 @@ class SettingsTableData extends DataClass
         geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
     geometricTextureVariationFloor:
         geometricTextureVariationFloor ?? this.geometricTextureVariationFloor,
+    navPageOrderJson: navPageOrderJson.present
+        ? navPageOrderJson.value
+        : this.navPageOrderJson,
+    startupPageMode: startupPageMode ?? this.startupPageMode,
+    customStartupPage: customStartupPage.present
+        ? customStartupPage.value
+        : this.customStartupPage,
+    lastSeenNavPage: lastSeenNavPage.present
+        ? lastSeenNavPage.value
+        : this.lastSeenNavPage,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
     return SettingsTableData(
@@ -8278,6 +8432,18 @@ class SettingsTableData extends DataClass
           data.geometricTextureVariationFloor.present
           ? data.geometricTextureVariationFloor.value
           : this.geometricTextureVariationFloor,
+      navPageOrderJson: data.navPageOrderJson.present
+          ? data.navPageOrderJson.value
+          : this.navPageOrderJson,
+      startupPageMode: data.startupPageMode.present
+          ? data.startupPageMode.value
+          : this.startupPageMode,
+      customStartupPage: data.customStartupPage.present
+          ? data.customStartupPage.value
+          : this.customStartupPage,
+      lastSeenNavPage: data.lastSeenNavPage.present
+          ? data.lastSeenNavPage.value
+          : this.lastSeenNavPage,
     );
   }
 
@@ -8340,8 +8506,12 @@ class SettingsTableData extends DataClass
           ..write('geometricTextureFocalPointX: $geometricTextureFocalPointX, ')
           ..write('geometricTextureFocalPointY: $geometricTextureFocalPointY, ')
           ..write(
-            'geometricTextureVariationFloor: $geometricTextureVariationFloor',
+            'geometricTextureVariationFloor: $geometricTextureVariationFloor, ',
           )
+          ..write('navPageOrderJson: $navPageOrderJson, ')
+          ..write('startupPageMode: $startupPageMode, ')
+          ..write('customStartupPage: $customStartupPage, ')
+          ..write('lastSeenNavPage: $lastSeenNavPage')
           ..write(')'))
         .toString();
   }
@@ -8400,6 +8570,10 @@ class SettingsTableData extends DataClass
     geometricTextureFocalPointX,
     geometricTextureFocalPointY,
     geometricTextureVariationFloor,
+    navPageOrderJson,
+    startupPageMode,
+    customStartupPage,
+    lastSeenNavPage,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -8462,7 +8636,11 @@ class SettingsTableData extends DataClass
           other.geometricTextureFocalPointY ==
               this.geometricTextureFocalPointY &&
           other.geometricTextureVariationFloor ==
-              this.geometricTextureVariationFloor);
+              this.geometricTextureVariationFloor &&
+          other.navPageOrderJson == this.navPageOrderJson &&
+          other.startupPageMode == this.startupPageMode &&
+          other.customStartupPage == this.customStartupPage &&
+          other.lastSeenNavPage == this.lastSeenNavPage);
 }
 
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
@@ -8518,6 +8696,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<double> geometricTextureFocalPointX;
   final Value<double> geometricTextureFocalPointY;
   final Value<double> geometricTextureVariationFloor;
+  final Value<String?> navPageOrderJson;
+  final Value<String> startupPageMode;
+  final Value<String?> customStartupPage;
+  final Value<String?> lastSeenNavPage;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
@@ -8571,6 +8753,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.geometricTextureFocalPointX = const Value.absent(),
     this.geometricTextureFocalPointY = const Value.absent(),
     this.geometricTextureVariationFloor = const Value.absent(),
+    this.navPageOrderJson = const Value.absent(),
+    this.startupPageMode = const Value.absent(),
+    this.customStartupPage = const Value.absent(),
+    this.lastSeenNavPage = const Value.absent(),
   });
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
@@ -8625,6 +8811,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.geometricTextureFocalPointX = const Value.absent(),
     this.geometricTextureFocalPointY = const Value.absent(),
     this.geometricTextureVariationFloor = const Value.absent(),
+    this.navPageOrderJson = const Value.absent(),
+    this.startupPageMode = const Value.absent(),
+    this.customStartupPage = const Value.absent(),
+    this.lastSeenNavPage = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
@@ -8679,6 +8869,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<double>? geometricTextureFocalPointX,
     Expression<double>? geometricTextureFocalPointY,
     Expression<double>? geometricTextureVariationFloor,
+    Expression<String>? navPageOrderJson,
+    Expression<String>? startupPageMode,
+    Expression<String>? customStartupPage,
+    Expression<String>? lastSeenNavPage,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -8770,6 +8964,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'geometric_texture_focal_point_y': geometricTextureFocalPointY,
       if (geometricTextureVariationFloor != null)
         'geometric_texture_variation_floor': geometricTextureVariationFloor,
+      if (navPageOrderJson != null) 'nav_page_order_json': navPageOrderJson,
+      if (startupPageMode != null) 'startup_page_mode': startupPageMode,
+      if (customStartupPage != null) 'custom_startup_page': customStartupPage,
+      if (lastSeenNavPage != null) 'last_seen_nav_page': lastSeenNavPage,
     });
   }
 
@@ -8826,6 +9024,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<double>? geometricTextureFocalPointX,
     Value<double>? geometricTextureFocalPointY,
     Value<double>? geometricTextureVariationFloor,
+    Value<String?>? navPageOrderJson,
+    Value<String>? startupPageMode,
+    Value<String?>? customStartupPage,
+    Value<String?>? lastSeenNavPage,
   }) {
     return SettingsTableCompanion(
       id: id ?? this.id,
@@ -8902,6 +9104,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
       geometricTextureVariationFloor:
           geometricTextureVariationFloor ?? this.geometricTextureVariationFloor,
+      navPageOrderJson: navPageOrderJson ?? this.navPageOrderJson,
+      startupPageMode: startupPageMode ?? this.startupPageMode,
+      customStartupPage: customStartupPage ?? this.customStartupPage,
+      lastSeenNavPage: lastSeenNavPage ?? this.lastSeenNavPage,
     );
   }
 
@@ -9122,6 +9328,18 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         geometricTextureVariationFloor.value,
       );
     }
+    if (navPageOrderJson.present) {
+      map['nav_page_order_json'] = Variable<String>(navPageOrderJson.value);
+    }
+    if (startupPageMode.present) {
+      map['startup_page_mode'] = Variable<String>(startupPageMode.value);
+    }
+    if (customStartupPage.present) {
+      map['custom_startup_page'] = Variable<String>(customStartupPage.value);
+    }
+    if (lastSeenNavPage.present) {
+      map['last_seen_nav_page'] = Variable<String>(lastSeenNavPage.value);
+    }
     return map;
   }
 
@@ -9184,8 +9402,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('geometricTextureFocalPointX: $geometricTextureFocalPointX, ')
           ..write('geometricTextureFocalPointY: $geometricTextureFocalPointY, ')
           ..write(
-            'geometricTextureVariationFloor: $geometricTextureVariationFloor',
+            'geometricTextureVariationFloor: $geometricTextureVariationFloor, ',
           )
+          ..write('navPageOrderJson: $navPageOrderJson, ')
+          ..write('startupPageMode: $startupPageMode, ')
+          ..write('customStartupPage: $customStartupPage, ')
+          ..write('lastSeenNavPage: $lastSeenNavPage')
           ..write(')'))
         .toString();
   }
@@ -13410,6 +13632,10 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<double> geometricTextureFocalPointX,
       Value<double> geometricTextureFocalPointY,
       Value<double> geometricTextureVariationFloor,
+      Value<String?> navPageOrderJson,
+      Value<String> startupPageMode,
+      Value<String?> customStartupPage,
+      Value<String?> lastSeenNavPage,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
@@ -13465,6 +13691,10 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<double> geometricTextureFocalPointX,
       Value<double> geometricTextureFocalPointY,
       Value<double> geometricTextureVariationFloor,
+      Value<String?> navPageOrderJson,
+      Value<String> startupPageMode,
+      Value<String?> customStartupPage,
+      Value<String?> lastSeenNavPage,
     });
 
 class $$SettingsTableTableFilterComposer
@@ -13737,6 +13967,26 @@ class $$SettingsTableTableFilterComposer
         column: $table.geometricTextureVariationFloor,
         builder: (column) => ColumnFilters(column),
       );
+
+  ColumnFilters<String> get navPageOrderJson => $composableBuilder(
+    column: $table.navPageOrderJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get startupPageMode => $composableBuilder(
+    column: $table.startupPageMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get customStartupPage => $composableBuilder(
+    column: $table.customStartupPage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastSeenNavPage => $composableBuilder(
+    column: $table.lastSeenNavPage,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$SettingsTableTableOrderingComposer
@@ -14010,6 +14260,26 @@ class $$SettingsTableTableOrderingComposer
         column: $table.geometricTextureVariationFloor,
         builder: (column) => ColumnOrderings(column),
       );
+
+  ColumnOrderings<String> get navPageOrderJson => $composableBuilder(
+    column: $table.navPageOrderJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get startupPageMode => $composableBuilder(
+    column: $table.startupPageMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get customStartupPage => $composableBuilder(
+    column: $table.customStartupPage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastSeenNavPage => $composableBuilder(
+    column: $table.lastSeenNavPage,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SettingsTableTableAnnotationComposer
@@ -14277,6 +14547,26 @@ class $$SettingsTableTableAnnotationComposer
         column: $table.geometricTextureVariationFloor,
         builder: (column) => column,
       );
+
+  GeneratedColumn<String> get navPageOrderJson => $composableBuilder(
+    column: $table.navPageOrderJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get startupPageMode => $composableBuilder(
+    column: $table.startupPageMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get customStartupPage => $composableBuilder(
+    column: $table.customStartupPage,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastSeenNavPage => $composableBuilder(
+    column: $table.lastSeenNavPage,
+    builder: (column) => column,
+  );
 }
 
 class $$SettingsTableTableTableManager
@@ -14373,6 +14663,10 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<double> geometricTextureVariationFloor =
                     const Value.absent(),
+                Value<String?> navPageOrderJson = const Value.absent(),
+                Value<String> startupPageMode = const Value.absent(),
+                Value<String?> customStartupPage = const Value.absent(),
+                Value<String?> lastSeenNavPage = const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
@@ -14427,6 +14721,10 @@ class $$SettingsTableTableTableManager
                 geometricTextureFocalPointX: geometricTextureFocalPointX,
                 geometricTextureFocalPointY: geometricTextureFocalPointY,
                 geometricTextureVariationFloor: geometricTextureVariationFloor,
+                navPageOrderJson: navPageOrderJson,
+                startupPageMode: startupPageMode,
+                customStartupPage: customStartupPage,
+                lastSeenNavPage: lastSeenNavPage,
               ),
           createCompanionCallback:
               ({
@@ -14489,6 +14787,10 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<double> geometricTextureVariationFloor =
                     const Value.absent(),
+                Value<String?> navPageOrderJson = const Value.absent(),
+                Value<String> startupPageMode = const Value.absent(),
+                Value<String?> customStartupPage = const Value.absent(),
+                Value<String?> lastSeenNavPage = const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
@@ -14543,6 +14845,10 @@ class $$SettingsTableTableTableManager
                 geometricTextureFocalPointX: geometricTextureFocalPointX,
                 geometricTextureFocalPointY: geometricTextureFocalPointY,
                 geometricTextureVariationFloor: geometricTextureVariationFloor,
+                navPageOrderJson: navPageOrderJson,
+                startupPageMode: startupPageMode,
+                customStartupPage: customStartupPage,
+                lastSeenNavPage: lastSeenNavPage,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

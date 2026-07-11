@@ -254,6 +254,10 @@ class SettingsTable extends Table {
       real().withDefault(const Constant(0.5))();
   RealColumn get geometricTextureVariationFloor =>
       real().withDefault(const Constant(0.75))();
+  TextColumn get navPageOrderJson => text().nullable()();
+  TextColumn get startupPageMode => text().withDefault(const Constant('first'))();
+  TextColumn get customStartupPage => text().nullable()();
+  TextColumn get lastSeenNavPage => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -314,7 +318,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 33;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -573,6 +577,12 @@ class AppDatabase extends _$AppDatabase {
           migrator,
           settingsTable.devSlowCalendarAnimations,
         );
+      }
+      if (from < 33) {
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.navPageOrderJson);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.startupPageMode);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.customStartupPage);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.lastSeenNavPage);
       }
     },
   );
