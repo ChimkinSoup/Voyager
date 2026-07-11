@@ -1240,6 +1240,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
                   children: [
                     if (_editing)
                       TextField(
+                        contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
                         controller: _editController,
                         focusNode: _editFocusNode,
                         autofocus: true,

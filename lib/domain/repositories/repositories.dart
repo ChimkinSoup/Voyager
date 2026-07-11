@@ -74,6 +74,7 @@ abstract class TrackerRepository {
 
   Future<List<TrackerValue>> listValues(String trackerId);
   Future<void> upsertValue(TrackerValue value);
+  Future<void> softDeleteValue(String id);
 
   Future<List<RankingConfig>> listRankingConfigs();
   Future<void> upsertRankingConfig(RankingConfig config);

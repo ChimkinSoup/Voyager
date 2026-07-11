@@ -123,6 +123,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       contentPadding: contentPadding,
       alignLabelToTop: widget.expands || (widget.maxLines ?? 1) > 1,
       child: TextField(
+        contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
         controller: widget.controller,
         focusNode: _focusNode,
         decoration: innerDecoration,

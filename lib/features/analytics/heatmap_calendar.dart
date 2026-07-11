@@ -22,10 +22,11 @@ class HeatmapCalendar extends StatelessWidget {
       return current > m ? current : m;
     });
 
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     return Wrap(
       spacing: 4,
       runSpacing: 4,
-      children: List.generate(28, (index) {
+      children: List.generate(daysInMonth, (index) {
         final day = DateTime(month.year, month.month, index + 1);
         final value = values.cast<TrackerValue?>().firstWhere(
           (v) =>
@@ -40,6 +41,7 @@ class HeatmapCalendar extends StatelessWidget {
           value: value,
           tracker: tracker,
           maxInPeriod: max == 0 ? 1 : max,
+          allValues: values,
         );
         return Container(
           width: 20,

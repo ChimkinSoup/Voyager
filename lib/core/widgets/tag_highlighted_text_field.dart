@@ -198,6 +198,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         DefaultTextHeightBehavior(
           textHeightBehavior: textHeightBehavior,
           child: TextField(
+            contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
             controller: widget.controller,
             focusNode: widget.focusNode,
             readOnly: widget.readOnly,

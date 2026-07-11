@@ -118,6 +118,7 @@ class TrackersTable extends Table {
   BoolColumn get defaultBool => boolean().withDefault(const Constant(false))();
   TextColumn get enumOptionsJson => text().withDefault(const Constant('[]'))();
   TextColumn get defaultEnumOption => text().nullable()();
+  TextColumn get trackingStyle => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -318,7 +319,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -583,6 +584,9 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(migrator, settingsTable.startupPageMode);
         await _addSettingsColumnIfNotExists(migrator, settingsTable.customStartupPage);
         await _addSettingsColumnIfNotExists(migrator, settingsTable.lastSeenNavPage);
+      }
+      if (from < 34) {
+        await migrator.addColumn(trackersTable, trackersTable.trackingStyle);
       }
     },
   );
