@@ -34,12 +34,14 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final orderedDestinations = getOrderedDestinations(settings, shellDestinations);
     final navigationShell = _navigationShell;
     final index = navigationShell.currentIndex;
     final accent = Color(settings.accentColor);
 
     return ShellKeyboardShortcuts(
       navigationShell: navigationShell,
+      orderedDestinations: orderedDestinations,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -58,6 +60,7 @@ class AppShell extends ConsumerWidget {
                     selectedIndex: index,
                     accent: accent,
                     onDestinationSelected: navigationShell.goBranch,
+                    orderedDestinations: orderedDestinations,
                   ),
                 ),
                 const VerticalDivider(width: 12),
@@ -78,7 +81,7 @@ class AppShell extends ConsumerWidget {
 }
 
 /// Flushes in-memory edits when the user switches main sections.
-class _ShellBranchChangeFlusher extends StatefulWidget {
+class _ShellBranchChangeFlusher extends ConsumerStatefulWidget {
   const _ShellBranchChangeFlusher({
     required this.branchIndex,
     required this.child,
@@ -88,17 +91,23 @@ class _ShellBranchChangeFlusher extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_ShellBranchChangeFlusher> createState() =>
+  ConsumerState<_ShellBranchChangeFlusher> createState() =>
       _ShellBranchChangeFlusherState();
 }
 
-class _ShellBranchChangeFlusherState extends State<_ShellBranchChangeFlusher> {
+class _ShellBranchChangeFlusherState extends ConsumerState<_ShellBranchChangeFlusher> {
   @override
   void didUpdateWidget(covariant _ShellBranchChangeFlusher oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.branchIndex != widget.branchIndex) {
       FocusManager.instance.primaryFocus?.unfocus();
       unawaited(PendingFlushRegistry.instance.flushAll());
+
+      final currentPath = shellPathForIndex(widget.branchIndex);
+      final repo = ref.read(settingsRepositoryProvider);
+      repo.getSettings().then((s) {
+        repo.saveSettings(s.copyWith(lastSeenNavPage: currentPath));
+      });
     }
   }
 
@@ -111,11 +120,13 @@ class _VoyagerNavigationRail extends StatelessWidget {
     required this.selectedIndex,
     required this.accent,
     required this.onDestinationSelected,
+    required this.orderedDestinations,
   });
 
   final int selectedIndex;
   final Color accent;
   final ValueChanged<int> onDestinationSelected;
+  final List<({ShellDestination dest, int originalIndex})> orderedDestinations;
 
   @override
   Widget build(BuildContext context) {
@@ -125,16 +136,16 @@ class _VoyagerNavigationRail extends StatelessWidget {
         children: [
           _RailClockWeather(accent: accent),
           const SizedBox(height: 8),
-          for (var i = 0; i < shellDestinations.length; i++)
+          for (final item in orderedDestinations)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: ExcludeFocus(
                 child: _RailDestinationButton(
-                  icon: shellDestinations[i].icon,
-                  label: shellDestinations[i].label,
-                  selected: i == selectedIndex,
+                  icon: item.dest.icon,
+                  label: item.dest.label,
+                  selected: item.originalIndex == selectedIndex,
                   accent: accent,
-                  onTap: () => onDestinationSelected(i),
+                  onTap: () => onDestinationSelected(item.originalIndex),
                 ),
               ),
             ),

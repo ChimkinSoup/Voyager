@@ -1,5 +1,6 @@
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/domain/models/enums.dart';
 class AppSettings {
   const AppSettings({
     this.accentColor = 0xFF7C9EFF,
@@ -52,6 +53,10 @@ class AppSettings {
     this.weatherChartRainColor,
     this.weatherChartCurveTension = 0.22,
     this.journalEntryListWidth,
+    this.navPageOrder,
+    this.startupPageMode = StartupPageMode.first,
+    this.customStartupPage,
+    this.lastSeenNavPage,
     List<int>? colorPalette,
   }) : colorPalette = colorPalette ?? defaultColorPalette;
 
@@ -105,6 +110,10 @@ class AppSettings {
   final int? weatherChartRainColor;
   final double weatherChartCurveTension;
   final double? journalEntryListWidth;
+  final List<String>? navPageOrder;
+  final StartupPageMode startupPageMode;
+  final String? customStartupPage;
+  final String? lastSeenNavPage;
   final List<int> colorPalette;
 
   bool get hasWeatherLocation => weatherLat != null && weatherLon != null;
@@ -154,6 +163,10 @@ class AppSettings {
     int? weatherChartRainColor,
     double? weatherChartCurveTension,
     double? journalEntryListWidth,
+    List<String>? navPageOrder,
+    StartupPageMode? startupPageMode,
+    String? customStartupPage,
+    String? lastSeenNavPage,
     List<int>? colorPalette,
     bool clearWeatherLocationLabel = false,
     bool clearWeatherLat = false,
@@ -168,6 +181,8 @@ class AppSettings {
     bool clearLastViewedJournalId = false,
     bool clearLastViewedTodoListId = false,
     bool clearJournalEntryListWidth = false,
+    bool clearCustomStartupPage = false,
+    bool clearLastSeenNavPage = false,
   }) {
     return AppSettings(
       accentColor: accentColor ?? this.accentColor,
@@ -256,6 +271,14 @@ class AppSettings {
       journalEntryListWidth: clearJournalEntryListWidth
           ? null
           : (journalEntryListWidth ?? this.journalEntryListWidth),
+      navPageOrder: navPageOrder ?? this.navPageOrder,
+      startupPageMode: startupPageMode ?? this.startupPageMode,
+      customStartupPage: clearCustomStartupPage
+          ? null
+          : (customStartupPage ?? this.customStartupPage),
+      lastSeenNavPage: clearLastSeenNavPage
+          ? null
+          : (lastSeenNavPage ?? this.lastSeenNavPage),
       colorPalette: colorPalette ?? this.colorPalette,
     );
   }

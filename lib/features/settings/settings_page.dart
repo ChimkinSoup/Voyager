@@ -10,7 +10,9 @@ import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
+import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
 import 'package:voyager/features/settings/weather_location_tile.dart';
@@ -116,6 +118,20 @@ class SettingsPage extends ConsumerWidget {
                 _save(ref, settings.copyWith(hideCompletedTasks: v)),
           ),
           WeatherLocationTile(settings: settings),
+          const SizedBox(height: 16),
+          Text('Navigation', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Reorder navigation pages'),
+            trailing: const Icon(PhosphorIconsRegular.caretRight),
+            onTap: () => _showReorderNavDialog(context, ref, settings),
+          ),
+          ListTile(
+            title: const Text('Startup page'),
+            subtitle: Text(_startupPageLabel(settings)),
+            trailing: const Icon(PhosphorIconsRegular.caretRight),
+            onTap: () => _showStartupPageDialog(context, ref, settings),
+          ),
           const SizedBox(height: 16),
           Text('Backup & Restore', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -283,5 +299,171 @@ class SettingsPage extends ConsumerWidget {
     );
     if (picked == null || picked == current) return;
     await _save(ref, onSelected(picked));
+  }
+
+  String _startupPageLabel(AppSettings settings) {
+    switch (settings.startupPageMode) {
+      case StartupPageMode.first:
+        return 'First page in navigation order';
+      case StartupPageMode.lastSeen:
+        return 'Last seen page';
+      case StartupPageMode.custom:
+        final path = settings.customStartupPage;
+        if (path == null) return 'Custom (none selected)';
+        final dest = shellDestinations.cast<ShellDestination?>().firstWhere(
+              (d) => d?.path == path,
+              orElse: () => null,
+            );
+        return dest != null ? 'Custom: ${dest.label}' : 'Custom: $path';
+    }
+  }
+
+  Future<void> _showReorderNavDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings,
+  ) async {
+    final items = getOrderedDestinations(settings, shellDestinations).toList();
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Reorder navigation pages'),
+              content: SizedBox(
+                width: 320,
+                child: ReorderableListView(
+                  shrinkWrap: true,
+                  onReorder: (oldIndex, newIndex) {
+                    if (oldIndex < newIndex) {
+                      newIndex -= 1;
+                    }
+                    final item = items.removeAt(oldIndex);
+                    items.insert(newIndex, item);
+                    setState(() {});
+                  },
+                  children: [
+                    for (var i = 0; i < items.length; i++)
+                      ListTile(
+                        key: ValueKey(items[i].dest.path),
+                        leading: Icon(items[i].dest.icon),
+                        title: Text(items[i].dest.label),
+                        trailing: const Icon(Icons.drag_handle),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final newOrder = items.map((e) => e.dest.path).toList();
+                    _save(ref, settings.copyWith(navPageOrder: newOrder));
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showStartupPageDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings,
+  ) async {
+    final ordered = getOrderedDestinations(settings, shellDestinations);
+    StartupPageMode mode = settings.startupPageMode;
+    String? customPath = settings.customStartupPage;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Startup page'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<StartupPageMode>(
+                    title: const Text('First page in navigation order'),
+                    value: StartupPageMode.first,
+                    groupValue: mode,
+                    onChanged: (v) => setState(() => mode = v!),
+                  ),
+                  RadioListTile<StartupPageMode>(
+                    title: const Text('Last seen page'),
+                    value: StartupPageMode.lastSeen,
+                    groupValue: mode,
+                    onChanged: (v) => setState(() => mode = v!),
+                  ),
+                  RadioListTile<StartupPageMode>(
+                    title: const Text('Custom page...'),
+                    value: StartupPageMode.custom,
+                    groupValue: mode,
+                    onChanged: (v) {
+                      setState(() {
+                        mode = v!;
+                        customPath ??= ordered.first.dest.path;
+                      });
+                    },
+                  ),
+                  if (mode == StartupPageMode.custom)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 48, top: 8),
+                      child: DropdownButtonFormField<String>(
+                        value: customPath,
+                        items: [
+                          for (final d in shellDestinations)
+                            DropdownMenuItem(
+                              value: d.path,
+                              child: Row(
+                                children: [
+                                  Icon(d.icon, size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(d.label),
+                                ],
+                              ),
+                            )
+                        ],
+                        onChanged: (v) => setState(() => customPath = v),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    _save(
+                      ref,
+                      settings.copyWith(
+                        startupPageMode: mode,
+                        customStartupPage: customPath,
+                      ),
+                    );
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

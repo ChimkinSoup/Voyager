@@ -905,6 +905,12 @@ class DriftSettingsRepository implements SettingsRepository {
       weatherChartRainColor: row.weatherChartRainColor,
       weatherChartCurveTension: row.weatherChartCurveTension,
       journalEntryListWidth: row.journalEntryListWidth,
+      navPageOrder: row.navPageOrderJson == null
+          ? null
+          : List<String>.from(jsonDecode(row.navPageOrderJson!) as List),
+      startupPageMode: StartupPageMode.values.byName(row.startupPageMode),
+      customStartupPage: row.customStartupPage,
+      lastSeenNavPage: row.lastSeenNavPage,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
     );
   }
@@ -973,6 +979,14 @@ class DriftSettingsRepository implements SettingsRepository {
             weatherChartRainColor: Value(settings.weatherChartRainColor),
             weatherChartCurveTension: Value(settings.weatherChartCurveTension),
             journalEntryListWidth: Value(settings.journalEntryListWidth),
+            navPageOrderJson: Value(
+              settings.navPageOrder == null
+                  ? null
+                  : jsonEncode(settings.navPageOrder),
+            ),
+            startupPageMode: Value(settings.startupPageMode.name),
+            customStartupPage: Value(settings.customStartupPage),
+            lastSeenNavPage: Value(settings.lastSeenNavPage),
             colorPaletteJson: Value(
               encodeColorPaletteJson(settings.colorPalette),
             ),

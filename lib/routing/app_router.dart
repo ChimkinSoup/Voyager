@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/desktop_window_frame.dart';
 import 'package:voyager/features/auth/login_page.dart';
@@ -9,6 +10,7 @@ import 'package:voyager/features/shell/shell_page_transition.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authNotifierProvider);
+  final settingsRepo = ref.read(settingsRepositoryProvider);
 
   return GoRouter(
     initialLocation: '/login',
@@ -33,10 +35,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
     ],
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final loggingIn = state.matchedLocation == '/login';
       if (!auth.isAuthenticated && !loggingIn) return '/login';
-      if (auth.isAuthenticated && loggingIn) return '/journal';
+      if (auth.isAuthenticated && loggingIn) {
+        final settings = await settingsRepo.getSettings();
+        if (settings.startupPageMode == StartupPageMode.lastSeen && settings.lastSeenNavPage != null) {
+          return settings.lastSeenNavPage;
+        } else if (settings.startupPageMode == StartupPageMode.custom && settings.customStartupPage != null) {
+          return settings.customStartupPage;
+        } else if (settings.navPageOrder != null && settings.navPageOrder!.isNotEmpty) {
+          return settings.navPageOrder!.first;
+        }
+        return '/journal';
+      }
       return null;
     },
   );

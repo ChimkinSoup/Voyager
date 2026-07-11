@@ -69,10 +69,12 @@ class ShellKeyboardShortcuts extends StatefulWidget {
   const ShellKeyboardShortcuts({
     super.key,
     required this.navigationShell,
+    required this.orderedDestinations,
     required this.child,
   });
 
   final StatefulNavigationShell navigationShell;
+  final List<({ShellDestination dest, int originalIndex})> orderedDestinations;
   final Widget child;
 
   static const Map<ShortcutActivator, Intent> shortcuts = {
@@ -112,15 +114,20 @@ class _ShellKeyboardShortcutsState extends State<ShellKeyboardShortcuts> {
   }
 
   void _goToRelativeTab(int delta) {
-    final count = shellDestinations.length;
+    final count = widget.orderedDestinations.length;
     if (count == 0) return;
 
-    final current = widget.navigationShell.currentIndex;
-    final next = delta > 0
-        ? nextShellTabIndex(current, count)
-        : previousShellTabIndex(current, count);
-    if (next != current) {
-      widget.navigationShell.goBranch(next);
+    final currentOrigIndex = widget.navigationShell.currentIndex;
+    final currentVisualIndex = widget.orderedDestinations.indexWhere(
+      (d) => d.originalIndex == currentOrigIndex,
+    );
+    if (currentVisualIndex == -1) return;
+
+    final nextVisualIndex = (currentVisualIndex + delta + count) % count;
+    final nextOrigIndex = widget.orderedDestinations[nextVisualIndex].originalIndex;
+
+    if (nextOrigIndex != currentOrigIndex) {
+      widget.navigationShell.goBranch(nextOrigIndex);
     }
   }
 
