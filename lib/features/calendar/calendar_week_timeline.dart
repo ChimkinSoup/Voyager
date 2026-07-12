@@ -917,21 +917,13 @@ Path calendarWeekHourLineClipPath({
 }) {
   if (borderedDayRects.isEmpty) return Path();
 
-  return Path()
-    ..addRRect(
-      RRect.fromRectAndCorners(
-        Rect.fromLTRB(
-          borderedDayRects.first.left,
-          borderedDayRects.first.top,
-          borderedDayRects.last.right,
-          borderedDayRects.last.bottom,
-        ),
-        topLeft: Radius.circular(borderRadius),
-        topRight: Radius.circular(borderRadius),
-        bottomLeft: Radius.circular(borderRadius),
-        bottomRight: Radius.circular(borderRadius),
-      ),
+  final path = Path();
+  for (final rect in borderedDayRects) {
+    path.addRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(borderRadius)),
     );
+  }
+  return path;
 }
 
 /// Fixed-viewport hour-line + label overlay.

@@ -28,9 +28,9 @@ class MoodGradientSlider extends StatelessWidget {
         ),
       ),
       child: Slider(
-        min: 1,
+        min: 0,
         max: 10,
-        divisions: 9,
+        divisions: 10,
         label: '$value',
         value: value.toDouble(),
         onChanged: (next) => onChanged(next.round()),

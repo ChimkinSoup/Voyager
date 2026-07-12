@@ -564,7 +564,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       setState(() => _subtasks = [subtask, ..._subtasks]);
       ref.read(todoRepositoryProvider).upsertTask(subtask).then((_) {
         ref.read(remoteSyncServiceProvider).pushTodoTaskNow(subtask);
-        _loadSubtasks().then((_) => widget.onChanged());
+        widget.onChanged();
       });
     });
   }
@@ -577,7 +577,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     });
     ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
       ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
-      _loadSubtasks().then((_) => widget.onChanged());
+      widget.onChanged();
     });
   }
 
@@ -591,7 +591,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     });
     ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
       ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
-      _loadSubtasks().then((_) => widget.onChanged());
+      widget.onChanged();
     });
   }
 
@@ -602,7 +602,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     });
     ref.read(todoRepositoryProvider).upsertTask(deleted).then((_) {
       ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
-      _loadSubtasks().then((_) => widget.onChanged());
+      widget.onChanged();
     });
   }
 
@@ -1100,7 +1100,6 @@ class _SubtaskRowState extends State<_SubtaskRow>
   late final TextEditingController _editController;
   late final FocusNode _editFocusNode;
   var _displayCompleted = false;
-  var _animating = false;
   var _editing = false;
 
   @override
@@ -1125,13 +1124,15 @@ class _SubtaskRowState extends State<_SubtaskRow>
   @override
   void didUpdateWidget(covariant _SubtaskRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_animating || _editing) return;
+    if (_editing) return;
     if (oldWidget.subtask.title != widget.subtask.title) {
       _editController.text = widget.subtask.title;
     }
     if (oldWidget.subtask.completed != widget.subtask.completed) {
-      _displayCompleted = widget.subtask.completed;
-      _controller.value = widget.subtask.completed ? 1.0 : 0.0;
+      if (widget.subtask.completed != _displayCompleted) {
+        _displayCompleted = widget.subtask.completed;
+        _controller.value = widget.subtask.completed ? 1.0 : 0.0;
+      }
     }
   }
 
@@ -1185,24 +1186,19 @@ class _SubtaskRowState extends State<_SubtaskRow>
     }
   }
 
-  Future<void> _handleToggle(bool? value) async {
-    if (_animating) return;
-    if (value == true && !widget.subtask.completed) {
-      setState(() {
-        _animating = true;
-        _displayCompleted = true;
-      });
-      await _controller.forward(from: 0);
-      if (!mounted) return;
-      widget.onToggle(true);
-      setState(() => _animating = false);
-    } else if (value == false && widget.subtask.completed) {
-      setState(() => _animating = true);
-      await _controller.reverse(from: 1.0);
-      if (!mounted) return;
-      setState(() => _displayCompleted = false);
-      widget.onToggle(false);
-      setState(() => _animating = false);
+  void _handleToggle(bool? value) {
+    if (value == null) return;
+    if (value == _displayCompleted) return;
+
+    setState(() {
+      _displayCompleted = value;
+    });
+    widget.onToggle(value);
+
+    if (value) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
     }
   }
 

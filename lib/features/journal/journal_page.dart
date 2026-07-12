@@ -2390,8 +2390,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _tags = extractTags(body);
   }
 
-  bool _isSessionReady = false;
-
   @override
   void initState() {
     super.initState();
@@ -2407,12 +2405,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         collection: FirestoreCollections.journalEntries,
         documentId: entry.id,
         initialText: _controller.text,
-      ).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _isSessionReady = true;
-        });
-      });
+      );
       remoteSync.setDocumentEditing(
         collection: FirestoreCollections.journalEntries,
         documentId: entry.id,
@@ -2479,7 +2472,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (pendingFlush != null) {
       await pendingFlush;
     }
-    _isSessionReady = false;
 
     if (!mounted) return;
     final remoteSync = _remoteSync;
@@ -2511,12 +2503,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         collection: FirestoreCollections.journalEntries,
         documentId: entry.id,
         initialText: _controller.text,
-      ).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _isSessionReady = true;
-        });
-      });
+      );
     }
     if (mounted) setState(() {});
   }
@@ -2674,7 +2661,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       child: TagHighlightedTextField(
         controller: _controller,
         focusNode: widget.focusNode,
-        readOnly: !_isSessionReady,
+        readOnly: false,
         expands: true,
         keyboardType: TextInputType.multiline,
         cursorColor: widget.accentColor,

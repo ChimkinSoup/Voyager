@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -165,7 +166,7 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
     final closedTrailing = widget.closedTrailing ??
         (widget.displayLabel == null ? selected?.trailing : null);
 
-    final glowColor = flat ? widget.labelColor?.withValues(alpha: 0.3) : null;
+    final glowColor = flat ? widget.labelColor?.withValues(alpha: popupGlowAlpha) : null;
 
     return Container(
       decoration: BoxDecoration(

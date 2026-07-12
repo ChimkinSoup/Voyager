@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/features/analytics/statistics_entry_modal.dart';
 
 /// A floating action button placed on the Journal page.
@@ -18,7 +19,7 @@ class StatisticsActionFab extends ConsumerWidget {
     final accent = Theme.of(context).colorScheme.primary;
     final pending = pendingAsync.valueOrNull ?? 0;
 
-    final glowColor = accent.withValues(alpha: pending > 0 ? 0.45 : 0.0);
+    final glowColor = accent.withValues(alpha: pending > 0 ? popupGlowAlpha : 0.0);
 
     return Container(
       decoration: BoxDecoration(

@@ -407,6 +407,9 @@ class CalendarWeekTaskBar extends StatelessWidget {
             final iconSize = compact ? 8.0 : 10.0;
             final gap = compact ? 2.0 : 4.0;
             final showText = width >= iconSize + gap + 8;
+            final contentColor = ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+                ? Colors.white
+                : Colors.black87;
 
             return Container(
               padding: EdgeInsets.symmetric(horizontal: hPad),
@@ -416,7 +419,7 @@ class CalendarWeekTaskBar extends StatelessWidget {
                   Icon(
                     PhosphorIconsFill.checkFat,
                     size: iconSize,
-                    color: color,
+                    color: contentColor,
                   ),
                   if (showText) ...[
                     SizedBox(width: gap),
@@ -429,6 +432,7 @@ class CalendarWeekTaskBar extends StatelessWidget {
                           fontSize: compact ? 9 : 10,
                           fontWeight: FontWeight.w500,
                           height: 1.0,
+                          color: contentColor,
                           decoration: marker.completed
                               ? TextDecoration.lineThrough
                               : null,
@@ -441,14 +445,18 @@ class CalendarWeekTaskBar extends StatelessWidget {
                     Icon(
                       PhosphorIconsFill.note,
                       size: 11,
-                      color: color,
+                      color: contentColor,
                     ),
                   ],
                   if (showMeta && marker.totalSubtaskCount > 0) ...[
                     const SizedBox(width: 4),
                     Text(
                       '${marker.completedSubtaskCount} | ${marker.totalSubtaskCount}',
-                      style: AppFonts.style(fontSize: 10, height: 1),
+                      style: AppFonts.style(
+                        fontSize: 10,
+                        height: 1,
+                        color: contentColor,
+                      ),
                     ),
                   ],
                 ],

@@ -102,7 +102,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         const EdgeInsets.symmetric(horizontal: 16, vertical: 18);
 
     final innerDecoration = decoration.copyWith(
-      labelText: null,
+      labelText: '\u200B',
       floatingLabelBehavior: FloatingLabelBehavior.never,
       filled: false,
       border: InputBorder.none,
