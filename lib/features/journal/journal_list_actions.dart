@@ -147,6 +147,7 @@ Future<Journal?> createJournalList(
 
 void _invalidateJournalDeleteProviders(WidgetRef ref, String journalId) {
   ref.invalidate(journalEntriesProvider);
+  ref.invalidate(allJournalEntriesProvider);
   ref.invalidate(journalListEntriesProvider);
   ref.invalidate(journalListEntriesProvider(journalId));
   ref.invalidate(journalEntryCountsProvider);

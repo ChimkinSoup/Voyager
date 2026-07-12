@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -425,7 +426,7 @@ class _ColorSwatch extends StatelessWidget {
               : null,
           boxShadow: selected ? [
             BoxShadow(
-              color: swatchColor.withValues(alpha: 0.6),
+              color: swatchColor.withValues(alpha: popupGlowAlpha),
               blurRadius: 8,
               spreadRadius: 2,
             ),

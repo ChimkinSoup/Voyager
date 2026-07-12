@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 
 class ContextualPopover extends StatelessWidget {
   const ContextualPopover({
@@ -31,12 +32,12 @@ class ContextualPopover extends StatelessWidget {
         borderRadius: BorderRadius.circular(_radius),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: 0.50),
+            color: accent.withValues(alpha: popupGlowAlpha),
             blurRadius: 14,
             spreadRadius: 0,
           ),
           BoxShadow(
-            color: accent.withValues(alpha: 0.22),
+            color: accent.withValues(alpha: popupGlowAlpha / 2.0),
             blurRadius: 22,
             spreadRadius: 1,
           ),

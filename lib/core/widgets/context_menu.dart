@@ -282,35 +282,38 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(_radius),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: _verticalPadding),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < items.length; i++) ...[
-                  if (i > 0 &&
-                      items[i].isDestructive &&
-                      !items[i - 1].isDestructive)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.10),
-                      indent: 14,
-                      endIndent: 14,
-                    ),
-                  _ContextMenuItemTile(
-                    item: items[i],
-                    isHovered: _hoveredIndex == i,
-                    borderRadius: _itemRadius(i, items.length),
-                    onHover: (v) =>
-                        setState(() => _hoveredIndex = v ? i : null),
-                    onTap: () => _handleItemTap(items[i]),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0 &&
+                    items[i].isDestructive &&
+                    !items[i - 1].isDestructive)
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: theme.colorScheme.onSurface
+                        .withValues(alpha: 0.10),
+                    indent: 14,
+                    endIndent: 14,
                   ),
-                ],
+                _ContextMenuItemTile(
+                  item: items[i],
+                  isHovered: _hoveredIndex == i,
+                  borderRadius: _itemRadius(i, items.length),
+                  padding: EdgeInsets.only(
+                    left: 14,
+                    right: 14,
+                    top: i == 0 ? 10 + _verticalPadding : 10,
+                    bottom: i == items.length - 1 ? 10 + _verticalPadding : 10,
+                  ),
+                  onHover: (v) =>
+                      setState(() => _hoveredIndex = v ? i : null),
+                  onTap: () => _handleItemTap(items[i]),
+                ),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -327,6 +330,7 @@ class _ContextMenuItemTile extends StatelessWidget {
     required this.item,
     required this.isHovered,
     required this.borderRadius,
+    required this.padding,
     required this.onHover,
     required this.onTap,
   });
@@ -334,6 +338,7 @@ class _ContextMenuItemTile extends StatelessWidget {
   final ContextMenuItem item;
   final bool isHovered;
   final BorderRadius borderRadius;
+  final EdgeInsetsGeometry padding;
   final void Function(bool) onHover;
   final VoidCallback onTap;
 
@@ -366,7 +371,7 @@ class _ContextMenuItemTile extends StatelessWidget {
             color: isHovered && isEnabled ? hoverColor : Colors.transparent,
             borderRadius: borderRadius,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: padding,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

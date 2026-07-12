@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 
 /// A self-contained "chrome" wrapper that draws a rounded border, a fill,
 /// an accent focus glow, and (optionally) a Material-style floating label
@@ -249,7 +250,7 @@ class _NotchedFieldBorderState extends State<NotchedFieldBorder>
                     boxShadow: widget.showGlow && focusT > 0
                         ? [
                             BoxShadow(
-                              color: accent.withValues(alpha: 0.14 * focusT),
+                              color: accent.withValues(alpha: popupGlowAlpha * focusT),
                               blurRadius: 14,
                               spreadRadius: 1,
                             ),

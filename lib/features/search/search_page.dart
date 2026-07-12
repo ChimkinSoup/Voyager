@@ -329,6 +329,13 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     if (mounted) setState(() => _isDatePickerOpen = false);
     if (pickedDt == null) return;
     
+    // Update locally immediately for snappy responsiveness
+    final updatedImmediate = _entry.copyWith(entryDate: pickedDt.toUtc());
+    if (mounted) {
+      setState(() => _entry = updatedImmediate);
+      widget.onSaved(updatedImmediate);
+    }
+
     final helper = SearchEntrySaveHelper(
       coordinator: ref.read(journalWriteCoordinatorProvider),
       remoteSync: ref.read(remoteSyncServiceProvider),
@@ -452,6 +459,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                       onChanged: (value) => setState(() => _mood = value),
                     ),
                   ),
+                  const SizedBox(width: 12),
                   PopupMenuButton<VoyagerMenuCatalogEntry>(
                     icon: Icon(
                       weatherIconData(_weatherIcon),

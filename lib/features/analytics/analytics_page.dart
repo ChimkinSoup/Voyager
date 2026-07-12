@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:intl/intl.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -1154,6 +1156,7 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = Color(widget.tracker.colorValue);
     return Stack(
       children: [
         // Dismiss tapping outside
@@ -1168,14 +1171,28 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
         Positioned(
           left: widget.anchorRect.left.clamp(0, double.infinity),
           top: widget.anchorRect.bottom + 6,
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(12),
-            color: theme.colorScheme.surface,
-            child: SizedBox(
-              width: 280,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.withValues(alpha: popupGlowAlpha),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Material(
+              elevation: 8,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: accent, width: 3),
+              ),
+              color: theme.colorScheme.surface,
+              child: SizedBox(
+                width: 310,
+                child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1196,12 +1213,11 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    _valueEditor(theme),
+                    _valueEditor(theme, accent),
                     const SizedBox(height: 10),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        if (widget.initialValue != null) ...[
+                        if (widget.initialValue != null)
                           TextButton(
                             onPressed: _delete,
                             style: TextButton.styleFrom(
@@ -1209,21 +1225,30 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
                             ),
                             child: const Text('Delete'),
                           ),
-                          const Spacer(),
-                        ],
-                        TextButton(
-                          onPressed: Navigator.of(context).pop,
-                          child: const Text('Cancel'),
-                        ),
-                        const SizedBox(width: 8),
+                        const Spacer(),
                         FilledButton(
                           onPressed: _save,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: accent,
+                            foregroundColor: ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+                                ? Colors.white
+                                : Colors.black,
+                          ),
                           child: const Text('Save'),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: Navigator.of(context).pop,
+                          style: TextButton.styleFrom(
+                            foregroundColor: accent,
+                          ),
+                          child: const Text('Cancel'),
                         ),
                       ],
                     ),
                   ],
                 ),
+              ),
               ),
             ),
           ),
@@ -1232,7 +1257,7 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
     );
   }
 
-  Widget _valueEditor(ThemeData theme) {
+  Widget _valueEditor(ThemeData theme, Color accent) {
     switch (widget.tracker.type) {
       case TrackerType.integer:
         final cap = widget.tracker.integerCap;
@@ -1244,6 +1269,8 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
                 min: 0,
                 max: cap.toDouble(),
                 divisions: cap == 0 ? null : cap,
+                activeColor: accent,
+                inactiveColor: accent.withValues(alpha: 0.24),
                 value: (int.tryParse(_intController.text) ?? 0)
                     .clamp(0, cap)
                     .toDouble(),
@@ -1254,26 +1281,31 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
             VoyagerTextField(
               controller: _intController,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              accentColor: accent,
               decoration: InputDecoration(
                 labelText: 'Value',
                 helperText: cap == null ? null : '0–$cap',
                 isDense: true,
+                contentPadding: const EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
               ),
             ),
           ],
         );
       case TrackerType.boolean:
         return SwitchListTile(
-          contentPadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.only(left: 6, right: 0),
           dense: true,
           title: const Text('Completed'),
           value: _boolValue ?? false,
+          activeColor: accent,
           onChanged: (v) => setState(() => _boolValue = v),
         );
       case TrackerType.enumType:
         final options = widget.tracker.enumOptions;
         return VoyagerDropdownButtonFormField<String>(
           initialValue: options.contains(_enumValue) ? _enumValue : null,
+          accentColor: accent,
           decoration: const InputDecoration(
             labelText: 'Value',
             isDense: true,
@@ -1345,7 +1377,7 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover> {
   }
 
   String _formatDate(DateTime d) {
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return DateFormat('MMMM d, yyyy').format(d);
   }
 }
 
@@ -1903,7 +1935,11 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   final _nameController = TextEditingController();
   final _defaultIntController = TextEditingController(text: '0');
   final _capController = TextEditingController(text: '10');
-  final _optionsController = TextEditingController();
+  final List<TextEditingController> _optionControllers = [];
+  final List<FocusNode> _optionFocusNodes = [];
+  final _newOptionController = TextEditingController();
+  final _newOptionFocusNode = FocusNode();
+  String? _optionError;
   var _type = TrackerType.integer;
   var _cadence = TrackerCadence.daily;
   var _trackingStyle = TrackerStyle.independent;
@@ -1929,14 +1965,30 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
     _nameController.dispose();
     _defaultIntController.dispose();
     _capController.dispose();
-    _optionsController.dispose();
+    for (final controller in _optionControllers) {
+      controller.dispose();
+    }
+    for (final focusNode in _optionFocusNodes) {
+      focusNode.dispose();
+    }
+    _newOptionController.dispose();
+    _newOptionFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final enumOptions = _enumOptions;
+    final accent = Color(_colorValue);
     return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: accent, width: 3),
+      ),
+      shadowColor: accent.withValues(alpha: popupGlowAlpha),
+      elevation: 24,
+      titlePadding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       title: const Text('New statistic tracker'),
       content: SizedBox(
         width: 420,
@@ -1944,15 +1996,22 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const SizedBox(height: 8),
               VoyagerTextField(
                 controller: _nameController,
                 autofocus: true,
-                decoration: const InputDecoration(labelText: 'Name'),
+                accentColor: accent,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  isDense: true,
+                  contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                ),
                 onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 12),
               VoyagerDropdownButtonFormField<TrackerType>(
                 initialValue: _type,
+                accentColor: accent,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: TrackerType.values
                     .map(
@@ -1978,6 +2037,10 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 const SizedBox(height: 6),
                 SegmentedButton<TrackerStyle>(
                   showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    selectedForegroundColor: Colors.white,
+                    selectedBackgroundColor: accent,
+                  ),
                   segments: const [
                     ButtonSegment(
                       value: TrackerStyle.independent,
@@ -2001,6 +2064,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
               const SizedBox(height: 12),
               VoyagerDropdownButtonFormField<TrackerCadence>(
                 initialValue: _cadence,
+                accentColor: accent,
                 decoration: const InputDecoration(labelText: 'Cadence'),
                 items: TrackerCadence.values
                     .map(
@@ -2014,16 +2078,11 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                     setState(() => _cadence = value ?? _cadence),
               ),
               const SizedBox(height: 12),
-              ColorPickerField(
-                label: 'Tracker color',
-                value: _colorValue,
-                onChanged: (value) =>
-                    setState(() => _colorValue = value),
-              ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Show on calendar'),
                 value: _showOnCalendar,
+                activeColor: accent,
                 onChanged: (value) =>
                     setState(() => _showOnCalendar = value),
               ),
@@ -2031,13 +2090,19 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 VoyagerTextField(
                   controller: _defaultIntController,
                   keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: 'Default value'),
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  accentColor: accent,
+                  decoration: const InputDecoration(
+                    labelText: 'Default value',
+                    isDense: true,
+                    contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                  ),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Use cap'),
                   value: _hasCap,
+                  activeColor: accent,
                   onChanged: (value) =>
                       setState(() => _hasCap = value),
                 ),
@@ -2045,8 +2110,13 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   VoyagerTextField(
                     controller: _capController,
                     keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Cap'),
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    accentColor: accent,
+                    decoration: const InputDecoration(
+                      labelText: 'Cap',
+                      isDense: true,
+                      contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                    ),
                   ),
               ],
               if (_type == TrackerType.boolean)
@@ -2054,42 +2124,125 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Default checked'),
                   value: _defaultBool,
+                  activeColor: accent,
                   onChanged: (value) =>
                       setState(() => _defaultBool = value),
                 ),
               if (_type == TrackerType.enumType) ...[
-                VoyagerTextField(
-                  controller: _optionsController,
-                  decoration: const InputDecoration(
-                    labelText: 'Options',
-                    helperText: 'Comma-separated, e.g. Gym A, Gym B',
-                  ),
-                  onChanged: (_) => setState(() {
-                    if (!enumOptions.contains(_defaultEnumOption)) {
-                      _defaultEnumOption = null;
-                    }
-                  }),
-                ),
-                const SizedBox(height: 12),
-                VoyagerDropdownButtonFormField<String>(
-                  initialValue: enumOptions.contains(_defaultEnumOption)
-                      ? _defaultEnumOption
-                      : null,
-                  decoration: const InputDecoration(
-                    labelText: 'Default option',
-                  ),
-                  items: enumOptions
-                      .map(
-                        (option) => DropdownMenuItem(
-                          value: option,
-                          child: Text(option),
+                if (_optionControllers.isNotEmpty) ...[
+                  ReorderableListView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
+                    onReorderItem: _reorderOptions,
+                    children: [
+                      for (var i = 0; i < _optionControllers.length; i++)
+                        Padding(
+                          key: ValueKey(_optionControllers[i]),
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              ReorderableDragStartListener(
+                                index: i,
+                                child: Icon(
+                                  Icons.drag_handle,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.5),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: VoyagerTextField(
+                                  controller: _optionControllers[i],
+                                  focusNode: _optionFocusNodes[i],
+                                  accentColor: accent,
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.only(
+                                      left: 16,
+                                      right: 16,
+                                      top: 0,
+                                      bottom: 12,
+                                    ),
+                                  ),
+                                  onChanged: (_) => setState(() {
+                                    _optionError = null;
+                                    if (!_enumOptions.contains(_defaultEnumOption)) {
+                                      _defaultEnumOption = null;
+                                    }
+                                  }),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(PhosphorIconsRegular.trash),
+                                onPressed: () => _removeOption(i),
+                              ),
+                            ],
+                          ),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setState(() => _defaultEnumOption = value),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                VoyagerTextField(
+                  key: const ValueKey('new-option-field'),
+                  controller: _newOptionController,
+                  focusNode: _newOptionFocusNode,
+                  accentColor: accent,
+                  decoration: const InputDecoration(
+                    labelText: 'Add option',
+                    isDense: true,
+                    contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                  ),
+                  onChanged: (_) {
+                    if (_optionError != null) setState(() => _optionError = null);
+                  },
+                  onSubmitted: (_) => _addOption(),
                 ),
+                if (_optionError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 4),
+                    child: Text(
+                      _optionError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                if (enumOptions.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  VoyagerDropdownButtonFormField<String>(
+                    initialValue: enumOptions.contains(_defaultEnumOption)
+                        ? _defaultEnumOption
+                        : null,
+                    accentColor: accent,
+                    decoration: const InputDecoration(
+                      labelText: 'Default option',
+                    ),
+                    items: enumOptions
+                        .map(
+                          (option) => DropdownMenuItem(
+                            value: option,
+                            child: Text(option),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _defaultEnumOption = value),
+                  ),
+                ],
               ],
+              const SizedBox(height: 12),
+              ColorPickerField(
+                label: 'Tracker color',
+                value: _colorValue,
+                maxHeight: paletteViewportHeight(18, visibleRows: 3, clipPartialNextRow: true) - 4,
+                onChanged: (value) =>
+                    setState(() => _colorValue = value),
+              ),
             ],
           ),
         ),
@@ -2097,25 +2250,92 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
+          style: TextButton.styleFrom(
+            foregroundColor: accent,
+          ),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        FilledButton(
+          onPressed: _submit,
+          style: FilledButton.styleFrom(
+            backgroundColor: accent,
+          ),
+          child: const Text('Create'),
+        ),
       ],
     );
   }
 
-  List<String> get _enumOptions => _optionsController.text
-      .split(',')
-      .map((option) => option.trim())
+  List<String> get _enumOptions => _optionControllers
+      .map((controller) => controller.text.trim())
       .where((option) => option.isNotEmpty)
-      .toSet()
       .toList();
+
+  void _addOption() {
+    final text = _newOptionController.text.trim();
+    if (text.isEmpty) return;
+    if (_enumOptions.contains(text)) {
+      setState(() => _optionError = 'This option already exists');
+      return;
+    }
+    setState(() {
+      _optionControllers.add(TextEditingController(text: text));
+      _optionFocusNodes.add(FocusNode());
+      _newOptionController.clear();
+      _optionError = null;
+    });
+    _newOptionFocusNode.requestFocus();
+  }
+
+  void _removeOption(int index) {
+    setState(() {
+      _optionControllers.removeAt(index).dispose();
+      _optionFocusNodes.removeAt(index).dispose();
+      _optionError = null;
+      if (!_enumOptions.contains(_defaultEnumOption)) {
+        _defaultEnumOption = null;
+      }
+    });
+  }
+
+  void _reorderOptions(int oldIndex, int newIndex) {
+    if (oldIndex == newIndex) return;
+    setState(() {
+      final controller = _optionControllers.removeAt(oldIndex);
+      final focusNode = _optionFocusNodes.removeAt(oldIndex);
+      _optionControllers.insert(newIndex, controller);
+      _optionFocusNodes.insert(newIndex, focusNode);
+    });
+  }
 
   void _submit() {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
+
+    if (_type == TrackerType.enumType) {
+      final pending = _newOptionController.text.trim();
+      if (pending.isNotEmpty) {
+        if (_enumOptions.contains(pending)) {
+          setState(() => _optionError = 'This option already exists');
+          _newOptionFocusNode.requestFocus();
+          return;
+        }
+        setState(() {
+          _optionControllers.add(TextEditingController(text: pending));
+          _optionFocusNodes.add(FocusNode());
+          _newOptionController.clear();
+        });
+      }
+    }
+
     final enumOptions = _enumOptions;
-    if (_type == TrackerType.enumType && enumOptions.isEmpty) return;
+    if (_type == TrackerType.enumType) {
+      if (enumOptions.isEmpty) return;
+      if (enumOptions.toSet().length != enumOptions.length) {
+        setState(() => _optionError = 'Options must be unique');
+        return;
+      }
+    }
     final now = utcNow();
     Navigator.pop(
       context,
