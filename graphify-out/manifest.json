@@ -185,8 +185,8 @@
     "semantic_hash": ""
   },
   "lib/core/dev/dev_flags.dart": {
-    "mtime": 1783737748.51667,
-    "ast_hash": "f85da3faa41ab7aeadbb70ff787c78e3",
+    "mtime": 1783900135.3528285,
+    "ast_hash": "c4fac5c528e109d03855c90c47e290aa",
     "semantic_hash": ""
   },
   "lib/core/dev/dev_settings_controller.dart": {
@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1783895863.77981,
-    "ast_hash": "417e8f694388dcd262ce39444702d4f6",
+    "mtime": 1783907940.6050744,
+    "ast_hash": "84393a5e847e32da65f94c054e1eb2e1",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -820,8 +820,8 @@
     "semantic_hash": ""
   },
   "lib/features/dev/dev_page.dart": {
-    "mtime": 1783737748.5326695,
-    "ast_hash": "ae1b348031e063b14b1287d27d9d51aa",
+    "mtime": 1783900147.9899206,
+    "ast_hash": "bf6be825c1b3046ffe5b555751c189ee",
     "semantic_hash": ""
   },
   "lib/features/dev/dev_remote_purge_tile.dart": {
@@ -1617,6 +1617,11 @@
   ".claude/settings.local.json": {
     "mtime": 1783889004.9939322,
     "ast_hash": "f37aab39cd3ecd7ecc1697731ef37800",
+    "semantic_hash": ""
+  },
+  "flutter_02.png": {
+    "mtime": 1783896735.9724064,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": ""
   }
 }
