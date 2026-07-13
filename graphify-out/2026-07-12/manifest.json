@@ -720,13 +720,13 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1783822780.844053,
-    "ast_hash": "057f545ca3ebaaa6bd83e35c92220550",
+    "mtime": 1783895075.8909264,
+    "ast_hash": "a100a34663377cf9e9d2aaafd7ce31e1",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
-    "mtime": 1783791410.022524,
-    "ast_hash": "a26afa035f28c1c60e87a0bb9c40ad35",
+    "mtime": 1783882444.582954,
+    "ast_hash": "cb998c2436aab7d5443ee79d823446ae",
     "semantic_hash": ""
   },
   "lib/features/analytics/ranking_prompt_banner.dart": {
@@ -1600,8 +1600,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/statistics_entry_modal.dart": {
-    "mtime": 1783739330.026209,
-    "ast_hash": "79f8e14785534631906daaa70b7aed79",
+    "mtime": 1783889313.456878,
+    "ast_hash": "abaf970806581afbd57d57d30fde2d44",
     "semantic_hash": ""
   },
   "ANALYTICS_PAGE.md": {
@@ -1615,8 +1615,8 @@
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
-    "mtime": 1783821947.9446108,
-    "ast_hash": "2f9e7a69b3190b3c703fb6f619a97035",
+    "mtime": 1783889004.9939322,
+    "ast_hash": "f37aab39cd3ecd7ecc1697731ef37800",
     "semantic_hash": ""
   }
 }

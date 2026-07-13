@@ -451,7 +451,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
   Widget build(BuildContext context) {
     final weatherAsync = ref.watch(currentWeatherProvider);
     final cachedWeather = ref.watch(cachedCurrentWeatherProvider);
-    final weather = weatherAsync.value ?? cachedWeather;
+    final weather = weatherAsync.valueOrNull ?? cachedWeather;
     final icon = weather?.icon;
     final colorScheme = Theme.of(context).colorScheme;
 

@@ -20,6 +20,8 @@ import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 final devVerboseSyncProvider = StateProvider<bool>((ref) => false);
 final devShowTimeSelectorHitboxesProvider = StateProvider<bool>((ref) => DevFlags.showTimeSelectorHitboxes);
+final devSlowHeatmapPopoverAnimationProvider =
+    StateProvider<bool>((ref) => DevFlags.slowHeatmapPopoverAnimation);
 
 class DevPage extends ConsumerWidget {
   const DevPage({super.key});
@@ -64,6 +66,17 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.showTimeSelectorHitboxes = v;
             ref.read(devShowTimeSelectorHitboxesProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Slow heatmap popover animation'),
+          subtitle: const Text(
+            'Play the hover-tooltip-to-edit-popup expand animation at 10× duration for debugging',
+          ),
+          value: ref.watch(devSlowHeatmapPopoverAnimationProvider),
+          onChanged: (v) {
+            DevFlags.slowHeatmapPopoverAnimation = v;
+            ref.read(devSlowHeatmapPopoverAnimationProvider.notifier).state = v;
           },
         ),
         SwitchListTile(
