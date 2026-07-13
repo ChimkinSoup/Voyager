@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1783895075.8909264,
-    "ast_hash": "a100a34663377cf9e9d2aaafd7ce31e1",
+    "mtime": 1783895863.77981,
+    "ast_hash": "417e8f694388dcd262ce39444702d4f6",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -915,8 +915,8 @@
     "semantic_hash": ""
   },
   "lib/features/shell/app_shell.dart": {
-    "mtime": 1783737748.5346687,
-    "ast_hash": "9798d38898312fcb80d9f87c6c9f0f0d",
+    "mtime": 1783896266.357774,
+    "ast_hash": "e9333673bec0bb988edcbb7e174d28ed",
     "semantic_hash": ""
   },
   "lib/features/shell/shell_destinations.dart": {

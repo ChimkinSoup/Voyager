@@ -1278,6 +1278,74 @@ String? _tooltipValueLabel(TrackerType type, TrackerValue? value) {
   };
 }
 
+/// The date's compact "tooltip" appearance — same base metrics (font
+/// family/height/letterSpacing) as [_editorDateStyle], just a smaller
+/// fontSize, rather than an independently-inherited style. Previously this
+/// was its own plain `TextStyle(...)` (inheriting whatever ambient
+/// font/height/letterSpacing happened to be in scope) while a *second*,
+/// separately-defined style was used as the actual starting point for
+/// [TextStyle.lerp] in [_MorphPopoverState.build] — the two didn't
+/// necessarily agree on anything but fontSize/color, so the date's
+/// rendered glyphs visibly changed shape (read as "changing font size")
+/// the instant the popover opened, before the lerp had moved at all. Now
+/// there's one definition, used for the real hover tooltip's date text,
+/// the placeholder that reserves its layout space, and the lerp's t=0
+/// endpoint alike, so all three are pixel-identical by construction.
+TextStyle _tooltipDateStyle(ThemeData theme) {
+  return _editorDateStyle(theme).copyWith(fontSize: 10);
+}
+
+TextStyle _editorDateStyle(ThemeData theme) {
+  return (theme.textTheme.bodySmall ?? const TextStyle())
+      .copyWith(inherit: false, color: theme.colorScheme.onSurfaceVariant);
+}
+
+/// The tooltip's date + value content, shared verbatim between the real
+/// hover tooltip ([_HoverEditPopoverState._show]) and the morph popover's
+/// reconstruction of it ([_MorphPopoverState._buildTooltipBubble]) — the
+/// two previously duplicated this structure by hand and had drifted apart
+/// (the morph popover wrapped its [dateKey] Text in an extra [Align] the
+/// real tooltip didn't have), which showed up as the value text visibly
+/// shifting position the instant the popover opened. Building both from
+/// this single function instead guarantees they lay out identically; only
+/// [dateOpacity] differs (0 in the morph popover, where the date is drawn
+/// by a separate floating layer instead).
+Widget _tooltipDateValueColumn({
+  required String periodLabel,
+  required String? valueLabel,
+  required ThemeData theme,
+  Key? dateKey,
+  double dateOpacity = 1,
+}) {
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Opacity(
+        opacity: dateOpacity,
+        child: Text(
+          periodLabel,
+          key: dateKey,
+          textAlign: TextAlign.right,
+          style: _tooltipDateStyle(theme),
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        valueLabel ?? '–',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: valueLabel == null
+              ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
+              : theme.colorScheme.onSurface,
+          fontWeight: FontWeight.normal,
+          fontSize: 14,
+        ),
+      ),
+    ],
+  );
+}
+
 /// Wraps [child] with a hover tooltip showing the period label (small, top
 /// right) and the value (centered, regular size — a greyed "–" if there's
 /// no entry yet). Clicking morphs the same popup in place into the value
@@ -1337,6 +1405,7 @@ class _HoverEditPopover extends StatefulWidget {
 class _HoverEditPopoverState extends State<_HoverEditPopover> {
   final _key = GlobalKey();
   final _tooltipKey = GlobalKey();
+  final _tooltipDateKey = GlobalKey();
   OverlayEntry? _entry;
 
   /// The tooltip bubble's own on-screen rect (not the cell's) — this is
@@ -1352,6 +1421,19 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
 
   Rect? _measureTooltip() {
     final box = _tooltipKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  /// The date text's own on-screen rect within the tooltip. Passed straight
+  /// into [_MorphPopover] as its starting point for the date, so the morph
+  /// popover's date-slide layer has a real position from its very first
+  /// frame instead of only after its own post-frame remeasurement — which
+  /// otherwise left the date invisible for a frame and made it "pop in"
+  /// right as the popover opened.
+  Rect? _measureTooltipDate() {
+    final box =
+        _tooltipDateKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return null;
     return box.localToGlobal(Offset.zero) & box.size;
   }
@@ -1390,32 +1472,11 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                  Text(
-                    widget.periodLabel,
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.normal,
-                      fontSize: 10,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.valueLabel ?? '–',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: widget.valueLabel == null
-                          ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
-                          : theme.colorScheme.onSurface,
-                      fontWeight: FontWeight.normal,
-                      fontSize: 14,
-                    ),
-                  ),
-                  ],
+                child: _tooltipDateValueColumn(
+                  periodLabel: widget.periodLabel,
+                  valueLabel: widget.valueLabel,
+                  theme: theme,
+                  dateKey: _tooltipDateKey,
                 ),
               ),
             ),
@@ -1442,6 +1503,9 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
     // start rect can be slightly off from what's really on screen, showing
     // up as a small pop/shift right as the animation begins.
     final startRect = _measureTooltip() ?? _lastRect ?? _measure();
+    // Measured before [_hide] removes the tooltip's overlay entry (and with
+    // it, the render objects being measured).
+    final startDateRect = _measureTooltipDate();
     _hide();
     if (startRect != null) {
       _showMorphPopover(
@@ -1449,6 +1513,7 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
         tracker: widget.tracker,
         periodDate: widget.periodDate,
         anchorRect: startRect,
+        anchorDateRect: startDateRect,
         initialValue: widget.initialValue,
         periodLabel: widget.periodLabel,
         valueLabel: widget.valueLabel,
@@ -1485,6 +1550,7 @@ Future<void> _showMorphPopover({
   required StatisticTracker tracker,
   required DateTime periodDate,
   required Rect anchorRect,
+  required Rect? anchorDateRect,
   required TrackerValue? initialValue,
   required String periodLabel,
   required String? valueLabel,
@@ -1505,6 +1571,7 @@ Future<void> _showMorphPopover({
         tracker: tracker,
         periodDate: periodDate,
         anchorRect: anchorRect,
+        anchorDateRect: anchorDateRect,
         initialValue: initialValue,
         periodLabel: periodLabel,
         valueLabel: valueLabel,
@@ -1538,6 +1605,7 @@ class _MorphPopover extends ConsumerStatefulWidget {
     required this.tracker,
     required this.periodDate,
     required this.anchorRect,
+    required this.anchorDateRect,
     required this.initialValue,
     required this.periodLabel,
     required this.valueLabel,
@@ -1547,6 +1615,14 @@ class _MorphPopover extends ConsumerStatefulWidget {
   final StatisticTracker tracker;
   final DateTime periodDate;
   final Rect anchorRect;
+
+  /// The date text's on-screen rect within the hover tooltip it's expanding
+  /// from, measured synchronously at tap time (see
+  /// [_HoverEditPopoverState._measureTooltipDate]). Seeds [_MorphPopoverState.
+  /// _tooltipDateRect] immediately, so the date-slide layer has a real start
+  /// position from the very first frame instead of only appearing once this
+  /// widget's own post-frame remeasurement completes.
+  final Rect? anchorDateRect;
   final TrackerValue? initialValue;
   final String periodLabel;
   final String? valueLabel;
@@ -1604,6 +1680,12 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     _boolValue = widget.initialValue?.boolValue ?? widget.tracker.defaultBool;
     _enumValue = widget.initialValue?.enumValue ??
         widget.tracker.defaultEnumOption;
+    // Seed from the tooltip's own already-measured date rect (see
+    // [_MorphPopover.anchorDateRect]) so the date-slide layer in [build] can
+    // render from frame one instead of waiting for [_measure]'s post-frame
+    // remeasurement — otherwise the date is invisible for a frame and then
+    // pops in right as the popover opens.
+    _tooltipDateRect = widget.anchorDateRect;
 
     _morphController = AnimationController(
       vsync: this,
@@ -1792,14 +1874,20 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         // back in on the editor, it slides from its measured resting spot
         // in the tooltip to its measured resting spot in the editor, in
         // lockstep with the frame's own morph.
-        if (_tooltipDateRect != null && _editorDateRect != null)
+        // Renders as soon as [_tooltipDateRect] is known (seeded
+        // synchronously from [widget.anchorDateRect], so that's frame one)
+        // rather than waiting on [_editorDateRect] too — the morph hasn't
+        // started at that point anyway (t is still 0), so lerping toward
+        // the tooltip's own rect as a placeholder end target is a no-op
+        // until [_measure] fills in the real editor-side rect.
+        if (_tooltipDateRect != null)
           AnimatedBuilder(
             animation: _morphController,
             builder: (context, _) {
               final t = Curves.easeInOutCubic.transform(_morphController.value);
               final origin = Offset.lerp(
                 _tooltipDateRect!.topLeft,
-                _editorDateRect!.topLeft,
+                (_editorDateRect ?? _tooltipDateRect!).topLeft,
                 t,
               )!;
               return Positioned(
@@ -1809,7 +1897,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                   child: Text(
                     widget.periodLabel,
                     style: TextStyle.lerp(
-                      _tooltipDateLerpStyle(theme),
+                      _tooltipDateStyle(theme),
                       _editorDateStyle(theme),
                       t,
                     ),
@@ -1820,32 +1908,6 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           ),
       ],
     );
-  }
-
-  /// The placeholder's real style — matches exactly what the raw hover
-  /// tooltip (before the click) renders, so the invisible placeholder in
-  /// [_buildTooltipBubble] reserves exactly the same layout space and
-  /// nothing in the tooltip content shifts when this popover takes over.
-  TextStyle _tooltipDateStyle(ThemeData theme) {
-    return TextStyle(
-      color: theme.colorScheme.onSurfaceVariant,
-      fontWeight: FontWeight.normal,
-      fontSize: 10,
-    );
-  }
-
-  /// Same look as [_tooltipDateStyle], but normalized onto the same base
-  /// (inherit/font family/height/etc.) as [_editorDateStyle] purely so
-  /// TextStyle.lerp can interpolate between the two — used only by the
-  /// floating slide layer, never for real layout, so it can't affect the
-  /// tooltip's own sizing.
-  TextStyle _tooltipDateLerpStyle(ThemeData theme) {
-    return _editorDateStyle(theme).copyWith(fontSize: 10);
-  }
-
-  TextStyle _editorDateStyle(ThemeData theme) {
-    return (theme.textTheme.bodySmall ?? const TextStyle())
-        .copyWith(inherit: false, color: theme.colorScheme.onSurfaceVariant);
   }
 
   Widget _buildTooltipBubble(ThemeData theme) {
@@ -1859,42 +1921,16 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         constraints: const BoxConstraints(minWidth: 64),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(11, 7, 11, 7),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Invisible — only here to reserve layout space. The visible
-              // date text is drawn by the sliding layer in [build].
-              // widthFactor/heightFactor force Align to shrink-wrap to the
-              // text's own natural size regardless of the ambient (bounded)
-              // constraints from the surrounding Stack, instead of quietly
-              // expanding to fill them.
-              Align(
-                alignment: Alignment.centerRight,
-                widthFactor: 1,
-                heightFactor: 1,
-                child: Opacity(
-                  opacity: 0,
-                  child: Text(
-                    key: _tooltipDateKey,
-                    widget.periodLabel,
-                    style: _tooltipDateStyle(theme),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.valueLabel ?? '–',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: widget.valueLabel == null
-                      ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
-                      : theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.normal,
-                  fontSize: 14,
-                ),
-              ),
-            ],
+          // Shared with the real hover tooltip's own content (see
+          // [_tooltipDateValueColumn]) — only the date's opacity differs,
+          // since it's drawn here purely to reserve layout space while the
+          // visible date text is drawn by the sliding layer in [build].
+          child: _tooltipDateValueColumn(
+            periodLabel: widget.periodLabel,
+            valueLabel: widget.valueLabel,
+            theme: theme,
+            dateKey: _tooltipDateKey,
+            dateOpacity: 0,
           ),
         ),
       ),
@@ -2211,13 +2247,17 @@ Future<void> _showHeatmapPopover({
   required TrackerValue? initialValue,
   required VoidCallback onSaved,
 }) {
-  final slowMo = DevFlags.slowHeatmapPopoverAnimation ? 10 : 1;
   return Navigator.of(context, rootNavigator: true).push<void>(
     PageRouteBuilder<void>(
       opaque: false,
       barrierColor: Colors.transparent,
       barrierDismissible: false,
-      transitionDuration: Duration(milliseconds: 220 * slowMo),
+      // No built-in route transition — [_HeatmapPopover] drives its own
+      // expand animation (like [_MorphPopover]) and only starts it once it
+      // has measured its real size/position, so there's never a frame
+      // where the route's own clock has run ahead of geometry that isn't
+      // known yet.
+      transitionDuration: Duration.zero,
       reverseTransitionDuration: Duration.zero,
       transitionsBuilder: (ctx, animation, secondaryAnimation, child) => child,
       pageBuilder: (ctx, animation, secondaryAnimation) => _HeatmapPopover(
@@ -2226,7 +2266,6 @@ Future<void> _showHeatmapPopover({
         anchorRect: anchorRect,
         initialValue: initialValue,
         onSaved: onSaved,
-        routeAnimation: animation,
       ),
     ),
   );
@@ -2254,7 +2293,6 @@ class _HeatmapPopover extends ConsumerStatefulWidget {
     required this.anchorRect,
     required this.initialValue,
     required this.onSaved,
-    required this.routeAnimation,
   });
 
   final StatisticTracker tracker;
@@ -2263,26 +2301,31 @@ class _HeatmapPopover extends ConsumerStatefulWidget {
   final TrackerValue? initialValue;
   final VoidCallback onSaved;
 
-  /// Drives the expand-from-the-hovered-cell entrance animation. Reaches
-  /// 1.0 once open and reverses back to 0.0 while closing.
-  final Animation<double> routeAnimation;
-
   @override
   ConsumerState<_HeatmapPopover> createState() => _HeatmapPopoverState();
 }
 
 class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final TextEditingController _intController;
   bool? _boolValue;
   String? _enumValue;
   final _cardKey = GlobalKey();
   Offset? _position;
   Size? _cardSize;
+  bool _expandStarted = false;
+
+  /// Drives the expand-from-the-hovered-cell entrance animation. Doesn't
+  /// start until [_cardSize]/[_position] are known, so there is never a
+  /// frame where it's animating toward a wrong/placeholder target — the
+  /// same fix as [_MorphPopoverState._morphController].
+  late final AnimationController _expandController;
 
   /// Secondary controls (Save/Delete/Cancel) fade in only once the main
   /// expand animation has finished, per design.
   late final AnimationController _controlsController;
+
+  int get _slowMo => DevFlags.slowHeatmapPopoverAnimation ? 10 : 1;
 
   @override
   void initState() {
@@ -2298,30 +2341,21 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
     _enumValue = widget.initialValue?.enumValue ??
         widget.tracker.defaultEnumOption;
 
+    _expandController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 220 * _slowMo),
+    );
     _controlsController = AnimationController(
       vsync: this,
-      duration: Duration(
-        milliseconds: 150 * (DevFlags.slowHeatmapPopoverAnimation ? 10 : 1),
-      ),
+      duration: Duration(milliseconds: 150 * _slowMo),
     );
-    widget.routeAnimation.addStatusListener(_handleRouteStatus);
-    if (widget.routeAnimation.isCompleted) _controlsController.value = 1;
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _reposition());
   }
 
-  /// Closing is instant (see [_showHeatmapPopover]'s zero reverse duration)
-  /// so only the forward completion — revealing Save/Delete/Cancel — needs
-  /// handling here.
-  void _handleRouteStatus(AnimationStatus status) {
-    if (status == AnimationStatus.completed) {
-      _controlsController.forward();
-    }
-  }
-
   @override
   void dispose() {
-    widget.routeAnimation.removeStatusListener(_handleRouteStatus);
+    _expandController.dispose();
     _controlsController.dispose();
     _intController.dispose();
     super.dispose();
@@ -2357,6 +2391,12 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
         _cardSize = size;
       });
     }
+    if (!_expandStarted) {
+      _expandStarted = true;
+      _expandController.forward().whenComplete(() {
+        if (mounted) _controlsController.forward();
+      });
+    }
   }
 
   @override
@@ -2364,7 +2404,7 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
     final theme = Theme.of(context);
     final accent = Color(widget.tracker.colorValue);
     final expand = CurvedAnimation(
-      parent: widget.routeAnimation,
+      parent: _expandController,
       curve: Curves.easeOutCubic,
     );
 
@@ -2409,7 +2449,7 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
             ),
             child: FadeTransition(
               opacity: CurvedAnimation(
-                parent: widget.routeAnimation,
+                parent: _expandController,
                 curve: const Interval(0.0, 0.5),
               ),
               child: Container(
