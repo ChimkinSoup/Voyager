@@ -1310,6 +1310,18 @@ TextStyle _editorDateStyle(ThemeData theme) {
 /// this single function instead guarantees they lay out identically; only
 /// [dateOpacity] differs (0 in the morph popover, where the date is drawn
 /// by a separate floating layer instead).
+///
+/// Wrapped in its own transparent [Material] (the same
+/// `MaterialType.transparency` trick [_MorphPopoverState._buildEditorContent]
+/// already uses) rather than relying on an ambient one from a caller: the
+/// value [Text] below doesn't set its own `height`/line-height, so it
+/// inherits whatever [DefaultTextStyle] happens to be nearest above it — the
+/// real tooltip provided one via its own `Material`, but the morph popover's
+/// bubble didn't, so the *same* value text resolved a different line-height
+/// (and so a different vertical position within its own line box) in the two
+/// places even though the text itself was identical. A self-contained
+/// `Material` here means both callers get the same ambient style regardless
+/// of what surrounds them.
 Widget _tooltipDateValueColumn({
   required String periodLabel,
   required String? valueLabel,
@@ -1317,32 +1329,35 @@ Widget _tooltipDateValueColumn({
   Key? dateKey,
   double dateOpacity = 1,
 }) {
-  return Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Opacity(
-        opacity: dateOpacity,
-        child: Text(
-          periodLabel,
-          key: dateKey,
-          textAlign: TextAlign.right,
-          style: _tooltipDateStyle(theme),
+  return Material(
+    type: MaterialType.transparency,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Opacity(
+          opacity: dateOpacity,
+          child: Text(
+            periodLabel,
+            key: dateKey,
+            textAlign: TextAlign.right,
+            style: _tooltipDateStyle(theme),
+          ),
         ),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        valueLabel ?? '–',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: valueLabel == null
-              ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
-              : theme.colorScheme.onSurface,
-          fontWeight: FontWeight.normal,
-          fontSize: 14,
+        const SizedBox(height: 4),
+        Text(
+          valueLabel ?? '–',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: valueLabel == null
+                ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
+                : theme.colorScheme.onSurface,
+            fontWeight: FontWeight.normal,
+            fontSize: 14,
+          ),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 }
 
@@ -1462,22 +1477,23 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
         child: IgnorePointer(
           child: IntrinsicWidth(
             key: _tooltipKey,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 64),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: calendarPanelBackgroundColor(context),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                ),
-                child: _tooltipDateValueColumn(
-                  periodLabel: widget.periodLabel,
-                  valueLabel: widget.valueLabel,
-                  theme: theme,
-                  dateKey: _tooltipDateKey,
-                ),
+            // No Material of its own here — [_tooltipDateValueColumn]
+            // provides one, so the ambient DefaultTextStyle it resolves is
+            // the same regardless of what's around it (see that function's
+            // doc comment).
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 64),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: calendarPanelBackgroundColor(context),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: _tooltipDateValueColumn(
+                periodLabel: widget.periodLabel,
+                valueLabel: widget.valueLabel,
+                theme: theme,
+                dateKey: _tooltipDateKey,
               ),
             ),
           ),
