@@ -244,6 +244,10 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
           final val = existing?.intValue ?? widget.tracker.defaultInt;
           if (_intController.text != val.toString()) {
             _intController.text = val.toString();
+            _intController.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: _intController.text.length,
+            );
           }
         }
 
@@ -287,22 +291,43 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
     switch (widget.tracker.type) {
       case TrackerType.integer:
         final cap = widget.tracker.integerCap;
+        final minVal = widget.tracker.defaultInt;
         return Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 80,
-              child: VoyagerTextField(
-                controller: _intController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  isDense: true,
-                  helperText: cap == null ? null : '0-$cap',
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 80,
+                  child: VoyagerTextField(
+                    controller: _intController,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    onSubmitted: (_) => _saveInt(existing),
+                  ),
                 ),
-                onSubmitted: (_) => _saveInt(existing),
-              ),
+                if (cap != null) ...[
+                  const SizedBox(height: 2),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      '$minVal-$cap',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontSize: 8,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(width: 6),
             FilledButton(
