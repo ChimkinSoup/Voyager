@@ -11,14 +11,12 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
-import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
-import 'package:voyager/features/analytics/ranking_prompt_banner.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/dev/dev_calendar_debug_tile.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart'
@@ -32,6 +30,7 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart'
         monthDayGridWeekdayHeaderGap,
         monthGridDates;
 import 'package:flutter/services.dart';
+import 'dart:ui' show lerpDouble;
 
 // ---------------------------------------------------------------------------
 // View mode
@@ -85,51 +84,45 @@ class AnalyticsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final entriesAsync = ref.watch(allJournalEntriesProvider);
     final trackersAsync = ref.watch(trackersProvider);
-    final rankingConfigsAsync = ref.watch(rankingConfigsProvider);
     final analytics = ref.watch(analyticsServiceProvider);
     final prompt = ref.watch(periodicPromptServiceProvider);
     final viewMode = ref.watch(_analyticsViewModeProvider);
 
     return trackersAsync.when(
       data: (trackers) => entriesAsync.when(
-        data: (entries) => rankingConfigsAsync.when(
-          data: (rankingConfigs) {
-            final words = entries.fold<int>(
-              0,
-              (sum, e) => sum + analytics.countWords(e.body),
-            );
-            final streak = prompt.longestJournalStreak(entries);
-            return KeepAliveScrollView(
-              storageKey: ShellPageStorageKeys.analyticsList,
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              children: [
-                // ── Global Stats Header ──────────────────────────────────
-                _GlobalStatsHeader(
-                  totalEntries: analytics.totalJournalEntries(entries),
-                  totalWords: words,
-                  longestStreak: streak,
-                  rankingConfigs: rankingConfigs,
-                  hasTrackers: trackers.isNotEmpty,
-                  trackers: trackers,
-                  viewMode: viewMode,
-                  onViewModeChanged: (m) =>
-                      ref.read(_analyticsViewModeProvider.notifier).state = m,
-                  onCreateTracker: () => _createTracker(context, ref),
-                ),
-                const SizedBox(height: 12),
-                if (trackers.isEmpty)
-                  const _EmptyTrackersCard()
-                else if (viewMode == _AnalyticsViewMode.grid)
-                  _GridView(trackers: trackers, analytics: analytics)
-                else
-                  _CalendarView(trackers: trackers, analytics: analytics),
-                const SizedBox(height: 32),
-              ],
-            );
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('$e')),
-        ),
+        data: (entries) {
+          final words = entries.fold<int>(
+            0,
+            (sum, e) => sum + analytics.countWords(e.body),
+          );
+          final streak = prompt.longestJournalStreak(entries);
+          return KeepAliveScrollView(
+            storageKey: ShellPageStorageKeys.analyticsList,
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+            children: [
+              // ── Global Stats Header ──────────────────────────────────
+              _GlobalStatsHeader(
+                totalEntries: analytics.totalJournalEntries(entries),
+                totalWords: words,
+                longestStreak: streak,
+                hasTrackers: trackers.isNotEmpty,
+                trackers: trackers,
+                viewMode: viewMode,
+                onViewModeChanged: (m) =>
+                    ref.read(_analyticsViewModeProvider.notifier).state = m,
+                onCreateTracker: () => _createTracker(context, ref),
+              ),
+              const SizedBox(height: 12),
+              if (trackers.isEmpty)
+                const _EmptyTrackersCard()
+              else if (viewMode == _AnalyticsViewMode.grid)
+                _GridView(trackers: trackers, analytics: analytics)
+              else
+                _CalendarView(trackers: trackers, analytics: analytics),
+              const SizedBox(height: 32),
+            ],
+          );
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
       ),
@@ -158,7 +151,6 @@ class _GlobalStatsHeader extends ConsumerWidget {
     required this.totalEntries,
     required this.totalWords,
     required this.longestStreak,
-    required this.rankingConfigs,
     required this.hasTrackers,
     required this.trackers,
     required this.viewMode,
@@ -169,7 +161,6 @@ class _GlobalStatsHeader extends ConsumerWidget {
   final int totalEntries;
   final int totalWords;
   final int longestStreak;
-  final List<RankingConfig> rankingConfigs;
   final bool hasTrackers;
   final List<StatisticTracker> trackers;
   final _AnalyticsViewMode viewMode;
@@ -218,16 +209,6 @@ class _GlobalStatsHeader extends ConsumerWidget {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    if (rankingConfigs.isNotEmpty) ...[
-                      Text(
-                        'Periodic Rankings',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                    ],
                     if (hasTrackers) ...[
                       SegmentedButton<_AnalyticsViewMode>(
                         showSelectedIcon: false,
@@ -323,14 +304,8 @@ class _GlobalStatsHeader extends ConsumerWidget {
               icon: const Icon(PhosphorIconsRegular.plus, size: 16),
               label: const Text('New tracker'),
             ),
-            const SizedBox(width: 8),
-            _AddRankingButton(),
           ],
         ),
-        if (rankingConfigs.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          for (final config in rankingConfigs) _RankingCard(config: config),
-        ],
       ],
     );
   }
@@ -393,270 +368,6 @@ class _StatChip extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Add Ranking button (extracted so it can be used in two places)
-// ---------------------------------------------------------------------------
-
-class _AddRankingButton extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return TextButton.icon(
-      onPressed: () async {
-        final config = await showDialog<RankingConfig>(
-          context: context,
-          builder: (_) => const _RankingDialog(),
-        );
-        if (config == null) return;
-        await ref.read(trackerRepositoryProvider).upsertRankingConfig(config);
-        ref.invalidate(rankingConfigsProvider);
-      },
-      icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-      label: const Text('New ranking'),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Rankings (kept as-is from original)
-// ---------------------------------------------------------------------------
-
-class _RankingCard extends ConsumerWidget {
-  const _RankingCard({required this.config});
-
-  final RankingConfig config;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(rankingValuesProvider(config.id));
-    final weekStartsMonday =
-        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: valuesAsync.when(
-          data: (values) {
-            final sorted = [...values]
-              ..sort((a, b) => a.periodStart.compareTo(b.periodStart));
-            final lastCompleted =
-                sorted.isEmpty ? null : sorted.last.periodStart;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        config.name,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                    ),
-                    Text(
-                      '${config.cadence.name} / 1-${config.maxValue}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                RankingPromptBanner(
-                  cadence: config.cadence,
-                  maxValue: config.maxValue,
-                  lastCompleted: lastCompleted,
-                  weekStartsMonday: weekStartsMonday,
-                  onSubmit: (value) =>
-                      _saveRanking(ref, value, weekStartsMonday),
-                ),
-                if (sorted.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 80,
-                    child: LineChart(
-                      LineChartData(
-                        minY: 1,
-                        maxY: config.maxValue.toDouble(),
-                        gridData: const FlGridData(show: false),
-                        titlesData: const FlTitlesData(show: false),
-                        borderData: FlBorderData(show: false),
-                        lineBarsData: [
-                          LineChartBarData(
-                            spots: [
-                              for (var i = 0; i < sorted.length; i++)
-                                FlSpot(i.toDouble(), sorted[i].value.toDouble()),
-                            ],
-                            isCurved: true,
-                            preventCurveOverShooting: true,
-                            preventCurveOvershootingThreshold: 0,
-                            color: Color(config.colorStart),
-                            dotData: const FlDotData(show: false),
-                            belowBarData: BarAreaData(
-                              show: true,
-                              color: Color(config.colorStart).withValues(alpha: 0.1),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            );
-          },
-          loading: () => const LinearProgressIndicator(),
-          error: (e, _) => Text('$e'),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _saveRanking(
-    WidgetRef ref,
-    int value,
-    bool weekStartsMonday,
-  ) async {
-    final periodStart = _periodStart(
-      DateTime.now(),
-      config.cadence,
-      weekStartsMonday: weekStartsMonday,
-    );
-    final now = utcNow();
-    await ref.read(trackerRepositoryProvider).upsertRankingValue(
-          RankingValue(
-            id: '${config.id}_${periodStart.millisecondsSinceEpoch}',
-            configId: config.id,
-            periodStart: periodStart,
-            value: value,
-            createdAt: now,
-            updatedAt: now,
-          ),
-        );
-    ref.invalidate(rankingValuesProvider(config.id));
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Ranking Dialog (kept as-is)
-// ---------------------------------------------------------------------------
-
-class _RankingDialog extends ConsumerStatefulWidget {
-  const _RankingDialog();
-
-  @override
-  ConsumerState<_RankingDialog> createState() => _RankingDialogState();
-}
-
-class _RankingDialogState extends ConsumerState<_RankingDialog> {
-  final _nameController = TextEditingController(text: 'Weekly review');
-  final _maxController = TextEditingController(text: '10');
-  var _cadence = TrackerCadence.weekly;
-  late int _colorStart;
-  late int _colorEnd;
-  var _initialized = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialized) return;
-    _initialized = true;
-    final palette = ref.read(colorPaletteProvider);
-    _colorStart =
-        palette.contains(0xFF4CAF50) ? 0xFF4CAF50 : palette.first;
-    _colorEnd = palette.contains(0xFFF44336) ? 0xFFF44336 : palette.last;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _maxController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('New periodic ranking'),
-      content: SizedBox(
-        width: 360,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-            VoyagerTextField(
-              controller: _nameController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Name'),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            VoyagerDropdownButtonFormField<TrackerCadence>(
-              initialValue: _cadence,
-              decoration: const InputDecoration(labelText: 'Cadence'),
-              items: TrackerCadence.values
-                  .map(
-                    (cadence) => DropdownMenuItem(
-                      value: cadence,
-                      child: Text(cadence.name),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) =>
-                  setState(() => _cadence = value ?? _cadence),
-            ),
-            const SizedBox(height: 12),
-            VoyagerTextField(
-              controller: _maxController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Max value'),
-            ),
-            const SizedBox(height: 12),
-            ColorPickerField(
-              label: 'Low score color',
-              value: _colorStart,
-              onChanged: (value) => setState(() => _colorStart = value),
-            ),
-            const SizedBox(height: 12),
-            ColorPickerField(
-              label: 'High score color',
-              value: _colorEnd,
-              onChanged: (value) => setState(() => _colorEnd = value),
-            ),
-          ],
-        ),
-      ),
-    ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
-      ],
-    );
-  }
-
-  void _submit() {
-    final name = _nameController.text.trim();
-    final maxValue = int.tryParse(_maxController.text.trim()) ?? 10;
-    if (name.isEmpty || maxValue < 2) return;
-    final now = utcNow();
-    Navigator.pop(
-      context,
-      RankingConfig(
-        id: newId(),
-        name: name,
-        cadence: _cadence,
-        maxValue: maxValue,
-        colorStart: _colorStart,
-        colorEnd: _colorEnd,
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-  }
-}
-
-
 
 class _EmptyTrackersCard extends StatelessWidget {
   const _EmptyTrackersCard();
@@ -886,7 +597,7 @@ class _SparklineRow extends ConsumerWidget {
                               (spot) => LineTooltipItem(
                                 spot.y.toStringAsFixed(1),
                                 TextStyle(
-                                  color: theme.colorScheme.onSurface,
+                                  color: color,
                                   fontWeight: FontWeight.normal,
                                   fontSize: 12,
                                 ),
@@ -1046,43 +757,208 @@ class _SparklineRow extends ConsumerWidget {
 // Heatmap Grid
 // ---------------------------------------------------------------------------
 
-class _HeatmapGrid extends StatelessWidget {
+/// Sort comparator for trackers within a single group (starred, or one
+/// cadence): manual [StatisticTracker.sortOrder] first, falling back to
+/// creation order so freshly-created trackers — which all default to
+/// sortOrder 0 — still land in a stable, sensible position.
+int _compareTrackerOrder(StatisticTracker a, StatisticTracker b) {
+  if (a.sortOrder != b.sortOrder) return a.sortOrder.compareTo(b.sortOrder);
+  return a.createdAt.compareTo(b.createdAt);
+}
+
+bool _sameTrackerIds(List<StatisticTracker> a, List<StatisticTracker> b) {
+  if (a.length != b.length) return false;
+  final ids = a.map((t) => t.id).toSet();
+  return b.every((t) => ids.contains(t.id));
+}
+
+/// Moves [tracker] to the end of its new group (the starred group if newly
+/// starred, otherwise back into its cadence group) when its star is toggled.
+Future<void> _toggleTrackerStar(
+  WidgetRef ref,
+  StatisticTracker tracker,
+  List<StatisticTracker> allTrackers,
+) async {
+  final starring = !tracker.starred;
+  final siblings = starring
+      ? allTrackers.where((t) => t.starred)
+      : allTrackers.where(
+          (t) => !t.starred && t.cadence == tracker.cadence && t.id != tracker.id,
+        );
+  var maxOrder = -1;
+  for (final t in siblings) {
+    if (t.sortOrder > maxOrder) maxOrder = t.sortOrder;
+  }
+  await ref.read(trackerRepositoryProvider).upsertTracker(
+        tracker.copyWith(starred: starring, sortOrder: maxOrder + 1),
+      );
+  ref.invalidate(trackersProvider);
+}
+
+/// A faint horizontal rule separating groups (starred vs. time-period, or
+/// between adjacent time periods) in the heatmap grid.
+class _HeatmapGroupDivider extends StatelessWidget {
+  const _HeatmapGroupDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Container(
+        height: 1,
+        color: Colors.white.withValues(alpha: 0.12),
+      ),
+    );
+  }
+}
+
+class _HeatmapGrid extends ConsumerWidget {
   const _HeatmapGrid({required this.trackers, required this.analytics});
 
   final List<StatisticTracker> trackers;
   final AnalyticsService analytics;
 
   @override
-  Widget build(BuildContext context) {
-    // Group by cadence with dividers between groups
-    final byGroup = <TrackerCadence, List<StatisticTracker>>{};
-    for (final t in trackers) {
-      byGroup.putIfAbsent(t.cadence, () => []).add(t);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final starred = trackers.where((t) => t.starred).toList()
+      ..sort(_compareTrackerOrder);
+
+    final byCadence = <TrackerCadence, List<StatisticTracker>>{};
+    for (final t in trackers.where((t) => !t.starred)) {
+      byCadence.putIfAbsent(t.cadence, () => []).add(t);
     }
-    final groups = TrackerCadence.values
-        .where((c) => byGroup.containsKey(c))
+    for (final group in byCadence.values) {
+      group.sort(_compareTrackerOrder);
+    }
+    final cadenceGroups = TrackerCadence.values
+        .where((c) => byCadence.containsKey(c))
         .toList();
 
-    final rows = <Widget>[];
-    for (var gi = 0; gi < groups.length; gi++) {
-      if (gi > 0) {
-        rows.add(const Divider(
-          height: 24,
-          thickness: 0.5,
-          indent: 0,
-          endIndent: 0,
-        ));
+    void toggleStar(StatisticTracker tracker) {
+      unawaited(_toggleTrackerStar(ref, tracker, trackers));
+    }
+
+    final sections = <Widget>[];
+    if (starred.isNotEmpty) {
+      sections.add(_HeatmapBucket(
+        key: const ValueKey('starred'),
+        trackers: starred,
+        analytics: analytics,
+        onToggleStar: toggleStar,
+      ));
+      if (cadenceGroups.isNotEmpty) {
+        sections.add(const _HeatmapGroupDivider());
       }
-      final groupTrackers = byGroup[groups[gi]]!;
-      for (final tracker in groupTrackers) {
-        rows.add(_HeatmapRow(tracker: tracker, analytics: analytics));
-        rows.add(const SizedBox(height: 6));
-      }
+    }
+    for (var gi = 0; gi < cadenceGroups.length; gi++) {
+      if (gi > 0) sections.add(const _HeatmapGroupDivider());
+      sections.add(_HeatmapBucket(
+        key: ValueKey(cadenceGroups[gi].name),
+        trackers: byCadence[cadenceGroups[gi]]!,
+        analytics: analytics,
+        onToggleStar: toggleStar,
+      ));
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: rows,
+      children: sections,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Heatmap Bucket — one freely-reorderable group (starred, or a single
+// cadence). Which groups exist and their relative order (starred, then
+// daily < weekly < monthly < yearly) is fixed; only the order *within* a
+// group is user-draggable. Each group owns its own [ReorderableListView], so
+// an item physically cannot be dragged into a different group's list.
+// ---------------------------------------------------------------------------
+
+class _HeatmapBucket extends ConsumerStatefulWidget {
+  const _HeatmapBucket({
+    super.key,
+    required this.trackers,
+    required this.analytics,
+    required this.onToggleStar,
+  });
+
+  final List<StatisticTracker> trackers;
+  final AnalyticsService analytics;
+  final ValueChanged<StatisticTracker> onToggleStar;
+
+  @override
+  ConsumerState<_HeatmapBucket> createState() => _HeatmapBucketState();
+}
+
+class _HeatmapBucketState extends ConsumerState<_HeatmapBucket> {
+  late List<StatisticTracker> _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List.of(widget.trackers);
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeatmapBucket oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_sameTrackerIds(widget.trackers, _items)) {
+      // Membership changed (tracker added/removed, or starred/unstarred
+      // elsewhere) — adopt the incoming order outright.
+      _items = List.of(widget.trackers);
+      return;
+    }
+    // Same membership: refresh individual tracker objects (e.g. edited
+    // name/color) while preserving the current local drag order, so an
+    // in-flight reorder's optimistic UI isn't reverted by an unrelated
+    // rebuild before persistence finishes.
+    final byId = {for (final t in widget.trackers) t.id: t};
+    _items = [for (final t in _items) byId[t.id] ?? t];
+  }
+
+  void _handleReorder(int oldIndex, int newIndex) {
+    setState(() {
+      final item = _items.removeAt(oldIndex);
+      _items.insert(newIndex, item);
+    });
+    unawaited(_persist());
+  }
+
+  Future<void> _persist() async {
+    final repo = ref.read(trackerRepositoryProvider);
+    for (var i = 0; i < _items.length; i++) {
+      if (_items[i].sortOrder != i) {
+        await repo.upsertTracker(_items[i].copyWith(sortOrder: i));
+      }
+    }
+    ref.invalidate(trackersProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorderItem: _handleReorder,
+      proxyDecorator: (child, index, animation) =>
+          Material(type: MaterialType.transparency, child: child),
+      children: [
+        for (var i = 0; i < _items.length; i++)
+          ReorderableDragStartListener(
+            key: ValueKey(_items[i].id),
+            index: i,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: _HeatmapRow(
+                tracker: _items[i],
+                analytics: widget.analytics,
+                onToggleStar: () => widget.onToggleStar(_items[i]),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1092,10 +968,15 @@ class _HeatmapGrid extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _HeatmapRow extends ConsumerWidget {
-  const _HeatmapRow({required this.tracker, required this.analytics});
+  const _HeatmapRow({
+    required this.tracker,
+    required this.analytics,
+    required this.onToggleStar,
+  });
 
   final StatisticTracker tracker;
   final AnalyticsService analytics;
+  final VoidCallback onToggleStar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1141,6 +1022,21 @@ class _HeatmapRow extends ConsumerWidget {
                   ),
                 ),
                 const Spacer(),
+                IconButton(
+                  icon: Icon(
+                    tracker.starred
+                        ? PhosphorIconsFill.star
+                        : PhosphorIconsRegular.star,
+                    size: 14,
+                  ),
+                  constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                  color: tracker.starred
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                  onPressed: onToggleStar,
+                ),
+                const SizedBox(width: 12),
                 IconButton(
                   icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 14),
                   constraints: const BoxConstraints(),
@@ -1265,6 +1161,19 @@ String _tooltipPeriodLabel(DateTime date, TrackerCadence cadence) {
   };
 }
 
+/// A text-legible analogue of the heatmap cells' own alpha-based intensity
+/// coloring (see e.g. [_HeatmapSquareState.build]): fading a *fill* toward
+/// alpha 0 reads as "faint," but doing the same to thin text glyphs makes
+/// them unreadable. Desaturating the tracker's color toward grey instead —
+/// same hue/lightness, less saturation — gives the same "faint at low
+/// values, vivid at high values" read while staying fully opaque.
+Color _heatmapValueColor(Color base, double intensity) {
+  final hsl = HSLColor.fromColor(base);
+  final t = intensity.clamp(0.0, 1.0);
+  final saturation = lerpDouble(0.15, hsl.saturation, t)!;
+  return hsl.withSaturation(saturation).toColor();
+}
+
 String? _tooltipValueLabel(TrackerType type, TrackerValue? value) {
   if (value == null) return null;
   return switch (type) {
@@ -1328,6 +1237,7 @@ Widget _tooltipDateValueColumn({
   required ThemeData theme,
   Key? dateKey,
   double dateOpacity = 1,
+  Color? valueColor,
 }) {
   return Material(
     type: MaterialType.transparency,
@@ -1351,7 +1261,7 @@ Widget _tooltipDateValueColumn({
           style: TextStyle(
             color: valueLabel == null
                 ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
-                : theme.colorScheme.onSurface,
+                : (valueColor ?? theme.colorScheme.onSurface),
             fontWeight: FontWeight.normal,
             fontSize: 14,
           ),
@@ -1374,10 +1284,12 @@ Widget _hoverTooltip({
   required DateTime periodDate,
   required VoidCallback onSaved,
   required Widget child,
+  Color? valueColor,
 }) {
   return _HoverEditPopover(
     periodLabel: periodLabel,
     valueLabel: _tooltipValueLabel(type, value),
+    valueColor: valueColor,
     tracker: tracker,
     periodDate: periodDate,
     initialValue: value,
@@ -1398,6 +1310,7 @@ class _HoverEditPopover extends StatefulWidget {
   const _HoverEditPopover({
     required this.periodLabel,
     required this.valueLabel,
+    this.valueColor,
     required this.tracker,
     required this.periodDate,
     required this.initialValue,
@@ -1407,6 +1320,7 @@ class _HoverEditPopover extends StatefulWidget {
 
   final String periodLabel;
   final String? valueLabel;
+  final Color? valueColor;
   final StatisticTracker tracker;
   final DateTime periodDate;
   final TrackerValue? initialValue;
@@ -1492,6 +1406,7 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
               child: _tooltipDateValueColumn(
                 periodLabel: widget.periodLabel,
                 valueLabel: widget.valueLabel,
+                valueColor: widget.valueColor,
                 theme: theme,
                 dateKey: _tooltipDateKey,
               ),
@@ -1533,6 +1448,7 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
         initialValue: widget.initialValue,
         periodLabel: widget.periodLabel,
         valueLabel: widget.valueLabel,
+        valueColor: widget.valueColor,
         onSaved: widget.onSaved,
       );
     }
@@ -1570,6 +1486,7 @@ Future<void> _showMorphPopover({
   required TrackerValue? initialValue,
   required String periodLabel,
   required String? valueLabel,
+  Color? valueColor,
   required VoidCallback onSaved,
 }) {
   return Navigator.of(context, rootNavigator: true).push<void>(
@@ -1591,6 +1508,7 @@ Future<void> _showMorphPopover({
         initialValue: initialValue,
         periodLabel: periodLabel,
         valueLabel: valueLabel,
+        valueColor: valueColor,
         onSaved: onSaved,
       ),
     ),
@@ -1625,6 +1543,7 @@ class _MorphPopover extends ConsumerStatefulWidget {
     required this.initialValue,
     required this.periodLabel,
     required this.valueLabel,
+    this.valueColor,
     required this.onSaved,
   });
 
@@ -1642,6 +1561,7 @@ class _MorphPopover extends ConsumerStatefulWidget {
   final TrackerValue? initialValue;
   final String periodLabel;
   final String? valueLabel;
+  final Color? valueColor;
   final VoidCallback onSaved;
 
   @override
@@ -1944,6 +1864,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           child: _tooltipDateValueColumn(
             periodLabel: widget.periodLabel,
             valueLabel: widget.valueLabel,
+            valueColor: widget.valueColor,
             theme: theme,
             dateKey: _tooltipDateKey,
             dateOpacity: 0,
@@ -2230,6 +2151,7 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
       value: value,
       tracker: widget.tracker,
       periodDate: widget.periodDate,
+      valueColor: value == null ? null : _heatmapValueColor(color, intensity),
       onSaved: () {
         ref.invalidate(trackerValuesProvider(widget.tracker.id));
         ref.invalidate(pendingStatEntriesProvider);
@@ -2799,6 +2721,23 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
           height: 280,
           child: LineChart(
             LineChartData(
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => calendarPanelBackgroundColor(context),
+                  getTooltipItems: (touchedSpots) => touchedSpots
+                      .map(
+                        (spot) => LineTooltipItem(
+                          spot.y.toStringAsFixed(1),
+                          TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.normal,
+                            fontSize: 12,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
               minY: 0,
               maxY: maxY * 1.2,
               gridData: FlGridData(
@@ -3444,6 +3383,7 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
       value: value,
       tracker: widget.tracker,
       periodDate: widget.date,
+      valueColor: value == null ? null : _heatmapValueColor(color, intensity),
       onSaved: () {
         ref.invalidate(trackerValuesProvider(widget.tracker.id));
         ref.invalidate(pendingStatEntriesProvider);
@@ -3546,6 +3486,7 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
       value: value,
       tracker: widget.tracker,
       periodDate: _weekStart,
+      valueColor: value == null ? null : _heatmapValueColor(color, intensity),
       onSaved: () {
         ref.invalidate(trackerValuesProvider(widget.tracker.id));
         ref.invalidate(pendingStatEntriesProvider);
@@ -3754,6 +3695,7 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
             value: value,
             tracker: widget.tracker,
             periodDate: widget.periodDate,
+            valueColor: value == null ? null : _heatmapValueColor(color, intensity),
             onSaved: () {
               ref.invalidate(trackerValuesProvider(widget.tracker.id));
               ref.invalidate(pendingStatEntriesProvider);
@@ -3932,6 +3874,7 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
             value: value,
             tracker: widget.tracker,
             periodDate: widget.periodDate,
+            valueColor: value == null ? null : _heatmapValueColor(color, intensity),
             onSaved: () {
               ref.invalidate(trackerValuesProvider(widget.tracker.id));
               ref.invalidate(pendingStatEntriesProvider);
@@ -4461,6 +4404,8 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         // Only set trackingStyle for integer type; null for others
         trackingStyle:
             _type == TrackerType.integer ? _trackingStyle : null,
+        starred: widget.tracker?.starred ?? false,
+        sortOrder: widget.tracker?.sortOrder ?? 0,
         createdAt: widget.tracker?.createdAt ?? now,
         updatedAt: now,
       ),
@@ -4480,22 +4425,3 @@ String _typeLabel(TrackerType type) {
   };
 }
 
-DateTime _periodStart(
-  DateTime date,
-  TrackerCadence cadence, {
-  required bool weekStartsMonday,
-}) {
-  final local = DateTime(date.year, date.month, date.day);
-  return switch (cadence) {
-    TrackerCadence.daily => local,
-    TrackerCadence.weekly => local.subtract(
-        Duration(
-          days: weekStartsMonday
-              ? local.weekday - DateTime.monday
-              : local.weekday % 7,
-        ),
-      ),
-    TrackerCadence.monthly => DateTime(local.year, local.month),
-    TrackerCadence.yearly => DateTime(local.year),
-  };
-}

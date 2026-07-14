@@ -340,35 +340,4 @@ void main() {
     expect(values, hasLength(1));
     expect(values.first.intValue, 7);
   });
-
-  test('tracker repository persists ranking configs and values', () async {
-    final now = utcNow();
-    final config = RankingConfig(
-      id: newId(),
-      name: 'Weekly review',
-      cadence: TrackerCadence.weekly,
-      maxValue: 10,
-      createdAt: now,
-      updatedAt: now,
-    );
-    await trackerRepo.upsertRankingConfig(config);
-
-    final value = RankingValue(
-      id: newId(),
-      configId: config.id,
-      periodStart: DateTime(now.year, now.month, now.day),
-      value: 8,
-      createdAt: now,
-      updatedAt: now,
-    );
-    await trackerRepo.upsertRankingValue(value);
-
-    final configs = await trackerRepo.listRankingConfigs();
-    final values = await trackerRepo.listRankingValues(config.id);
-
-    expect(configs, hasLength(1));
-    expect(configs.first.name, 'Weekly review');
-    expect(values, hasLength(1));
-    expect(values.first.value, 8);
-  });
 }
