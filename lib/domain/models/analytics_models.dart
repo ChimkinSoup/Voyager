@@ -18,6 +18,8 @@ class StatisticTracker extends SoftDeletable {
     this.enumOptions = const [],
     this.defaultEnumOption,
     this.trackingStyle,
+    this.starred = false,
+    this.sortOrder = 0,
   });
 
   final String name;
@@ -35,6 +37,14 @@ class StatisticTracker extends SoftDeletable {
   /// For integer trackers, null is treated as [TrackerStyle.independent].
   final TrackerStyle? trackingStyle;
 
+  /// Forces the tracker above all others in the grid view, regardless of
+  /// [cadence]. Starred trackers form their own freely-reorderable group.
+  final bool starred;
+
+  /// Manual position within whichever group the tracker currently belongs
+  /// to (the starred group if [starred], otherwise its [cadence] group).
+  final int sortOrder;
+
   /// The resolved visualisation style, applying defaults.
   TrackerStyle? get effectiveTrackingStyle {
     if (type != TrackerType.integer) return null;
@@ -46,6 +56,8 @@ class StatisticTracker extends SoftDeletable {
     bool? showOnCalendar,
     DateTime? deletedAt,
     TrackerStyle? trackingStyle,
+    bool? starred,
+    int? sortOrder,
   }) {
     return StatisticTracker(
       id: id,
@@ -63,6 +75,8 @@ class StatisticTracker extends SoftDeletable {
       enumOptions: enumOptions,
       defaultEnumOption: defaultEnumOption,
       trackingStyle: trackingStyle ?? this.trackingStyle,
+      starred: starred ?? this.starred,
+      sortOrder: sortOrder ?? this.sortOrder,
     );
   }
 }
@@ -85,40 +99,4 @@ class TrackerValue extends SoftDeletable {
   final int? intValue;
   final bool? boolValue;
   final String? enumValue;
-}
-
-class RankingConfig extends SoftDeletable {
-  const RankingConfig({
-    required super.id,
-    required super.createdAt,
-    required super.updatedAt,
-    super.deletedAt,
-    required this.name,
-    required this.cadence,
-    required this.maxValue,
-    this.colorStart = 0xFF4CAF50,
-    this.colorEnd = 0xFFF44336,
-  });
-
-  final String name;
-  final TrackerCadence cadence;
-  final int maxValue;
-  final int colorStart;
-  final int colorEnd;
-}
-
-class RankingValue extends SoftDeletable {
-  const RankingValue({
-    required super.id,
-    required super.createdAt,
-    required super.updatedAt,
-    super.deletedAt,
-    required this.configId,
-    required this.periodStart,
-    required this.value,
-  });
-
-  final String configId;
-  final DateTime periodStart;
-  final int value;
 }

@@ -483,16 +483,6 @@ final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
   return pending;
 });
 
-final rankingConfigsProvider = FutureProvider((ref) {
-  ref.keepAlive();
-  return ref.watch(trackerRepositoryProvider).listRankingConfigs();
-});
-
-final rankingValuesProvider = FutureProvider.family((ref, String configId) {
-  ref.keepAlive();
-  return ref.watch(trackerRepositoryProvider).listRankingValues(configId);
-});
-
 final geometricShaderProvider = FutureProvider<FragmentProgram?>((ref) async {
   ref.keepAlive();
   try {
@@ -585,7 +575,6 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
     ref.read(journalEntryCountsProvider.future).then((_) {}),
     ref.read(calendarEventsProvider.future).then((_) {}),
     ref.read(trackersProvider.future).then((_) {}),
-    ref.read(rankingConfigsProvider.future).then((_) {}),
     listsFuture.then((lists) async {
       await Future.wait<void>([
         ref.read(allTodoTasksProvider.future).then((_) {}),
@@ -683,7 +672,6 @@ final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
     cacheStatusFromAsync('Journal entries', ref.watch(journalEntriesProvider)),
     cacheStatusFromAsync('Calendar events', ref.watch(calendarEventsProvider)),
     cacheStatusFromAsync('Trackers', ref.watch(trackersProvider)),
-    cacheStatusFromAsync('Ranking configs', ref.watch(rankingConfigsProvider)),
     cacheStatusFromAsync('Current weather', ref.watch(currentWeatherProvider)),
     cacheStatusFromAsync('Weather forecast', ref.watch(weatherForecastProvider)),
     cacheStatusFromAsync('Shell warmup', ref.watch(shellDataWarmupProvider)),

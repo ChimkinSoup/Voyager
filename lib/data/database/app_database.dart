@@ -119,6 +119,8 @@ class TrackersTable extends Table {
   TextColumn get enumOptionsJson => text().withDefault(const Constant('[]'))();
   TextColumn get defaultEnumOption => text().nullable()();
   TextColumn get trackingStyle => text().nullable()();
+  BoolColumn get starred => boolean().withDefault(const Constant(false))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -142,35 +144,6 @@ class TrackerValuesTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-class RankingConfigsTable extends Table {
-  TextColumn get id => text()();
-  TextColumn get name => text()();
-  TextColumn get cadence => text()();
-  IntColumn get maxValue => integer()();
-  IntColumn get colorStart =>
-      integer().withDefault(const Constant(0xFF4CAF50))();
-  IntColumn get colorEnd => integer().withDefault(const Constant(0xFFF44336))();
-  DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime()();
-  DateTimeColumn get deletedAt => dateTime().nullable()();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-class RankingValuesTable extends Table {
-  TextColumn get id => text()();
-  TextColumn get configId => text()();
-  DateTimeColumn get periodStart => dateTime()();
-  IntColumn get value => integer()();
-  DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime()();
-  DateTimeColumn get deletedAt => dateTime().nullable()();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
 class SettingsTable extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
   IntColumn get accentColor =>
@@ -186,10 +159,6 @@ class SettingsTable extends Table {
       text().withDefault(const Constant(defaultCalendarNavigateLeftKey))();
   TextColumn get calendarNavigateRightKey =>
       text().withDefault(const Constant(defaultCalendarNavigateRightKey))();
-  IntColumn get rankingColorStart =>
-      integer().withDefault(const Constant(0xFF4CAF50))();
-  IntColumn get rankingColorEnd =>
-      integer().withDefault(const Constant(0xFFF44336))();
   BoolColumn get timelineModeYearZero =>
       boolean().withDefault(const Constant(true))();
   IntColumn get birthYear => integer().nullable()();
@@ -307,8 +276,6 @@ class PendingUploadsTable extends Table {
     CalendarEventsTable,
     TrackersTable,
     TrackerValuesTable,
-    RankingConfigsTable,
-    RankingValuesTable,
     SettingsTable,
     TagColorsTable,
     SyncConflictsTable,
@@ -319,7 +286,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -588,6 +555,16 @@ class AppDatabase extends _$AppDatabase {
       if (from < 34) {
         await migrator.addColumn(trackersTable, trackersTable.trackingStyle);
       }
+      if (from < 35) {
+        await migrator.deleteTable('ranking_configs_table');
+        await migrator.deleteTable('ranking_values_table');
+        await _dropSettingsColumnIfExists(migrator, 'ranking_color_start');
+        await _dropSettingsColumnIfExists(migrator, 'ranking_color_end');
+      }
+      if (from < 36) {
+        await migrator.addColumn(trackersTable, trackersTable.starred);
+        await migrator.addColumn(trackersTable, trackersTable.sortOrder);
+      }
     },
   );
 
@@ -605,6 +582,20 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Skips DROP COLUMN when the local DB doesn't have it (e.g. after branch churn).
+  Future<void> _dropSettingsColumnIfExists(
+    Migrator migrator,
+    String columnName,
+  ) async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('settings_table') WHERE name = ?",
+      variables: [Variable.withString(columnName)],
+    ).get();
+    if (exists.isNotEmpty) {
+      await migrator.dropColumn(settingsTable, columnName);
+    }
+  }
+
   Future<void> _backfillNullBools() async {
     await customStatement(
       'UPDATE settings_table SET hide_completed_tasks = 0 WHERE hide_completed_tasks IS NULL',
@@ -614,6 +605,41 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'UPDATE todo_tasks_table SET starred = 0 WHERE starred IS NULL',
+    );
+    // Columns added via _addSettingsColumnIfNotExists (or the weatherChartCurveTension
+    // try/catch) can be left NULL forever if the column already existed on disk from
+    // branch churn, since the guard then skips the ADD COLUMN that would apply the
+    // Dart-side default. Backfill them unconditionally so a non-nullable read never
+    // hits a null-check crash regardless of migration history.
+    await customStatement(
+      'UPDATE settings_table SET weather_chart_curve_tension = 0.22 WHERE weather_chart_curve_tension IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET dev_show_journal_remote_pull_button = 0 WHERE dev_show_journal_remote_pull_button IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET dev_slow_calendar_animations = 0 WHERE dev_slow_calendar_animations IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_texture_scale = 10.0 WHERE geometric_texture_scale IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_texture_intensity = 0.85 WHERE geometric_texture_intensity IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_texture_focal_spread = 1.0 WHERE geometric_texture_focal_spread IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_texture_focal_point_x = 1.0 WHERE geometric_texture_focal_point_x IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_texture_focal_point_y = 0.5 WHERE geometric_texture_focal_point_y IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_texture_variation_floor = 0.75 WHERE geometric_texture_variation_floor IS NULL',
+    );
+    await customStatement(
+      "UPDATE settings_table SET startup_page_mode = 'first' WHERE startup_page_mode IS NULL",
     );
   }
 

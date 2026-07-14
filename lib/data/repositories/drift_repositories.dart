@@ -651,6 +651,8 @@ class DriftTrackerRepository implements TrackerRepository {
             enumOptionsJson: Value(jsonEncode(tracker.enumOptions)),
             defaultEnumOption: Value(tracker.defaultEnumOption),
             trackingStyle: Value(tracker.trackingStyle?.name),
+            starred: Value(tracker.starred),
+            sortOrder: Value(tracker.sortOrder),
             createdAt: Value(tracker.createdAt),
             updatedAt: Value(tracker.updatedAt),
             deletedAt: Value(tracker.deletedAt),
@@ -706,83 +708,6 @@ class DriftTrackerRepository implements TrackerRepository {
   }
 
   @override
-  Future<List<RankingConfig>> listRankingConfigs() async {
-    final rows = await _db.select(_db.rankingConfigsTable).get();
-    return rows
-        .where((r) => r.deletedAt == null)
-        .map(
-          (r) => RankingConfig(
-            id: r.id,
-            name: r.name,
-            cadence: TrackerCadence.values.byName(r.cadence),
-            maxValue: r.maxValue,
-            colorStart: r.colorStart,
-            colorEnd: r.colorEnd,
-            createdAt: r.createdAt,
-            updatedAt: r.updatedAt,
-            deletedAt: r.deletedAt,
-          ),
-        )
-        .toList();
-  }
-
-  @override
-  Future<void> upsertRankingConfig(RankingConfig config) async {
-    await _db
-        .into(_db.rankingConfigsTable)
-        .insertOnConflictUpdate(
-          RankingConfigsTableCompanion(
-            id: Value(config.id),
-            name: Value(config.name),
-            cadence: Value(config.cadence.name),
-            maxValue: Value(config.maxValue),
-            colorStart: Value(config.colorStart),
-            colorEnd: Value(config.colorEnd),
-            createdAt: Value(config.createdAt),
-            updatedAt: Value(config.updatedAt),
-            deletedAt: Value(config.deletedAt),
-          ),
-        );
-  }
-
-  @override
-  Future<List<RankingValue>> listRankingValues(String configId) async {
-    final rows = await (_db.select(
-      _db.rankingValuesTable,
-    )..where((t) => t.configId.equals(configId))).get();
-    return rows
-        .map(
-          (r) => RankingValue(
-            id: r.id,
-            configId: r.configId,
-            periodStart: r.periodStart,
-            value: r.value,
-            createdAt: r.createdAt,
-            updatedAt: r.updatedAt,
-            deletedAt: r.deletedAt,
-          ),
-        )
-        .toList();
-  }
-
-  @override
-  Future<void> upsertRankingValue(RankingValue value) async {
-    await _db
-        .into(_db.rankingValuesTable)
-        .insertOnConflictUpdate(
-          RankingValuesTableCompanion(
-            id: Value(value.id),
-            configId: Value(value.configId),
-            periodStart: Value(value.periodStart),
-            value: Value(value.value),
-            createdAt: Value(value.createdAt),
-            updatedAt: Value(value.updatedAt),
-            deletedAt: Value(value.deletedAt),
-          ),
-        );
-  }
-
-  @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final trackers = await _db.select(_db.trackersTable).get();
     for (final row in trackers) {
@@ -797,22 +722,6 @@ class DriftTrackerRepository implements TrackerRepository {
       if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
         await (_db.delete(
           _db.trackerValuesTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final configs = await _db.select(_db.rankingConfigsTable).get();
-    for (final row in configs) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.rankingConfigsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final rankings = await _db.select(_db.rankingValuesTable).get();
-    for (final row in rankings) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.rankingValuesTable,
         )..where((t) => t.id.equals(row.id))).go();
       }
     }
@@ -835,6 +744,8 @@ class DriftTrackerRepository implements TrackerRepository {
     trackingStyle: row.trackingStyle == null
         ? null
         : TrackerStyle.values.byName(row.trackingStyle!),
+    starred: row.starred,
+    sortOrder: row.sortOrder,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
@@ -876,8 +787,6 @@ class DriftSettingsRepository implements SettingsRepository {
       todoHotkey: row.todoHotkey,
       calendarNavigateLeftKey: row.calendarNavigateLeftKey,
       calendarNavigateRightKey: row.calendarNavigateRightKey,
-      rankingColorStart: row.rankingColorStart,
-      rankingColorEnd: row.rankingColorEnd,
       timelineModeYearZero: row.timelineModeYearZero,
       birthYear: row.birthYear,
       alertOnPeriodicPrompts: row.alertOnPeriodicPrompts,
@@ -943,8 +852,6 @@ class DriftSettingsRepository implements SettingsRepository {
             todoHotkey: Value(settings.todoHotkey),
             calendarNavigateLeftKey: Value(settings.calendarNavigateLeftKey),
             calendarNavigateRightKey: Value(settings.calendarNavigateRightKey),
-            rankingColorStart: Value(settings.rankingColorStart),
-            rankingColorEnd: Value(settings.rankingColorEnd),
             timelineModeYearZero: Value(settings.timelineModeYearZero),
             birthYear: Value(settings.birthYear),
             alertOnPeriodicPrompts: Value(settings.alertOnPeriodicPrompts),

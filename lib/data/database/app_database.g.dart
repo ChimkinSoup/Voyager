@@ -3759,6 +3759,33 @@ class $TrackersTableTable extends TrackersTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _starredMeta = const VerificationMeta(
+    'starred',
+  );
+  @override
+  late final GeneratedColumn<bool> starred = GeneratedColumn<bool>(
+    'starred',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("starred" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3806,6 +3833,8 @@ class $TrackersTableTable extends TrackersTable
     enumOptionsJson,
     defaultEnumOption,
     trackingStyle,
+    starred,
+    sortOrder,
     createdAt,
     updatedAt,
     deletedAt,
@@ -3914,6 +3943,18 @@ class $TrackersTableTable extends TrackersTable
         ),
       );
     }
+    if (data.containsKey('starred')) {
+      context.handle(
+        _starredMeta,
+        starred.isAcceptableOrUnknown(data['starred']!, _starredMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3993,6 +4034,14 @@ class $TrackersTableTable extends TrackersTable
         DriftSqlType.string,
         data['${effectivePrefix}tracking_style'],
       ),
+      starred: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}starred'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4028,6 +4077,8 @@ class TrackersTableData extends DataClass
   final String enumOptionsJson;
   final String? defaultEnumOption;
   final String? trackingStyle;
+  final bool starred;
+  final int sortOrder;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -4044,6 +4095,8 @@ class TrackersTableData extends DataClass
     required this.enumOptionsJson,
     this.defaultEnumOption,
     this.trackingStyle,
+    required this.starred,
+    required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -4069,6 +4122,8 @@ class TrackersTableData extends DataClass
     if (!nullToAbsent || trackingStyle != null) {
       map['tracking_style'] = Variable<String>(trackingStyle);
     }
+    map['starred'] = Variable<bool>(starred);
+    map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -4097,6 +4152,8 @@ class TrackersTableData extends DataClass
       trackingStyle: trackingStyle == null && nullToAbsent
           ? const Value.absent()
           : Value(trackingStyle),
+      starred: Value(starred),
+      sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -4125,6 +4182,8 @@ class TrackersTableData extends DataClass
         json['defaultEnumOption'],
       ),
       trackingStyle: serializer.fromJson<String?>(json['trackingStyle']),
+      starred: serializer.fromJson<bool>(json['starred']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -4146,6 +4205,8 @@ class TrackersTableData extends DataClass
       'enumOptionsJson': serializer.toJson<String>(enumOptionsJson),
       'defaultEnumOption': serializer.toJson<String?>(defaultEnumOption),
       'trackingStyle': serializer.toJson<String?>(trackingStyle),
+      'starred': serializer.toJson<bool>(starred),
+      'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -4165,6 +4226,8 @@ class TrackersTableData extends DataClass
     String? enumOptionsJson,
     Value<String?> defaultEnumOption = const Value.absent(),
     Value<String?> trackingStyle = const Value.absent(),
+    bool? starred,
+    int? sortOrder,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -4185,6 +4248,8 @@ class TrackersTableData extends DataClass
     trackingStyle: trackingStyle.present
         ? trackingStyle.value
         : this.trackingStyle,
+    starred: starred ?? this.starred,
+    sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -4219,6 +4284,8 @@ class TrackersTableData extends DataClass
       trackingStyle: data.trackingStyle.present
           ? data.trackingStyle.value
           : this.trackingStyle,
+      starred: data.starred.present ? data.starred.value : this.starred,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -4240,6 +4307,8 @@ class TrackersTableData extends DataClass
           ..write('enumOptionsJson: $enumOptionsJson, ')
           ..write('defaultEnumOption: $defaultEnumOption, ')
           ..write('trackingStyle: $trackingStyle, ')
+          ..write('starred: $starred, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -4261,6 +4330,8 @@ class TrackersTableData extends DataClass
     enumOptionsJson,
     defaultEnumOption,
     trackingStyle,
+    starred,
+    sortOrder,
     createdAt,
     updatedAt,
     deletedAt,
@@ -4281,6 +4352,8 @@ class TrackersTableData extends DataClass
           other.enumOptionsJson == this.enumOptionsJson &&
           other.defaultEnumOption == this.defaultEnumOption &&
           other.trackingStyle == this.trackingStyle &&
+          other.starred == this.starred &&
+          other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -4299,6 +4372,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
   final Value<String> enumOptionsJson;
   final Value<String?> defaultEnumOption;
   final Value<String?> trackingStyle;
+  final Value<bool> starred;
+  final Value<int> sortOrder;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -4316,6 +4391,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     this.enumOptionsJson = const Value.absent(),
     this.defaultEnumOption = const Value.absent(),
     this.trackingStyle = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -4334,6 +4411,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     this.enumOptionsJson = const Value.absent(),
     this.defaultEnumOption = const Value.absent(),
     this.trackingStyle = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.deletedAt = const Value.absent(),
@@ -4357,6 +4436,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     Expression<String>? enumOptionsJson,
     Expression<String>? defaultEnumOption,
     Expression<String>? trackingStyle,
+    Expression<bool>? starred,
+    Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -4375,6 +4456,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
       if (enumOptionsJson != null) 'enum_options_json': enumOptionsJson,
       if (defaultEnumOption != null) 'default_enum_option': defaultEnumOption,
       if (trackingStyle != null) 'tracking_style': trackingStyle,
+      if (starred != null) 'starred': starred,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -4395,6 +4478,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     Value<String>? enumOptionsJson,
     Value<String?>? defaultEnumOption,
     Value<String?>? trackingStyle,
+    Value<bool>? starred,
+    Value<int>? sortOrder,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -4413,6 +4498,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
       enumOptionsJson: enumOptionsJson ?? this.enumOptionsJson,
       defaultEnumOption: defaultEnumOption ?? this.defaultEnumOption,
       trackingStyle: trackingStyle ?? this.trackingStyle,
+      starred: starred ?? this.starred,
+      sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -4459,6 +4546,12 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
     if (trackingStyle.present) {
       map['tracking_style'] = Variable<String>(trackingStyle.value);
     }
+    if (starred.present) {
+      map['starred'] = Variable<bool>(starred.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4489,6 +4582,8 @@ class TrackersTableCompanion extends UpdateCompanion<TrackersTableData> {
           ..write('enumOptionsJson: $enumOptionsJson, ')
           ..write('defaultEnumOption: $defaultEnumOption, ')
           ..write('trackingStyle: $trackingStyle, ')
+          ..write('starred: $starred, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -5072,1038 +5167,6 @@ class TrackerValuesTableCompanion
   }
 }
 
-class $RankingConfigsTableTable extends RankingConfigsTable
-    with TableInfo<$RankingConfigsTableTable, RankingConfigsTableData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $RankingConfigsTableTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _nameMeta = const VerificationMeta('name');
-  @override
-  late final GeneratedColumn<String> name = GeneratedColumn<String>(
-    'name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _cadenceMeta = const VerificationMeta(
-    'cadence',
-  );
-  @override
-  late final GeneratedColumn<String> cadence = GeneratedColumn<String>(
-    'cadence',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _maxValueMeta = const VerificationMeta(
-    'maxValue',
-  );
-  @override
-  late final GeneratedColumn<int> maxValue = GeneratedColumn<int>(
-    'max_value',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _colorStartMeta = const VerificationMeta(
-    'colorStart',
-  );
-  @override
-  late final GeneratedColumn<int> colorStart = GeneratedColumn<int>(
-    'color_start',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0xFF4CAF50),
-  );
-  static const VerificationMeta _colorEndMeta = const VerificationMeta(
-    'colorEnd',
-  );
-  @override
-  late final GeneratedColumn<int> colorEnd = GeneratedColumn<int>(
-    'color_end',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0xFFF44336),
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
-    'deletedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
-    'deleted_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    name,
-    cadence,
-    maxValue,
-    colorStart,
-    colorEnd,
-    createdAt,
-    updatedAt,
-    deletedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'ranking_configs_table';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<RankingConfigsTableData> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('name')) {
-      context.handle(
-        _nameMeta,
-        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_nameMeta);
-    }
-    if (data.containsKey('cadence')) {
-      context.handle(
-        _cadenceMeta,
-        cadence.isAcceptableOrUnknown(data['cadence']!, _cadenceMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_cadenceMeta);
-    }
-    if (data.containsKey('max_value')) {
-      context.handle(
-        _maxValueMeta,
-        maxValue.isAcceptableOrUnknown(data['max_value']!, _maxValueMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_maxValueMeta);
-    }
-    if (data.containsKey('color_start')) {
-      context.handle(
-        _colorStartMeta,
-        colorStart.isAcceptableOrUnknown(data['color_start']!, _colorStartMeta),
-      );
-    }
-    if (data.containsKey('color_end')) {
-      context.handle(
-        _colorEndMeta,
-        colorEnd.isAcceptableOrUnknown(data['color_end']!, _colorEndMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_createdAtMeta);
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
-    }
-    if (data.containsKey('deleted_at')) {
-      context.handle(
-        _deletedAtMeta,
-        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  RankingConfigsTableData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return RankingConfigsTableData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      cadence: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}cadence'],
-      )!,
-      maxValue: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}max_value'],
-      )!,
-      colorStart: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_start'],
-      )!,
-      colorEnd: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}color_end'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
-      deletedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}deleted_at'],
-      ),
-    );
-  }
-
-  @override
-  $RankingConfigsTableTable createAlias(String alias) {
-    return $RankingConfigsTableTable(attachedDatabase, alias);
-  }
-}
-
-class RankingConfigsTableData extends DataClass
-    implements Insertable<RankingConfigsTableData> {
-  final String id;
-  final String name;
-  final String cadence;
-  final int maxValue;
-  final int colorStart;
-  final int colorEnd;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  final DateTime? deletedAt;
-  const RankingConfigsTableData({
-    required this.id,
-    required this.name,
-    required this.cadence,
-    required this.maxValue,
-    required this.colorStart,
-    required this.colorEnd,
-    required this.createdAt,
-    required this.updatedAt,
-    this.deletedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['name'] = Variable<String>(name);
-    map['cadence'] = Variable<String>(cadence);
-    map['max_value'] = Variable<int>(maxValue);
-    map['color_start'] = Variable<int>(colorStart);
-    map['color_end'] = Variable<int>(colorEnd);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
-    if (!nullToAbsent || deletedAt != null) {
-      map['deleted_at'] = Variable<DateTime>(deletedAt);
-    }
-    return map;
-  }
-
-  RankingConfigsTableCompanion toCompanion(bool nullToAbsent) {
-    return RankingConfigsTableCompanion(
-      id: Value(id),
-      name: Value(name),
-      cadence: Value(cadence),
-      maxValue: Value(maxValue),
-      colorStart: Value(colorStart),
-      colorEnd: Value(colorEnd),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-      deletedAt: deletedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(deletedAt),
-    );
-  }
-
-  factory RankingConfigsTableData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return RankingConfigsTableData(
-      id: serializer.fromJson<String>(json['id']),
-      name: serializer.fromJson<String>(json['name']),
-      cadence: serializer.fromJson<String>(json['cadence']),
-      maxValue: serializer.fromJson<int>(json['maxValue']),
-      colorStart: serializer.fromJson<int>(json['colorStart']),
-      colorEnd: serializer.fromJson<int>(json['colorEnd']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
-      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'name': serializer.toJson<String>(name),
-      'cadence': serializer.toJson<String>(cadence),
-      'maxValue': serializer.toJson<int>(maxValue),
-      'colorStart': serializer.toJson<int>(colorStart),
-      'colorEnd': serializer.toJson<int>(colorEnd),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'updatedAt': serializer.toJson<DateTime>(updatedAt),
-      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
-    };
-  }
-
-  RankingConfigsTableData copyWith({
-    String? id,
-    String? name,
-    String? cadence,
-    int? maxValue,
-    int? colorStart,
-    int? colorEnd,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    Value<DateTime?> deletedAt = const Value.absent(),
-  }) => RankingConfigsTableData(
-    id: id ?? this.id,
-    name: name ?? this.name,
-    cadence: cadence ?? this.cadence,
-    maxValue: maxValue ?? this.maxValue,
-    colorStart: colorStart ?? this.colorStart,
-    colorEnd: colorEnd ?? this.colorEnd,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
-  );
-  RankingConfigsTableData copyWithCompanion(RankingConfigsTableCompanion data) {
-    return RankingConfigsTableData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      cadence: data.cadence.present ? data.cadence.value : this.cadence,
-      maxValue: data.maxValue.present ? data.maxValue.value : this.maxValue,
-      colorStart: data.colorStart.present
-          ? data.colorStart.value
-          : this.colorStart,
-      colorEnd: data.colorEnd.present ? data.colorEnd.value : this.colorEnd,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('RankingConfigsTableData(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('cadence: $cadence, ')
-          ..write('maxValue: $maxValue, ')
-          ..write('colorStart: $colorStart, ')
-          ..write('colorEnd: $colorEnd, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    name,
-    cadence,
-    maxValue,
-    colorStart,
-    colorEnd,
-    createdAt,
-    updatedAt,
-    deletedAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is RankingConfigsTableData &&
-          other.id == this.id &&
-          other.name == this.name &&
-          other.cadence == this.cadence &&
-          other.maxValue == this.maxValue &&
-          other.colorStart == this.colorStart &&
-          other.colorEnd == this.colorEnd &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt &&
-          other.deletedAt == this.deletedAt);
-}
-
-class RankingConfigsTableCompanion
-    extends UpdateCompanion<RankingConfigsTableData> {
-  final Value<String> id;
-  final Value<String> name;
-  final Value<String> cadence;
-  final Value<int> maxValue;
-  final Value<int> colorStart;
-  final Value<int> colorEnd;
-  final Value<DateTime> createdAt;
-  final Value<DateTime> updatedAt;
-  final Value<DateTime?> deletedAt;
-  final Value<int> rowid;
-  const RankingConfigsTableCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.cadence = const Value.absent(),
-    this.maxValue = const Value.absent(),
-    this.colorStart = const Value.absent(),
-    this.colorEnd = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.deletedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  RankingConfigsTableCompanion.insert({
-    required String id,
-    required String name,
-    required String cadence,
-    required int maxValue,
-    this.colorStart = const Value.absent(),
-    this.colorEnd = const Value.absent(),
-    required DateTime createdAt,
-    required DateTime updatedAt,
-    this.deletedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       name = Value(name),
-       cadence = Value(cadence),
-       maxValue = Value(maxValue),
-       createdAt = Value(createdAt),
-       updatedAt = Value(updatedAt);
-  static Insertable<RankingConfigsTableData> custom({
-    Expression<String>? id,
-    Expression<String>? name,
-    Expression<String>? cadence,
-    Expression<int>? maxValue,
-    Expression<int>? colorStart,
-    Expression<int>? colorEnd,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? updatedAt,
-    Expression<DateTime>? deletedAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (cadence != null) 'cadence': cadence,
-      if (maxValue != null) 'max_value': maxValue,
-      if (colorStart != null) 'color_start': colorStart,
-      if (colorEnd != null) 'color_end': colorEnd,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-      if (deletedAt != null) 'deleted_at': deletedAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  RankingConfigsTableCompanion copyWith({
-    Value<String>? id,
-    Value<String>? name,
-    Value<String>? cadence,
-    Value<int>? maxValue,
-    Value<int>? colorStart,
-    Value<int>? colorEnd,
-    Value<DateTime>? createdAt,
-    Value<DateTime>? updatedAt,
-    Value<DateTime?>? deletedAt,
-    Value<int>? rowid,
-  }) {
-    return RankingConfigsTableCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      cadence: cadence ?? this.cadence,
-      maxValue: maxValue ?? this.maxValue,
-      colorStart: colorStart ?? this.colorStart,
-      colorEnd: colorEnd ?? this.colorEnd,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: deletedAt ?? this.deletedAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (cadence.present) {
-      map['cadence'] = Variable<String>(cadence.value);
-    }
-    if (maxValue.present) {
-      map['max_value'] = Variable<int>(maxValue.value);
-    }
-    if (colorStart.present) {
-      map['color_start'] = Variable<int>(colorStart.value);
-    }
-    if (colorEnd.present) {
-      map['color_end'] = Variable<int>(colorEnd.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
-    }
-    if (deletedAt.present) {
-      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('RankingConfigsTableCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('cadence: $cadence, ')
-          ..write('maxValue: $maxValue, ')
-          ..write('colorStart: $colorStart, ')
-          ..write('colorEnd: $colorEnd, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $RankingValuesTableTable extends RankingValuesTable
-    with TableInfo<$RankingValuesTableTable, RankingValuesTableData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $RankingValuesTableTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _configIdMeta = const VerificationMeta(
-    'configId',
-  );
-  @override
-  late final GeneratedColumn<String> configId = GeneratedColumn<String>(
-    'config_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _periodStartMeta = const VerificationMeta(
-    'periodStart',
-  );
-  @override
-  late final GeneratedColumn<DateTime> periodStart = GeneratedColumn<DateTime>(
-    'period_start',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _valueMeta = const VerificationMeta('value');
-  @override
-  late final GeneratedColumn<int> value = GeneratedColumn<int>(
-    'value',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
-    'deletedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
-    'deleted_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    configId,
-    periodStart,
-    value,
-    createdAt,
-    updatedAt,
-    deletedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'ranking_values_table';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<RankingValuesTableData> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
-    }
-    if (data.containsKey('config_id')) {
-      context.handle(
-        _configIdMeta,
-        configId.isAcceptableOrUnknown(data['config_id']!, _configIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_configIdMeta);
-    }
-    if (data.containsKey('period_start')) {
-      context.handle(
-        _periodStartMeta,
-        periodStart.isAcceptableOrUnknown(
-          data['period_start']!,
-          _periodStartMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_periodStartMeta);
-    }
-    if (data.containsKey('value')) {
-      context.handle(
-        _valueMeta,
-        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_valueMeta);
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_createdAtMeta);
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
-    }
-    if (data.containsKey('deleted_at')) {
-      context.handle(
-        _deletedAtMeta,
-        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  RankingValuesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return RankingValuesTableData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      configId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}config_id'],
-      )!,
-      periodStart: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}period_start'],
-      )!,
-      value: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}value'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
-      deletedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}deleted_at'],
-      ),
-    );
-  }
-
-  @override
-  $RankingValuesTableTable createAlias(String alias) {
-    return $RankingValuesTableTable(attachedDatabase, alias);
-  }
-}
-
-class RankingValuesTableData extends DataClass
-    implements Insertable<RankingValuesTableData> {
-  final String id;
-  final String configId;
-  final DateTime periodStart;
-  final int value;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  final DateTime? deletedAt;
-  const RankingValuesTableData({
-    required this.id,
-    required this.configId,
-    required this.periodStart,
-    required this.value,
-    required this.createdAt,
-    required this.updatedAt,
-    this.deletedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['config_id'] = Variable<String>(configId);
-    map['period_start'] = Variable<DateTime>(periodStart);
-    map['value'] = Variable<int>(value);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
-    if (!nullToAbsent || deletedAt != null) {
-      map['deleted_at'] = Variable<DateTime>(deletedAt);
-    }
-    return map;
-  }
-
-  RankingValuesTableCompanion toCompanion(bool nullToAbsent) {
-    return RankingValuesTableCompanion(
-      id: Value(id),
-      configId: Value(configId),
-      periodStart: Value(periodStart),
-      value: Value(value),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-      deletedAt: deletedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(deletedAt),
-    );
-  }
-
-  factory RankingValuesTableData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return RankingValuesTableData(
-      id: serializer.fromJson<String>(json['id']),
-      configId: serializer.fromJson<String>(json['configId']),
-      periodStart: serializer.fromJson<DateTime>(json['periodStart']),
-      value: serializer.fromJson<int>(json['value']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
-      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'configId': serializer.toJson<String>(configId),
-      'periodStart': serializer.toJson<DateTime>(periodStart),
-      'value': serializer.toJson<int>(value),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'updatedAt': serializer.toJson<DateTime>(updatedAt),
-      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
-    };
-  }
-
-  RankingValuesTableData copyWith({
-    String? id,
-    String? configId,
-    DateTime? periodStart,
-    int? value,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    Value<DateTime?> deletedAt = const Value.absent(),
-  }) => RankingValuesTableData(
-    id: id ?? this.id,
-    configId: configId ?? this.configId,
-    periodStart: periodStart ?? this.periodStart,
-    value: value ?? this.value,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
-  );
-  RankingValuesTableData copyWithCompanion(RankingValuesTableCompanion data) {
-    return RankingValuesTableData(
-      id: data.id.present ? data.id.value : this.id,
-      configId: data.configId.present ? data.configId.value : this.configId,
-      periodStart: data.periodStart.present
-          ? data.periodStart.value
-          : this.periodStart,
-      value: data.value.present ? data.value.value : this.value,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('RankingValuesTableData(')
-          ..write('id: $id, ')
-          ..write('configId: $configId, ')
-          ..write('periodStart: $periodStart, ')
-          ..write('value: $value, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    configId,
-    periodStart,
-    value,
-    createdAt,
-    updatedAt,
-    deletedAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is RankingValuesTableData &&
-          other.id == this.id &&
-          other.configId == this.configId &&
-          other.periodStart == this.periodStart &&
-          other.value == this.value &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt &&
-          other.deletedAt == this.deletedAt);
-}
-
-class RankingValuesTableCompanion
-    extends UpdateCompanion<RankingValuesTableData> {
-  final Value<String> id;
-  final Value<String> configId;
-  final Value<DateTime> periodStart;
-  final Value<int> value;
-  final Value<DateTime> createdAt;
-  final Value<DateTime> updatedAt;
-  final Value<DateTime?> deletedAt;
-  final Value<int> rowid;
-  const RankingValuesTableCompanion({
-    this.id = const Value.absent(),
-    this.configId = const Value.absent(),
-    this.periodStart = const Value.absent(),
-    this.value = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.deletedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  RankingValuesTableCompanion.insert({
-    required String id,
-    required String configId,
-    required DateTime periodStart,
-    required int value,
-    required DateTime createdAt,
-    required DateTime updatedAt,
-    this.deletedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       configId = Value(configId),
-       periodStart = Value(periodStart),
-       value = Value(value),
-       createdAt = Value(createdAt),
-       updatedAt = Value(updatedAt);
-  static Insertable<RankingValuesTableData> custom({
-    Expression<String>? id,
-    Expression<String>? configId,
-    Expression<DateTime>? periodStart,
-    Expression<int>? value,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? updatedAt,
-    Expression<DateTime>? deletedAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (configId != null) 'config_id': configId,
-      if (periodStart != null) 'period_start': periodStart,
-      if (value != null) 'value': value,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-      if (deletedAt != null) 'deleted_at': deletedAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  RankingValuesTableCompanion copyWith({
-    Value<String>? id,
-    Value<String>? configId,
-    Value<DateTime>? periodStart,
-    Value<int>? value,
-    Value<DateTime>? createdAt,
-    Value<DateTime>? updatedAt,
-    Value<DateTime?>? deletedAt,
-    Value<int>? rowid,
-  }) {
-    return RankingValuesTableCompanion(
-      id: id ?? this.id,
-      configId: configId ?? this.configId,
-      periodStart: periodStart ?? this.periodStart,
-      value: value ?? this.value,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: deletedAt ?? this.deletedAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (configId.present) {
-      map['config_id'] = Variable<String>(configId.value);
-    }
-    if (periodStart.present) {
-      map['period_start'] = Variable<DateTime>(periodStart.value);
-    }
-    if (value.present) {
-      map['value'] = Variable<int>(value.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
-    }
-    if (deletedAt.present) {
-      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('RankingValuesTableCompanion(')
-          ..write('id: $id, ')
-          ..write('configId: $configId, ')
-          ..write('periodStart: $periodStart, ')
-          ..write('value: $value, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $SettingsTableTable extends SettingsTable
     with TableInfo<$SettingsTableTable, SettingsTableData> {
   @override
@@ -6209,30 +5272,6 @@ class $SettingsTableTable extends SettingsTable
         requiredDuringInsert: false,
         defaultValue: const Constant(defaultCalendarNavigateRightKey),
       );
-  static const VerificationMeta _rankingColorStartMeta = const VerificationMeta(
-    'rankingColorStart',
-  );
-  @override
-  late final GeneratedColumn<int> rankingColorStart = GeneratedColumn<int>(
-    'ranking_color_start',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0xFF4CAF50),
-  );
-  static const VerificationMeta _rankingColorEndMeta = const VerificationMeta(
-    'rankingColorEnd',
-  );
-  @override
-  late final GeneratedColumn<int> rankingColorEnd = GeneratedColumn<int>(
-    'ranking_color_end',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0xFFF44336),
-  );
   static const VerificationMeta _timelineModeYearZeroMeta =
       const VerificationMeta('timelineModeYearZero');
   @override
@@ -6813,8 +5852,6 @@ class $SettingsTableTable extends SettingsTable
     todoHotkey,
     calendarNavigateLeftKey,
     calendarNavigateRightKey,
-    rankingColorStart,
-    rankingColorEnd,
     timelineModeYearZero,
     birthYear,
     alertOnPeriodicPrompts,
@@ -6931,24 +5968,6 @@ class $SettingsTableTable extends SettingsTable
         calendarNavigateRightKey.isAcceptableOrUnknown(
           data['calendar_navigate_right_key']!,
           _calendarNavigateRightKeyMeta,
-        ),
-      );
-    }
-    if (data.containsKey('ranking_color_start')) {
-      context.handle(
-        _rankingColorStartMeta,
-        rankingColorStart.isAcceptableOrUnknown(
-          data['ranking_color_start']!,
-          _rankingColorStartMeta,
-        ),
-      );
-    }
-    if (data.containsKey('ranking_color_end')) {
-      context.handle(
-        _rankingColorEndMeta,
-        rankingColorEnd.isAcceptableOrUnknown(
-          data['ranking_color_end']!,
-          _rankingColorEndMeta,
         ),
       );
     }
@@ -7395,14 +6414,6 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}calendar_navigate_right_key'],
       )!,
-      rankingColorStart: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}ranking_color_start'],
-      )!,
-      rankingColorEnd: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}ranking_color_end'],
-      )!,
       timelineModeYearZero: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}timeline_mode_year_zero'],
@@ -7606,8 +6617,6 @@ class SettingsTableData extends DataClass
   final String todoHotkey;
   final String calendarNavigateLeftKey;
   final String calendarNavigateRightKey;
-  final int rankingColorStart;
-  final int rankingColorEnd;
   final bool timelineModeYearZero;
   final int? birthYear;
   final bool alertOnPeriodicPrompts;
@@ -7663,8 +6672,6 @@ class SettingsTableData extends DataClass
     required this.todoHotkey,
     required this.calendarNavigateLeftKey,
     required this.calendarNavigateRightKey,
-    required this.rankingColorStart,
-    required this.rankingColorEnd,
     required this.timelineModeYearZero,
     this.birthYear,
     required this.alertOnPeriodicPrompts,
@@ -7727,8 +6734,6 @@ class SettingsTableData extends DataClass
     map['calendar_navigate_right_key'] = Variable<String>(
       calendarNavigateRightKey,
     );
-    map['ranking_color_start'] = Variable<int>(rankingColorStart);
-    map['ranking_color_end'] = Variable<int>(rankingColorEnd);
     map['timeline_mode_year_zero'] = Variable<bool>(timelineModeYearZero);
     if (!nullToAbsent || birthYear != null) {
       map['birth_year'] = Variable<int>(birthYear);
@@ -7856,8 +6861,6 @@ class SettingsTableData extends DataClass
       todoHotkey: Value(todoHotkey),
       calendarNavigateLeftKey: Value(calendarNavigateLeftKey),
       calendarNavigateRightKey: Value(calendarNavigateRightKey),
-      rankingColorStart: Value(rankingColorStart),
-      rankingColorEnd: Value(rankingColorEnd),
       timelineModeYearZero: Value(timelineModeYearZero),
       birthYear: birthYear == null && nullToAbsent
           ? const Value.absent()
@@ -7967,8 +6970,6 @@ class SettingsTableData extends DataClass
       calendarNavigateRightKey: serializer.fromJson<String>(
         json['calendarNavigateRightKey'],
       ),
-      rankingColorStart: serializer.fromJson<int>(json['rankingColorStart']),
-      rankingColorEnd: serializer.fromJson<int>(json['rankingColorEnd']),
       timelineModeYearZero: serializer.fromJson<bool>(
         json['timelineModeYearZero'],
       ),
@@ -8093,8 +7094,6 @@ class SettingsTableData extends DataClass
       'calendarNavigateRightKey': serializer.toJson<String>(
         calendarNavigateRightKey,
       ),
-      'rankingColorStart': serializer.toJson<int>(rankingColorStart),
-      'rankingColorEnd': serializer.toJson<int>(rankingColorEnd),
       'timelineModeYearZero': serializer.toJson<bool>(timelineModeYearZero),
       'birthYear': serializer.toJson<int?>(birthYear),
       'alertOnPeriodicPrompts': serializer.toJson<bool>(alertOnPeriodicPrompts),
@@ -8181,8 +7180,6 @@ class SettingsTableData extends DataClass
     String? todoHotkey,
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
-    int? rankingColorStart,
-    int? rankingColorEnd,
     bool? timelineModeYearZero,
     Value<int?> birthYear = const Value.absent(),
     bool? alertOnPeriodicPrompts,
@@ -8240,8 +7237,6 @@ class SettingsTableData extends DataClass
         calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
     calendarNavigateRightKey:
         calendarNavigateRightKey ?? this.calendarNavigateRightKey,
-    rankingColorStart: rankingColorStart ?? this.rankingColorStart,
-    rankingColorEnd: rankingColorEnd ?? this.rankingColorEnd,
     timelineModeYearZero: timelineModeYearZero ?? this.timelineModeYearZero,
     birthYear: birthYear.present ? birthYear.value : this.birthYear,
     alertOnPeriodicPrompts:
@@ -8357,12 +7352,6 @@ class SettingsTableData extends DataClass
       calendarNavigateRightKey: data.calendarNavigateRightKey.present
           ? data.calendarNavigateRightKey.value
           : this.calendarNavigateRightKey,
-      rankingColorStart: data.rankingColorStart.present
-          ? data.rankingColorStart.value
-          : this.rankingColorStart,
-      rankingColorEnd: data.rankingColorEnd.present
-          ? data.rankingColorEnd.value
-          : this.rankingColorEnd,
       timelineModeYearZero: data.timelineModeYearZero.present
           ? data.timelineModeYearZero.value
           : this.timelineModeYearZero,
@@ -8514,8 +7503,6 @@ class SettingsTableData extends DataClass
           ..write('todoHotkey: $todoHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
-          ..write('rankingColorStart: $rankingColorStart, ')
-          ..write('rankingColorEnd: $rankingColorEnd, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
           ..write('birthYear: $birthYear, ')
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
@@ -8582,8 +7569,6 @@ class SettingsTableData extends DataClass
     todoHotkey,
     calendarNavigateLeftKey,
     calendarNavigateRightKey,
-    rankingColorStart,
-    rankingColorEnd,
     timelineModeYearZero,
     birthYear,
     alertOnPeriodicPrompts,
@@ -8643,8 +7628,6 @@ class SettingsTableData extends DataClass
           other.todoHotkey == this.todoHotkey &&
           other.calendarNavigateLeftKey == this.calendarNavigateLeftKey &&
           other.calendarNavigateRightKey == this.calendarNavigateRightKey &&
-          other.rankingColorStart == this.rankingColorStart &&
-          other.rankingColorEnd == this.rankingColorEnd &&
           other.timelineModeYearZero == this.timelineModeYearZero &&
           other.birthYear == this.birthYear &&
           other.alertOnPeriodicPrompts == this.alertOnPeriodicPrompts &&
@@ -8708,8 +7691,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String> todoHotkey;
   final Value<String> calendarNavigateLeftKey;
   final Value<String> calendarNavigateRightKey;
-  final Value<int> rankingColorStart;
-  final Value<int> rankingColorEnd;
   final Value<bool> timelineModeYearZero;
   final Value<int?> birthYear;
   final Value<bool> alertOnPeriodicPrompts;
@@ -8765,8 +7746,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.todoHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
     this.calendarNavigateRightKey = const Value.absent(),
-    this.rankingColorStart = const Value.absent(),
-    this.rankingColorEnd = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
     this.birthYear = const Value.absent(),
     this.alertOnPeriodicPrompts = const Value.absent(),
@@ -8823,8 +7802,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.todoHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
     this.calendarNavigateRightKey = const Value.absent(),
-    this.rankingColorStart = const Value.absent(),
-    this.rankingColorEnd = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
     this.birthYear = const Value.absent(),
     this.alertOnPeriodicPrompts = const Value.absent(),
@@ -8881,8 +7858,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? todoHotkey,
     Expression<String>? calendarNavigateLeftKey,
     Expression<String>? calendarNavigateRightKey,
-    Expression<int>? rankingColorStart,
-    Expression<int>? rankingColorEnd,
     Expression<bool>? timelineModeYearZero,
     Expression<int>? birthYear,
     Expression<bool>? alertOnPeriodicPrompts,
@@ -8942,8 +7917,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'calendar_navigate_left_key': calendarNavigateLeftKey,
       if (calendarNavigateRightKey != null)
         'calendar_navigate_right_key': calendarNavigateRightKey,
-      if (rankingColorStart != null) 'ranking_color_start': rankingColorStart,
-      if (rankingColorEnd != null) 'ranking_color_end': rankingColorEnd,
       if (timelineModeYearZero != null)
         'timeline_mode_year_zero': timelineModeYearZero,
       if (birthYear != null) 'birth_year': birthYear,
@@ -9036,8 +8009,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String>? todoHotkey,
     Value<String>? calendarNavigateLeftKey,
     Value<String>? calendarNavigateRightKey,
-    Value<int>? rankingColorStart,
-    Value<int>? rankingColorEnd,
     Value<bool>? timelineModeYearZero,
     Value<int?>? birthYear,
     Value<bool>? alertOnPeriodicPrompts,
@@ -9096,8 +8067,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
       calendarNavigateRightKey:
           calendarNavigateRightKey ?? this.calendarNavigateRightKey,
-      rankingColorStart: rankingColorStart ?? this.rankingColorStart,
-      rankingColorEnd: rankingColorEnd ?? this.rankingColorEnd,
       timelineModeYearZero: timelineModeYearZero ?? this.timelineModeYearZero,
       birthYear: birthYear ?? this.birthYear,
       alertOnPeriodicPrompts:
@@ -9197,12 +8166,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       map['calendar_navigate_right_key'] = Variable<String>(
         calendarNavigateRightKey.value,
       );
-    }
-    if (rankingColorStart.present) {
-      map['ranking_color_start'] = Variable<int>(rankingColorStart.value);
-    }
-    if (rankingColorEnd.present) {
-      map['ranking_color_end'] = Variable<int>(rankingColorEnd.value);
     }
     if (timelineModeYearZero.present) {
       map['timeline_mode_year_zero'] = Variable<bool>(
@@ -9410,8 +8373,6 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('todoHotkey: $todoHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
-          ..write('rankingColorStart: $rankingColorStart, ')
-          ..write('rankingColorEnd: $rankingColorEnd, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
           ..write('birthYear: $birthYear, ')
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
@@ -10616,10 +9577,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TrackersTableTable trackersTable = $TrackersTableTable(this);
   late final $TrackerValuesTableTable trackerValuesTable =
       $TrackerValuesTableTable(this);
-  late final $RankingConfigsTableTable rankingConfigsTable =
-      $RankingConfigsTableTable(this);
-  late final $RankingValuesTableTable rankingValuesTable =
-      $RankingValuesTableTable(this);
   late final $SettingsTableTable settingsTable = $SettingsTableTable(this);
   late final $TagColorsTableTable tagColorsTable = $TagColorsTableTable(this);
   late final $SyncConflictsTableTable syncConflictsTable =
@@ -10638,8 +9595,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     calendarEventsTable,
     trackersTable,
     trackerValuesTable,
-    rankingConfigsTable,
-    rankingValuesTable,
     settingsTable,
     tagColorsTable,
     syncConflictsTable,
@@ -12421,6 +11376,8 @@ typedef $$TrackersTableTableCreateCompanionBuilder =
       Value<String> enumOptionsJson,
       Value<String?> defaultEnumOption,
       Value<String?> trackingStyle,
+      Value<bool> starred,
+      Value<int> sortOrder,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> deletedAt,
@@ -12440,6 +11397,8 @@ typedef $$TrackersTableTableUpdateCompanionBuilder =
       Value<String> enumOptionsJson,
       Value<String?> defaultEnumOption,
       Value<String?> trackingStyle,
+      Value<bool> starred,
+      Value<int> sortOrder,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -12512,6 +11471,16 @@ class $$TrackersTableTableFilterComposer
 
   ColumnFilters<String> get trackingStyle => $composableBuilder(
     column: $table.trackingStyle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12600,6 +11569,16 @@ class $$TrackersTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -12677,6 +11656,12 @@ class $$TrackersTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get starred =>
+      $composableBuilder(column: $table.starred, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -12734,6 +11719,8 @@ class $$TrackersTableTableTableManager
                 Value<String> enumOptionsJson = const Value.absent(),
                 Value<String?> defaultEnumOption = const Value.absent(),
                 Value<String?> trackingStyle = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -12751,6 +11738,8 @@ class $$TrackersTableTableTableManager
                 enumOptionsJson: enumOptionsJson,
                 defaultEnumOption: defaultEnumOption,
                 trackingStyle: trackingStyle,
+                starred: starred,
+                sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -12770,6 +11759,8 @@ class $$TrackersTableTableTableManager
                 Value<String> enumOptionsJson = const Value.absent(),
                 Value<String?> defaultEnumOption = const Value.absent(),
                 Value<String?> trackingStyle = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -12787,6 +11778,8 @@ class $$TrackersTableTableTableManager
                 enumOptionsJson: enumOptionsJson,
                 defaultEnumOption: defaultEnumOption,
                 trackingStyle: trackingStyle,
+                starred: starred,
+                sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -13108,553 +12101,6 @@ typedef $$TrackerValuesTableTableProcessedTableManager =
       TrackerValuesTableData,
       PrefetchHooks Function()
     >;
-typedef $$RankingConfigsTableTableCreateCompanionBuilder =
-    RankingConfigsTableCompanion Function({
-      required String id,
-      required String name,
-      required String cadence,
-      required int maxValue,
-      Value<int> colorStart,
-      Value<int> colorEnd,
-      required DateTime createdAt,
-      required DateTime updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<int> rowid,
-    });
-typedef $$RankingConfigsTableTableUpdateCompanionBuilder =
-    RankingConfigsTableCompanion Function({
-      Value<String> id,
-      Value<String> name,
-      Value<String> cadence,
-      Value<int> maxValue,
-      Value<int> colorStart,
-      Value<int> colorEnd,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<int> rowid,
-    });
-
-class $$RankingConfigsTableTableFilterComposer
-    extends Composer<_$AppDatabase, $RankingConfigsTableTable> {
-  $$RankingConfigsTableTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get cadence => $composableBuilder(
-    column: $table.cadence,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get maxValue => $composableBuilder(
-    column: $table.maxValue,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorStart => $composableBuilder(
-    column: $table.colorStart,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get colorEnd => $composableBuilder(
-    column: $table.colorEnd,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
-    column: $table.deletedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$RankingConfigsTableTableOrderingComposer
-    extends Composer<_$AppDatabase, $RankingConfigsTableTable> {
-  $$RankingConfigsTableTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get cadence => $composableBuilder(
-    column: $table.cadence,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get maxValue => $composableBuilder(
-    column: $table.maxValue,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorStart => $composableBuilder(
-    column: $table.colorStart,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get colorEnd => $composableBuilder(
-    column: $table.colorEnd,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
-    column: $table.deletedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$RankingConfigsTableTableAnnotationComposer
-    extends Composer<_$AppDatabase, $RankingConfigsTableTable> {
-  $$RankingConfigsTableTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get name =>
-      $composableBuilder(column: $table.name, builder: (column) => column);
-
-  GeneratedColumn<String> get cadence =>
-      $composableBuilder(column: $table.cadence, builder: (column) => column);
-
-  GeneratedColumn<int> get maxValue =>
-      $composableBuilder(column: $table.maxValue, builder: (column) => column);
-
-  GeneratedColumn<int> get colorStart => $composableBuilder(
-    column: $table.colorStart,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get colorEnd =>
-      $composableBuilder(column: $table.colorEnd, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get updatedAt =>
-      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get deletedAt =>
-      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
-}
-
-class $$RankingConfigsTableTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $RankingConfigsTableTable,
-          RankingConfigsTableData,
-          $$RankingConfigsTableTableFilterComposer,
-          $$RankingConfigsTableTableOrderingComposer,
-          $$RankingConfigsTableTableAnnotationComposer,
-          $$RankingConfigsTableTableCreateCompanionBuilder,
-          $$RankingConfigsTableTableUpdateCompanionBuilder,
-          (
-            RankingConfigsTableData,
-            BaseReferences<
-              _$AppDatabase,
-              $RankingConfigsTableTable,
-              RankingConfigsTableData
-            >,
-          ),
-          RankingConfigsTableData,
-          PrefetchHooks Function()
-        > {
-  $$RankingConfigsTableTableTableManager(
-    _$AppDatabase db,
-    $RankingConfigsTableTable table,
-  ) : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$RankingConfigsTableTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$RankingConfigsTableTableOrderingComposer(
-                $db: db,
-                $table: table,
-              ),
-          createComputedFieldComposer: () =>
-              $$RankingConfigsTableTableAnnotationComposer(
-                $db: db,
-                $table: table,
-              ),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> name = const Value.absent(),
-                Value<String> cadence = const Value.absent(),
-                Value<int> maxValue = const Value.absent(),
-                Value<int> colorStart = const Value.absent(),
-                Value<int> colorEnd = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
-                Value<DateTime?> deletedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => RankingConfigsTableCompanion(
-                id: id,
-                name: name,
-                cadence: cadence,
-                maxValue: maxValue,
-                colorStart: colorStart,
-                colorEnd: colorEnd,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                deletedAt: deletedAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String name,
-                required String cadence,
-                required int maxValue,
-                Value<int> colorStart = const Value.absent(),
-                Value<int> colorEnd = const Value.absent(),
-                required DateTime createdAt,
-                required DateTime updatedAt,
-                Value<DateTime?> deletedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => RankingConfigsTableCompanion.insert(
-                id: id,
-                name: name,
-                cadence: cadence,
-                maxValue: maxValue,
-                colorStart: colorStart,
-                colorEnd: colorEnd,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                deletedAt: deletedAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$RankingConfigsTableTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $RankingConfigsTableTable,
-      RankingConfigsTableData,
-      $$RankingConfigsTableTableFilterComposer,
-      $$RankingConfigsTableTableOrderingComposer,
-      $$RankingConfigsTableTableAnnotationComposer,
-      $$RankingConfigsTableTableCreateCompanionBuilder,
-      $$RankingConfigsTableTableUpdateCompanionBuilder,
-      (
-        RankingConfigsTableData,
-        BaseReferences<
-          _$AppDatabase,
-          $RankingConfigsTableTable,
-          RankingConfigsTableData
-        >,
-      ),
-      RankingConfigsTableData,
-      PrefetchHooks Function()
-    >;
-typedef $$RankingValuesTableTableCreateCompanionBuilder =
-    RankingValuesTableCompanion Function({
-      required String id,
-      required String configId,
-      required DateTime periodStart,
-      required int value,
-      required DateTime createdAt,
-      required DateTime updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<int> rowid,
-    });
-typedef $$RankingValuesTableTableUpdateCompanionBuilder =
-    RankingValuesTableCompanion Function({
-      Value<String> id,
-      Value<String> configId,
-      Value<DateTime> periodStart,
-      Value<int> value,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<int> rowid,
-    });
-
-class $$RankingValuesTableTableFilterComposer
-    extends Composer<_$AppDatabase, $RankingValuesTableTable> {
-  $$RankingValuesTableTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get configId => $composableBuilder(
-    column: $table.configId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get periodStart => $composableBuilder(
-    column: $table.periodStart,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get value => $composableBuilder(
-    column: $table.value,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
-    column: $table.deletedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$RankingValuesTableTableOrderingComposer
-    extends Composer<_$AppDatabase, $RankingValuesTableTable> {
-  $$RankingValuesTableTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get configId => $composableBuilder(
-    column: $table.configId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get periodStart => $composableBuilder(
-    column: $table.periodStart,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get value => $composableBuilder(
-    column: $table.value,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
-    column: $table.deletedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$RankingValuesTableTableAnnotationComposer
-    extends Composer<_$AppDatabase, $RankingValuesTableTable> {
-  $$RankingValuesTableTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get configId =>
-      $composableBuilder(column: $table.configId, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get periodStart => $composableBuilder(
-    column: $table.periodStart,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get value =>
-      $composableBuilder(column: $table.value, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get updatedAt =>
-      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get deletedAt =>
-      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
-}
-
-class $$RankingValuesTableTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $RankingValuesTableTable,
-          RankingValuesTableData,
-          $$RankingValuesTableTableFilterComposer,
-          $$RankingValuesTableTableOrderingComposer,
-          $$RankingValuesTableTableAnnotationComposer,
-          $$RankingValuesTableTableCreateCompanionBuilder,
-          $$RankingValuesTableTableUpdateCompanionBuilder,
-          (
-            RankingValuesTableData,
-            BaseReferences<
-              _$AppDatabase,
-              $RankingValuesTableTable,
-              RankingValuesTableData
-            >,
-          ),
-          RankingValuesTableData,
-          PrefetchHooks Function()
-        > {
-  $$RankingValuesTableTableTableManager(
-    _$AppDatabase db,
-    $RankingValuesTableTable table,
-  ) : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$RankingValuesTableTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$RankingValuesTableTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$RankingValuesTableTableAnnotationComposer(
-                $db: db,
-                $table: table,
-              ),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> configId = const Value.absent(),
-                Value<DateTime> periodStart = const Value.absent(),
-                Value<int> value = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
-                Value<DateTime?> deletedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => RankingValuesTableCompanion(
-                id: id,
-                configId: configId,
-                periodStart: periodStart,
-                value: value,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                deletedAt: deletedAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String configId,
-                required DateTime periodStart,
-                required int value,
-                required DateTime createdAt,
-                required DateTime updatedAt,
-                Value<DateTime?> deletedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => RankingValuesTableCompanion.insert(
-                id: id,
-                configId: configId,
-                periodStart: periodStart,
-                value: value,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                deletedAt: deletedAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$RankingValuesTableTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $RankingValuesTableTable,
-      RankingValuesTableData,
-      $$RankingValuesTableTableFilterComposer,
-      $$RankingValuesTableTableOrderingComposer,
-      $$RankingValuesTableTableAnnotationComposer,
-      $$RankingValuesTableTableCreateCompanionBuilder,
-      $$RankingValuesTableTableUpdateCompanionBuilder,
-      (
-        RankingValuesTableData,
-        BaseReferences<
-          _$AppDatabase,
-          $RankingValuesTableTable,
-          RankingValuesTableData
-        >,
-      ),
-      RankingValuesTableData,
-      PrefetchHooks Function()
-    >;
 typedef $$SettingsTableTableCreateCompanionBuilder =
     SettingsTableCompanion Function({
       Value<int> id,
@@ -13665,8 +12111,6 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String> todoHotkey,
       Value<String> calendarNavigateLeftKey,
       Value<String> calendarNavigateRightKey,
-      Value<int> rankingColorStart,
-      Value<int> rankingColorEnd,
       Value<bool> timelineModeYearZero,
       Value<int?> birthYear,
       Value<bool> alertOnPeriodicPrompts,
@@ -13724,8 +12168,6 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String> todoHotkey,
       Value<String> calendarNavigateLeftKey,
       Value<String> calendarNavigateRightKey,
-      Value<int> rankingColorStart,
-      Value<int> rankingColorEnd,
       Value<bool> timelineModeYearZero,
       Value<int?> birthYear,
       Value<bool> alertOnPeriodicPrompts,
@@ -13820,16 +12262,6 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get calendarNavigateRightKey => $composableBuilder(
     column: $table.calendarNavigateRightKey,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get rankingColorStart => $composableBuilder(
-    column: $table.rankingColorStart,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get rankingColorEnd => $composableBuilder(
-    column: $table.rankingColorEnd,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14115,16 +12547,6 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get rankingColorStart => $composableBuilder(
-    column: $table.rankingColorStart,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get rankingColorEnd => $composableBuilder(
-    column: $table.rankingColorEnd,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<bool> get timelineModeYearZero => $composableBuilder(
     column: $table.timelineModeYearZero,
     builder: (column) => ColumnOrderings(column),
@@ -14406,16 +12828,6 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get rankingColorStart => $composableBuilder(
-    column: $table.rankingColorStart,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get rankingColorEnd => $composableBuilder(
-    column: $table.rankingColorEnd,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<bool> get timelineModeYearZero => $composableBuilder(
     column: $table.timelineModeYearZero,
     builder: (column) => column,
@@ -14689,8 +13101,6 @@ class $$SettingsTableTableTableManager
                 Value<String> todoHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
                 Value<String> calendarNavigateRightKey = const Value.absent(),
-                Value<int> rankingColorStart = const Value.absent(),
-                Value<int> rankingColorEnd = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
                 Value<int?> birthYear = const Value.absent(),
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
@@ -14753,8 +13163,6 @@ class $$SettingsTableTableTableManager
                 todoHotkey: todoHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
                 calendarNavigateRightKey: calendarNavigateRightKey,
-                rankingColorStart: rankingColorStart,
-                rankingColorEnd: rankingColorEnd,
                 timelineModeYearZero: timelineModeYearZero,
                 birthYear: birthYear,
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
@@ -14813,8 +13221,6 @@ class $$SettingsTableTableTableManager
                 Value<String> todoHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
                 Value<String> calendarNavigateRightKey = const Value.absent(),
-                Value<int> rankingColorStart = const Value.absent(),
-                Value<int> rankingColorEnd = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
                 Value<int?> birthYear = const Value.absent(),
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
@@ -14877,8 +13283,6 @@ class $$SettingsTableTableTableManager
                 todoHotkey: todoHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
                 calendarNavigateRightKey: calendarNavigateRightKey,
-                rankingColorStart: rankingColorStart,
-                rankingColorEnd: rankingColorEnd,
                 timelineModeYearZero: timelineModeYearZero,
                 birthYear: birthYear,
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
@@ -15627,10 +14031,6 @@ class $AppDatabaseManager {
       $$TrackersTableTableTableManager(_db, _db.trackersTable);
   $$TrackerValuesTableTableTableManager get trackerValuesTable =>
       $$TrackerValuesTableTableTableManager(_db, _db.trackerValuesTable);
-  $$RankingConfigsTableTableTableManager get rankingConfigsTable =>
-      $$RankingConfigsTableTableTableManager(_db, _db.rankingConfigsTable);
-  $$RankingValuesTableTableTableManager get rankingValuesTable =>
-      $$RankingValuesTableTableTableManager(_db, _db.rankingValuesTable);
   $$SettingsTableTableTableManager get settingsTable =>
       $$SettingsTableTableTableManager(_db, _db.settingsTable);
   $$TagColorsTableTableTableManager get tagColorsTable =>

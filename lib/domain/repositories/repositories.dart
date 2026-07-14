@@ -76,10 +76,6 @@ abstract class TrackerRepository {
   Future<void> upsertValue(TrackerValue value);
   Future<void> softDeleteValue(String id);
 
-  Future<List<RankingConfig>> listRankingConfigs();
-  Future<void> upsertRankingConfig(RankingConfig config);
-  Future<List<RankingValue>> listRankingValues(String configId);
-  Future<void> upsertRankingValue(RankingValue value);
   Future<void> purgeExpiredDeleted(DateTime now);
 }
 
