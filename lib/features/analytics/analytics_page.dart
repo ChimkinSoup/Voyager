@@ -41,6 +41,12 @@ enum _AnalyticsViewMode { grid, calendar }
 final _analyticsViewModeProvider =
     StateProvider<_AnalyticsViewMode>((_) => _AnalyticsViewMode.grid);
 
+/// True while a tracker row in the heatmap grid is being drag-reordered.
+/// Watched by the hover/tap value popup so it stays hidden for the whole
+/// grid during a drag, instead of popping up over whatever square the
+/// pointer happens to pass under mid-drag.
+final _heatmapDraggingProvider = StateProvider<bool>((_) => false);
+
 final _calendarSelectedTrackerProvider =
     StateProvider<String?>((_) => null);
 
@@ -100,25 +106,42 @@ class AnalyticsPage extends ConsumerWidget {
             storageKey: ShellPageStorageKeys.analyticsList,
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
             children: [
-              // ── Global Stats Header ──────────────────────────────────
-              _GlobalStatsHeader(
+              // ── Macro Stats Row ───────────────────────────────────────
+              _MacroStatsRow(
                 totalEntries: analytics.totalJournalEntries(entries),
                 totalWords: words,
                 longestStreak: streak,
-                hasTrackers: trackers.isNotEmpty,
-                trackers: trackers,
-                viewMode: viewMode,
-                onViewModeChanged: (m) =>
-                    ref.read(_analyticsViewModeProvider.notifier).state = m,
-                onCreateTracker: () => _createTracker(context, ref),
               ),
               const SizedBox(height: 12),
-              if (trackers.isEmpty)
-                const _EmptyTrackersCard()
-              else if (viewMode == _AnalyticsViewMode.grid)
-                _GridView(trackers: trackers, analytics: analytics)
-              else
-                _CalendarView(trackers: trackers, analytics: analytics),
+              // ── Panel: toolbar + tracker views ────────────────────────
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: calendarPanelBackgroundColor(context),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _AnalyticsToolbar(
+                      hasTrackers: trackers.isNotEmpty,
+                      trackers: trackers,
+                      viewMode: viewMode,
+                      onViewModeChanged: (m) => ref
+                          .read(_analyticsViewModeProvider.notifier)
+                          .state = m,
+                      onCreateTracker: () => _createTracker(context, ref),
+                    ),
+                    const SizedBox(height: 12),
+                    if (trackers.isEmpty)
+                      const _EmptyTrackersCard()
+                    else if (viewMode == _AnalyticsViewMode.grid)
+                      _GridView(trackers: trackers, analytics: analytics)
+                    else
+                      _CalendarView(trackers: trackers, analytics: analytics),
+                  ],
+                ),
+              ),
               const SizedBox(height: 32),
             ],
           );
@@ -143,14 +166,64 @@ class AnalyticsPage extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Global Stats Header
+// Macro Stats Row
 // ---------------------------------------------------------------------------
 
-class _GlobalStatsHeader extends ConsumerWidget {
-  const _GlobalStatsHeader({
+class _MacroStatsRow extends StatelessWidget {
+  const _MacroStatsRow({
     required this.totalEntries,
     required this.totalWords,
     required this.longestStreak,
+  });
+
+  final int totalEntries;
+  final int totalWords;
+  final int longestStreak;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return IntrinsicHeight(
+      child: Row(
+        children: [
+          _StatChip(
+            label: 'Entries',
+            value: '$totalEntries',
+            icon: PhosphorIconsRegular.notebook,
+            accent: accent,
+          ),
+          const SizedBox(width: 10),
+          _StatChip(
+            label: 'Words',
+            value: _formatNumber(totalWords),
+            icon: PhosphorIconsRegular.textAa,
+            accent: accent,
+          ),
+          const SizedBox(width: 10),
+          _StatChip(
+            label: 'Best Streak',
+            value: '$longestStreak days',
+            icon: PhosphorIconsRegular.flame,
+            accent: accent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatNumber(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+    return '$n';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Analytics Toolbar — view mode toggle, tracker selector, new tracker button
+// ---------------------------------------------------------------------------
+
+class _AnalyticsToolbar extends ConsumerWidget {
+  const _AnalyticsToolbar({
     required this.hasTrackers,
     required this.trackers,
     required this.viewMode,
@@ -158,9 +231,6 @@ class _GlobalStatsHeader extends ConsumerWidget {
     required this.onCreateTracker,
   });
 
-  final int totalEntries;
-  final int totalWords;
-  final int longestStreak;
   final bool hasTrackers;
   final List<StatisticTracker> trackers;
   final _AnalyticsViewMode viewMode;
@@ -169,40 +239,7 @@ class _GlobalStatsHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Macro stats row
-        IntrinsicHeight(
-          child: Row(
-            children: [
-              _StatChip(
-                label: 'Entries',
-                value: '$totalEntries',
-                icon: PhosphorIconsRegular.notebook,
-                accent: accent,
-              ),
-              const SizedBox(width: 10),
-              _StatChip(
-                label: 'Words',
-                value: _formatNumber(totalWords),
-                icon: PhosphorIconsRegular.textAa,
-                accent: accent,
-              ),
-              const SizedBox(width: 10),
-              _StatChip(
-                label: 'Best Streak',
-                value: '$longestStreak days',
-                icon: PhosphorIconsRegular.flame,
-                accent: accent,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
+    return Row(
           children: [
             Expanded(
               child: SingleChildScrollView(
@@ -305,15 +342,7 @@ class _GlobalStatsHeader extends ConsumerWidget {
               label: const Text('New tracker'),
             ),
           ],
-        ),
-      ],
-    );
-  }
-
-  String _formatNumber(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-    return '$n';
+        );
   }
 }
 
@@ -795,18 +824,47 @@ Future<void> _toggleTrackerStar(
   ref.invalidate(trackersProvider);
 }
 
+String _cadenceLabel(TrackerCadence cadence) {
+  final name = cadence.name;
+  return name[0].toUpperCase() + name.substring(1);
+}
+
 /// A faint horizontal rule separating groups (starred vs. time-period, or
-/// between adjacent time periods) in the heatmap grid.
+/// between adjacent time periods) in the heatmap grid. When [label] is set
+/// (the name of the section that follows), the rule is cut in the middle
+/// to make room for it instead of running underneath the text.
 class _HeatmapGroupDivider extends StatelessWidget {
-  const _HeatmapGroupDivider();
+  const _HeatmapGroupDivider({this.label});
+
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lineColor = Colors.white.withValues(alpha: 0.12);
+    if (label == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Container(height: 1, color: lineColor),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Container(
-        height: 1,
-        color: Colors.white.withValues(alpha: 0.12),
+      child: Row(
+        children: [
+          Expanded(child: Container(height: 1, color: lineColor)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              label!,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(child: Container(height: 1, color: lineColor)),
+        ],
       ),
     );
   }
@@ -820,6 +878,8 @@ class _HeatmapGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
     final starred = trackers.where((t) => t.starred).toList()
       ..sort(_compareTrackerOrder);
 
@@ -840,18 +900,32 @@ class _HeatmapGrid extends ConsumerWidget {
 
     final sections = <Widget>[];
     if (starred.isNotEmpty) {
-      sections.add(_HeatmapBucket(
-        key: const ValueKey('starred'),
-        trackers: starred,
-        analytics: analytics,
-        onToggleStar: toggleStar,
+      sections.add(Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: accent.withValues(alpha: 0.6)),
+        ),
+        child: _HeatmapBucket(
+          key: const ValueKey('starred'),
+          trackers: starred,
+          analytics: analytics,
+          onToggleStar: toggleStar,
+        ),
       ));
       if (cadenceGroups.isNotEmpty) {
-        sections.add(const _HeatmapGroupDivider());
+        sections.add(
+          _HeatmapGroupDivider(label: _cadenceLabel(cadenceGroups.first)),
+        );
       }
     }
     for (var gi = 0; gi < cadenceGroups.length; gi++) {
-      if (gi > 0) sections.add(const _HeatmapGroupDivider());
+      if (gi > 0) {
+        sections.add(
+          _HeatmapGroupDivider(label: _cadenceLabel(cadenceGroups[gi])),
+        );
+      }
       sections.add(_HeatmapBucket(
         key: ValueKey(cadenceGroups[gi].name),
         trackers: byCadence[cadenceGroups[gi]]!,
@@ -937,11 +1011,22 @@ class _HeatmapBucketState extends ConsumerState<_HeatmapBucket> {
 
   @override
   Widget build(BuildContext context) {
+    // Keyed on this bucket's *membership* (not order), so a star toggle —
+    // which moves a tracker into or out of this bucket — tears down and
+    // remounts the list fresh with no residual animation state to carry
+    // over, while a plain in-bucket drag reorder (membership unchanged)
+    // keeps the same key and so keeps Flutter's native drag animation.
+    final membershipKey = (_items.map((t) => t.id).toList()..sort()).join('|');
     return ReorderableListView(
+      key: ValueKey(membershipKey),
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       buildDefaultDragHandles: false,
       onReorderItem: _handleReorder,
+      onReorderStart: (_) =>
+          ref.read(_heatmapDraggingProvider.notifier).state = true,
+      onReorderEnd: (_) =>
+          ref.read(_heatmapDraggingProvider.notifier).state = false,
       proxyDecorator: (child, index, animation) =>
           Material(type: MaterialType.transparency, child: child),
       children: [
@@ -998,6 +1083,18 @@ class _HeatmapRow extends ConsumerWidget {
             DateTime.now().difference(periods.first).inDays + 1;
         final max = analytics.rollingMax(values, days: windowDays);
 
+        // Hoisted out of [_HeatmapSquare] so each of the (up to 30) squares
+        // in this row does an O(1) map lookup instead of its own O(n) scan
+        // over the full value history, and so the "only one value ever
+        // recorded" check inside [AnalyticsService.heatmapIntensity] runs
+        // once per row instead of once per square.
+        final valuesByDay = <DateTime, TrackerValue>{
+          for (final v in values)
+            DateTime(v.periodStart.year, v.periodStart.month, v.periodStart.day): v,
+        };
+        final hasSingleIntValue =
+            values.where((v) => v.intValue != null).length == 1;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1018,7 +1115,7 @@ class _HeatmapRow extends ConsumerWidget {
                 Text(
                   '(${_typeLabel(tracker.type)})',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
                 ),
                 const Spacer(),
@@ -1032,7 +1129,7 @@ class _HeatmapRow extends ConsumerWidget {
                   constraints: const BoxConstraints(),
                   padding: EdgeInsets.zero,
                   color: tracker.starred
-                      ? theme.colorScheme.primary
+                      ? color
                       : theme.colorScheme.onSurfaceVariant,
                   onPressed: onToggleStar,
                 ),
@@ -1074,7 +1171,8 @@ class _HeatmapRow extends ConsumerWidget {
                           children: [
                             _HeatmapSquare(
                               tracker: tracker,
-                              values: values,
+                              valuesByDay: valuesByDay,
+                              hasSingleIntValue: hasSingleIntValue,
                               periodDate: period,
                               maxInPeriod: max,
                               analytics: analytics,
@@ -1306,7 +1404,7 @@ Widget _hoverTooltip({
 /// proper route by [_showMorphPopover] instead of folded into this same
 /// overlay entry, since that combination is what triggered overlay/element
 /// tree corruption in this app's go_router setup.
-class _HoverEditPopover extends StatefulWidget {
+class _HoverEditPopover extends ConsumerStatefulWidget {
   const _HoverEditPopover({
     required this.periodLabel,
     required this.valueLabel,
@@ -1328,10 +1426,10 @@ class _HoverEditPopover extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_HoverEditPopover> createState() => _HoverEditPopoverState();
+  ConsumerState<_HoverEditPopover> createState() => _HoverEditPopoverState();
 }
 
-class _HoverEditPopoverState extends State<_HoverEditPopover> {
+class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
   final _key = GlobalKey();
   final _tooltipKey = GlobalKey();
   final _tooltipDateKey = GlobalKey();
@@ -1369,6 +1467,10 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
 
   void _show() {
     if (_entry != null) return;
+    // Suppressed for the whole heatmap grid while any row is being
+    // drag-reordered, so the pointer passing over other squares mid-drag
+    // doesn't pop up a stray value tooltip.
+    if (ref.read(_heatmapDraggingProvider)) return;
     final anchor = _measure();
     if (anchor == null) return;
     final theme = Theme.of(context);
@@ -1428,6 +1530,7 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
   }
 
   void _handleTap() {
+    if (ref.read(_heatmapDraggingProvider)) return;
     // Measure the tooltip's actual on-screen rect synchronously rather than
     // trusting [_lastRect] (which starts as an estimate and is only
     // corrected a frame after the tooltip is shown) — otherwise the morph's
@@ -1462,6 +1565,11 @@ class _HoverEditPopoverState extends State<_HoverEditPopover> {
 
   @override
   Widget build(BuildContext context) {
+    // Dismiss an already-open tooltip the instant a drag starts anywhere
+    // in the grid (not just on this row), matching the [_show] guard above.
+    ref.listen(_heatmapDraggingProvider, (_, dragging) {
+      if (dragging) _hide();
+    });
     return MouseRegion(
       key: _key,
       onEnter: (_) => _show(),
@@ -1741,35 +1849,42 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
             final rect = Rect.lerp(widget.anchorRect, cardRect, t)!;
             return Positioned.fromRect(
               rect: rect,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Color.lerp(
-                    calendarPanelBackgroundColor(context),
-                    theme.colorScheme.surface,
-                    t,
-                  ),
-                  borderRadius: BorderRadius.lerp(
-                    BorderRadius.circular(8),
-                    BorderRadius.circular(12),
-                    t,
-                  ),
-                  border: Border.lerp(
-                    Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                    Border.all(color: accent, width: 3),
-                    t,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: popupGlowAlpha * t),
-                      blurRadius: 12 * t,
-                      spreadRadius: 2 * t,
+              // The blurred/spread box shadows below are re-rasterized every
+              // tick since their radii are animating — isolating them in
+              // their own compositing layer keeps that repaint from also
+              // repainting the sibling tooltip/editor/date layers in this
+              // Stack, which don't otherwise share a layer with this one.
+              child: RepaintBoundary(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color.lerp(
+                      calendarPanelBackgroundColor(context),
+                      theme.colorScheme.surface,
+                      t,
                     ),
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35 * t),
-                      blurRadius: 10 * t,
-                      offset: Offset(0, 4 * t),
+                    borderRadius: BorderRadius.lerp(
+                      BorderRadius.circular(8),
+                      BorderRadius.circular(12),
+                      t,
                     ),
-                  ],
+                    border: Border.lerp(
+                      Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      Border.all(color: accent, width: 3),
+                      t,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: popupGlowAlpha * t),
+                        blurRadius: 12 * t,
+                        spreadRadius: 2 * t,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35 * t),
+                        blurRadius: 10 * t,
+                        offset: Offset(0, 4 * t),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -2098,7 +2213,8 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
 class _HeatmapSquare extends ConsumerStatefulWidget {
   const _HeatmapSquare({
     required this.tracker,
-    required this.values,
+    required this.valuesByDay,
+    required this.hasSingleIntValue,
     required this.periodDate,
     required this.maxInPeriod,
     required this.analytics,
@@ -2106,7 +2222,16 @@ class _HeatmapSquare extends ConsumerStatefulWidget {
   });
 
   final StatisticTracker tracker;
-  final List<TrackerValue> values;
+
+  /// This tracker's values keyed by calendar day (see [_HeatmapRow.build]) —
+  /// an O(1) lookup for this square's [periodDate] instead of each square
+  /// independently scanning the full value history.
+  final Map<DateTime, TrackerValue> valuesByDay;
+
+  /// Whether this tracker has ever recorded exactly one value, precomputed
+  /// once per row (see [_HeatmapRow.build]) instead of re-scanned by
+  /// [AnalyticsService.heatmapIntensity] for every square in the row.
+  final bool hasSingleIntValue;
   final DateTime periodDate;
   final int maxInPeriod;
   final AnalyticsService analytics;
@@ -2118,14 +2243,11 @@ class _HeatmapSquare extends ConsumerStatefulWidget {
 
 class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
   TrackerValue? _findValue() {
-    return widget.values.cast<TrackerValue?>().firstWhere(
-      (v) =>
-          v != null &&
-          v.periodStart.year == widget.periodDate.year &&
-          v.periodStart.month == widget.periodDate.month &&
-          v.periodStart.day == widget.periodDate.day,
-      orElse: () => null,
-    );
+    return widget.valuesByDay[DateTime(
+      widget.periodDate.year,
+      widget.periodDate.month,
+      widget.periodDate.day,
+    )];
   }
 
   @override
@@ -2137,7 +2259,7 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
       tracker: widget.tracker,
       maxInPeriod:
           widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
-      allValues: widget.values,
+      hasSingleIntValue: widget.hasSingleIntValue,
     );
     final color = Color(widget.tracker.colorValue);
     final bgColor = intensity == 0
@@ -2385,7 +2507,11 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
               ),
               child: child,
             ),
-            child: FadeTransition(
+            // Isolated in its own layer so the clip window growing every
+            // tick doesn't force this (fairly heavy) card content to be
+            // repainted each frame — only the clip boundary needs updating.
+            child: RepaintBoundary(
+              child: FadeTransition(
               opacity: CurvedAnimation(
                 parent: _expandController,
                 curve: const Interval(0.0, 0.5),
@@ -2475,6 +2601,7 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
                   ),
                 ),
               ),
+            ),
             ),
           ),
         ),

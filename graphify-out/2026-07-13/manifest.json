@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1783907940.6050744,
-    "ast_hash": "84393a5e847e32da65f94c054e1eb2e1",
+    "mtime": 1783978982.802555,
+    "ast_hash": "1d4aa185a40e203ce097ab2456ca06e5",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {

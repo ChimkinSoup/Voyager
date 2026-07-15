@@ -412,7 +412,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                     focusNode: _titleFocusNode,
                     textInputAction: TextInputAction.next,
                     accentColor: _accentColor,
-                    contentPadding: const EdgeInsets.fromLTRB(16, 16, 56, 16),
+                    contentPadding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
                     onSubmitted: (_) => _bodyFocusNode.requestFocus(),
                   ),
                   Positioned(

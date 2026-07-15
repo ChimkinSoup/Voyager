@@ -517,12 +517,82 @@ class DriftCalendarRepository implements CalendarRepository {
   final _policy = const SoftDeletePolicy();
 
   @override
+  Future<List<Calendar>> listCalendars({bool includeDeleted = false}) async {
+    final rows = await _db.select(_db.calendarsTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapCalendar)
+        .toList();
+  }
+
+  @override
+  Future<void> upsertCalendar(Calendar calendar) async {
+    await _db
+        .into(_db.calendarsTable)
+        .insertOnConflictUpdate(
+          CalendarsTableCompanion(
+            id: Value(calendar.id),
+            name: Value(calendar.name),
+            colorValue: Value(calendar.colorValue),
+            createdAt: Value(calendar.createdAt),
+            updatedAt: Value(calendar.updatedAt),
+            version: Value(calendar.version),
+            deletedAt: Value(calendar.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteCalendar(String id) async {
+    await (_db.update(
+      _db.calendarsTable,
+    )..where((t) => t.id.equals(id))).write(
+      CalendarsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<void> softDeleteEventsInCalendar(String calendarId) async {
+    final now = utcNow();
+    await (_db.update(_db.calendarEventsTable)
+          ..where((t) => t.calendarId.equals(calendarId)))
+        .write(
+      CalendarEventsTableCompanion(
+        deletedAt: Value(now),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  @override
+  Future<void> reassignEventsCalendar(
+    String fromCalendarId,
+    String toCalendarId,
+  ) async {
+    await (_db.update(_db.calendarEventsTable)
+          ..where((t) => t.calendarId.equals(fromCalendarId)))
+        .write(
+      CalendarEventsTableCompanion(
+        calendarId: Value(toCalendarId),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
   Future<List<CalendarEvent>> listEvents({
+    String? calendarId,
     DateTime? from,
     DateTime? to,
     bool includeDeleted = false,
   }) async {
     var query = _db.select(_db.calendarEventsTable);
+    if (calendarId != null) {
+      query = query..where((t) => t.calendarId.equals(calendarId));
+    }
     if (from != null) {
       query = query..where((t) => t.start.isBiggerOrEqualValue(from));
     }
@@ -543,6 +613,7 @@ class DriftCalendarRepository implements CalendarRepository {
         .insertOnConflictUpdate(
           CalendarEventsTableCompanion(
             id: Value(event.id),
+            calendarId: Value(event.calendarId),
             title: Value(event.title),
             start: Value(event.start),
             end: Value(event.end),
@@ -582,6 +653,8 @@ class DriftCalendarRepository implements CalendarRepository {
       _db.calendarEventsTable,
     )..where((t) => t.source.equals('google'))).go();
     for (final event in events) {
+      // Google-imported events currently always land in the default calendar;
+      // mapping Google's own calendars to Voyager calendars is future work.
       await upsertEvent(event);
     }
   }
@@ -596,10 +669,29 @@ class DriftCalendarRepository implements CalendarRepository {
         )..where((t) => t.id.equals(row.id))).go();
       }
     }
+    final calendars = await _db.select(_db.calendarsTable).get();
+    for (final row in calendars) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.calendarsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
   }
+
+  Calendar _mapCalendar(CalendarsTableData row) => Calendar(
+    id: row.id,
+    name: row.name,
+    colorValue: row.colorValue,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
 
   CalendarEvent _mapEvent(CalendarEventsTableData row) => CalendarEvent(
     id: row.id,
+    calendarId: row.calendarId,
     title: row.title,
     start: row.start,
     end: row.end,

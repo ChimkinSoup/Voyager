@@ -80,18 +80,25 @@ double calendarWeekDayDateLabelRowTopInArea(
 
 /// "MMM d" label pinned below a week day column (today gets a primary circle).
 class CalendarWeekDayDateLabel extends StatelessWidget {
-  const CalendarWeekDayDateLabel({super.key, required this.date});
+  const CalendarWeekDayDateLabel({super.key, required this.date, this.accentColor});
 
   final DateTime date;
+
+  /// Selected calendar's color; fills the "today" circle. Falls back to the
+  /// theme accent when null.
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
     const fontSize = calendarWeekDayDateLabelFontSize;
     final theme = Theme.of(context);
     final isToday = calendarIsToday(date);
-    final accent = theme.colorScheme.primary;
-    final textColor =
-        isToday ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant;
+    final accent = accentColor ?? theme.colorScheme.primary;
+    final textColor = isToday
+        ? (accentColor != null
+              ? calendarContrastingLabelColor(accent)
+              : theme.colorScheme.onPrimary)
+        : theme.colorScheme.onSurfaceVariant;
     final labelText = _weekDayDateLabelFormat.format(date);
 
     final label = Text(
@@ -265,6 +272,7 @@ class CalendarWeekTimeline extends StatefulWidget {
     this.showDayDateLabels = true,
     this.entryFadeEnabled = true,
     this.editingEventId,
+    this.weekdayAccentColor,
   });
 
   final DateTime weekStart;
@@ -281,6 +289,10 @@ class CalendarWeekTimeline extends StatefulWidget {
   final bool showDayDateLabels;
   final bool entryFadeEnabled;
   final String? editingEventId;
+
+  /// Selected calendar's color; the weekday header renders a fainter tint of
+  /// it. Falls back to the theme accent when null.
+  final Color? weekdayAccentColor;
 
   @override
   State<CalendarWeekTimeline> createState() => _CalendarWeekTimelineState();
@@ -379,7 +391,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
   Widget build(BuildContext context) {
     final divider = Theme.of(context).dividerColor;
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
-    final accentColor = Theme.of(context).colorScheme.primary;
+    final accentColor = widget.weekdayAccentColor ?? Theme.of(context).colorScheme.primary;
     final scrollContentHeight = calendarWeekTimelineScrollContentHeight();
 
     return LayoutBuilder(
@@ -387,6 +399,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
         final weekdayStyle = calendarWeekdayLabelStyle(
           context,
           fontSize: calendarWeekWeekdayFontSize,
+          accentColor: widget.weekdayAccentColor,
         );
         final metrics = CalendarWeekLayoutMetrics.compute(
           areaSize: Size(constraints.maxWidth, constraints.maxHeight),
@@ -610,6 +623,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                               child: Center(
                                 child: CalendarWeekDayDateLabel(
                                   date: weekDays[i],
+                                  accentColor: widget.weekdayAccentColor,
                                 ),
                               ),
                             ),

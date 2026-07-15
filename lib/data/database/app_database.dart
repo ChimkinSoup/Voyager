@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -83,8 +84,23 @@ class TodoTasksTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+class CalendarsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get colorValue => integer().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class CalendarEventsTable extends Table {
   TextColumn get id => text()();
+  TextColumn get calendarId =>
+      text().withDefault(const Constant(legacyCalendarId))();
   TextColumn get title => text()();
   DateTimeColumn get start => dateTime()();
   DateTimeColumn get end => dateTime()();
@@ -273,6 +289,7 @@ class PendingUploadsTable extends Table {
     JournalEntriesTable,
     TodoListsTable,
     TodoTasksTable,
+    CalendarsTable,
     CalendarEventsTable,
     TrackersTable,
     TrackerValuesTable,
@@ -286,7 +303,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -564,6 +581,29 @@ class AppDatabase extends _$AppDatabase {
       if (from < 36) {
         await migrator.addColumn(trackersTable, trackersTable.starred);
         await migrator.addColumn(trackersTable, trackersTable.sortOrder);
+      }
+      if (from < 37) {
+        await migrator.createTable(calendarsTable);
+        await migrator.addColumn(
+          calendarEventsTable,
+          calendarEventsTable.calendarId,
+        );
+        final now = DateTime.now().toUtc();
+        await into(calendarsTable).insertOnConflictUpdate(
+          CalendarsTableCompanion(
+            id: const Value(legacyCalendarId),
+            name: const Value('Calendar'),
+            colorValue: const Value(0xFF7C9EFF),
+            createdAt: Value(now),
+            updatedAt: Value(now),
+          ),
+        );
+        // Defensive backfill in case the ADD COLUMN default isn't retroactively
+        // applied to pre-existing rows on this platform/SQLite version.
+        await customStatement(
+          'UPDATE calendar_events_table SET calendar_id = ? WHERE calendar_id IS NULL',
+          [legacyCalendarId],
+        );
       }
     },
   );

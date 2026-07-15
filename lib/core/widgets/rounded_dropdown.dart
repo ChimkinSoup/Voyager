@@ -43,6 +43,15 @@ class AddListDropdownValue {
 
 const _addListSentinel = AddListDropdownValue();
 
+/// Wraps a menu selection so it can be told apart from the `null` a
+/// dismissed-without-choosing menu resolves with — otherwise, for a nullable
+/// [RoundedDropdown]`<T>` (e.g. `T = String?`), `null is T` is true and a
+/// barrier-tap dismissal would be misread as "the user picked null".
+class _PickedValue<T> {
+  const _PickedValue(this.value);
+  final T value;
+}
+
 class RoundedDropdown<T> extends StatefulWidget {
   const RoundedDropdown({
     super.key,
@@ -291,7 +300,10 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
           subtitleStyle: subtitleStyle,
           trailingStyle: trailingStyle,
           showManageButton: _showsManageButton(widget.items[i]),
-          onSelect: () => Navigator.pop<Object?>(context, widget.items[i].value),
+          onSelect: () => Navigator.pop<Object?>(
+            context,
+            _PickedValue<T>(widget.items[i].value),
+          ),
           onManagePressed: _showsManageButton(widget.items[i])
               ? (buttonContext) => _openItemManageMenu(
                     buttonContext,
@@ -326,8 +338,8 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
       _menuDepth = 0;
       _menuNavigator = null;
     }
-    if (picked is T) {
-      widget.onChanged?.call(picked);
+    if (picked is _PickedValue<T>) {
+      widget.onChanged?.call(picked.value);
     }
   }
 
@@ -351,12 +363,18 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
       0,
     );
 
+    final itemColor = widget.items
+        .where((item) => item.value == itemValue)
+        .firstOrNull
+        ?.labelColor;
+
     _menuNavigator ??= Navigator.of(context);
     _menuDepth = 2;
     final action = await showVoyagerMenu<VoyagerMenuCatalogEntry>(
       context: context,
       position: RelativeRect.fromRect(menuRect, Offset.zero & overlay.size),
       items: buildCatalogMenu(context, from: entries),
+      accentColor: itemColor,
     );
     if (action != null) {
       if (mounted) {

@@ -131,6 +131,7 @@ class CalendarGrid extends StatelessWidget {
     this.highlightedWeekStart,
     this.weekHighlightOpacity = 1,
     this.weekEntryFadeEnabled = true,
+    this.accentColor,
   });
 
   final CalendarViewMode mode;
@@ -173,6 +174,10 @@ class CalendarGrid extends StatelessWidget {
   final double weekHighlightOpacity;
   final bool weekEntryFadeEnabled;
 
+  /// Selected calendar's color, threaded down to the month title and week
+  /// weekday header. Null (e.g. "all calendars" view) keeps the theme accent.
+  final Color? accentColor;
+
   @override
   Widget build(BuildContext context) {
     return switch (mode) {
@@ -187,6 +192,7 @@ class CalendarGrid extends StatelessWidget {
         scrollController: weekTimelineScrollController,
         editingEventId: editingEventId,
         entryFadeEnabled: weekEntryFadeEnabled,
+        accentColor: accentColor,
       ),
       CalendarViewMode.month => _MonthGrid(
         focused: focused,
@@ -205,6 +211,7 @@ class CalendarGrid extends StatelessWidget {
         onNextMonth: onNextMonth,
         highlightedWeekStart: highlightedWeekStart,
         weekHighlightOpacity: weekHighlightOpacity,
+        accentColor: accentColor,
       ),
       CalendarViewMode.year => _YearGrid(
         focused: focused,
@@ -216,6 +223,7 @@ class CalendarGrid extends StatelessWidget {
         monthTileKeyBuilder: monthTileKeyBuilder,
         dayGridKeyBuilder: yearTileDayGridKeyBuilder,
         hiddenMonth: hiddenMonth,
+        accentColor: accentColor,
       ),
     };
   }
@@ -362,11 +370,16 @@ class MonthTitleHeader extends StatelessWidget {
     this.showTitle = true,
     this.morphTitleStyle,
     this.navCenterY,
+    this.titleColor,
   });
 
   final DateTime month;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
+
+  /// Overrides the title's accent color (e.g. the selected calendar's color).
+  /// Ignored when [morphTitleStyle] is set.
+  final Color? titleColor;
 
   /// Fades nav controls in/out during the year↔month morph.
   final double navOpacity;
@@ -426,20 +439,24 @@ class MonthTitleHeader extends StatelessWidget {
     return baseline - fontSize * 0.35;
   }
 
-  static TextStyle yearTileMonthNameStyle(BuildContext context) {
+  static TextStyle yearTileMonthNameStyle(
+    BuildContext context, {
+    Color? titleColor,
+  }) {
     return Theme.of(context).textTheme.titleSmall!.copyWith(
-      color: calendarTitleAccentColor(context),
+      color: calendarTitleAccentColor(context, accentColor: titleColor),
     );
   }
 
   static TextStyle resolveTitleStyle(
     BuildContext context, {
     TextStyle? morphTitleStyle,
+    Color? titleColor,
   }) {
     return morphTitleStyle ??
         Theme.of(context).textTheme.titleSmall!.copyWith(
           fontSize: titleFontSize,
-          color: calendarTitleAccentColor(context),
+          color: calendarTitleAccentColor(context, accentColor: titleColor),
         );
   }
 
@@ -510,6 +527,7 @@ class MonthTitleHeader extends StatelessWidget {
     final titleStyle = resolveTitleStyle(
       context,
       morphTitleStyle: morphTitleStyle,
+      titleColor: titleColor,
     );
     final monthName = _mmmmFormat.format(month);
     final textSize = measureTitleText(titleStyle, monthName);
@@ -686,6 +704,7 @@ class _MonthGrid extends StatelessWidget {
     this.onNextMonth,
     this.highlightedWeekStart,
     this.weekHighlightOpacity = 1,
+    this.accentColor,
   });
 
   final DateTime focused;
@@ -706,6 +725,10 @@ class _MonthGrid extends StatelessWidget {
   final VoidCallback? onNextMonth;
   final DateTime? highlightedWeekStart;
   final double weekHighlightOpacity;
+
+  /// Selected calendar's color, applied to the month title. Falls back to
+  /// the theme accent when null (e.g. "all calendars" view).
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -732,9 +755,16 @@ class _MonthGrid extends StatelessWidget {
                 month: focused,
                 onPreviousMonth: onPreviousMonth,
                 onNextMonth: onNextMonth,
+                titleColor: accentColor,
               ),
               const SizedBox(height: MonthTitleHeader.titleGap),
-              WeekdayHeaderRow(weekStartsMonday: weekStartsMonday),
+              WeekdayHeaderRow(
+                weekStartsMonday: weekStartsMonday,
+                labelStyle: calendarWeekdayLabelStyle(
+                  context,
+                  accentColor: accentColor,
+                ),
+              ),
               const SizedBox(height: monthDayGridWeekdayHeaderGap),
             ] else if (chromeSpacer != null)
               SizedBox(height: chromeSpacer),
@@ -754,6 +784,7 @@ class _MonthGrid extends StatelessWidget {
                 hiddenWeekRow: hiddenWeekRow,
                 highlightedWeekStart: highlightedWeekStart,
                 weekHighlightOpacity: weekHighlightOpacity,
+                accentColor: accentColor,
               ),
             ),
           ],
@@ -775,6 +806,7 @@ class _WeekGrid extends StatelessWidget {
     this.scrollController,
     this.editingEventId,
     this.entryFadeEnabled = true,
+    this.accentColor,
   });
 
   final DateTime focused;
@@ -787,6 +819,9 @@ class _WeekGrid extends StatelessWidget {
   final ScrollController? scrollController;
   final String? editingEventId;
   final bool entryFadeEnabled;
+
+  /// Selected calendar's color, applied (faintly) to the weekday header row.
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -806,6 +841,7 @@ class _WeekGrid extends StatelessWidget {
       onSlotTap: onSlotTap ?? (_, _) {},
       editingEventId: editingEventId,
       entryFadeEnabled: entryFadeEnabled,
+      weekdayAccentColor: accentColor,
       ),
     );
   }
@@ -822,6 +858,7 @@ class _YearGrid extends StatelessWidget {
     this.monthTileKeyBuilder,
     this.dayGridKeyBuilder,
     this.hiddenMonth,
+    this.accentColor,
   });
 
   final DateTime focused;
@@ -838,6 +875,9 @@ class _YearGrid extends StatelessWidget {
   /// Month to replace with an invisible placeholder — the "hole" that expands
   /// as the background zooms during the morph animation.
   final DateTime? hiddenMonth;
+
+  /// Selected calendar's color, applied to each tile's month name.
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -907,7 +947,10 @@ class _YearGrid extends StatelessWidget {
                 children: [
                   Text(
                     _mmmmFormat.format(monthDate),
-                    style: MonthTitleHeader.yearTileMonthNameStyle(context),
+                    style: MonthTitleHeader.yearTileMonthNameStyle(
+                      context,
+                      titleColor: accentColor,
+                    ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -920,6 +963,7 @@ class _YearGrid extends StatelessWidget {
                     labelStyle: calendarWeekdayLabelStyle(
                       context,
                       fontSize: MonthDayCellStyle.compact.fontSize,
+                      accentColor: accentColor,
                     ),
                   ),
                   const SizedBox(height: monthDayGridWeekdayHeaderGap),
@@ -931,6 +975,7 @@ class _YearGrid extends StatelessWidget {
                       indicators: indicators,
                       weekStartsMonday: weekStartsMonday,
                       style: MonthDayCellStyle.compact,
+                      accentColor: accentColor,
                     ),
                   ),
                 ],

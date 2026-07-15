@@ -2093,7 +2093,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     contentPadding: const EdgeInsets.fromLTRB(
                                       16,
                                       16,
-                                      56,
+                                      40,
                                       16,
                                     ),
                                     onChanged: (value) {
