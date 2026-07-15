@@ -9,17 +9,19 @@ class JournalTitleCornerFlag extends StatelessWidget {
     required this.onSelected,
     required this.menuEntries,
     this.size = 22,
+    this.tooltip = 'Move to journal',
   });
 
   final int colorValue;
   final ValueChanged<String> onSelected;
   final List<PopupMenuEntry<String>> Function(BuildContext context) menuEntries;
   final double size;
+  final String tooltip;
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      tooltip: 'Move to journal',
+      tooltip: tooltip,
       padding: EdgeInsets.zero,
       splashRadius: 0,
       borderRadius: BorderRadius.zero,
@@ -57,15 +59,10 @@ class JournalBookmarkFlag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Color(colorValue);
-    final icon = Icon(PhosphorIconsFill.bookmarkSimple, size: size);
-    final shaded = ShaderMask(
-      blendMode: BlendMode.srcIn,
-      shaderCallback: (rect) => LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [color, color.withValues(alpha: 0.5)],
-      ).createShader(rect),
-      child: icon,
+    final shaded = Icon(
+      PhosphorIconsFill.bookmarkSimple,
+      size: size,
+      color: color,
     );
 
     if (!snapToTopEdge) {
@@ -73,13 +70,13 @@ class JournalBookmarkFlag extends StatelessWidget {
     }
 
     // Phosphor glyphs sit slightly below the icon box top; nudge up to meet
-    // the input border.
+    // the input border (and fully cover it, not just approach it).
     return SizedBox(
       width: size,
       height: size,
       child: ClipRect(
         child: Transform.translate(
-          offset: const Offset(0, -2.5),
+          offset: const Offset(0, -4.5),
           child: Align(
             alignment: Alignment.topCenter,
             child: shaded,

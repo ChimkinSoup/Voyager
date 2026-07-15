@@ -33,6 +33,7 @@ import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
+import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -430,9 +431,19 @@ final todoListStatsProvider =
   return stats;
 });
 
-final calendarEventsProvider = FutureProvider((ref) {
+final calendarsProvider = FutureProvider((ref) {
   ref.keepAlive();
-  return ref.watch(calendarRepositoryProvider).listEvents();
+  return ref.watch(calendarRepositoryProvider).listCalendars();
+});
+
+/// Calendar events scope: `null` = "All calendars" (union of every calendar's
+/// events), otherwise a specific calendar id for that calendar's events only.
+final calendarEventsProvider =
+    FutureProvider.family<List<CalendarEvent>, String?>((ref, calendarId) {
+  ref.keepAlive();
+  final repo = ref.watch(calendarRepositoryProvider);
+  if (calendarId == null) return repo.listEvents();
+  return repo.listEvents(calendarId: calendarId);
 });
 
 final calendarTodoMarkersProvider =
@@ -573,7 +584,7 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
     ref.read(journalsProvider.future).then((_) {}),
     ref.read(journalEntriesProvider.future).then((_) {}),
     ref.read(journalEntryCountsProvider.future).then((_) {}),
-    ref.read(calendarEventsProvider.future).then((_) {}),
+    ref.read(calendarEventsProvider(null).future).then((_) {}),
     ref.read(trackersProvider.future).then((_) {}),
     listsFuture.then((lists) async {
       await Future.wait<void>([
@@ -670,7 +681,7 @@ final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
     cacheStatusFromAsync('Settings', ref.watch(settingsProvider)),
     cacheStatusFromAsync('Journals', ref.watch(journalsProvider)),
     cacheStatusFromAsync('Journal entries', ref.watch(journalEntriesProvider)),
-    cacheStatusFromAsync('Calendar events', ref.watch(calendarEventsProvider)),
+    cacheStatusFromAsync('Calendar events', ref.watch(calendarEventsProvider(null))),
     cacheStatusFromAsync('Trackers', ref.watch(trackersProvider)),
     cacheStatusFromAsync('Current weather', ref.watch(currentWeatherProvider)),
     cacheStatusFromAsync('Weather forecast', ref.watch(weatherForecastProvider)),

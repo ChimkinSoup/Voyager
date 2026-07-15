@@ -34,6 +34,9 @@ class AnalyticsService {
     required StatisticTracker tracker,
     required int maxInPeriod,
     List<TrackerValue>? allValues,
+    // Lets a caller that already knows this (e.g. computed once for a whole
+    // row of squares) skip the O(n) scan over [allValues] below.
+    bool? hasSingleIntValue,
   }) {
     if (value == null) return 0;
     switch (type) {
@@ -42,8 +45,10 @@ class AnalyticsService {
       case TrackerType.integer:
         if (maxInPeriod == 0) return 0;
         final cap = tracker.integerCap ?? maxInPeriod;
-        if (allValues != null &&
-            allValues.where((v) => v.intValue != null).length == 1) {
+        final singleValue = hasSingleIntValue ??
+            (allValues != null &&
+                allValues.where((v) => v.intValue != null).length == 1);
+        if (singleValue) {
           return (value.intValue ?? 0) > 0 ? 0.5 : 0.0;
         }
         return (value.intValue ?? 0) / cap;

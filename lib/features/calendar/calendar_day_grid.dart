@@ -196,27 +196,34 @@ BoxDecoration calendarEventFillDecoration(
   );
 }
 
-Color calendarTitleAccentColor(BuildContext context) =>
-    Theme.of(context).colorScheme.primary;
+Color calendarTitleAccentColor(BuildContext context, {Color? accentColor}) =>
+    accentColor ?? Theme.of(context).colorScheme.primary;
 
-Color calendarWeekdayAccentColor(BuildContext context) => Color.lerp(
-  Theme.of(context).colorScheme.primary,
-  Colors.white,
-  0.5,
-)!;
+Color calendarWeekdayAccentColor(BuildContext context, {Color? accentColor}) =>
+    Color.lerp(
+      accentColor ?? Theme.of(context).colorScheme.primary,
+      Colors.white,
+      0.5,
+    )!;
 
 Color calendarAdjacentMonthColor(BuildContext context) =>
     Theme.of(context).colorScheme.onSurface.withValues(
       alpha: calendarAdjacentMonthTextOpacity,
     );
 
+/// Black or white, whichever contrasts better against [background] — used for
+/// text/icons painted directly on an arbitrary calendar color.
+Color calendarContrastingLabelColor(Color background) =>
+    background.computeLuminance() < 0.5 ? Colors.white : Colors.black;
+
 TextStyle calendarWeekdayLabelStyle(
   BuildContext context, {
   double? fontSize,
+  Color? accentColor,
 }) {
   final size = calendarWeekdayFontSize(context, baseFontSize: fontSize);
   return Theme.of(context).textTheme.labelSmall!.copyWith(
-    color: calendarWeekdayAccentColor(context),
+    color: calendarWeekdayAccentColor(context, accentColor: accentColor),
     fontWeight: FontWeight.bold,
     fontSize: size,
     height: 1.0,
@@ -309,6 +316,7 @@ class CalendarDayCell extends StatelessWidget {
     this.isLastColumn = false,
     this.editingEventId,
     this.weekHighlightAlpha = 0,
+    this.accentColor,
   });
 
   final DateTime date;
@@ -350,12 +358,17 @@ class CalendarDayCell extends StatelessWidget {
   /// Accent fill behind the cell for the currently focused week row.
   final double weekHighlightAlpha;
 
+  /// Selected calendar's color; used for the focused-week highlight and the
+  /// "today" circle. Falls back to the theme accent when null.
+  final Color? accentColor;
+
   @override
   Widget build(BuildContext context) {
     final inMonth = date.month == month.month;
     final divider = Theme.of(context).dividerColor;
     final isFullLayout = !style.isCompactLayout;
     final accent = Theme.of(context).colorScheme.primary;
+    final highlightColor = accentColor ?? accent;
 
     final Color borderColor;
     final double borderAlpha;
@@ -386,7 +399,7 @@ class CalendarDayCell extends StatelessWidget {
       padding: style.cellPadding,
       decoration: BoxDecoration(
         color: weekHighlightAlpha > 0
-            ? accent.withValues(alpha: weekHighlightAlpha.clamp(0.0, 1.0))
+            ? highlightColor.withValues(alpha: weekHighlightAlpha.clamp(0.0, 1.0))
             : null,
         border: Border.all(
           color: borderColor.withValues(
@@ -473,6 +486,7 @@ class CalendarDayCell extends StatelessWidget {
                   mutedWhenAdjacent: !inMonth,
                   adjacentTextT: adjacentTextT,
                   isSelected: isSelected,
+                  accentColor: accentColor,
                 ),
               ),
               if (indicators.isNotEmpty) ...[
@@ -610,6 +624,7 @@ class CalendarDayCell extends StatelessWidget {
               mutedWhenAdjacent: !inMonth,
               adjacentTextT: adjacentTextT,
               isSelected: isSelected,
+              accentColor: accentColor,
             ),
           ),
         ),
@@ -660,6 +675,7 @@ class CalendarDayNumber extends StatelessWidget {
     this.mutedWhenAdjacent = false,
     this.adjacentTextT,
     this.isSelected = false,
+    this.accentColor,
   });
 
   final DateTime date;
@@ -671,9 +687,14 @@ class CalendarDayNumber extends StatelessWidget {
   final double? adjacentTextT;
   final bool isSelected;
 
+  /// Selected calendar's color; fills the "today" circle. Falls back to the
+  /// theme accent when null.
+  final Color? accentColor;
+
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
+    final todayColor = accentColor ?? accent;
     final isToday = calendarIsToday(date);
     final muted = mutedWhenAdjacent && date.month != month.month;
     final mutedColor = calendarAdjacentMonthColor(context);
@@ -686,7 +707,9 @@ class CalendarDayNumber extends StatelessWidget {
 
     Color textColor;
     if (isToday) {
-      textColor = Theme.of(context).colorScheme.onPrimary;
+      textColor = accentColor != null
+          ? calendarContrastingLabelColor(todayColor)
+          : Theme.of(context).colorScheme.onPrimary;
     } else if (muted && adjacentTextT != null) {
       textColor = Color.lerp(mutedColor, onSurface, adjacentTextT!.clamp(0.0, 1.0))!;
     } else if (muted) {
@@ -701,12 +724,12 @@ class CalendarDayNumber extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: isToday
-            ? accent
+            ? todayColor
             : showSelection
-            ? accent.withValues(alpha: 0.2)
+            ? todayColor.withValues(alpha: 0.2)
             : null,
         shape: BoxShape.circle,
-        border: showSelection ? Border.all(color: accent) : null,
+        border: showSelection ? Border.all(color: todayColor) : null,
       ),
       child: Text(
         '${date.day}',
@@ -2214,6 +2237,7 @@ class MonthDayGrid extends StatelessWidget {
     this.hiddenWeekRow,
     this.highlightedWeekStart,
     this.weekHighlightOpacity = 1,
+    this.accentColor,
   });
 
   final DateTime month;
@@ -2241,6 +2265,10 @@ class MonthDayGrid extends StatelessWidget {
 
   /// Scales the focused-week highlight (fades during month↔week morph).
   final double weekHighlightOpacity;
+
+  /// Selected calendar's color, threaded to each cell's "today" circle and
+  /// focused-week highlight.
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -2340,6 +2368,7 @@ class MonthDayGrid extends StatelessWidget {
                         onTap: onDayTap == null ? null : () => onDayTap!(date),
                         onEntryTap: onEntryTap,
                         editingEventId: editingEventId,
+                        accentColor: accentColor,
                       ),
                     );
                   }),

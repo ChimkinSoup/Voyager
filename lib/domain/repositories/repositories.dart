@@ -55,7 +55,14 @@ abstract class TodoRepository {
 }
 
 abstract class CalendarRepository {
+  Future<List<Calendar>> listCalendars({bool includeDeleted = false});
+  Future<void> upsertCalendar(Calendar calendar);
+  Future<void> softDeleteCalendar(String id);
+  Future<void> softDeleteEventsInCalendar(String calendarId);
+  Future<void> reassignEventsCalendar(String fromCalendarId, String toCalendarId);
+
   Future<List<CalendarEvent>> listEvents({
+    String? calendarId,
     DateTime? from,
     DateTime? to,
     bool includeDeleted = false,

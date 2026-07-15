@@ -839,7 +839,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   accentColor: listColor,
                   dense: true,
                   borderRadius: 12,
-                  contentPadding: const EdgeInsets.fromLTRB(14, 15, 56, 15),
+                  contentPadding: const EdgeInsets.fromLTRB(14, 15, 40, 15),
                 ),
                 if (widget.lists.isNotEmpty)
                   Positioned(

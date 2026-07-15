@@ -97,9 +97,6 @@ computeColorPaletteLayout({
   );
 }
 
-bool _paletteContains(List<int> palette, int color) =>
-    paletteContains(palette, color);
-
 /// Grid of preset swatches (no custom hex entry).
 class ColorPaletteGrid extends StatelessWidget {
   const ColorPaletteGrid({
@@ -326,9 +323,6 @@ class _PalettePickDialogState extends State<_PalettePickDialog> {
     _picked = widget.initial == null
         ? normalizeColorValue(widget.palette.first)
         : normalizeColorValue(widget.initial!);
-    if (!_paletteContains(widget.palette, _picked)) {
-      _picked = normalizeColorValue(widget.palette.first);
-    }
   }
 
   @override

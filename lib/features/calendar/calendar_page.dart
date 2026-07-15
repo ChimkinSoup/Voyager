@@ -6,8 +6,11 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/rounded_dropdown.dart';
+import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -17,6 +20,7 @@ import 'package:voyager/features/calendar/calendar_event_panel.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
+import 'package:voyager/features/calendar/calendar_list_actions.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
@@ -36,6 +40,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   CalendarViewMode _mode = CalendarViewMode.month;
   DateTime _focused = DateTime.now();
   DateTime? _dayViewDate;
+
+  /// Selected calendar to view; `null` means every calendar is shown (the
+  /// "all calendars" toggle is on). Defaults to the built-in default
+  /// calendar.
+  String? _selectedCalendarId = legacyCalendarId;
+
+  /// Last specific (non-null) calendar selected. Restored when the "all
+  /// calendars" toggle is turned back off, and used as the calendar
+  /// dropdown's displayed selection while all calendars are showing.
+  String _lastSpecificCalendarId = legacyCalendarId;
 
   _CalendarSidebarKind _sidebarKind = _CalendarSidebarKind.none;
   CalendarEvent? _sidebarEvent;
@@ -141,6 +155,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _weekTimelineScrollController.addListener(_onWeekTimelineScrolled);
     final now = DateTime.now();
     _lastViewedMonth = DateTime(now.year, now.month, 1);
+    _ensureDefaultCalendar();
+  }
+
+  /// Lazily creates the built-in default calendar for fresh installs (schema
+  /// migrations backfill it for existing databases, but a brand-new database
+  /// never runs the migration ladder).
+  Future<void> _ensureDefaultCalendar() async {
+    final repo = ref.read(calendarRepositoryProvider);
+    final calendars = await repo.listCalendars();
+    if (calendars.any((c) => c.id == legacyCalendarId)) return;
+    final now = utcNow();
+    final settings = ref.read(settingsProvider).valueOrNull ?? const AppSettings();
+    final defaultCalendar = Calendar(
+      id: legacyCalendarId,
+      name: 'Calendar',
+      colorValue: settings.accentColor,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await repo.upsertCalendar(defaultCalendar);
+    if (mounted) ref.invalidate(calendarsProvider);
   }
 
   void _disposeMorphListener() {
@@ -372,13 +407,24 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required DateTime date,
     bool focusTitle = true,
   }) async {
-    // Always pass an accent color so the popup glows.  For existing events use
-    // the event color; for new events fall back to the app accent color.
     final settings =
         ref.read(settingsProvider).valueOrNull ?? const AppSettings();
+    final calendars = ref.read(calendarsProvider).valueOrNull ?? const [];
+    final initialCalendarId =
+        event?.calendarId ?? _selectedCalendarId ?? legacyCalendarId;
+
+    // Always pass an accent color so the popup glows.  For existing events use
+    // the event color; for new events use the target calendar's color, so the
+    // border matches the color the panel itself will default to.
     final accentColor = event != null
         ? Color(event.colorValue)
-        : Color(settings.accentColor);
+        : Color(
+            calendars
+                    .where((c) => c.id == initialCalendarId)
+                    .firstOrNull
+                    ?.colorValue ??
+                settings.accentColor,
+          );
 
     await showContextualPopoverAt(
       context: context,
@@ -391,6 +437,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ),
         event: event,
         initialDate: date,
+        calendars: calendars,
+        initialCalendarId: initialCalendarId,
         focusTitleOnOpen: focusTitle,
         onSave: (data) {
           // Close popup first so the user sees immediate feedback, then
@@ -478,6 +526,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final now = utcNow();
     final saved = CalendarEvent(
       id: event?.id ?? newId(),
+      calendarId: result['calendarId'] as String? ??
+          event?.calendarId ??
+          _selectedCalendarId ??
+          legacyCalendarId,
       title: result['title'] as String,
       start: result['start'] as DateTime,
       end: result['end'] as DateTime,
@@ -587,6 +639,110 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ),
       ),
     );
+  }
+
+  Widget _buildAllCalendarsToggle(BuildContext context) {
+    final active = _selectedCalendarId == null;
+    return IconButton(
+      tooltip: active ? 'Show selected calendar only' : 'Show all calendars',
+      onPressed: () => setState(() {
+        if (active) {
+          _selectedCalendarId = _lastSpecificCalendarId;
+        } else {
+          if (_selectedCalendarId != null) {
+            _lastSpecificCalendarId = _selectedCalendarId!;
+          }
+          _selectedCalendarId = null;
+        }
+      }),
+      icon: Icon(
+        PhosphorIconsRegular.calendarDots,
+        color: active ? Colors.black : null,
+      ),
+      style: IconButton.styleFrom(
+        backgroundColor:
+            active ? Theme.of(context).colorScheme.primary : null,
+      ),
+    );
+  }
+
+  Widget _buildCalendarSelector(BuildContext context, List<Calendar> calendars) {
+    final accent = Theme.of(context).colorScheme.primary.toARGB32();
+    final dropdownValue = _selectedCalendarId ?? _lastSpecificCalendarId;
+    final selected = calendars
+        .cast<Calendar?>()
+        .firstWhere((c) => c?.id == dropdownValue, orElse: () => null);
+    return RoundedDropdown<String?>(
+      value: dropdownValue,
+      labelColor: Color(selected?.colorValue ?? accent),
+      onAddList: () => _createCalendarFromDropdown(),
+      addListLabel: 'Add calendar',
+      manageMenuEntriesFor: (id) => id == legacyCalendarId
+          ? defaultEntityManageMenuEntries
+          : entityManageMenuEntries,
+      onManage: (id, action) => _handleCalendarManage(id!, action, calendars),
+      items: [
+        ...calendars.map(
+          (c) => RoundedDropdownItem(
+            value: c.id,
+            label: c.name,
+            labelColor: Color(c.colorValue ?? accent),
+          ),
+        ),
+      ],
+      onChanged: (v) => setState(() {
+        _selectedCalendarId = v;
+        if (v != null) _lastSpecificCalendarId = v;
+      }),
+    );
+  }
+
+  Future<void> _createCalendarFromDropdown() async {
+    final created = await createCalendarList(context, ref);
+    if (!mounted || created == null) return;
+    await ref.read(calendarsProvider.future);
+    if (!mounted) return;
+    setState(() {
+      _selectedCalendarId = created.id;
+      _lastSpecificCalendarId = created.id;
+    });
+  }
+
+  Future<void> _handleCalendarManage(
+    String calendarId,
+    VoyagerMenuCatalogEntry action,
+    List<Calendar> allCalendars,
+  ) async {
+    final calendar = allCalendars.firstWhere((c) => c.id == calendarId);
+    switch (action) {
+      case VoyagerMenuCatalogEntry.rename:
+        await renameCalendarList(context, ref, calendar);
+      case VoyagerMenuCatalogEntry.changeColor:
+        await changeCalendarListColor(context, ref, calendar, allCalendars);
+      case VoyagerMenuCatalogEntry.delete:
+        final eventsForCalendar = await ref
+            .read(calendarRepositoryProvider)
+            .listEvents(calendarId: calendarId);
+        final deleted = await deleteCalendarList(
+          context,
+          ref,
+          calendar: calendar,
+          allCalendars: allCalendars,
+          eventCount: eventsForCalendar.length,
+        );
+        if (deleted && mounted) {
+          setState(() {
+            if (_selectedCalendarId == calendarId) {
+              _selectedCalendarId = legacyCalendarId;
+            }
+            if (_lastSpecificCalendarId == calendarId) {
+              _lastSpecificCalendarId = legacyCalendarId;
+            }
+          });
+        }
+      default:
+        break;
+    }
   }
 
   Future<void> _syncGoogle() async {
@@ -700,12 +856,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   // ---------------------------------------------------------------------------
 
   (TextStyle compact, TextStyle full) _weekdayMorphStyles(
-    BuildContext context,
-  ) => _calendarWeekdayMorphStyles(context);
+    BuildContext context, {
+    Color? accentColor,
+  }) => _calendarWeekdayMorphStyles(context, accentColor: accentColor);
 
   (TextStyle yearMonth, TextStyle monthTitle) _titleMorphStyles(
-    BuildContext context,
-  ) => _calendarTitleMorphStyles(context);
+    BuildContext context, {
+    Color? accentColor,
+  }) => _calendarTitleMorphStyles(context, accentColor: accentColor);
 
   int _weekRowForDate(
     DateTime month,
@@ -1447,7 +1605,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
-  Widget _buildViewModeSelector(bool weekStartsMonday) {
+  Widget _buildViewModeSelector(bool weekStartsMonday, {Color? accentColor}) {
     final onSelectionChanged = (Set<CalendarViewMode> selection) =>
         _onViewModeSelectionChanged(
           selection,
@@ -1466,6 +1624,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             yearSelect: 0.0,
             onSelectionChanged: onSelectionChanged,
             interactive: interactive,
+            accentColor: accentColor,
           );
         },
       );
@@ -1483,6 +1642,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               yearSelect: t,
               onSelectionChanged: onSelectionChanged,
               interactive: interactive,
+              accentColor: accentColor,
             );
           }
           return _ViewModeSegmentedControl(
@@ -1491,6 +1651,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             yearSelect: 1.0 - t,
             onSelectionChanged: onSelectionChanged,
             interactive: interactive,
+            accentColor: accentColor,
           );
         },
       );
@@ -1508,6 +1669,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           : (_mode == CalendarViewMode.year ? 1.0 : 0.0),
       onSelectionChanged: onSelectionChanged,
       interactive: interactive,
+      accentColor: accentColor,
     );
   }
 
@@ -1538,6 +1700,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     DateTime? highlightedWeekStart,
     double weekHighlightOpacity = 1,
     bool weekEntryFadeEnabled = true,
+    Color? accentColor,
   }) {
     final editingEventId = _sidebarKind == _CalendarSidebarKind.event
         ? _sidebarEvent?.id
@@ -1545,6 +1708,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     return CalendarGrid(
       mode: mode,
       focused: focused,
+      accentColor: accentColor,
       events: events,
       indicators: indicators,
       todoMarkers: mode == CalendarViewMode.year ? const [] : todoMarkers,
@@ -1584,6 +1748,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required int hiddenWeekRow,
     required TextStyle monthTitleStyle,
     required TextStyle monthWeekdayStyle,
+    Color? accentColor,
   }) {
     final chromeSpacer =
         MonthTitleHeader.preferredHeight(monthTitleStyle) +
@@ -1607,6 +1772,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
                 hiddenWeekRow: hiddenWeekRow,
+                accentColor: accentColor,
               ),
             ),
           ],
@@ -1641,6 +1807,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required List<CalendarDayIndicator> indicators,
     required List<CalendarTodoMarker> todoMarkers,
     required bool weekStartsMonday,
+    Color? accentColor,
   }) {
     final activeEvents = _weekMorphEvents ?? _morphEvents ?? events;
     final activeIndicators = _weekMorphIndicators ?? _morphIndicators ?? indicators;
@@ -1671,11 +1838,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         weekRow * 7,
         weekRow * 7 + 7,
       );
-      final monthTitleStyle = _titleMorphStyles(context).$2;
-      final monthWeekdayStyle = calendarWeekdayLabelStyle(context);
+      final monthTitleStyle =
+          _titleMorphStyles(context, accentColor: accentColor).$2;
+      final monthWeekdayStyle = calendarWeekdayLabelStyle(
+        context,
+        accentColor: accentColor,
+      );
       final weekWeekdayStyle = calendarWeekdayLabelStyle(
         context,
         fontSize: calendarWeekWeekdayFontSize,
+        accentColor: accentColor,
       );
 
       final chained = _isChainedWeekToYear || _isChainedYearToWeek;
@@ -1726,10 +1898,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           hiddenWeekRow: weekRow,
           monthTitleStyle: monthTitleStyle,
           monthWeekdayStyle: monthWeekdayStyle,
+          accentColor: accentColor,
         ),
         weekTimelineScrollController: _weekTimelineScrollController,
         weekTimelineScrollOffset: _weekTimelineScrollOffset,
         weekMorphForward: _weekMorphForward,
+        accentColor: accentColor,
       );
 
       if (!_weekMorphForward) {
@@ -1792,6 +1966,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         mode: CalendarViewMode.week,
         focused: _weekFocusAfterMonthToWeek(morphMonth, weekStartsMonday),
         weekEntryFadeEnabled: false,
+        accentColor: accentColor,
       );
 
       // month→week: keep the week grid alive behind the morph so the
@@ -1827,9 +2002,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
       final (compactWeekdayStyle, fullWeekdayStyle) = _weekdayMorphStyles(
         context,
+        accentColor: accentColor,
       );
       final (yearMonthNameStyle, monthTitleStyleForMorph) = _titleMorphStyles(
         context,
+        accentColor: accentColor,
       );
 
       final morphLayer = _MorphAnimationLayer(
@@ -1850,6 +2027,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         monthTitleStyle: monthTitleStyleForMorph,
         chainedYearWeekTransition:
             _isChainedWeekToYear || _isChainedYearToWeek,
+        accentColor: accentColor,
         yearGrid: _calendarGrid(
           events: activeEvents,
           indicators: activeIndicators,
@@ -1859,6 +2037,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           mode: CalendarViewMode.year,
           focused: DateTime(morphMonth.year, 1, 1),
           hiddenMonth: morphMonth,
+          accentColor: accentColor,
         ),
         events: activeEvents,
         todoMarkers: activeTodos,
@@ -1877,6 +2056,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             focused: morphMonth,
             monthNavigation: true,
             highlightedWeekStart: _highlightedWeekStart(weekStartsMonday),
+            accentColor: accentColor,
           ),
           morphOverlay: morphLayer,
         );
@@ -1897,6 +2077,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           : _focused,
       monthNavigation: _mode == CalendarViewMode.month,
       highlightedWeekStart: _highlightedWeekStart(weekStartsMonday),
+      accentColor: accentColor,
     );
   }
 
@@ -1909,10 +2090,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       },
     );
 
-    final eventsAsync = ref.watch(calendarEventsProvider);
+    final eventsAsync = ref.watch(calendarEventsProvider(_selectedCalendarId));
     final todosAsync = ref.watch(calendarTodoMarkersProvider);
+    final calendarsAsync = ref.watch(calendarsProvider);
+    final calendars = calendarsAsync.valueOrNull ?? const <Calendar>[];
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
     final weekStartsMonday = settings.weekStartsOnMonday;
+
+    final selectedCalendar = _selectedCalendarId == null
+        ? null
+        : calendars
+              .cast<Calendar?>()
+              .firstWhere((c) => c?.id == _selectedCalendarId, orElse: () => null);
+    final calendarAccentColor = selectedCalendar?.colorValue != null
+        ? Color(selectedCalendar!.colorValue!)
+        : null;
 
     const indicators = <CalendarDayIndicator>[];
 
@@ -1929,8 +2121,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               children: [
                 Row(
                   children: [
-                    _buildViewModeSelector(weekStartsMonday),
+                    _buildViewModeSelector(weekStartsMonday, accentColor: calendarAccentColor),
                     _buildGoToTodayButton(weekStartsMonday),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 360),
+                        child: _buildCalendarSelector(context, calendars),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildAllCalendarsToggle(context),
                     if (ref.watch(devSettingsProvider).showCalendarInstantViewSwitch) ...[
                       const SizedBox(width: 8),
                       const Text('Instant Switch:', style: TextStyle(fontSize: 10, color: Colors.grey)),
@@ -1981,7 +2182,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 Expanded(
                   child: eventsAsync.when(
                     data: (events) {
-                      final todos = todosAsync.valueOrNull ?? const <CalendarTodoMarker>[];
+                      final rawTodos = todosAsync.valueOrNull ?? const <CalendarTodoMarker>[];
+                      final showTodos = _selectedCalendarId == null ||
+                          _selectedCalendarId == legacyCalendarId;
+                      final todos = showTodos
+                          ? rawTodos
+                          : const <CalendarTodoMarker>[];
                       final calendarEvents =
                           _isWeekMorphing && _weekMorphEvents != null
                           ? _weekMorphEvents!
@@ -2010,6 +2216,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                                   indicators: indicators,
                                   todoMarkers: todos,
                                   weekStartsMonday: weekStartsMonday,
+                                  accentColor: calendarAccentColor,
                                 ),
                               );
                             },
@@ -2038,21 +2245,27 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 // =============================================================================
 
 (TextStyle compact, TextStyle full) _calendarWeekdayMorphStyles(
-  BuildContext context,
-) {
-  final full = calendarWeekdayLabelStyle(context);
+  BuildContext context, {
+  Color? accentColor,
+}) {
+  final full = calendarWeekdayLabelStyle(context, accentColor: accentColor);
   final compact = calendarWeekdayLabelStyle(
     context,
     fontSize: MonthDayCellStyle.compact.fontSize,
+    accentColor: accentColor,
   ).copyWith(inherit: false);
   return (compact, full);
 }
 
 (TextStyle yearMonth, TextStyle monthTitle) _calendarTitleMorphStyles(
-  BuildContext context,
-) {
-  final color = calendarTitleAccentColor(context);
-  final yearMonth = MonthTitleHeader.yearTileMonthNameStyle(context);
+  BuildContext context, {
+  Color? accentColor,
+}) {
+  final color = calendarTitleAccentColor(context, accentColor: accentColor);
+  final yearMonth = MonthTitleHeader.yearTileMonthNameStyle(
+    context,
+    titleColor: accentColor,
+  );
   final monthTitle = Theme.of(context).textTheme.titleSmall!.copyWith(
     fontSize: MonthTitleHeader.titleFontSize,
     color: color,
@@ -2446,6 +2659,7 @@ class _MorphProgress extends InheritedWidget {
     required this.monthMorphEventMetrics,
     required this.chainedYearWeekTransition,
     required this.yearEventDotsOpacity,
+    this.accentColor,
     required super.child,
   });
 
@@ -2467,6 +2681,9 @@ class _MorphProgress extends InheritedWidget {
   /// Fades year-tile event dots in/out during chained week↔year zoom.
   final double yearEventDotsOpacity;
 
+  /// Selected calendar's color; falls back to the theme accent when null.
+  final Color? accentColor;
+
   static _MorphProgress of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_MorphProgress>()!;
 
@@ -2476,7 +2693,8 @@ class _MorphProgress extends InheritedWidget {
       old.styleT != styleT ||
       old.morphReverse != morphReverse ||
       old.chainedYearWeekTransition != chainedYearWeekTransition ||
-      old.yearEventDotsOpacity != yearEventDotsOpacity;
+      old.yearEventDotsOpacity != yearEventDotsOpacity ||
+      old.accentColor != accentColor;
 }
 
 /// Bifurcated morph stack — isolated from parent rebuilds during the animation.
@@ -2502,6 +2720,7 @@ class _MorphAnimationLayer extends StatefulWidget {
     required this.todoMarkers,
     required this.monthMorphEventMetrics,
     this.chainedYearWeekTransition = false,
+    this.accentColor,
   });
 
   final AnimationController controller;
@@ -2519,6 +2738,10 @@ class _MorphAnimationLayer extends StatefulWidget {
   final TextStyle yearMonthNameStyle;
   final TextStyle monthTitleStyle;
   final Widget yearGrid;
+
+  /// Selected calendar's color, threaded to the "today" circle during the
+  /// morph. Falls back to the theme accent when null.
+  final Color? accentColor;
   final List<CalendarEvent> events;
   final List<CalendarTodoMarker> todoMarkers;
   final List<MorphDayEventFrozenMetrics> monthMorphEventMetrics;
@@ -2688,6 +2911,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
               monthMorphEventMetrics: widget.monthMorphEventMetrics,
               chainedYearWeekTransition: widget.chainedYearWeekTransition,
               yearEventDotsOpacity: yearEventDotsOpacity,
+              accentColor: widget.accentColor,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -2963,6 +3187,7 @@ class _MorphCell extends StatelessWidget {
                               month: month,
                               fontSize: MonthDayCellStyle.compact.fontSize,
                               mutedWhenAdjacent: !inMonth,
+                              accentColor: progress.accentColor,
                             ),
                           ),
                           if (inMonth && events.isNotEmpty) ...[
@@ -3006,6 +3231,7 @@ class _MorphCell extends StatelessWidget {
                           month: month,
                           fontSize: dayFontSize,
                           mutedWhenAdjacent: !inMonth,
+                          accentColor: progress.accentColor,
                         ),
                       ),
                     ),
@@ -3054,6 +3280,7 @@ class _ViewModeSegmentedControl extends StatelessWidget {
     required this.yearSelect,
     required this.onSelectionChanged,
     this.interactive = true,
+    this.accentColor,
   });
 
   final double weekSelect;
@@ -3061,6 +3288,10 @@ class _ViewModeSegmentedControl extends StatelessWidget {
   final double yearSelect;
   final ValueChanged<Set<CalendarViewMode>> onSelectionChanged;
   final bool interactive;
+
+  /// Selected calendar's color, applied to the active tab. Falls back to the
+  /// theme accent when null.
+  final Color? accentColor;
 
   static const _labels = ['Week', 'Month', 'Year'];
 
@@ -3092,9 +3323,11 @@ class _ViewModeSegmentedControl extends StatelessWidget {
         buttonStyle.textStyle?.resolve(const {}) ?? theme.textTheme.labelLarge;
     const outerRadius = Radius.circular(18);
 
-    final selectedBackground = colorScheme.primary;
+    final selectedBackground = accentColor ?? colorScheme.primary;
     const unselectedBackground = Colors.transparent;
-    final selectedForeground = colorScheme.onPrimary;
+    final selectedForeground = accentColor != null
+        ? calendarContrastingLabelColor(selectedBackground)
+        : colorScheme.onPrimary;
     final unselectedForeground = colorScheme.onSurface;
 
     Widget segment(int index, CalendarViewMode mode) {
@@ -3185,18 +3418,22 @@ class _WeekMorphProgress extends InheritedWidget {
   const _WeekMorphProgress({
     required this.t,
     required this.monthEntryOpacity,
+    this.accentColor,
     required super.child,
   });
 
   final double t;
   final double monthEntryOpacity;
+  final Color? accentColor;
 
   static _WeekMorphProgress of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_WeekMorphProgress>()!;
 
   @override
   bool updateShouldNotify(_WeekMorphProgress old) =>
-      old.t != t || old.monthEntryOpacity != monthEntryOpacity;
+      old.t != t ||
+      old.monthEntryOpacity != monthEntryOpacity ||
+      old.accentColor != accentColor;
 }
 
 class _MonthWeekMorphLayer extends StatefulWidget {
@@ -3224,6 +3461,7 @@ class _MonthWeekMorphLayer extends StatefulWidget {
     required this.weekTimelineScrollController,
     required this.weekTimelineScrollOffset,
     required this.weekMorphForward,
+    this.accentColor,
   });
 
   final AnimationController controller;
@@ -3248,6 +3486,10 @@ class _MonthWeekMorphLayer extends StatefulWidget {
   final ScrollController weekTimelineScrollController;
   final double weekTimelineScrollOffset;
   final bool weekMorphForward;
+
+  /// Selected calendar's color, threaded to the "today" circle and
+  /// focused-week highlight during the morph. Falls back to the theme accent.
+  final Color? accentColor;
 
   @override
   State<_MonthWeekMorphLayer> createState() => _MonthWeekMorphLayerState();
@@ -3361,6 +3603,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             return _WeekMorphProgress(
               t: t,
               monthEntryOpacity: monthEntryOpacity,
+              accentColor: widget.accentColor,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -3492,7 +3735,10 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                           for (final date in _weekDates)
                             Expanded(
                               child: Center(
-                                child: CalendarWeekDayDateLabel(date: date),
+                                child: CalendarWeekDayDateLabel(
+                                  date: date,
+                                  accentColor: widget.accentColor,
+                                ),
                               ),
                             ),
                         ],
@@ -3588,6 +3834,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
       dayNumberOpacity: (1.0 - t).clamp(0.0, 1.0),
       frozenEntryLayoutHeight: frozenEntryLayoutHeight,
       weekHighlightAlpha: weekHighlightAlpha,
+      accentColor: progress.accentColor,
       adjacentTextT: inMonth ? null : t,
       adjacentBorderT: inMonth ? null : Curves.easeOutCubic.transform(t),
       style: MonthDayCellStyle(

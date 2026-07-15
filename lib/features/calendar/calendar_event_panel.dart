@@ -9,9 +9,11 @@ import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 
 /// Inline event add/edit panel for the calendar sidebar (no dialog).
@@ -20,6 +22,8 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
     super.key,
     this.event,
     required this.initialDate,
+    required this.calendars,
+    required this.initialCalendarId,
     required this.onSave,
     required this.onCancel,
     this.focusTitleOnOpen = false,
@@ -27,6 +31,8 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
 
   final CalendarEvent? event;
   final DateTime initialDate;
+  final List<Calendar> calendars;
+  final String initialCalendarId;
   final ValueChanged<Map<String, dynamic>> onSave;
   final VoidCallback onCancel;
   final bool focusTitleOnOpen;
@@ -45,6 +51,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   late DateTime _end;
   late int _colorValue;
   late EventRecurrence _recurrence;
+  late String _calendarId;
   String? _titleError;
   bool _isDatePopoverOpen = false;
   bool _isTimePopoverOpen = false;
@@ -95,10 +102,20 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
           widget.initialDate.minute,
         );
     _end = e?.end ?? _start.add(const Duration(hours: 1));
-    final settings = ref.read(settingsProvider).valueOrNull;
-    _colorValue = e?.colorValue ?? (settings?.accentColor ?? 0xFF7C9EFF);
+    _calendarId = e?.calendarId ?? widget.initialCalendarId;
+    _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
     _recurrence = e?.recurrence ?? EventRecurrence.none;
     _scheduleTitleFocusIfNeeded();
+  }
+
+  /// Default color for a new event: the color of the calendar it's being
+  /// created in, falling back to the accent color if that calendar has none.
+  int _defaultEventColor(String calendarId) {
+    final calendar = widget.calendars
+        .where((c) => c.id == calendarId)
+        .firstOrNull;
+    final settings = ref.read(settingsProvider).valueOrNull;
+    return calendar?.colorValue ?? settings?.accentColor ?? 0xFF7C9EFF;
   }
 
   void _scheduleTitleFocusIfNeeded() {
@@ -126,8 +143,8 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
             widget.initialDate.minute,
           );
       _end = e?.end ?? _start.add(const Duration(hours: 1));
-      final settings = ref.read(settingsProvider).valueOrNull;
-      _colorValue = e?.colorValue ?? (settings?.accentColor ?? 0xFF7C9EFF);
+      _calendarId = e?.calendarId ?? widget.initialCalendarId;
+      _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
       _recurrence = e?.recurrence ?? EventRecurrence.none;
       _titleError = null;
     }
@@ -153,6 +170,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         'end': _end,
         'colorValue': _colorValue,
         'recurrence': _recurrence,
+        'calendarId': _calendarId,
       };
 
   /// Returns true when the form is valid and [onSave] was called.
@@ -190,6 +208,9 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       Navigator.of(context).pop();
     }
   }
+
+  int _calendarFlagColor(Calendar calendar) =>
+      calendar.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32();
 
   Future<void> _openTimePopover(BuildContext buttonContext) async {
     setState(() => _isTimePopoverOpen = true);
@@ -273,24 +294,86 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: LabeledTextField(
-                      label: 'Title',
-                      controller: _titleController,
-                      focusNode: _titleFocusNode,
-                      textInputAction: TextInputAction.done,
-                      accentColor: accent,
-                      dense: true,
-                      borderRadius: 12,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 15,
-                      ),
-                      onSubmitted: (_) => _submit(),
-                      onChanged: (_) {
-                        if (_titleError != null) {
-                          setState(() => _titleError = null);
-                        }
-                      },
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        LabeledTextField(
+                          label: 'Title',
+                          controller: _titleController,
+                          focusNode: _titleFocusNode,
+                          textInputAction: TextInputAction.done,
+                          accentColor: accent,
+                          dense: true,
+                          borderRadius: 12,
+                          contentPadding: const EdgeInsets.fromLTRB(
+                            14,
+                            15,
+                            40,
+                            15,
+                          ),
+                          onSubmitted: (_) => _submit(),
+                          onChanged: (_) {
+                            if (_titleError != null) {
+                              setState(() => _titleError = null);
+                            }
+                          },
+                        ),
+                        if (widget.calendars.isNotEmpty)
+                          Positioned(
+                            top: 0,
+                            right: 10,
+                            child: JournalTitleCornerFlag(
+                              colorValue: widget.calendars
+                                      .cast<Calendar?>()
+                                      .firstWhere(
+                                        (c) => c?.id == _calendarId,
+                                        orElse: () => null,
+                                      )
+                                      ?.colorValue ??
+                                  accent.toARGB32(),
+                              onSelected: (v) =>
+                                  setState(() => _calendarId = v),
+                              tooltip: 'Move to calendar',
+                              menuEntries: (_) => [
+                                for (var i = 0;
+                                    i < widget.calendars.length;
+                                    i++)
+                                  VoyagerPopupMenuItem<String>(
+                                    value: widget.calendars[i].id,
+                                    position: VoyagerMenuTheme.positionFor(
+                                      i,
+                                      widget.calendars.length,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        JournalBookmarkFlag(
+                                          colorValue: _calendarFlagColor(
+                                            widget.calendars[i],
+                                          ),
+                                          size: 12,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            widget.calendars[i].name,
+                                          ),
+                                        ),
+                                        if (widget.calendars[i].id ==
+                                            _calendarId)
+                                          Icon(
+                                            PhosphorIconsRegular.check,
+                                            size: 18,
+                                            color: Color(_calendarFlagColor(
+                                              widget.calendars[i],
+                                            )),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 6),
