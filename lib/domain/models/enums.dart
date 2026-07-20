@@ -1,5 +1,13 @@
 enum TrackerType { integer, boolean, enumType }
 
+/// Direction of a financial ledger transaction.
+/// - [expense]: money flowing out (rendered in the main accent color).
+/// - [deposit]: money flowing in (rendered in green).
+enum TransactionType { expense, deposit }
+
+/// Billing cadence of a recurring subscription or bill.
+enum BillingPeriod { weekly, biweekly, monthly, quarterly, yearly }
+
 enum TrackerCadence { daily, weekly, monthly, yearly }
 
 /// How an integer tracker's history is visualised.
@@ -13,3 +21,12 @@ enum CalendarViewMode { week, month, year }
 enum HeatmapMode { defaultAll, mood, studying, writing, custom }
 
 enum StartupPageMode { first, custom, lastSeen }
+
+/// Shape of the geometric-texture background's animated wave SDF.
+enum GeometricWaveShape {
+  /// A straight line sweeping across the grid.
+  linear,
+
+  /// A ring expanding outward from the focal point.
+  radial,
+}

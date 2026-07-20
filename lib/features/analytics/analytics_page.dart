@@ -16,9 +16,12 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
-import 'package:voyager/features/dev/dev_calendar_debug_tile.dart';
+import 'package:voyager/features/analytics/sparkline_touch.dart';
+import 'package:voyager/features/analytics/stat_number_format.dart';
+import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart'
     show calendarPanelBackgroundColor, MonthTitleHeader;
 import 'package:voyager/features/calendar/calendar_day_grid.dart'
@@ -33,13 +36,8 @@ import 'package:flutter/services.dart';
 import 'dart:ui' show lerpDouble;
 
 // ---------------------------------------------------------------------------
-// View mode
+// Detail view state
 // ---------------------------------------------------------------------------
-
-enum _AnalyticsViewMode { grid, calendar }
-
-final _analyticsViewModeProvider =
-    StateProvider<_AnalyticsViewMode>((_) => _AnalyticsViewMode.grid);
 
 /// True while a tracker row in the heatmap grid is being drag-reordered.
 /// Watched by the hover/tap value popup so it stays hidden for the whole
@@ -47,37 +45,30 @@ final _analyticsViewModeProvider =
 /// pointer happens to pass under mid-drag.
 final _heatmapDraggingProvider = StateProvider<bool>((_) => false);
 
-final _calendarSelectedTrackerProvider =
-    StateProvider<String?>((_) => null);
-
-final _calendarTimeScaleProvider =
-    StateProvider<_CalendarScale>((_) => _CalendarScale.month);
-
-final _calendarViewMonthProvider = StateProvider<DateTime>((ref) {
-  final override = ref.watch(devAnalyticsMonthOverrideProvider);
-  if (override == DevAnalyticsMonthOverride.fourRows) {
-    return DateTime(2026, 2, 1);
-  } else if (override == DevAnalyticsMonthOverride.sixRows) {
-    return DateTime(2026, 5, 1);
-  } else if (override == DevAnalyticsMonthOverride.fiveRows) {
-    return DateTime(2026, 7, 1);
-  }
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, 1);
-});
-
-final _calendarViewYearProvider =
-    StateProvider<int>((_) => DateTime.now().year);
+final _calendarViewYearProvider = StateProvider<int>(
+  (_) => DateTime.now().year,
+);
 
 /// Older (top-row) year of the 2-year window shown by [_MonthGridCalendar].
-final _calendarViewMonthlyBaseYearProvider =
-    StateProvider<int>((_) => DateTime.now().year - 1);
+final _calendarViewMonthlyBaseYearProvider = StateProvider<int>(
+  (_) => DateTime.now().year - 1,
+);
 
 /// Oldest (leftmost) year of the 10-year window shown by [_YearGridCalendar].
-final _calendarViewYearlyBaseYearProvider =
-    StateProvider<int>((_) => DateTime.now().year - 9);
+final _calendarViewYearlyBaseYearProvider = StateProvider<int>(
+  (_) => DateTime.now().year - 9,
+);
 
-enum _CalendarScale { month, year }
+/// Years spanned by [_MonthGridCalendar] (one row per year), and so also how
+/// far one page step moves it — paging by the full window means each step
+/// lands on a fresh block instead of overlapping what was just on screen.
+/// Shared with [_StatisticDetailPopup._page] so the chevrons and the arrow
+/// keys can't drift apart from what's actually rendered.
+const _monthGridWindowYears = 2;
+
+/// Years spanned by [_YearGridCalendar] (one box per year); same paging rule
+/// as [_monthGridWindowYears].
+const _yearGridWindowYears = 10;
 
 // ---------------------------------------------------------------------------
 // Root page
@@ -92,7 +83,6 @@ class AnalyticsPage extends ConsumerWidget {
     final trackersAsync = ref.watch(trackersProvider);
     final analytics = ref.watch(analyticsServiceProvider);
     final prompt = ref.watch(periodicPromptServiceProvider);
-    final viewMode = ref.watch(_analyticsViewModeProvider);
 
     return trackersAsync.when(
       data: (trackers) => entriesAsync.when(
@@ -102,45 +92,48 @@ class AnalyticsPage extends ConsumerWidget {
             (sum, e) => sum + analytics.countWords(e.body),
           );
           final streak = prompt.longestJournalStreak(entries);
+          // Prepend built-in default trackers (e.g. Journal Entries) when the
+          // per-view setting is on. These are virtual — see
+          // [buildJournalEntriesTracker] — and each view has its own toggle.
+          final settings = ref.watch(settingsProvider).valueOrNull;
+          final showDefaultsInGrid =
+              settings?.showDefaultTrackersInGrid ?? true;
+          final accent = Theme.of(context).colorScheme.primary.toARGB32();
+          final defaultTracker = buildJournalEntriesTracker(colorValue: accent);
+          final gridTrackers = <StatisticTracker>[
+            if (showDefaultsInGrid) defaultTracker,
+            ...trackers,
+          ];
           return KeepAliveScrollView(
             storageKey: ShellPageStorageKeys.analyticsList,
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
             children: [
               // ── Macro Stats Row ───────────────────────────────────────
+              // Each chip opens the same detail popup a tracker tile does,
+              // backed by a virtual tracker derived from journal entries.
               _MacroStatsRow(
                 totalEntries: analytics.totalJournalEntries(entries),
                 totalWords: words,
                 longestStreak: streak,
+                analytics: analytics,
+                entriesTracker: defaultTracker,
+                streakTracker: buildStreakTracker(colorValue: accent),
+                wordCountTracker: buildWordCountTracker(colorValue: accent),
               ),
               const SizedBox(height: 12),
-              // ── Panel: toolbar + tracker views ────────────────────────
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: calendarPanelBackgroundColor(context),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _AnalyticsToolbar(
-                      hasTrackers: trackers.isNotEmpty,
-                      trackers: trackers,
-                      viewMode: viewMode,
-                      onViewModeChanged: (m) => ref
-                          .read(_analyticsViewModeProvider.notifier)
-                          .state = m,
-                      onCreateTracker: () => _createTracker(context, ref),
-                    ),
-                    const SizedBox(height: 12),
-                    if (trackers.isEmpty)
-                      const _EmptyTrackersCard()
-                    else if (viewMode == _AnalyticsViewMode.grid)
-                      _GridView(trackers: trackers, analytics: analytics)
-                    else
-                      _CalendarView(trackers: trackers, analytics: analytics),
-                  ],
-                ),
+              // ── Toolbar + tracker grid ────────────────────────────────
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _AnalyticsToolbar(
+                    onCreateTracker: () => _createTracker(context, ref),
+                  ),
+                  const SizedBox(height: 12),
+                  if (gridTrackers.isEmpty)
+                    const _EmptyTrackersCard()
+                  else
+                    _GridView(trackers: gridTrackers, analytics: analytics),
+                ],
               ),
               const SizedBox(height: 32),
             ],
@@ -174,11 +167,22 @@ class _MacroStatsRow extends StatelessWidget {
     required this.totalEntries,
     required this.totalWords,
     required this.longestStreak,
+    required this.analytics,
+    required this.entriesTracker,
+    required this.streakTracker,
+    required this.wordCountTracker,
   });
 
   final int totalEntries;
   final int totalWords;
   final int longestStreak;
+  final AnalyticsService analytics;
+
+  /// The virtual trackers each chip drills into. Built by the caller so the
+  /// chips and the popup agree on colour and identity.
+  final StatisticTracker entriesTracker;
+  final StatisticTracker streakTracker;
+  final StatisticTracker wordCountTracker;
 
   @override
   Widget build(BuildContext context) {
@@ -188,33 +192,42 @@ class _MacroStatsRow extends StatelessWidget {
         children: [
           _StatChip(
             label: 'Entries',
-            value: '$totalEntries',
+            value: compactNumberLabel(totalEntries),
             icon: PhosphorIconsRegular.notebook,
             accent: accent,
+            onTap: () => _showStatisticDetail(
+              context: context,
+              tracker: entriesTracker,
+              analytics: analytics,
+            ),
           ),
           const SizedBox(width: 10),
           _StatChip(
             label: 'Words',
-            value: _formatNumber(totalWords),
+            value: compactNumberLabel(totalWords),
             icon: PhosphorIconsRegular.textAa,
             accent: accent,
+            onTap: () => _showStatisticDetail(
+              context: context,
+              tracker: wordCountTracker,
+              analytics: analytics,
+            ),
           ),
           const SizedBox(width: 10),
           _StatChip(
             label: 'Best Streak',
-            value: '$longestStreak days',
+            value: '${compactNumberLabel(longestStreak)} days',
             icon: PhosphorIconsRegular.flame,
             accent: accent,
+            onTap: () => _showStatisticDetail(
+              context: context,
+              tracker: streakTracker,
+              analytics: analytics,
+            ),
           ),
         ],
       ),
     );
-  }
-
-  String _formatNumber(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-    return '$n';
   }
 }
 
@@ -222,127 +235,23 @@ class _MacroStatsRow extends StatelessWidget {
 // Analytics Toolbar — view mode toggle, tracker selector, new tracker button
 // ---------------------------------------------------------------------------
 
-class _AnalyticsToolbar extends ConsumerWidget {
-  const _AnalyticsToolbar({
-    required this.hasTrackers,
-    required this.trackers,
-    required this.viewMode,
-    required this.onViewModeChanged,
-    required this.onCreateTracker,
-  });
+class _AnalyticsToolbar extends StatelessWidget {
+  const _AnalyticsToolbar({required this.onCreateTracker});
 
-  final bool hasTrackers;
-  final List<StatisticTracker> trackers;
-  final _AnalyticsViewMode viewMode;
-  final ValueChanged<_AnalyticsViewMode> onViewModeChanged;
   final VoidCallback onCreateTracker;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Row(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    if (hasTrackers) ...[
-                      SegmentedButton<_AnalyticsViewMode>(
-                        showSelectedIcon: false,
-                        style: SegmentedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        segments: const [
-                          ButtonSegment(
-                            value: _AnalyticsViewMode.grid,
-                            icon: Icon(PhosphorIconsRegular.gridNine, size: 16),
-                            label: Text('Grid'),
-                          ),
-                          ButtonSegment(
-                            value: _AnalyticsViewMode.calendar,
-                            icon: Icon(PhosphorIconsRegular.calendarBlank, size: 16),
-                            label: Text('Calendar'),
-                          ),
-                        ],
-                        selected: {viewMode},
-                        onSelectionChanged: (set) {
-                          if (set.isNotEmpty) onViewModeChanged(set.first);
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (viewMode == _AnalyticsViewMode.calendar) ...[
-                      Builder(builder: (ctx) {
-                        final selectedId = ref.watch(_calendarSelectedTrackerProvider);
-                        final scale = ref.watch(_calendarTimeScaleProvider);
-                        final selectedTracker = trackers.cast<StatisticTracker?>().firstWhere(
-                          (t) => t?.id == selectedId,
-                          orElse: () => trackers.isNotEmpty ? trackers.first : null,
-                        );
-
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 220,
-                              child: VoyagerDropdownButtonFormField<String>(
-                                initialValue: selectedTracker?.id,
-                                decoration: const InputDecoration(
-                                  labelText: 'Statistic',
-                                  isDense: true,
-                                ),
-                                items: trackers
-                                    .map(
-                                      (t) => DropdownMenuItem(
-                                        value: t.id,
-                                        child: Text(
-                                          t.name,
-                                          style: const TextStyle(fontSize: 13),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (id) => ref
-                                    .read(_calendarSelectedTrackerProvider.notifier)
-                                    .state = id,
-                              ),
-                            ),
-                            if (selectedTracker != null) ...[
-                              const SizedBox(width: 4),
-                              IconButton(
-                                icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
-                                onPressed: () async {
-                                  final updated = await showDialog<StatisticTracker>(
-                                    context: ctx,
-                                    builder: (_) => _TrackerDialog(tracker: selectedTracker),
-                                  );
-                                  if (updated == null) return;
-                                  await ref.read(trackerRepositoryProvider).upsertTracker(updated);
-                                  ref.invalidate(trackersProvider);
-                                },
-                              ),
-                            ],
-                            const SizedBox(width: 8),
-
-                          ],
-                        );
-                      }),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            FilledButton.icon(
-              onPressed: onCreateTracker,
-              icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-              label: const Text('New tracker'),
-            ),
-          ],
-        );
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        FilledButton.icon(
+          onPressed: onCreateTracker,
+          icon: const Icon(PhosphorIconsRegular.plus, size: 16),
+          label: const Text('New tracker'),
+        ),
+      ],
+    );
   }
 }
 
@@ -352,46 +261,59 @@ class _StatChip extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.accent,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
   final Color accent;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: accent.withValues(alpha: 0.08),
+      child: Material(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withValues(alpha: 0.18)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: accent),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withValues(alpha: 0.18)),
+            ),
+            child: Row(
               children: [
-                Text(
-                  label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                Icon(icon, size: 18, color: accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        value,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -484,8 +406,7 @@ class _SectionLabel extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(icon,
-            size: 14, color: theme.colorScheme.onSurfaceVariant),
+        Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
         Text(
           label.toUpperCase(),
@@ -499,284 +420,542 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+/// Makes a whole grid tile — the full bar out to the right edge, not just its
+/// label — both the hover target and the tap target for opening [tracker]'s
+/// detail popup.
+///
+/// The tap target sits *behind* the tile's content. The chart and the heatmap
+/// squares handle their own taps (which mean "edit this period's value"), so
+/// only taps landing in the surrounding chrome fall through to here — one
+/// gesture can't mean two things.
+///
+/// [dragIndex], when set, also makes that same chrome the drag handle for
+/// reordering the row at that index: press and hold the chrome to drag, press
+/// and release it to open the detail popup. Both gestures hang off the
+/// *behind* layer deliberately, so the split follows the hit test rather than
+/// a timer — anything the content above claims (the sparkline, a heatmap
+/// square) never reaches this layer at all and so can neither drag the row nor
+/// open the detail popup. That's what leaves a press on the sparkline itself
+/// free to mean "edit this period", however long it's held: fl_chart registers
+/// its own tap *and* long-press recognizers, so it wins the pointer over the
+/// plot either way.
+///
+/// Hover is the opposite: its [MouseRegion] sits above everything and doesn't
+/// absorb events, because a highlight driven from behind the content would
+/// blink out every time the pointer crossed the chart or a square.
+class _StatTile extends StatefulWidget {
+  const _StatTile({
+    required this.tracker,
+    required this.analytics,
+    required this.builder,
+    this.dragIndex,
+  });
+
+  final StatisticTracker tracker;
+  final AnalyticsService analytics;
+  final Widget Function(BuildContext context, bool hovered) builder;
+
+  /// This row's position in its reorderable list, or null when the row isn't
+  /// reorderable (or reorders from its own handle elsewhere).
+  final int? dragIndex;
+
+  @override
+  State<_StatTile> createState() => _StatTileState();
+}
+
+class _StatTileState extends State<_StatTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tapTarget = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showStatisticDetail(
+        context: context,
+        tracker: widget.tracker,
+        analytics: widget.analytics,
+      ),
+    );
+    final dragIndex = widget.dragIndex;
+    if (dragIndex != null) {
+      tapTarget = ReorderableDelayedDragStartListener(
+        index: dragIndex,
+        child: tapTarget,
+      );
+    }
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Stack(
+        children: [
+          // Bottom of the stack: hit-tested only where the content above
+          // doesn't claim the pointer.
+          Positioned.fill(child: tapTarget),
+          widget.builder(context, _hovered),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Sparkline Stack
 // ---------------------------------------------------------------------------
 
-class _SparklineStack extends ConsumerWidget {
+/// The consecutive section's rows, as one flat freely-reorderable list.
+///
+/// Unlike the heatmap — which splits into starred and per-cadence buckets —
+/// consecutive trackers reorder as a single group, so a row can be dragged
+/// anywhere in the section regardless of its cadence.
+///
+/// Dragging starts on a *long press anywhere* on the row rather than from a
+/// handle. A row is almost entirely chart, and the chart already claims plain
+/// hover (tooltip) and plain tap (edit that period); requiring the press to be
+/// held is what keeps those three gestures distinguishable on one surface.
+class _SparklineStack extends ConsumerStatefulWidget {
   const _SparklineStack({required this.trackers, required this.analytics});
 
   final List<StatisticTracker> trackers;
   final AnalyticsService analytics;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
+  ConsumerState<_SparklineStack> createState() => _SparklineStackState();
+}
+
+class _SparklineStackState extends ConsumerState<_SparklineStack> {
+  late List<StatisticTracker> _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List.of(widget.trackers)..sort(_compareTrackerOrder);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SparklineStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_sameTrackerIds(widget.trackers, _items)) {
+      // Membership changed (tracker added, removed, or switched tracking
+      // style) — adopt the incoming set outright.
+      _items = List.of(widget.trackers)..sort(_compareTrackerOrder);
+      return;
+    }
+    // Same membership: refresh the tracker objects (an edited name or colour)
+    // while preserving the current local order, so an in-flight reorder's
+    // optimistic UI isn't reverted by an unrelated rebuild before the write
+    // finishes.
+    final byId = {for (final t in widget.trackers) t.id: t};
+    _items = [for (final t in _items) byId[t.id] ?? t];
+  }
+
+  void _handleReorder(int oldIndex, int newIndex) {
+    setState(() {
+      final item = _items.removeAt(oldIndex);
+      _items.insert(newIndex, item);
+    });
+    unawaited(_persist());
+  }
+
+  Future<void> _persist() async {
+    final repo = ref.read(trackerRepositoryProvider);
+    for (var i = 0; i < _items.length; i++) {
+      if (_items[i].sortOrder != i) {
+        await repo.upsertTracker(_items[i].copyWith(sortOrder: i));
+      }
+    }
+    ref.invalidate(trackersProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorderItem: _handleReorder,
+      onReorderStart: (_) =>
+          ref.read(_heatmapDraggingProvider.notifier).state = true,
+      onReorderEnd: (_) =>
+          ref.read(_heatmapDraggingProvider.notifier).state = false,
+      proxyDecorator: (child, index, animation) =>
+          Material(type: MaterialType.transparency, child: child),
       children: [
-        for (final tracker in trackers)
-          _SparklineRow(tracker: tracker, analytics: analytics),
+        for (var i = 0; i < _items.length; i++)
+          _SparklineRow(
+            key: ValueKey(_items[i].id),
+            tracker: _items[i],
+            analytics: widget.analytics,
+            // The drag handle is the row's chrome, not the whole row — see
+            // [_StatTile]. Wrapping the row itself would have made a hold on
+            // the sparkline drag it, stealing the press that means "edit this
+            // period".
+            dragIndex: i,
+          ),
       ],
     );
   }
 }
 
 class _SparklineRow extends ConsumerWidget {
-  const _SparklineRow({required this.tracker, required this.analytics});
+  const _SparklineRow({
+    super.key,
+    required this.tracker,
+    required this.analytics,
+    this.dragIndex,
+  });
 
   final StatisticTracker tracker;
   final AnalyticsService analytics;
+  final int? dragIndex;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
     final color = Color(tracker.colorValue);
+    final promptService = ref.watch(periodicPromptServiceProvider);
+    final weekStartsMonday =
+        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
 
-    return Container(
-      height: 120,
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Left side: Labels
-          SizedBox(
-            width: 140,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  tracker.name,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  tracker.cadence.name,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+    return _StatTile(
+      tracker: tracker,
+      analytics: analytics,
+      // Around the sparkline: short press opens the detail popup, hold drags
+      // the row. On the sparkline itself both gestures belong to the chart
+      // and mean "edit this period".
+      dragIndex: dragIndex,
+      builder: (context, hovered) => Container(
+        height: 120,
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: hovered ? 0.12 : 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: color.withValues(alpha: hovered ? 0.35 : 0.15),
           ),
-          const SizedBox(width: 12),
-          // Middle: Chart
-          Expanded(
-            child: valuesAsync.when(
-              data: (values) {
-                if (values.isEmpty) {
-                  return const Center(
-                    child: Text('No data', style: TextStyle(fontSize: 10)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Left side: labels. Opening the detail popup is handled by the
+            // whole-tile hitbox in [_StatTile], so nothing here needs its own
+            // tap target.
+            SizedBox(
+              width: 140,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    tracker.name,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    tracker.cadence.name,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Middle: Chart
+            Expanded(
+              child: valuesAsync.when(
+                data: (values) {
+                  final now = DateTime.now();
+                  final nowLocal = DateTime(now.year, now.month, now.day);
+                  final from = switch (tracker.cadence) {
+                    TrackerCadence.daily => nowLocal.subtract(
+                      const Duration(days: 29),
+                    ),
+                    TrackerCadence.weekly => nowLocal.subtract(
+                      const Duration(days: 29 * 7),
+                    ),
+                    TrackerCadence.monthly => DateTime(
+                      nowLocal.year,
+                      nowLocal.month - 29,
+                      1,
+                    ),
+                    TrackerCadence.yearly => DateTime(nowLocal.year - 29, 1, 1),
+                  };
+                  final bottomTitleInterval = switch (tracker.cadence) {
+                    TrackerCadence.daily => 10.0,
+                    TrackerCadence.weekly => 70.0,
+                    TrackerCadence.monthly => 300.0,
+                    TrackerCadence.yearly => 3650.0,
+                  };
+                  final verticalGridInterval = switch (tracker.cadence) {
+                    TrackerCadence.daily => 5.0,
+                    TrackerCadence.weekly => 35.0,
+                    TrackerCadence.monthly => 150.0,
+                    TrackerCadence.yearly => 1825.0,
+                  };
+                  final spots = analytics.interpolateConsecutive(
+                    values: values,
+                    from: from,
+                    to: now,
+                    // Cover the whole window, not just the default first 365
+                    // days — otherwise the longer monthly/yearly spans draw only
+                    // their first year of data, squished onto the left edge.
+                    maxDays: now.difference(from).inDays,
+                    upperBound: tracker.integerCap,
                   );
-                }
-                final now = DateTime.now();
-                final nowLocal = DateTime(now.year, now.month, now.day);
-                final from = switch (tracker.cadence) {
-                  TrackerCadence.daily => nowLocal.subtract(const Duration(days: 29)),
-                  TrackerCadence.weekly => nowLocal.subtract(const Duration(days: 29 * 7)),
-                  TrackerCadence.monthly => DateTime(nowLocal.year, nowLocal.month - 29, 1),
-                  TrackerCadence.yearly => DateTime(nowLocal.year - 29, 1, 1),
-                };
-                final bottomTitleInterval = switch (tracker.cadence) {
-                  TrackerCadence.daily => 10.0,
-                  TrackerCadence.weekly => 70.0,
-                  TrackerCadence.monthly => 300.0,
-                  TrackerCadence.yearly => 3650.0,
-                };
-                final verticalGridInterval = switch (tracker.cadence) {
-                  TrackerCadence.daily => 5.0,
-                  TrackerCadence.weekly => 35.0,
-                  TrackerCadence.monthly => 150.0,
-                  TrackerCadence.yearly => 1825.0,
-                };
-                final spots = analytics.interpolateConsecutive(
-                  values: values,
-                  from: from,
-                  to: now,
-                );
-                if (spots.isEmpty) {
-                  return const Center(
-                    child: Text('No data', style: TextStyle(fontSize: 10)),
+                  // Period-start anchors across the window, drawn as an
+                  // invisible zero-height line. fl_chart only hit-tests near a
+                  // bar's spots, so these let the user tap the sparkline to enter
+                  // data even when it has no values yet — the chart renders (axes
+                  // + gridlines) instead of a dead "No data" label.
+                  final todayPeriod = promptService.periodStartFor(
+                    now,
+                    tracker.cadence,
+                    weekStartsMonday: weekStartsMonday,
                   );
-                }
-                final maxY = spots
-                    .map((s) => s.y)
-                    .fold<double>(1, (m, y) => y > m ? y : m);
-                return LineChart(
-                  LineChartData(
-                    lineTouchData: LineTouchData(
-                      // Large threshold so hovering anywhere between two
-                      // interpolated points still resolves to the nearest
-                      // spot instead of leaving "dead" gaps with no tooltip.
-                      touchSpotThreshold: 10000,
-                      touchTooltipData: LineTouchTooltipData(
-                        getTooltipColor: (_) => calendarPanelBackgroundColor(context),
-                        getTooltipItems: (touchedSpots) => touchedSpots
-                            .map(
-                              (spot) => LineTooltipItem(
-                                spot.y.toStringAsFixed(1),
-                                TextStyle(
-                                  color: color,
-                                  fontWeight: FontWeight.normal,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            )
-                            .toList(),
+                  final anchors = <FlSpot>[];
+                  for (var i = 0; ; i++) {
+                    final periodStart = switch (tracker.cadence) {
+                      TrackerCadence.daily => todayPeriod.subtract(
+                        Duration(days: i),
                       ),
-                      touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-                        if (event is FlTapUpEvent &&
-                            response != null &&
-                            response.lineBarSpots != null &&
-                            response.lineBarSpots!.isNotEmpty) {
-                          final spot = response.lineBarSpots!.first;
-                          final date = from.add(Duration(days: spot.x.toInt()));
-                          final localOffset = event.localPosition;
-                          if (localOffset != null) {
-                            final box = context.findRenderObject() as RenderBox?;
-                            if (box != null) {
-                              final globalOffset = box.localToGlobal(localOffset);
-                              final rect = globalOffset & const Size(1, 1);
-                              final value = values.cast<TrackerValue?>().firstWhere(
-                                (v) =>
-                                    v != null &&
-                                    v.periodStart.year == date.year &&
-                                    v.periodStart.month == date.month &&
-                                    v.periodStart.day == date.day,
-                                orElse: () => null,
-                              );
-                              _showHeatmapPopover(
-                                context: context,
-                                tracker: tracker,
-                                periodDate: date,
-                                anchorRect: rect,
-                                initialValue: value,
-                                onSaved: () {
-                                  ref.invalidate(trackerValuesProvider(tracker.id));
-                                },
-                              );
-                            }
-                          }
-                        }
-                      },
-                    ),
-                    minY: 0,
-                    maxY: maxY <= 0 ? 1 : maxY * 1.15,
-                    gridData: FlGridData(
-                      show: true,
-                      drawVerticalLine: true,
-                      verticalInterval: verticalGridInterval,
-                      getDrawingVerticalLine: (_) => FlLine(
-                        color: Colors.grey.withValues(alpha: 0.15),
-                        strokeWidth: 1,
+                      TrackerCadence.weekly => todayPeriod.subtract(
+                        Duration(days: i * 7),
                       ),
-                      getDrawingHorizontalLine: (_) => FlLine(
-                        color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                        strokeWidth: 1,
+                      TrackerCadence.monthly => DateTime(
+                        todayPeriod.year,
+                        todayPeriod.month - i,
+                        1,
                       ),
-                    ),
-                    titlesData: FlTitlesData(
-                      rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
+                      TrackerCadence.yearly => DateTime(
+                        todayPeriod.year - i,
+                        1,
+                        1,
                       ),
-                      topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 24,
-                          getTitlesWidget: (v, _) => Text(
-                            v.toInt().toString(),
-                            style: theme.textTheme.labelSmall?.copyWith(fontSize: 9),
-                          ),
-                        ),
-                      ),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 18,
-                          interval: bottomTitleInterval,
-                          getTitlesWidget: (v, _) {
-                            final date = from.add(Duration(days: v.toInt()));
-                            return Text(
-                              DateFormat('MMM d').format(date),
-                              style: theme.textTheme.labelSmall?.copyWith(fontSize: 8),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    borderData: FlBorderData(
-                      show: true,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          width: 1,
-                        ),
-                        left: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    lineBarsData: [
-                      LineChartBarData(
+                    };
+                    final x = periodStart.difference(from).inDays;
+                    if (x < 0) break;
+                    anchors.add(FlSpot(x.toDouble(), 0));
+                  }
+                  final anchorSpots = anchors.reversed.toList();
+                  DateTime periodStartOf(DateTime date) =>
+                      promptService.periodStartFor(
+                        date,
+                        tracker.cadence,
+                        weekStartsMonday: weekStartsMonday,
+                      );
+                  final dataMax = spots
+                      .map((s) => s.y)
+                      .fold<double>(1, (m, y) => y > m ? y : m);
+                  // Round the axis out to whole steps so the compact tile shows
+                  // three evenly spaced, round gridlines instead of an arbitrary
+                  // 15% headroom above the peak.
+                  final yStep = niceAxisStep(dataMax, _sparklineGridLines);
+                  final maxY = yStep * (_sparklineGridLines - 1);
+                  return _SparklineTouchScope(
+                    builder: (context, touch, onTouchChanged) {
+                      final touchedIndex = touchedSpotIndex(spots, touch?.x);
+                      // Hoisted so the touched-spot indicator below can
+                      // reference the very same bar instance it's drawn
+                      // against.
+                      final dataBar = LineChartBarData(
                         spots: spots,
                         isCurved: true,
-                        preventCurveOverShooting: true,
-                        preventCurveOvershootingThreshold: 0,
                         color: color.withValues(alpha: 0.9),
                         barWidth: 1.5,
                         dotData: const FlDotData(show: false),
-                        belowBarData: BarAreaData(
-                          show: true,
-                          color: color.withValues(alpha: 0.15),
+                        belowBarData: _sparklineFill(color),
+                        showingIndicators: touchedIndex < 0
+                            ? const []
+                            : [touchedIndex],
+                      );
+                      final chart = Builder(
+                        builder: (chartContext) => LineChart(
+                          LineChartData(
+                            // fl_chart's own tooltip stays off: the bubble is
+                            // drawn by [_sparklineHoverBubble] instead, so it
+                            // is literally the heatmap's. The indicator line
+                            // on the touched spot is a separate setting
+                            // ([LineChartBarData.showingIndicators]) and is
+                            // still on.
+                            showingTooltipIndicators: const [],
+                            lineTouchData: LineTouchData(
+                              handleBuiltInTouches: false,
+                              // Large threshold so hovering anywhere between two
+                              // interpolated points still resolves to the nearest
+                              // spot instead of leaving "dead" gaps with no tooltip.
+                              touchSpotThreshold: 10000,
+                              touchCallback:
+                                  (
+                                    FlTouchEvent event,
+                                    LineTouchResponse? response,
+                                  ) {
+                                    _recordSparklineTouch(
+                                      event,
+                                      response,
+                                      onTouchChanged,
+                                    );
+                                    _openSparklinePeriodEditor(
+                                      event: event,
+                                      response: response,
+                                      chartContext: chartContext,
+                                      context: context,
+                                      tracker: tracker,
+                                      from: from,
+                                      values: values,
+                                      periodStartOf: periodStartOf,
+                                      onSaved: () => ref.invalidate(
+                                        trackerValuesProvider(tracker.id),
+                                      ),
+                                    );
+                                  },
+                            ),
+                            minY: 0,
+                            maxY: maxY,
+                            gridData: FlGridData(
+                              show: true,
+                              drawVerticalLine: true,
+                              verticalInterval: verticalGridInterval,
+                              horizontalInterval: yStep,
+                              getDrawingVerticalLine: (_) => FlLine(
+                                color: Colors.grey.withValues(alpha: 0.15),
+                                strokeWidth: 1,
+                              ),
+                              getDrawingHorizontalLine: (_) => FlLine(
+                                color: theme.colorScheme.outline.withValues(
+                                  alpha: 0.1,
+                                ),
+                                strokeWidth: 1,
+                              ),
+                            ),
+                            titlesData: FlTitlesData(
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              // Both axes hold their labels off the plot with
+                              // [SideTitleWidget.space]. Without it the "0" on the Y
+                              // axis and the first date on the X axis butt up against
+                              // the corner and read as one run-together number.
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: axisReservedSize(maxY, 9, 8),
+                                  interval: yStep,
+                                  getTitlesWidget: (v, meta) => SideTitleWidget(
+                                    meta: meta,
+                                    space: 8,
+                                    child: Text(
+                                      compactNumberLabel(v),
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(fontSize: 9),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 26,
+                                  interval: bottomTitleInterval,
+                                  getTitlesWidget: (v, meta) {
+                                    final date = from.add(
+                                      Duration(days: v.toInt()),
+                                    );
+                                    return SideTitleWidget(
+                                      meta: meta,
+                                      space: 8,
+                                      child: Text(
+                                        DateFormat('MMM d').format(date),
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(fontSize: 8),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            borderData: FlBorderData(
+                              show: true,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  width: 1,
+                                ),
+                                left: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  width: 1,
+                                ),
+                              ),
+                            ),
+                            lineBarsData: [
+                              // barIndex 0 — invisible hit-test anchors.
+                              LineChartBarData(
+                                spots: anchorSpots,
+                                color: Colors.transparent,
+                                barWidth: 0,
+                                dotData: const FlDotData(show: false),
+                              ),
+                              // barIndex 1 — the real data curve.
+                              dataBar,
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      );
+                      return _sparklineHoverBubble(
+                        chart: chart,
+                        pointer: touch?.position,
+                        x: touch?.x ?? 0,
+                        from: from,
+                        values: values,
+                        tracker: tracker,
+                        periodStartOf: periodStartOf,
+                        color: color,
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                );
-              },
-              loading: () => const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
+                error: (_, __) => const SizedBox.expand(),
               ),
-              error: (_, __) => const SizedBox.expand(),
             ),
-          ),
-          const SizedBox(width: 12),
-          // Right: Edit Button
-          Align(
-            alignment: Alignment.centerRight,
-            child: IconButton(
-              icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
-              color: theme.colorScheme.onSurfaceVariant,
-              onPressed: () async {
-                final updated = await showDialog<StatisticTracker>(
-                  context: context,
-                  builder: (_) => _TrackerDialog(tracker: tracker),
-                );
-                if (updated == null) return;
-                await ref.read(trackerRepositoryProvider).upsertTracker(updated);
-                ref.invalidate(trackersProvider);
-              },
+            const SizedBox(width: 12),
+            // Right: Edit Button
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
+                color: theme.colorScheme.onSurfaceVariant,
+                onPressed: () async {
+                  final updated = await showDialog<StatisticTracker>(
+                    context: context,
+                    builder: (_) => _TrackerDialog(tracker: tracker),
+                  );
+                  if (updated == null) return;
+                  await ref
+                      .read(trackerRepositoryProvider)
+                      .upsertTracker(updated);
+                  ref.invalidate(trackersProvider);
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -812,13 +991,16 @@ Future<void> _toggleTrackerStar(
   final siblings = starring
       ? allTrackers.where((t) => t.starred)
       : allTrackers.where(
-          (t) => !t.starred && t.cadence == tracker.cadence && t.id != tracker.id,
+          (t) =>
+              !t.starred && t.cadence == tracker.cadence && t.id != tracker.id,
         );
   var maxOrder = -1;
   for (final t in siblings) {
     if (t.sortOrder > maxOrder) maxOrder = t.sortOrder;
   }
-  await ref.read(trackerRepositoryProvider).upsertTracker(
+  await ref
+      .read(trackerRepositoryProvider)
+      .upsertTracker(
         tracker.copyWith(starred: starring, sortOrder: maxOrder + 1),
       );
   ref.invalidate(trackersProvider);
@@ -880,11 +1062,18 @@ class _HeatmapGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final starred = trackers.where((t) => t.starred).toList()
+
+    // Built-in default trackers (e.g. Journal Entries) are virtual and
+    // read-only: they can't be starred or reordered, so they're rendered as
+    // pinned rows above the reorderable buckets rather than inside one.
+    final defaults = trackers.where((t) => t.isDefault).toList();
+    final userTrackers = trackers.where((t) => !t.isDefault).toList();
+
+    final starred = userTrackers.where((t) => t.starred).toList()
       ..sort(_compareTrackerOrder);
 
     final byCadence = <TrackerCadence, List<StatisticTracker>>{};
-    for (final t in trackers.where((t) => !t.starred)) {
+    for (final t in userTrackers.where((t) => !t.starred)) {
       byCadence.putIfAbsent(t.cadence, () => []).add(t);
     }
     for (final group in byCadence.values) {
@@ -895,25 +1084,44 @@ class _HeatmapGrid extends ConsumerWidget {
         .toList();
 
     void toggleStar(StatisticTracker tracker) {
-      unawaited(_toggleTrackerStar(ref, tracker, trackers));
+      unawaited(_toggleTrackerStar(ref, tracker, userTrackers));
     }
 
     final sections = <Widget>[];
+    for (final tracker in defaults) {
+      sections.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: _HeatmapRow(
+            key: ValueKey(tracker.id),
+            tracker: tracker,
+            analytics: analytics,
+            onToggleStar: () {},
+          ),
+        ),
+      );
+    }
+    if (defaults.isNotEmpty &&
+        (starred.isNotEmpty || cadenceGroups.isNotEmpty)) {
+      sections.add(const _HeatmapGroupDivider());
+    }
     if (starred.isNotEmpty) {
-      sections.add(Container(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
-        decoration: BoxDecoration(
-          color: accent.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withValues(alpha: 0.6)),
+      sections.add(
+        Container(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: accent.withValues(alpha: 0.6)),
+          ),
+          child: _HeatmapBucket(
+            key: const ValueKey('starred'),
+            trackers: starred,
+            analytics: analytics,
+            onToggleStar: toggleStar,
+          ),
         ),
-        child: _HeatmapBucket(
-          key: const ValueKey('starred'),
-          trackers: starred,
-          analytics: analytics,
-          onToggleStar: toggleStar,
-        ),
-      ));
+      );
       if (cadenceGroups.isNotEmpty) {
         sections.add(
           _HeatmapGroupDivider(label: _cadenceLabel(cadenceGroups.first)),
@@ -926,12 +1134,14 @@ class _HeatmapGrid extends ConsumerWidget {
           _HeatmapGroupDivider(label: _cadenceLabel(cadenceGroups[gi])),
         );
       }
-      sections.add(_HeatmapBucket(
-        key: ValueKey(cadenceGroups[gi].name),
-        trackers: byCadence[cadenceGroups[gi]]!,
-        analytics: analytics,
-        onToggleStar: toggleStar,
-      ));
+      sections.add(
+        _HeatmapBucket(
+          key: ValueKey(cadenceGroups[gi].name),
+          trackers: byCadence[cadenceGroups[gi]]!,
+          analytics: analytics,
+          onToggleStar: toggleStar,
+        ),
+      );
     }
 
     return Column(
@@ -1054,6 +1264,7 @@ class _HeatmapBucketState extends ConsumerState<_HeatmapBucket> {
 
 class _HeatmapRow extends ConsumerWidget {
   const _HeatmapRow({
+    super.key,
     required this.tracker,
     required this.analytics,
     required this.onToggleStar,
@@ -1079,8 +1290,7 @@ class _HeatmapRow extends ConsumerWidget {
         // Compute rolling max over the exact window being displayed, so
         // normalisation doesn't miss values that fall outside a fixed
         // lookback (e.g. 30 monthly periods span ~2.5 years).
-        final windowDays =
-            DateTime.now().difference(periods.first).inDays + 1;
+        final windowDays = DateTime.now().difference(periods.first).inDays + 1;
         final max = analytics.rollingMax(values, days: windowDays);
 
         // Hoisted out of [_HeatmapSquare] so each of the (up to 30) squares
@@ -1090,118 +1300,166 @@ class _HeatmapRow extends ConsumerWidget {
         // once per row instead of once per square.
         final valuesByDay = <DateTime, TrackerValue>{
           for (final v in values)
-            DateTime(v.periodStart.year, v.periodStart.month, v.periodStart.day): v,
+            DateTime(
+              v.periodStart.year,
+              v.periodStart.month,
+              v.periodStart.day,
+            ): v,
         };
         final hasSingleIntValue =
             values.where((v) => v.intValue != null).length == 1;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Label row
-            Row(
+        return _StatTile(
+          tracker: tracker,
+          analytics: analytics,
+          builder: (context, hovered) => Container(
+            // The tile has no fill of its own at rest — it only lights up on
+            // hover, so the hitbox reads as spanning the whole bar out to the
+            // right edge rather than just the label.
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: hovered
+                  ? color.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: hovered
+                    ? color.withValues(alpha: 0.25)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 5,
-                  backgroundColor: color,
+                // Label row.
+                Row(
+                  children: [
+                    CircleAvatar(radius: 5, backgroundColor: color),
+                    const SizedBox(width: 6),
+                    Text(
+                      tracker.name,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '(${_typeLabel(tracker.type)})',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Default trackers (e.g. Journal Entries) are virtual and
+                    // read-only: no star, edit or reorder affordances.
+                    if (!tracker.isDefault) ...[
+                      IconButton(
+                        icon: Icon(
+                          tracker.starred
+                              ? PhosphorIconsFill.star
+                              : PhosphorIconsRegular.star,
+                          size: 14,
+                        ),
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        color: tracker.starred
+                            ? color
+                            : theme.colorScheme.onSurfaceVariant,
+                        onPressed: onToggleStar,
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(
+                          PhosphorIconsRegular.pencilSimple,
+                          size: 14,
+                        ),
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        color: theme.colorScheme.onSurfaceVariant,
+                        onPressed: () async {
+                          final updated = await showDialog<StatisticTracker>(
+                            context: context,
+                            builder: (_) => _TrackerDialog(tracker: tracker),
+                          );
+                          if (updated == null) return;
+                          await ref
+                              .read(trackerRepositoryProvider)
+                              .upsertTracker(updated);
+                          ref.invalidate(trackersProvider);
+                        },
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  tracker.name,
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '(${_typeLabel(tracker.type)})',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(
-                    tracker.starred
-                        ? PhosphorIconsFill.star
-                        : PhosphorIconsRegular.star,
-                    size: 14,
-                  ),
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                  color: tracker.starred
-                      ? color
-                      : theme.colorScheme.onSurfaceVariant,
-                  onPressed: onToggleStar,
-                ),
-                const SizedBox(width: 12),
-                IconButton(
-                  icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 14),
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                  color: theme.colorScheme.onSurfaceVariant,
-                  onPressed: () async {
-                    final updated = await showDialog<StatisticTracker>(
-                      context: context,
-                      builder: (_) => _TrackerDialog(tracker: tracker),
+                const SizedBox(height: 4),
+                // Squares stretched to fill the row width
+                LayoutBuilder(
+                  builder: (ctx, constraints) {
+                    const gap = 4.0;
+                    final squareSize =
+                        ((constraints.maxWidth - gap * periods.length) /
+                                periods.length)
+                            .clamp(10.0, 40.0);
+                    return Row(
+                      children: [
+                        for (var i = 0; i < periods.length; i++)
+                          Builder(
+                            builder: (ctx) {
+                              final period = periods[i];
+                              final showLabel =
+                                  (periods.length - 1 - i) % 5 == 0;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: gap),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _HeatmapSquare(
+                                      tracker: tracker,
+                                      valuesByDay: valuesByDay,
+                                      hasSingleIntValue: hasSingleIntValue,
+                                      periodDate: period,
+                                      maxInPeriod: max,
+                                      analytics: analytics,
+                                      size: squareSize,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    showLabel
+                                        ? Text(
+                                            _shortDateLabel(
+                                              period,
+                                              tracker.cadence,
+                                            ),
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                  fontSize: 8,
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant
+                                                      .withValues(alpha: 0.7),
+                                                ),
+                                          )
+                                        : const Text(
+                                            '',
+                                            style: TextStyle(fontSize: 8),
+                                          ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                      ],
                     );
-                    if (updated == null) return;
-                    await ref.read(trackerRepositoryProvider).upsertTracker(updated);
-                    ref.invalidate(trackersProvider);
                   },
                 ),
               ],
             ),
-             const SizedBox(height: 4),
-            // Squares stretched to fill the row width
-            LayoutBuilder(builder: (ctx, constraints) {
-              const gap = 4.0;
-              final squareSize =
-                  ((constraints.maxWidth - gap * periods.length) / periods.length)
-                      .clamp(10.0, 40.0);
-              return Row(
-                children: [
-                  for (var i = 0; i < periods.length; i++)
-                    Builder(builder: (ctx) {
-                      final period = periods[i];
-                      final showLabel = (periods.length - 1 - i) % 5 == 0;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: gap),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _HeatmapSquare(
-                              tracker: tracker,
-                              valuesByDay: valuesByDay,
-                              hasSingleIntValue: hasSingleIntValue,
-                              periodDate: period,
-                              maxInPeriod: max,
-                              analytics: analytics,
-                              size: squareSize,
-                            ),
-                            const SizedBox(height: 4),
-                            showLabel
-                                ? Text(
-                                    _shortDateLabel(period, tracker.cadence),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontSize: 8,
-                                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                                    ),
-                                  )
-                                : const Text(
-                                    '',
-                                    style: TextStyle(fontSize: 8),
-                                  ),
-                          ],
-                        ),
-                      );
-                    }),
-                ],
-              );
-            }),
-          ],
+          ),
         );
       },
-      loading: () => const SizedBox(height: 40, child: LinearProgressIndicator()),
+      loading: () =>
+          const SizedBox(height: 40, child: LinearProgressIndicator()),
       error: (e, _) => Text('$e'),
     );
   }
@@ -1234,10 +1492,14 @@ class _HeatmapRow extends ConsumerWidget {
     for (var i = n - 1; i >= 0; i--) {
       final candidate = switch (tracker.cadence) {
         TrackerCadence.daily => todayLocal.subtract(Duration(days: i)),
-        TrackerCadence.weekly =>
-          currentWeekStart.subtract(Duration(days: i * 7)),
-        TrackerCadence.monthly =>
-          DateTime(todayLocal.year, todayLocal.month - i, 1),
+        TrackerCadence.weekly => currentWeekStart.subtract(
+          Duration(days: i * 7),
+        ),
+        TrackerCadence.monthly => DateTime(
+          todayLocal.year,
+          todayLocal.month - i,
+          1,
+        ),
         TrackerCadence.yearly => DateTime(todayLocal.year - i, 1, 1),
       };
       periods.add(candidate);
@@ -1250,10 +1512,289 @@ class _HeatmapRow extends ConsumerWidget {
 // Hover tooltip helpers (Grid + Calendar cells)
 // ---------------------------------------------------------------------------
 
+/// Formats a sparkline hover value to at most one decimal place, dropping a
+/// trailing `.0` so a whole number reads as `1` rather than `1.0` (while
+/// `1.5` stays `1.5`). The plotted line itself keeps full precision — only
+/// the label a user hovers is rounded.
+///
+/// Past [_sparkLabelDigitBudget] whole digits the decimal is dropped
+/// altogether and the value is rounded: fl_chart sizes the hover bubble to
+/// its text, so `123456.5` makes a bubble wide enough to spill outside the
+/// chart. A tenth is noise at that magnitude anyway, so spending the width on
+/// it isn't worth it — `123457` reads the same and fits.
+/// Opens the single-period editor when [event] is a press *completing* on the
+/// sparkline, and does nothing otherwise.
+///
+/// Both a plain tap and a long press count. A press held over the plot is
+/// claimed by fl_chart's own long-press recognizer rather than by the row's
+/// drag handle, so without [FlLongPressEnd] here a slow or deliberate press on
+/// the chart would land on nothing at all — it can't fall through to the drag,
+/// and it wouldn't have opened the editor either.
+///
+/// The period and its current value come from [resolveSparklinePeriod], the
+/// same lookup the hover bubble reads, so the editor always opens on the number
+/// the bubble was showing.
+void _openSparklinePeriodEditor({
+  required FlTouchEvent event,
+  required LineTouchResponse? response,
+  required BuildContext chartContext,
+  required BuildContext context,
+  required StatisticTracker tracker,
+  required DateTime from,
+  required List<TrackerValue> values,
+  required DateTime Function(DateTime) periodStartOf,
+  required VoidCallback onSaved,
+}) {
+  if (event is! FlTapUpEvent && event is! FlLongPressEnd) return;
+  final spots = response?.lineBarSpots;
+  if (spots == null || spots.isEmpty) return;
+  final localPosition = event.localPosition;
+  if (localPosition == null) return;
+  final box = chartContext.findRenderObject() as RenderBox?;
+  if (box == null) return;
+  final resolved = resolveSparklinePeriod(
+    x: spots.first.x,
+    from: from,
+    values: values,
+    periodStartOf: periodStartOf,
+  );
+  _showHeatmapPopover(
+    context: context,
+    tracker: tracker,
+    periodDate: resolved.periodStart,
+    anchorRect: box.localToGlobal(localPosition) & const Size(1, 1),
+    initialValue: resolved.value,
+    onSaved: onSaved,
+  );
+}
+
+/// A sparkline's hover bubble, stacked over [chart] and anchored to the
+/// pointer at [pointer] (null hides it).
+///
+/// This is the heatmap's bubble, not a lookalike: same [Container] chrome and
+/// the same [_tooltipDateValueColumn] content, so the two surfaces stay
+/// identical by construction rather than by two sets of matching constants.
+/// That's also why fl_chart's own tooltip is switched off at the call sites —
+/// it can only paint [TextSpan]s, so it could never render the real column
+/// (whose two lines carry different alignments and their own spacing), and
+/// matching it by eye would have meant duplicating the styling a third time.
+/// The touched-spot indicator line is a separate fl_chart setting and stays on.
+///
+/// The number comes from [resolveSparklinePeriod] — the stored record — and
+/// never from the touched spot's `y`. The curve between two logged points is
+/// interpolated, so its `y` is a drawing artifact rather than data; printing it
+/// meant the bubble could read `4.7` on a day whose editor then opened on `4`,
+/// or on nothing at all. Periods with no record get the same greyed dash a
+/// never-logged heatmap square shows.
+Widget _sparklineHoverBubble({
+  required Widget chart,
+  required Offset? pointer,
+  required double x,
+  required DateTime from,
+  required List<TrackerValue> values,
+  required StatisticTracker tracker,
+  required DateTime Function(DateTime) periodStartOf,
+  required Color color,
+}) {
+  return Builder(
+    builder: (context) {
+      final theme = Theme.of(context);
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          if (pointer == null) return chart;
+          final resolved = resolveSparklinePeriod(
+            x: x,
+            from: from,
+            values: values,
+            periodStartOf: periodStartOf,
+          );
+          final valueLabel = _hoverValueLabel(
+            tracker: tracker,
+            type: tracker.type,
+            value: resolved.value,
+          );
+          // Same estimates the heatmap tooltip places itself with. The bubble
+          // sits above-left of the pointer where there's room, flipping below
+          // when the row is too short — a sparkline tile is only ~96px of
+          // plot, so above often isn't available.
+          const estWidth = 120.0;
+          const estHeight = 46.0;
+          const margin = 8.0;
+          final left = (pointer.dx - estWidth / 2)
+              .clamp(0.0, math.max(0.0, constraints.maxWidth - estWidth))
+              .toDouble();
+          final showAbove = pointer.dy - margin - estHeight >= 0;
+          final top = showAbove
+              ? pointer.dy - margin - estHeight
+              : math.min(
+                  pointer.dy + margin,
+                  math.max(0.0, constraints.maxHeight - estHeight),
+                );
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              chart,
+              Positioned(
+                left: left,
+                top: top,
+                child: IgnorePointer(
+                  child: IntrinsicWidth(
+                    // No Material of its own here — [_tooltipDateValueColumn]
+                    // provides one (see that function's doc comment).
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 64),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: calendarPanelBackgroundColor(context),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: _tooltipDateValueColumn(
+                        periodLabel: _tooltipPeriodLabel(
+                          resolved.periodStart,
+                          tracker.cadence,
+                        ),
+                        valueLabel: valueLabel,
+                        valueColor: valueLabel == null ? null : color,
+                        theme: theme,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Holds which period a sparkline's pointer is resting on, as an x coordinate
+/// rather than as a captured spot.
+///
+/// This exists to keep the hover bubble live across an edit. fl_chart's own
+/// touch handling (`handleBuiltInTouches`) snapshots the touched [LineBarSpot]
+/// *by value* and only replaces it on the next touch event — so saving from
+/// the keyboard, where the pointer never moves and no event is produced,
+/// leaves both the bubble's text and its anchor position showing pre-edit
+/// data until the user jiggles the mouse. Storing only the x and re-resolving
+/// it against the freshly built series every frame keeps both live.
+///
+/// The chart therefore opts out of built-in touch handling and supplies
+/// `showingTooltipIndicators` itself; [touchedSpotIndex] does the resolving.
+/// Where a sparkline's pointer is: the series x it resolves to, plus its raw
+/// position in the chart's own coordinates. The x identifies the period; the
+/// position is what the hover bubble anchors itself to.
+class _SparklineTouch {
+  const _SparklineTouch(this.x, this.position);
+
+  final double x;
+  final Offset position;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SparklineTouch && other.x == x && other.position == position;
+
+  @override
+  int get hashCode => Object.hash(x, position);
+}
+
+class _SparklineTouchScope extends StatefulWidget {
+  const _SparklineTouchScope({required this.builder});
+
+  final Widget Function(
+    BuildContext context,
+    _SparklineTouch? touch,
+    ValueChanged<_SparklineTouch?> onTouchChanged,
+  )
+  builder;
+
+  @override
+  State<_SparklineTouchScope> createState() => _SparklineTouchScopeState();
+}
+
+class _SparklineTouchScopeState extends State<_SparklineTouchScope> {
+  _SparklineTouch? _touch;
+
+  void _setTouch(_SparklineTouch? touch) {
+    if (_touch == touch) return;
+    setState(() => _touch = touch);
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      widget.builder(context, _touch, _setTouch);
+}
+
+/// Records the pointer's position from a sparkline touch event, mirroring the
+/// show/hide rule fl_chart applies internally: anything that isn't a live
+/// interaction (pointer exit, pan end, tap cancel) clears the tooltip.
+///
+/// Only the real data bar counts. Sparklines also carry an invisible anchor
+/// bar (barIndex 0) purely so empty regions stay tappable, and its spots sit
+/// at period starts that need not line up with the interpolated curve — so
+/// tracking its x would resolve to nothing on the series.
+void _recordSparklineTouch(
+  FlTouchEvent event,
+  LineTouchResponse? response,
+  ValueChanged<_SparklineTouch?> onTouchChanged,
+) {
+  final hits = response?.lineBarSpots;
+  final position = event.localPosition;
+  // No pointer position means there's nothing to anchor the bubble to — the
+  // same non-interactive events that clear the tooltip below.
+  if (!event.isInterestedForInteractions ||
+      position == null ||
+      hits == null ||
+      hits.isEmpty) {
+    onTouchChanged(null);
+    return;
+  }
+  for (final hit in hits) {
+    if (hit.barIndex == _sparklineDataBarIndex) {
+      onTouchChanged(_SparklineTouch(hit.x, position));
+      return;
+    }
+  }
+  onTouchChanged(null);
+}
+
+/// Index of the real data curve in a sparkline's `lineBarsData`; index 0 is
+/// the invisible hit-test anchor line.
+const _sparklineDataBarIndex = 1;
+
+/// Horizontal gridlines (including the zero baseline) drawn on a sparkline in
+/// the compact grid tile, versus in the large detail popup. The tile is only
+/// ~96px of plot height, so more than three lines reads as noise; the popup
+/// has the room to be read as a real chart.
+const _sparklineGridLines = 3;
+const _sparklineDetailGridLines = 6;
+
+/// The gradient wash under a sparkline: the tracker's colour at 30% where it
+/// meets the line, fading to fully transparent at the baseline, so the series
+/// carries visual weight without competing with the line itself.
+BarAreaData _sparklineFill(Color color) {
+  return BarAreaData(
+    show: true,
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [color.withValues(alpha: 0.30), color.withValues(alpha: 0.0)],
+    ),
+  );
+}
+
 String _tooltipPeriodLabel(DateTime date, TrackerCadence cadence) {
   return switch (cadence) {
     TrackerCadence.daily => DateFormat('MMM d, yyyy').format(date),
-    TrackerCadence.weekly => 'Week of ${DateFormat('MMM d, yyyy').format(date)}',
+    TrackerCadence.weekly =>
+      'Week of ${DateFormat('MMM d, yyyy').format(date)}',
     TrackerCadence.monthly => DateFormat('MMMM yyyy').format(date),
     TrackerCadence.yearly => DateFormat('yyyy').format(date),
   };
@@ -1270,6 +1811,47 @@ Color _heatmapValueColor(Color base, double intensity) {
   final t = intensity.clamp(0.0, 1.0);
   final saturation = lerpDouble(0.15, hsl.saturation, t)!;
   return hsl.withSaturation(saturation).toColor();
+}
+
+/// Intensity at which a heatmap cell starts to glow.
+const _heatmapGlowThreshold = 0.65;
+
+/// A soft [BoxShadow] in the cell's own colour, so a capped or highly active
+/// period reads as an LED lit against the dark geometric background rather
+/// than just a slightly-less-transparent square.
+///
+/// Only cells above [_heatmapGlowThreshold] glow, ramping in from there: if
+/// every cell glowed, the bloom would blur the grid into a smear and none of
+/// them would stand out.
+List<BoxShadow> _heatmapGlow(Color base, double intensity) {
+  final t = intensity.clamp(0.0, 1.0);
+  if (t < _heatmapGlowThreshold) return const [];
+  final ramp = (t - _heatmapGlowThreshold) / (1 - _heatmapGlowThreshold);
+  return [
+    BoxShadow(
+      color: base.withValues(alpha: 0.18 + 0.30 * ramp),
+      blurRadius: 5 + 7 * ramp,
+      spreadRadius: ramp,
+    ),
+  ];
+}
+
+/// The value line of a hover bubble, for heatmap squares and sparklines alike.
+///
+/// Shared so the two surfaces can't word the same record differently — null
+/// means "nothing logged", which [_tooltipDateValueColumn] renders as the
+/// greyed dash.
+String? _hoverValueLabel({
+  required StatisticTracker tracker,
+  required TrackerType type,
+  required TrackerValue? value,
+}) {
+  // The virtual "Journal Entries" tracker is read-only (no tap-to-edit) and
+  // reads as journaled / not journaled rather than completed / not completed.
+  if (tracker.id == kJournalEntriesTrackerId) {
+    return value?.boolValue == true ? 'Journaled' : 'Not journaled';
+  }
+  return _tooltipValueLabel(type, value);
 }
 
 String? _tooltipValueLabel(TrackerType type, TrackerValue? value) {
@@ -1303,8 +1885,10 @@ TextStyle _tooltipDateStyle(ThemeData theme) {
 }
 
 TextStyle _editorDateStyle(ThemeData theme) {
-  return (theme.textTheme.bodySmall ?? const TextStyle())
-      .copyWith(inherit: false, color: theme.colorScheme.onSurfaceVariant);
+  return (theme.textTheme.bodySmall ?? const TextStyle()).copyWith(
+    inherit: false,
+    color: theme.colorScheme.onSurfaceVariant,
+  );
 }
 
 /// The tooltip's date + value content, shared verbatim between the real
@@ -1316,7 +1900,9 @@ TextStyle _editorDateStyle(ThemeData theme) {
 /// shifting position the instant the popover opened. Building both from
 /// this single function instead guarantees they lay out identically; only
 /// [dateOpacity] differs (0 in the morph popover, where the date is drawn
-/// by a separate floating layer instead).
+/// by a separate floating layer instead). (The date does carry an [Align]
+/// now — but from here, so both callers get it. See the note on it below
+/// for what it's for.)
 ///
 /// Wrapped in its own transparent [Material] (the same
 /// `MaterialType.transparency` trick [_MorphPopoverState._buildEditorContent]
@@ -1343,19 +1929,48 @@ Widget _tooltipDateValueColumn({
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Both lines are held to a single line: the bubble sizes itself with
+        // [IntrinsicWidth], so letting them wrap would break a long value
+        // ("12000", or a wordy enum option) across two lines mid-number
+        // instead of widening the bubble to fit it.
+        // Centred, and shrink-wrapped by the [Align] rather than stretched to
+        // the column's width.
+        //
+        // Both matter for short labels — a yearly tracker's "2026", or
+        // anything narrower than the bubble's 64px minimum. Stretched, the
+        // date's box spans the full width and its glyphs sat at the right
+        // edge while the value below them sat centred, so the two lines
+        // visibly disagreed. Longer labels are the widest line in the bubble
+        // and so fill it either way, which is why this only ever showed up on
+        // yearly.
+        //
+        // Shrink-wrapping also keeps [dateKey]'s measured rect on the glyphs
+        // instead of on the full-width box. The morph popover positions its
+        // sliding date layer from that rect's topLeft
+        // ([_MorphPopoverState.build]) and draws the text unaligned, so a
+        // stretched box handed it a start position to the left of where the
+        // glyphs actually were — the same short labels would jump sideways
+        // the instant the editor opened.
         Opacity(
           opacity: dateOpacity,
-          child: Text(
-            periodLabel,
-            key: dateKey,
-            textAlign: TextAlign.right,
-            style: _tooltipDateStyle(theme),
+          child: Align(
+            child: Text(
+              periodLabel,
+              key: dateKey,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: _tooltipDateStyle(theme),
+            ),
           ),
         ),
         const SizedBox(height: 4),
         Text(
           valueLabel ?? '–',
           textAlign: TextAlign.center,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: valueLabel == null
                 ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
@@ -1369,8 +1984,8 @@ Widget _tooltipDateValueColumn({
   );
 }
 
-/// Wraps [child] with a hover tooltip showing the period label (small, top
-/// right) and the value (centered, regular size — a greyed "–" if there's
+/// Wraps [child] with a hover tooltip showing the period label (small,
+/// centered) and the value (centered, regular size — a greyed "–" if there's
 /// no entry yet). Clicking morphs the same popup in place into the value
 /// editor — see [_HoverEditPopover].
 Widget _hoverTooltip({
@@ -1384,20 +1999,26 @@ Widget _hoverTooltip({
   required Widget child,
   Color? valueColor,
 }) {
+  final valueLabel = _hoverValueLabel(
+    tracker: tracker,
+    type: type,
+    value: value,
+  );
   return _HoverEditPopover(
     periodLabel: periodLabel,
-    valueLabel: _tooltipValueLabel(type, value),
+    valueLabel: valueLabel,
     valueColor: valueColor,
     tracker: tracker,
     periodDate: periodDate,
     initialValue: value,
     onSaved: onSaved,
+    readOnly: tracker.isDefault,
     child: child,
   );
 }
 
-/// Wraps [child] with a hover tooltip showing the period label (small, top
-/// right) and the value (centered, regular size — a greyed "–" if there's
+/// Wraps [child] with a hover tooltip showing the period label (small,
+/// centered) and the value (centered, regular size — a greyed "–" if there's
 /// no entry yet). This is a plain, transient overlay entry — the same kind
 /// Flutter/this app already renders without issue — kept deliberately
 /// simple; the editor (heavier, interactive, longer-lived) is opened as a
@@ -1413,6 +2034,7 @@ class _HoverEditPopover extends ConsumerStatefulWidget {
     required this.periodDate,
     required this.initialValue,
     required this.onSaved,
+    this.readOnly = false,
     required this.child,
   });
 
@@ -1423,6 +2045,10 @@ class _HoverEditPopover extends ConsumerStatefulWidget {
   final DateTime periodDate;
   final TrackerValue? initialValue;
   final VoidCallback onSaved;
+
+  /// When true the hover tooltip still shows, but tapping does nothing (the
+  /// value can't be edited). Used by virtual default trackers.
+  final bool readOnly;
   final Widget child;
 
   @override
@@ -1434,6 +2060,13 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
   final _tooltipKey = GlobalKey();
   final _tooltipDateKey = GlobalKey();
   OverlayEntry? _entry;
+
+  /// Links the bubble (in the root overlay) to this cell, so it follows the
+  /// cell's live on-screen position. The overlay sits outside the page's
+  /// scroll view, so a bubble positioned by absolute coordinates would stay
+  /// put while the grid scrolled out from under it, drifting off-centre
+  /// until the pointer left the cell and re-entered it.
+  final _link = LayerLink();
 
   /// The tooltip bubble's own on-screen rect (not the cell's) — this is
   /// what the edit popover expands out of. Starts as an estimate and is
@@ -1479,38 +2112,69 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
     const estHeight = 46.0;
     const margin = 8.0;
 
+    // Horizontal placement is resolved once here, as a delta from the cell's
+    // own left edge: the grid only ever scrolls vertically, so the cell's x
+    // can't move while the bubble is up and this stays correct for the whole
+    // hover.
     final left = anchor.left
         .clamp(margin, math.max(margin, screen.width - margin - estWidth))
         .toDouble();
-    var top = anchor.top - margin - estHeight;
-    if (top < margin) top = anchor.bottom + margin;
-    _lastRect = Rect.fromLTWH(left, top, estWidth, estHeight);
+    final dx = left - anchor.left;
+    // Above the cell when there's room for it, else below. Also decided once:
+    // a hovered cell can only drift by its own height before the pointer
+    // falls off it, which hides the bubble and re-runs this on re-entry.
+    final showAbove = anchor.top - margin - estHeight >= margin;
+    _lastRect = Rect.fromLTWH(
+      left,
+      showAbove ? anchor.top - margin - estHeight : anchor.bottom + margin,
+      estWidth,
+      estHeight,
+    );
 
     _entry = OverlayEntry(
+      // Pinned at the overlay's origin so the follower below contributes no
+      // offset of its own, and left unsized so the bubble keeps sizing to its
+      // own content.
       builder: (ctx) => Positioned(
-        left: left,
-        top: top,
-        child: IgnorePointer(
-          child: IntrinsicWidth(
-            key: _tooltipKey,
-            // No Material of its own here — [_tooltipDateValueColumn]
-            // provides one, so the ambient DefaultTextStyle it resolves is
-            // the same regardless of what's around it (see that function's
-            // doc comment).
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 64),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: calendarPanelBackgroundColor(context),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: _tooltipDateValueColumn(
-                periodLabel: widget.periodLabel,
-                valueLabel: widget.valueLabel,
-                valueColor: widget.valueColor,
-                theme: theme,
-                dateKey: _tooltipDateKey,
+        left: 0,
+        top: 0,
+        child: CompositedTransformFollower(
+          link: _link,
+          // Vertical placement rides the cell's transform, re-resolved every
+          // frame at paint time — that's what keeps the bubble glued to the
+          // cell mid-scroll. Anchoring by the bubble's own edge means its real
+          // measured height places it; estHeight above only picks the side.
+          targetAnchor: showAbove ? Alignment.topLeft : Alignment.bottomLeft,
+          followerAnchor: showAbove ? Alignment.bottomLeft : Alignment.topLeft,
+          offset: Offset(dx, showAbove ? -margin : margin),
+          showWhenUnlinked: false,
+          child: IgnorePointer(
+            child: IntrinsicWidth(
+              key: _tooltipKey,
+              // No Material of its own here — [_tooltipDateValueColumn]
+              // provides one, so the ambient DefaultTextStyle it resolves is
+              // the same regardless of what's around it (see that function's
+              // doc comment).
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 64),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: calendarPanelBackgroundColor(context),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: _tooltipDateValueColumn(
+                  periodLabel: widget.periodLabel,
+                  valueLabel: widget.valueLabel,
+                  valueColor: widget.valueColor,
+                  theme: theme,
+                  dateKey: _tooltipDateKey,
+                ),
               ),
             ),
           ),
@@ -1530,6 +2194,9 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
   }
 
   void _handleTap() {
+    // Read-only trackers (e.g. the virtual Journal Entries tracker) show the
+    // hover tooltip but can't be edited.
+    if (widget.readOnly) return;
     if (ref.read(_heatmapDraggingProvider)) return;
     // Measure the tooltip's actual on-screen rect synchronously rather than
     // trusting [_lastRect] (which starts as an estimate and is only
@@ -1557,6 +2224,47 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
     }
   }
 
+  /// An [OverlayEntry] doesn't rebuild just because the widget that inserted
+  /// it did, so a bubble that's already up keeps painting the build it was
+  /// inserted with. That goes stale after an edit: saving invalidates the
+  /// values provider and *then* pops the editor, which drops the pointer back
+  /// onto the cell and re-runs [_show] before the refetch has landed — so the
+  /// re-shown bubble captures the pre-edit value, and the rebuild that carries
+  /// the new one arrives here, a frame or more later, with no effect on the
+  /// entry. Marking it dirty on content change is what lets that rebuild
+  /// through.
+  ///
+  /// Deferred to a post-frame callback rather than done inline: this runs
+  /// during the parent's build — and the heatmap builds under a
+  /// [LayoutBuilder], so it's a build inside a layout pass — while the entry
+  /// lives in the root overlay, a subtree of its own. Marking a widget dirty
+  /// mid-build is only legal for a descendant of whatever is currently
+  /// building, which the overlay never is, so doing it here throws
+  /// "markNeedsBuild() called during build". Waiting for the frame to finish
+  /// costs the bubble one frame of staleness, which is invisible.
+  @override
+  void didUpdateWidget(_HoverEditPopover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_entry == null) return;
+    if (widget.periodLabel == oldWidget.periodLabel &&
+        widget.valueLabel == oldWidget.valueLabel &&
+        widget.valueColor == oldWidget.valueColor) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _entry == null) return;
+      _entry!.markNeedsBuild();
+      // Re-measured only once the rebuilt bubble has laid out — a different
+      // value can change its width ([IntrinsicWidth]), and [_lastRect] is the
+      // fallback start rect for the morph animation.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _entry == null) return;
+        final measured = _measureTooltip();
+        if (measured != null) _lastRect = measured;
+      });
+    });
+  }
+
   @override
   void dispose() {
     _hide();
@@ -1570,13 +2278,13 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
     ref.listen(_heatmapDraggingProvider, (_, dragging) {
       if (dragging) _hide();
     });
-    return MouseRegion(
-      key: _key,
-      onEnter: (_) => _show(),
-      onExit: (_) => _hide(),
-      child: GestureDetector(
-        onTap: _handleTap,
-        child: widget.child,
+    return CompositedTransformTarget(
+      link: _link,
+      child: MouseRegion(
+        key: _key,
+        onEnter: (_) => _show(),
+        onExit: (_) => _hide(),
+        child: GestureDetector(onTap: _handleTap, child: widget.child),
       ),
     );
   }
@@ -1722,8 +2430,8 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
       extentOffset: _intController.text.length,
     );
     _boolValue = widget.initialValue?.boolValue ?? widget.tracker.defaultBool;
-    _enumValue = widget.initialValue?.enumValue ??
-        widget.tracker.defaultEnumOption;
+    _enumValue =
+        widget.initialValue?.enumValue ?? widget.tracker.defaultEnumOption;
     // Seed from the tooltip's own already-measured date rect (see
     // [_MorphPopover.anchorDateRect]) so the date-slide layer in [build] can
     // render from frame one instead of waiting for [_measure]'s post-frame
@@ -1769,7 +2477,10 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     const margin = 8.0;
 
     var left = widget.anchorRect.left;
-    left = left.clamp(margin, math.max(margin, screen.width - margin - size.width));
+    left = left.clamp(
+      margin,
+      math.max(margin, screen.width - margin - size.width),
+    );
 
     // Share a corner with the tooltip rather than floating some distance
     // from it: growing upward, the card's bottom-left lines up with the
@@ -1784,7 +2495,10 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           ? below
           : screen.height - margin - size.height;
     }
-    top = top.clamp(margin, math.max(margin, screen.height - margin - size.height));
+    top = top.clamp(
+      margin,
+      math.max(margin, screen.height - margin - size.height),
+    );
 
     final rect = Offset(left, top) & size;
 
@@ -2008,10 +2722,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
             children: [
               Row(
                 children: [
-                  Text(
-                    widget.tracker.name,
-                    style: theme.textTheme.titleSmall,
-                  ),
+                  Text(widget.tracker.name, style: theme.textTheme.titleSmall),
                   const Spacer(),
                   // Invisible — only here to reserve layout space. The
                   // visible date text is drawn by the sliding layer in
@@ -2044,7 +2755,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                     onPressed: _save,
                     style: FilledButton.styleFrom(
                       backgroundColor: accent,
-                      foregroundColor: ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+                      foregroundColor:
+                          ThemeData.estimateBrightnessForColor(accent) ==
+                              Brightness.dark
                           ? Colors.white
                           : Colors.black,
                     ),
@@ -2053,9 +2766,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                   const SizedBox(width: 8),
                   TextButton(
                     onPressed: Navigator.of(context).pop,
-                    style: TextButton.styleFrom(
-                      foregroundColor: accent,
-                    ),
+                    style: TextButton.styleFrom(foregroundColor: accent),
                     child: const Text('Cancel'),
                   ),
                 ],
@@ -2099,7 +2810,12 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
               decoration: const InputDecoration(
                 labelText: 'Value',
                 isDense: true,
-                contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                contentPadding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 0,
+                  bottom: 12,
+                ),
               ),
             ),
             if (cap != null) ...[
@@ -2109,7 +2825,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                 child: Text(
                   '$minVal–$cap',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.6,
+                    ),
                   ),
                 ),
               ),
@@ -2130,10 +2848,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         return VoyagerDropdownButtonFormField<String>(
           initialValue: options.contains(_enumValue) ? _enumValue : null,
           accentColor: accent,
-          decoration: const InputDecoration(
-            labelText: 'Value',
-            isDense: true,
-          ),
+          decoration: const InputDecoration(labelText: 'Value', isDense: true),
           items: options
               .map((o) => DropdownMenuItem(value: o, child: Text(o)))
               .toList(),
@@ -2163,7 +2878,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         final text = _intController.text.trim();
         if (text.isEmpty) {
           if (current != null) {
-            await ref.read(trackerRepositoryProvider).softDeleteValue(current.id);
+            await ref
+                .read(trackerRepositoryProvider)
+                .softDeleteValue(current.id);
             widget.onSaved();
           }
           if (mounted) Navigator.of(context).pop();
@@ -2182,10 +2899,13 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         enumVal = _enumValue;
     }
 
-    await ref.read(trackerRepositoryProvider).upsertValue(
+    await ref
+        .read(trackerRepositoryProvider)
+        .upsertValue(
           TrackerValue(
-            id: current?.id ??
-                '${widget.tracker.id}_${widget.periodDate.millisecondsSinceEpoch}',
+            id:
+                current?.id ??
+                trackerValueId(widget.tracker.id, widget.periodDate),
             trackerId: widget.tracker.id,
             periodStart: widget.periodDate,
             intValue: intVal,
@@ -2203,7 +2923,6 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   Future<void> _handleOutsideTap() async {
     await _save();
   }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -2257,8 +2976,7 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
       type: widget.tracker.type,
       value: value,
       tracker: widget.tracker,
-      maxInPeriod:
-          widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
+      maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
       hasSingleIntValue: widget.hasSingleIntValue,
     );
     final color = Color(widget.tracker.colorValue);
@@ -2268,7 +2986,10 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
 
     return _hoverTooltip(
       context: context,
-      periodLabel: _tooltipPeriodLabel(widget.periodDate, widget.tracker.cadence),
+      periodLabel: _tooltipPeriodLabel(
+        widget.periodDate,
+        widget.tracker.cadence,
+      ),
       type: widget.tracker.type,
       value: value,
       tracker: widget.tracker,
@@ -2284,7 +3005,11 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
+          boxShadow: _heatmapGlow(color, intensity),
         ),
       ),
     );
@@ -2343,7 +3068,8 @@ class _RevealClipper extends CustomClipper<Rect> {
   Rect getClip(Size size) => rect;
 
   @override
-  bool shouldReclip(covariant _RevealClipper oldClipper) => oldClipper.rect != rect;
+  bool shouldReclip(covariant _RevealClipper oldClipper) =>
+      oldClipper.rect != rect;
 }
 
 class _HeatmapPopover extends ConsumerStatefulWidget {
@@ -2398,8 +3124,8 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
       extentOffset: _intController.text.length,
     );
     _boolValue = widget.initialValue?.boolValue ?? widget.tracker.defaultBool;
-    _enumValue = widget.initialValue?.enumValue ??
-        widget.tracker.defaultEnumOption;
+    _enumValue =
+        widget.initialValue?.enumValue ?? widget.tracker.defaultEnumOption;
 
     _expandController = AnimationController(
       vsync: this,
@@ -2433,7 +3159,10 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
     const margin = 8.0;
 
     var left = widget.anchorRect.left;
-    left = left.clamp(margin, math.max(margin, screen.width - margin - size.width));
+    left = left.clamp(
+      margin,
+      math.max(margin, screen.width - margin - size.width),
+    );
 
     var top = widget.anchorRect.top - 6 - size.height;
     if (top < margin) {
@@ -2442,7 +3171,10 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
           ? below
           : screen.height - margin - size.height;
     }
-    top = top.clamp(margin, math.max(margin, screen.height - margin - size.height));
+    top = top.clamp(
+      margin,
+      math.max(margin, screen.height - margin - size.height),
+    );
 
     final next = Offset(left, top);
     if (next != _position || size != _cardSize) {
@@ -2477,13 +3209,16 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
     // window's on-screen position at t=0 is always `anchorRect` itself,
     // regardless of when `_reposition()` corrects `origin` — so there's
     // no visible jump once the real position/size are measured.
-    final origin = _position ??
+    final origin =
+        _position ??
         Offset(
           widget.anchorRect.left.clamp(0, double.infinity),
           widget.anchorRect.top.clamp(0, double.infinity),
         );
     final startLocalRect = widget.anchorRect.shift(-origin);
-    final endLocalRect = _cardSize == null ? startLocalRect : Offset.zero & _cardSize!;
+    final endLocalRect = _cardSize == null
+        ? startLocalRect
+        : Offset.zero & _cardSize!;
 
     return Stack(
       children: [
@@ -2512,96 +3247,104 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
             // repainted each frame — only the clip boundary needs updating.
             child: RepaintBoundary(
               child: FadeTransition(
-              opacity: CurvedAnimation(
-                parent: _expandController,
-                curve: const Interval(0.0, 0.5),
-              ),
-              child: Container(
-                key: _cardKey,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: popupGlowAlpha),
-                      blurRadius: 12,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                opacity: CurvedAnimation(
+                  parent: _expandController,
+                  curve: const Interval(0.0, 0.5),
                 ),
-                child: Material(
-                  elevation: 8,
-                  shape: RoundedRectangleBorder(
+                child: Container(
+                  key: _cardKey,
+                  decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: accent, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: popupGlowAlpha),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
-                  color: theme.colorScheme.surface,
-                  child: SizedBox(
-                    width: 310,
-                    child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                  child: Material(
+                    elevation: 8,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: accent, width: 3),
+                    ),
+                    color: theme.colorScheme.surface,
+                    child: SizedBox(
+                      width: 310,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.tracker.name,
-                              style: theme.textTheme.titleSmall,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.tracker.name,
+                                    style: theme.textTheme.titleSmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _formatDate(widget.periodDate),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const Spacer(),
-                            Text(
-                              _formatDate(widget.periodDate),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                            const SizedBox(height: 10),
+                            _valueEditor(theme, accent),
+                            const SizedBox(height: 10),
+                            FadeTransition(
+                              opacity: _controlsController,
+                              child: Row(
+                                children: [
+                                  if (widget.initialValue != null)
+                                    TextButton(
+                                      onPressed: _delete,
+                                      style: TextButton.styleFrom(
+                                        foregroundColor:
+                                            theme.colorScheme.error,
+                                      ),
+                                      child: const Text('Delete'),
+                                    ),
+                                  const Spacer(),
+                                  FilledButton(
+                                    onPressed: _save,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: accent,
+                                      foregroundColor:
+                                          ThemeData.estimateBrightnessForColor(
+                                                accent,
+                                              ) ==
+                                              Brightness.dark
+                                          ? Colors.white
+                                          : Colors.black,
+                                    ),
+                                    child: const Text('Save'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  TextButton(
+                                    onPressed: Navigator.of(context).pop,
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: accent,
+                                    ),
+                                    child: const Text('Cancel'),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        _valueEditor(theme, accent),
-                        const SizedBox(height: 10),
-                        FadeTransition(
-                          opacity: _controlsController,
-                          child: Row(
-                            children: [
-                              if (widget.initialValue != null)
-                                TextButton(
-                                  onPressed: _delete,
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: theme.colorScheme.error,
-                                  ),
-                                  child: const Text('Delete'),
-                                ),
-                              const Spacer(),
-                              FilledButton(
-                                onPressed: _save,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: accent,
-                                  foregroundColor: ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
-                                      ? Colors.white
-                                      : Colors.black,
-                                ),
-                                child: const Text('Save'),
-                              ),
-                              const SizedBox(width: 8),
-                              TextButton(
-                                onPressed: Navigator.of(context).pop,
-                                style: TextButton.styleFrom(
-                                  foregroundColor: accent,
-                                ),
-                                child: const Text('Cancel'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
                   ),
                 ),
               ),
-            ),
             ),
           ),
         ),
@@ -2641,7 +3384,12 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
               decoration: const InputDecoration(
                 labelText: 'Value',
                 isDense: true,
-                contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                contentPadding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 0,
+                  bottom: 12,
+                ),
               ),
             ),
             if (cap != null) ...[
@@ -2651,7 +3399,9 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
                 child: Text(
                   '$minVal–$cap',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.6,
+                    ),
                   ),
                 ),
               ),
@@ -2672,10 +3422,7 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
         return VoyagerDropdownButtonFormField<String>(
           initialValue: options.contains(_enumValue) ? _enumValue : null,
           accentColor: accent,
-          decoration: const InputDecoration(
-            labelText: 'Value',
-            isDense: true,
-          ),
+          decoration: const InputDecoration(labelText: 'Value', isDense: true),
           items: options
               .map((o) => DropdownMenuItem(value: o, child: Text(o)))
               .toList(),
@@ -2705,7 +3452,9 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
         final text = _intController.text.trim();
         if (text.isEmpty) {
           if (current != null) {
-            await ref.read(trackerRepositoryProvider).softDeleteValue(current.id);
+            await ref
+                .read(trackerRepositoryProvider)
+                .softDeleteValue(current.id);
             widget.onSaved();
           }
           if (mounted) Navigator.of(context).pop();
@@ -2724,10 +3473,13 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
         enumVal = _enumValue;
     }
 
-    await ref.read(trackerRepositoryProvider).upsertValue(
+    await ref
+        .read(trackerRepositoryProvider)
+        .upsertValue(
           TrackerValue(
-            id: current?.id ??
-                '${widget.tracker.id}_${widget.periodDate.millisecondsSinceEpoch}',
+            id:
+                current?.id ??
+                trackerValueId(widget.tracker.id, widget.periodDate),
             trackerId: widget.tracker.id,
             periodStart: widget.periodDate,
             intValue: intVal,
@@ -2755,50 +3507,181 @@ class _HeatmapPopoverState extends ConsumerState<_HeatmapPopover>
 // Calendar View
 // ---------------------------------------------------------------------------
 
-class _CalendarView extends ConsumerWidget {
-  const _CalendarView({required this.trackers, required this.analytics});
+/// Opens [_StatisticDetailPopup] for [tracker] — the large overlay that
+/// replaced the old Calendar view mode. Dismissed by tapping the scrim, the
+/// close button, or Escape.
+Future<void> _showStatisticDetail({
+  required BuildContext context,
+  required StatisticTracker tracker,
+  required AnalyticsService analytics,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierColor: Colors.black.withValues(alpha: 0.55),
+    builder: (_) =>
+        _StatisticDetailPopup(tracker: tracker, analytics: analytics),
+  );
+}
 
-  final List<StatisticTracker> trackers;
+class _StatisticDetailPopup extends ConsumerWidget {
+  const _StatisticDetailPopup({required this.tracker, required this.analytics});
+
+  final StatisticTracker tracker;
   final AnalyticsService analytics;
+
+  /// Steps the visible window by [delta] pages (-1 left/earlier, 1
+  /// right/later), matching whichever calendar [build] is showing for
+  /// [tracker]. The consecutive style renders a line chart with no windowed
+  /// range, so there's nothing to page there.
+  void _page(WidgetRef ref, StatisticTracker? tracker, int delta) {
+    if (tracker == null) return;
+    if (tracker.effectiveTrackingStyle == TrackerStyle.consecutive) return;
+    if (tracker.cadence == TrackerCadence.monthly) {
+      ref
+          .read(_calendarViewMonthlyBaseYearProvider.notifier)
+          .update((y) => y + _monthGridWindowYears * delta);
+    } else if (tracker.cadence == TrackerCadence.yearly) {
+      ref
+          .read(_calendarViewYearlyBaseYearProvider.notifier)
+          .update((y) => y + _yearGridWindowYears * delta);
+    } else {
+      ref.read(_calendarViewYearProvider.notifier).update((y) => y + delta);
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedId = ref.watch(_calendarSelectedTrackerProvider);
-    final scale = ref.watch(_calendarTimeScaleProvider);
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final color = Color(tracker.colorValue);
 
-    final selectedTracker = trackers.cast<StatisticTracker?>().firstWhere(
-      (t) => t?.id == selectedId,
-      orElse: () => trackers.isNotEmpty ? trackers.first : null,
-    );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (selectedTracker == null)
-          const SizedBox.shrink()
-        else if (selectedTracker.effectiveTrackingStyle ==
-            TrackerStyle.consecutive)
-          _ConsecutiveCalendarChart(
-            tracker: selectedTracker,
-            analytics: analytics,
-          )
-        else if (selectedTracker.cadence == TrackerCadence.monthly)
-          _MonthGridCalendar(
-            tracker: selectedTracker,
-            analytics: analytics,
-          )
-        else if (selectedTracker.cadence == TrackerCadence.yearly)
-          _YearGridCalendar(
-            tracker: selectedTracker,
-            analytics: analytics,
-          )
-        else
-          _YearHeatmapCalendar(
-            tracker: selectedTracker,
-            analytics: analytics,
+    // The same widget the Calendar page uses for its own period navigation, so
+    // the arrows (and the configurable letter keys) behave identically in both
+    // places. It listens on [HardwareKeyboard] rather than a [Focus] node,
+    // so it works the moment the popup opens without anything having to take
+    // focus first.
+    return CalendarKeyboardShortcuts(
+      navigateLeftKey: settings.calendarNavigateLeftKey,
+      navigateRightKey: settings.calendarNavigateRightKey,
+      onNavigate: (delta) => _page(ref, tracker, delta),
+      child: Dialog(
+        // Fully opaque, unlike the calendar's own translucent panels: this
+        // sits directly over the grid it was opened from, and letting the
+        // tiles show through would leave the chart competing with a heatmap
+        // behind it.
+        backgroundColor: theme.colorScheme.surface.withValues(alpha: 1),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: color.withValues(alpha: 0.25)),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ────────────────────────────────────────────
+                Row(
+                  children: [
+                    CircleAvatar(radius: 6, backgroundColor: color),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tracker.name,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '${tracker.cadence.name} · '
+                            '${_typeLabel(tracker.type)}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Built-in trackers are derived, not stored — nothing
+                    // about them is editable.
+                    if (!tracker.isDefault)
+                      IconButton(
+                        icon: const Icon(
+                          PhosphorIconsRegular.pencilSimple,
+                          size: 18,
+                        ),
+                        tooltip: 'Edit tracker',
+                        onPressed: () async {
+                          final updated = await showDialog<StatisticTracker>(
+                            context: context,
+                            builder: (_) => _TrackerDialog(tracker: tracker),
+                          );
+                          if (updated == null) return;
+                          await ref
+                              .read(trackerRepositoryProvider)
+                              .upsertTracker(updated);
+                          ref.invalidate(trackersProvider);
+                        },
+                      ),
+                    IconButton(
+                      icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // ── Body ──────────────────────────────────────────────
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: _StatisticDetailBody(
+                      tracker: tracker,
+                      analytics: analytics,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-      ],
+        ),
+      ),
     );
+  }
+}
+
+/// Picks the right calendar body for [tracker] — the same dispatch the old
+/// Calendar view mode used.
+class _StatisticDetailBody extends StatelessWidget {
+  const _StatisticDetailBody({required this.tracker, required this.analytics});
+
+  final StatisticTracker tracker;
+  final AnalyticsService analytics;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tracker.effectiveTrackingStyle == TrackerStyle.consecutive) {
+      return _ConsecutiveCalendarChart(tracker: tracker, analytics: analytics);
+    }
+    return switch (tracker.cadence) {
+      TrackerCadence.monthly => _MonthGridCalendar(
+        tracker: tracker,
+        analytics: analytics,
+      ),
+      TrackerCadence.yearly => _YearGridCalendar(
+        tracker: tracker,
+        analytics: analytics,
+      ),
+      _ => _YearHeatmapCalendar(tracker: tracker, analytics: analytics),
+    };
   }
 }
 
@@ -2818,115 +3701,225 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final theme = Theme.of(context);
     final color = Color(tracker.colorValue);
+    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final weekStartsMonday = settings.weekStartsOnMonday;
+    final promptService = ref.watch(periodicPromptServiceProvider);
+
+    // The chart spans a fixed number of periods per cadence — roughly 180
+    // days / 50 weeks / 24 months / 15 years. The window is sized so the day
+    // count is an exact multiple of the tick spacing, which is what keeps
+    // every bottom-axis label evenly spaced *and* lands the current period
+    // squarely on the final tick (instead of a stray, closer "today" label at
+    // the right edge — the old 1, 6, 11, 16, 17 problem).
+    final now = DateTime.now();
+    final todayPeriod = promptService.periodStartFor(
+      now,
+      tracker.cadence,
+      weekStartsMonday: weekStartsMonday,
+    );
+    final (
+      int totalDays,
+      double tickInterval,
+      String dateFmt,
+    ) = switch (tracker.cadence) {
+      TrackerCadence.daily => (180, 30.0, 'MMM d'),
+      TrackerCadence.weekly => (343, 49.0, 'MMM d'),
+      TrackerCadence.monthly => (720, 120.0, 'MMM yy'),
+      TrackerCadence.yearly => (5475, 1095.0, 'yyyy'),
+    };
+    final from = todayPeriod.subtract(Duration(days: totalDays));
 
     return valuesAsync.when(
       data: (values) {
-        final now = DateTime.now();
-        final from = DateTime(now.year, now.month, 1);
-        final to = now;
         final spots = analytics.interpolateConsecutive(
           values: values,
           from: from,
-          to: to,
+          to: todayPeriod,
+          maxDays: totalDays,
+          upperBound: tracker.integerCap,
         );
-        if (spots.isEmpty) {
-          return SizedBox(
-            height: 280,
-            child: Center(
-              child: Text(
-                'No data for this month',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
+
+        // One anchor per period start across the whole window, rendered as an
+        // invisible zero-height line. fl_chart only reports touches near a
+        // bar's spots, so these give a tap *anywhere* a nearest period to
+        // resolve to — letting the user click the chart to enter data even
+        // when it's otherwise empty ("just axes"), without drawing a baseline.
+        final anchors = <FlSpot>[];
+        for (var i = 0; ; i++) {
+          final periodStart = switch (tracker.cadence) {
+            TrackerCadence.daily => todayPeriod.subtract(Duration(days: i)),
+            TrackerCadence.weekly => todayPeriod.subtract(
+              Duration(days: i * 7),
             ),
-          );
+            TrackerCadence.monthly => DateTime(
+              todayPeriod.year,
+              todayPeriod.month - i,
+              1,
+            ),
+            TrackerCadence.yearly => DateTime(todayPeriod.year - i, 1, 1),
+          };
+          final x = periodStart.difference(from).inDays;
+          if (x < 0) break;
+          anchors.add(FlSpot(x.toDouble(), 0));
         }
-        final maxY = spots.map((s) => s.y).fold<double>(1, math.max);
+        final anchorSpots = anchors.reversed.toList();
+
+        DateTime periodStartOf(DateTime date) => promptService.periodStartFor(
+          date,
+          tracker.cadence,
+          weekStartsMonday: weekStartsMonday,
+        );
+
+        final dataMax = spots.isEmpty
+            ? 1.0
+            : spots.map((s) => s.y).fold<double>(1, math.max);
+        // The popup has the height to carry a full six-line scale.
+        final yStep = niceAxisStep(dataMax, _sparklineDetailGridLines);
+        final maxY = yStep * (_sparklineDetailGridLines - 1);
+
         return SizedBox(
-          height: 280,
-          child: LineChart(
-            LineChartData(
-              lineTouchData: LineTouchData(
-                touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => calendarPanelBackgroundColor(context),
-                  getTooltipItems: (touchedSpots) => touchedSpots
-                      .map(
-                        (spot) => LineTooltipItem(
-                          spot.y.toStringAsFixed(1),
-                          TextStyle(
-                            color: color,
-                            fontWeight: FontWeight.normal,
-                            fontSize: 12,
+          height: 380,
+          child: _SparklineTouchScope(
+            builder: (context, touch, onTouchChanged) {
+              final touchedIndex = touchedSpotIndex(spots, touch?.x);
+              // Hoisted so the touched-spot indicator below can reference the
+              // very same bar instance it's drawn against.
+              final dataBar = LineChartBarData(
+                spots: spots,
+                isCurved: true,
+                color: color,
+                barWidth: 2,
+                dotData: FlDotData(show: spots.length <= 15),
+                belowBarData: _sparklineFill(color),
+                showingIndicators: touchedIndex < 0 ? const [] : [touchedIndex],
+              );
+              return Builder(
+                builder: (chartContext) {
+                  final chart = LineChart(
+                    LineChartData(
+                      // fl_chart's own tooltip stays off: the bubble is drawn
+                      // by [_sparklineHoverBubble] instead, so it is literally
+                      // the heatmap's. The indicator line on the touched spot
+                      // is a separate setting
+                      // ([LineChartBarData.showingIndicators]) and is still on.
+                      showingTooltipIndicators: const [],
+                      lineTouchData: LineTouchData(
+                        handleBuiltInTouches: false,
+                        // Large threshold so a tap anywhere resolves to the nearest
+                        // period anchor rather than leaving dead zones.
+                        touchSpotThreshold: 100000,
+                        touchCallback:
+                            (FlTouchEvent event, LineTouchResponse? response) {
+                              _recordSparklineTouch(
+                                event,
+                                response,
+                                onTouchChanged,
+                              );
+                              _openSparklinePeriodEditor(
+                                event: event,
+                                response: response,
+                                chartContext: chartContext,
+                                context: context,
+                                tracker: tracker,
+                                from: from,
+                                values: values,
+                                periodStartOf: periodStartOf,
+                                onSaved: () => ref.invalidate(
+                                  trackerValuesProvider(tracker.id),
+                                ),
+                              );
+                            },
+                      ),
+                      minX: 0,
+                      maxX: totalDays.toDouble(),
+                      minY: 0,
+                      maxY: maxY,
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: yStep,
+                        getDrawingHorizontalLine: (_) => FlLine(
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.15,
+                          ),
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      titlesData: FlTitlesData(
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        // See the matching note on the grid sparkline: the axes
+                        // hold their labels clear of the plot so the Y origin and
+                        // the first date label don't collide in the corner.
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: axisReservedSize(maxY, 12, 10),
+                            interval: yStep,
+                            getTitlesWidget: (v, meta) => SideTitleWidget(
+                              meta: meta,
+                              space: 10,
+                              child: Text(
+                                compactNumberLabel(v),
+                                maxLines: 1,
+                                softWrap: false,
+                                style: theme.textTheme.labelSmall,
+                              ),
+                            ),
                           ),
                         ),
-                      )
-                      .toList(),
-                ),
-              ),
-              minY: 0,
-              maxY: maxY * 1.2,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                getDrawingHorizontalLine: (_) => FlLine(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outline
-                      .withValues(alpha: 0.15),
-                  strokeWidth: 1,
-                ),
-              ),
-              titlesData: FlTitlesData(
-                rightTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                topTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 36,
-                    getTitlesWidget: (v, _) => Text(
-                      v.toInt().toString(),
-                      style: Theme.of(context).textTheme.labelSmall,
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 32,
+                            interval: tickInterval,
+                            getTitlesWidget: (v, meta) {
+                              final date = from.add(Duration(days: v.round()));
+                              return SideTitleWidget(
+                                meta: meta,
+                                space: 10,
+                                child: Text(
+                                  DateFormat(dateFmt).format(date),
+                                  style: theme.textTheme.labelSmall,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        // barIndex 0 — invisible hit-test anchors.
+                        LineChartBarData(
+                          spots: anchorSpots,
+                          color: Colors.transparent,
+                          barWidth: 0,
+                          dotData: const FlDotData(show: false),
+                        ),
+                        // barIndex 1 — the real data curve.
+                        dataBar,
+                      ],
                     ),
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 22,
-                    interval: 5,
-                    getTitlesWidget: (v, _) {
-                      final day = from.add(Duration(days: v.toInt()));
-                      return Text(
-                        '${day.day}',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      );
-                    },
-                  ),
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isCurved: true,
-                  preventCurveOverShooting: true,
-                  preventCurveOvershootingThreshold: 0,
-                  color: color,
-                  barWidth: 2,
-                  dotData: FlDotData(show: spots.length <= 15),
-                  belowBarData: BarAreaData(
-                    show: true,
-                    color: color.withValues(alpha: 0.12),
-                  ),
-                ),
-              ],
-            ),
+                  );
+                  return _sparklineHoverBubble(
+                    chart: chart,
+                    pointer: touch?.position,
+                    x: touch?.x ?? 0,
+                    from: from,
+                    values: values,
+                    tracker: tracker,
+                    periodStartOf: periodStartOf,
+                    color: color,
+                  );
+                },
+              );
+            },
           ),
         );
       },
@@ -2940,300 +3933,11 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Monthly heatmap calendar
-// ---------------------------------------------------------------------------
-
-class _MonthHeatmapCalendar extends ConsumerWidget {
-  const _MonthHeatmapCalendar({
-    required this.tracker,
-    required this.analytics,
-  });
-
-  final StatisticTracker tracker;
-  final AnalyticsService analytics;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
-    final theme = Theme.of(context);
-    final color = Color(tracker.colorValue);
-    final currentMonth = ref.watch(_calendarViewMonthProvider);
-
-    return valuesAsync.when(
-      data: (values) {
-        final firstDay = DateTime(currentMonth.year, currentMonth.month, 1);
-        final daysInMonth =
-            DateTime(currentMonth.year, currentMonth.month + 1, 0).day;
-        final startWeekday = firstDay.weekday % 7; // 0=Sun
-        final max = analytics.rollingMax(values);
-
-        void previousMonth() {
-          ref.read(_calendarViewMonthProvider.notifier).update((state) =>
-              DateTime(state.year, state.month - 1, 1));
-        }
-
-        void nextMonth() {
-          ref.read(_calendarViewMonthProvider.notifier).update((state) =>
-              DateTime(state.year, state.month + 1, 1));
-        }
-
-        return Focus(
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                previousMonth();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                nextMonth();
-                return KeyEventResult.handled;
-              }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: previousMonth,
-                  ),
-                  Text(
-                    '${_monthName(currentMonth.month)} ${currentMonth.year}',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: nextMonth,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Day-of-week headers
-              Row(
-                children: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-                    .map(
-                      (d) => Expanded(
-                        child: Center(
-                          child: Text(
-                            d,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                children: [
-                  // Offset leading blanks
-                  for (var i = 0; i < startWeekday; i++)
-                    const _CalendarCell(
-                      day: null,
-                      color: Colors.transparent,
-                      intensity: 0,
-                      value: null,
-                      showValue: false,
-                    ),
-                  // Actual days
-                  for (var day = 1; day <= daysInMonth; day++)
-                    Builder(builder: (ctx) {
-                      final date = DateTime(currentMonth.year, currentMonth.month, day);
-                      final v = values.cast<TrackerValue?>().firstWhere(
-                        (v) =>
-                            v != null &&
-                            v.periodStart.year == date.year &&
-                            v.periodStart.month == date.month &&
-                            v.periodStart.day == date.day,
-                        orElse: () => null,
-                      );
-                      final intensity = analytics.heatmapIntensity(
-                        type: tracker.type,
-                        value: v,
-                        tracker: tracker,
-                        maxInPeriod: max == 0 ? 1 : max,
-                        allValues: values,
-                      );
-                      return _CalendarCell(
-                        day: day,
-                        color: color,
-                        intensity: intensity,
-                        value: v,
-                        showValue: true,
-                        tracker: tracker,
-                        periodDate: date,
-                      );
-                  }),
-                // Trailing blanks
-                for (var i = (startWeekday + daysInMonth) % 7; i > 0 && i < 7; i++)
-                  const _CalendarCell(
-                    day: null,
-                    color: Colors.transparent,
-                    intensity: 0,
-                    value: null,
-                    showValue: false,
-                  ),
-              ],
-            ),
-          ],
-        ),
-      );
-    },
-      loading: () => const SizedBox(
-        height: 200,
-        child: Center(child: CircularProgressIndicator()),
-      ),
-      error: (e, _) => Text('$e'),
-    );
-  }
-
-  String _monthName(int m) => [
-        '', 'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-      ][m];
-}
-
-class _CalendarCell extends ConsumerStatefulWidget {
-  const _CalendarCell({
-    required this.day,
-    required this.color,
-    required this.intensity,
-    required this.value,
-    required this.showValue,
-    this.tracker,
-    this.periodDate,
-  });
-
-  final int? day;
-  final Color color;
-  final double intensity;
-  final TrackerValue? value;
-  final bool showValue;
-  final StatisticTracker? tracker;
-  final DateTime? periodDate;
-
-  @override
-  ConsumerState<_CalendarCell> createState() => _CalendarCellState();
-}
-
-class _CalendarCellState extends ConsumerState<_CalendarCell> {
-  final _key = GlobalKey();
-
-  void _openPopover() {
-    if (widget.tracker == null || widget.periodDate == null) return;
-    final box = _key.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final offset = box.localToGlobal(Offset.zero);
-    final rect = offset & box.size;
-
-    _showHeatmapPopover(
-      context: context,
-      tracker: widget.tracker!,
-      periodDate: widget.periodDate!,
-      anchorRect: rect,
-      initialValue: widget.value,
-      onSaved: () {
-        ref.invalidate(trackerValuesProvider(widget.tracker!.id));
-        ref.invalidate(pendingStatEntriesProvider);
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final fraction = 1 / 7;
-    return FractionallySizedBox(
-      widthFactor: fraction,
-      child: AspectRatio(
-        aspectRatio: 8 / 5,
-        child: Padding(
-          padding: const EdgeInsets.all(2),
-          child: widget.day == null
-              ? Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      width: 1,
-                    ),
-                  ),
-                )
-              : GestureDetector(
-                  key: _key,
-                  onTap: _openPopover,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: widget.value == null
-                          ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05)
-                          : widget.intensity == 0
-                              ? widget.color.withValues(alpha: 0.10)
-                              : widget.color.withValues(alpha: 0.15 + 0.85 * widget.intensity),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        width: 1,
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          top: 2,
-                          left: 4,
-                          child: Text(
-                            '${widget.day}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                        if (widget.showValue && widget.value?.intValue != null)
-                          Center(
-                            child: FittedBox(
-                              child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Text(
-                                  '${widget.value!.intValue}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: widget.intensity > 0.5
-                                        ? Colors.white
-                                        : Theme.of(context).colorScheme.onSurface,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Yearly heatmap calendar
 // ---------------------------------------------------------------------------
 
 class _YearHeatmapCalendar extends ConsumerWidget {
-  const _YearHeatmapCalendar({
-    required this.tracker,
-    required this.analytics,
-  });
+  const _YearHeatmapCalendar({required this.tracker, required this.analytics});
 
   final StatisticTracker tracker;
   final AnalyticsService analytics;
@@ -3258,66 +3962,53 @@ class _YearHeatmapCalendar extends ConsumerWidget {
       data: (values) {
         final max = analytics.rollingMax(values, days: 366);
 
-        return Focus(
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                previousYear();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                nextYear();
-                return KeyEventResult.handled;
-              }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: previousYear,
+        // Arrow-key paging is handled once for every calendar by
+        // [_CalendarView] above — see [_CalendarView._page].
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: previousYear,
+                ),
+                Text(
+                  '$year',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-                  Text(
-                    '$year',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: nextYear,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              for (var row = 0; row < 4; row++) ...[
-                if (row > 0) const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var col = 0; col < 3; col++) ...[
-                      if (col > 0) const SizedBox(width: 8),
-                      Expanded(
-                        child: _HeatmapMonthTile(
-                          month: DateTime(year, row * 3 + col + 1),
-                          tracker: tracker,
-                          values: values,
-                          maxInPeriod: max,
-                          analytics: analytics,
-                          weekStartsMonday: weekStartsMonday,
-                        ),
-                      ),
-                    ],
-                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: nextYear,
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            for (var row = 0; row < 4; row++) ...[
+              if (row > 0) const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var col = 0; col < 3; col++) ...[
+                    if (col > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: _HeatmapMonthTile(
+                        month: DateTime(year, row * 3 + col + 1),
+                        tracker: tracker,
+                        values: values,
+                        maxInPeriod: max,
+                        analytics: analytics,
+                        weekStartsMonday: weekStartsMonday,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
-          ),
+          ],
         );
       },
       loading: () => const SizedBox(
@@ -3351,8 +4042,19 @@ class _HeatmapMonthTile extends StatelessWidget {
   final bool weekStartsMonday;
 
   static const _monthNames = [
-    '', 'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    '',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   @override
@@ -3366,53 +4068,59 @@ class _HeatmapMonthTile extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
         padding: const EdgeInsets.all(6),
-        child: LayoutBuilder(builder: (context, constraints) {
-          final daySize = constraints.maxWidth / 7;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _monthNames[month.month],
-                style: MonthTitleHeader.yearTileMonthNameStyle(context),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textHeightBehavior: MonthTitleHeader.titleTextHeightBehavior,
-              ),
-              const SizedBox(height: MonthTitleHeader.titleGap),
-              WeekdayHeaderRow(
-                weekStartsMonday: weekStartsMonday,
-                useSingleLetterLabels: false,
-                labelStyle: calendarWeekdayLabelStyle(
-                  context,
-                  fontSize: MonthDayCellStyle.compact.fontSize,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final daySize = constraints.maxWidth / 7;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _monthNames[month.month],
+                  style: MonthTitleHeader.yearTileMonthNameStyle(context),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textHeightBehavior: MonthTitleHeader.titleTextHeightBehavior,
                 ),
-              ),
-              const SizedBox(height: monthDayGridWeekdayHeaderGap),
-              for (var row = 0; row < 6; row++)
-                Row(
-                  children: tracker.cadence == TrackerCadence.weekly
-                      ? _weeklyRowCells(row: row, cells: cells, daySize: daySize)
-                      : [
-                          for (var col = 0; col < 7; col++)
-                            SizedBox(
-                              width: daySize,
-                              height: daySize,
-                              child: _HeatmapDayCell(
-                                tracker: tracker,
-                                date: cells[row * 7 + col],
-                                month: month,
-                                values: values,
-                                maxInPeriod: maxInPeriod,
-                                analytics: analytics,
+                const SizedBox(height: MonthTitleHeader.titleGap),
+                WeekdayHeaderRow(
+                  weekStartsMonday: weekStartsMonday,
+                  useSingleLetterLabels: false,
+                  labelStyle: calendarWeekdayLabelStyle(
+                    context,
+                    fontSize: MonthDayCellStyle.compact.fontSize,
+                  ),
+                ),
+                const SizedBox(height: monthDayGridWeekdayHeaderGap),
+                for (var row = 0; row < 6; row++)
+                  Row(
+                    children: tracker.cadence == TrackerCadence.weekly
+                        ? _weeklyRowCells(
+                            row: row,
+                            cells: cells,
+                            daySize: daySize,
+                          )
+                        : [
+                            for (var col = 0; col < 7; col++)
+                              SizedBox(
+                                width: daySize,
+                                height: daySize,
+                                child: _HeatmapDayCell(
+                                  tracker: tracker,
+                                  date: cells[row * 7 + col],
+                                  month: month,
+                                  values: values,
+                                  maxInPeriod: maxInPeriod,
+                                  analytics: analytics,
+                                ),
                               ),
-                            ),
-                        ],
-                ),
-            ],
-          );
-        }),
+                          ],
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -3497,11 +4205,15 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
     );
     final color = Color(widget.tracker.colorValue);
     final fade = inMonth ? 1.0 : 0.4;
-    final bgColor = value == null
+    // Days spilling in from an adjacent month never take the tracker's colour
+    // fill — they render as neutral (faded) cells so only the days that
+    // actually belong to this month light up. Their own value shows when that
+    // month is in view.
+    final bgColor = (!inMonth || value == null)
         ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05 * fade)
         : intensity == 0
-            ? color.withValues(alpha: 0.10 * fade)
-            : color.withValues(alpha: (0.15 + 0.85 * intensity) * fade);
+        ? color.withValues(alpha: 0.10 * fade)
+        : color.withValues(alpha: (0.15 + 0.85 * intensity) * fade);
 
     return _hoverTooltip(
       context: context,
@@ -3520,7 +4232,14 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
         padding: const EdgeInsets.all(1),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(MonthDayCellStyle.compact.borderRadius),
+          borderRadius: BorderRadius.circular(
+            MonthDayCellStyle.compact.borderRadius,
+          ),
+          // Spill-in days from an adjacent month render neutral, so they
+          // never glow either.
+          boxShadow: (!inMonth || value == null)
+              ? const []
+              : _heatmapGlow(color, intensity),
         ),
         child: Align(
           alignment: Alignment.topLeft,
@@ -3531,10 +4250,9 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
               fontWeight: FontWeight.w500,
               color: inMonth
                   ? Theme.of(context).colorScheme.onSurfaceVariant
-                  : Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant
-                      .withValues(alpha: calendarAdjacentMonthTextOpacity),
+                  : Theme.of(context).colorScheme.onSurfaceVariant.withValues(
+                      alpha: calendarAdjacentMonthTextOpacity,
+                    ),
             ),
           ),
         ),
@@ -3602,8 +4320,8 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
     final baseAlpha = value == null
         ? 0.05
         : intensity == 0
-            ? 0.10
-            : 0.15 + 0.85 * intensity;
+        ? 0.10
+        : 0.15 + 0.85 * intensity;
     final baseColor = value == null ? theme.colorScheme.onSurface : color;
 
     return _hoverTooltip(
@@ -3622,7 +4340,12 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
         margin: const EdgeInsets.all(1),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(MonthDayCellStyle.compact.borderRadius),
+          borderRadius: BorderRadius.circular(
+            MonthDayCellStyle.compact.borderRadius,
+          ),
+          // The week reads as one block, so the glow goes on the block rather
+          // than on each of its day segments.
+          boxShadow: value == null ? const [] : _heatmapGlow(color, intensity),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3643,8 +4366,9 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
                         fontWeight: FontWeight.w500,
                         color: _inMonth(d)
                             ? theme.colorScheme.onSurfaceVariant
-                            : theme.colorScheme.onSurfaceVariant
-                                .withValues(alpha: calendarAdjacentMonthTextOpacity),
+                            : theme.colorScheme.onSurfaceVariant.withValues(
+                                alpha: calendarAdjacentMonthTextOpacity,
+                              ),
                       ),
                     ),
                   ),
@@ -3674,84 +4398,75 @@ class _MonthGridCalendar extends ConsumerWidget {
     final baseYear = ref.watch(_calendarViewMonthlyBaseYearProvider);
 
     void previousWindow() {
-      ref.read(_calendarViewMonthlyBaseYearProvider.notifier).update((y) => y - 2);
+      ref
+          .read(_calendarViewMonthlyBaseYearProvider.notifier)
+          .update((y) => y - _monthGridWindowYears);
     }
 
     void nextWindow() {
-      ref.read(_calendarViewMonthlyBaseYearProvider.notifier).update((y) => y + 2);
+      ref
+          .read(_calendarViewMonthlyBaseYearProvider.notifier)
+          .update((y) => y + _monthGridWindowYears);
     }
 
     return valuesAsync.when(
       data: (values) {
         final max = analytics.rollingMax(values, days: 731);
 
-        return Focus(
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                previousWindow();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                nextWindow();
-                return KeyEventResult.handled;
-              }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: previousWindow,
-                  ),
-                  Text(
-                    '$baseYear – ${baseYear + 1}',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: nextWindow,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              for (var row = 0; row < 2; row++) ...[
-                if (row > 0) const SizedBox(height: 20),
+        // Arrow-key paging is handled once for every calendar by
+        // [_CalendarView] above — see [_CalendarView._page].
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: previousWindow,
+                ),
                 Text(
-                  '${baseYear + row}',
-                  style: theme.textTheme.titleSmall?.copyWith(
+                  '$baseYear – ${baseYear + _monthGridWindowYears - 1}',
+                  style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    for (var m = 0; m < 12; m++)
-                      Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(right: m < 11 ? 6 : 0),
-                          child: _MonthGridBox(
-                            tracker: tracker,
-                            periodDate: DateTime(baseYear + row, m + 1, 1),
-                            values: values,
-                            maxInPeriod: max,
-                            analytics: analytics,
-                          ),
-                        ),
-                      ),
-                  ],
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: nextWindow,
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            for (var row = 0; row < _monthGridWindowYears; row++) ...[
+              if (row > 0) const SizedBox(height: 20),
+              Text(
+                '${baseYear + row}',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  for (var m = 0; m < 12; m++)
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(right: m < 11 ? 6 : 0),
+                        child: _MonthGridBox(
+                          tracker: tracker,
+                          periodDate: DateTime(baseYear + row, m + 1, 1),
+                          values: values,
+                          maxInPeriod: max,
+                          analytics: analytics,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
-          ),
+          ],
         );
       },
       loading: () => const SizedBox(
@@ -3784,11 +4499,16 @@ class _MonthGridBox extends ConsumerStatefulWidget {
 
 class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
   TrackerValue? _findValue() {
+    // Match the canonical month period-start exactly (the 1st). Matching
+    // year+month alone would also pick up any daily row recorded in that
+    // month, so a tracker toggled from daily to monthly would surface an
+    // arbitrary daily value as the month's — and overwrite it on edit.
     return widget.values.cast<TrackerValue?>().firstWhere(
       (v) =>
           v != null &&
           v.periodStart.year == widget.periodDate.year &&
-          v.periodStart.month == widget.periodDate.month,
+          v.periodStart.month == widget.periodDate.month &&
+          v.periodStart.day == widget.periodDate.day,
       orElse: () => null,
     );
   }
@@ -3808,8 +4528,8 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
     final bgColor = value == null
         ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
         : intensity == 0
-            ? color.withValues(alpha: 0.10)
-            : color.withValues(alpha: 0.15 + 0.85 * intensity);
+        ? color.withValues(alpha: 0.10)
+        : color.withValues(alpha: 0.15 + 0.85 * intensity);
 
     return Column(
       children: [
@@ -3817,12 +4537,17 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
           aspectRatio: 1,
           child: _hoverTooltip(
             context: context,
-            periodLabel: _tooltipPeriodLabel(widget.periodDate, TrackerCadence.monthly),
+            periodLabel: _tooltipPeriodLabel(
+              widget.periodDate,
+              TrackerCadence.monthly,
+            ),
             type: widget.tracker.type,
             value: value,
             tracker: widget.tracker,
             periodDate: widget.periodDate,
-            valueColor: value == null ? null : _heatmapValueColor(color, intensity),
+            valueColor: value == null
+                ? null
+                : _heatmapValueColor(color, intensity),
             onSaved: () {
               ref.invalidate(trackerValuesProvider(widget.tracker.id));
               ref.invalidate(pendingStatEntriesProvider);
@@ -3832,6 +4557,9 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                boxShadow: value == null
+                    ? const []
+                    : _heatmapGlow(color, intensity),
               ),
             ),
           ),
@@ -3858,8 +4586,6 @@ class _YearGridCalendar extends ConsumerWidget {
   final StatisticTracker tracker;
   final AnalyticsService analytics;
 
-  static const _yearCount = 10;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
@@ -3867,73 +4593,69 @@ class _YearGridCalendar extends ConsumerWidget {
     final baseYear = ref.watch(_calendarViewYearlyBaseYearProvider);
 
     void previousWindow() {
-      ref.read(_calendarViewYearlyBaseYearProvider.notifier).update((y) => y - _yearCount);
+      ref
+          .read(_calendarViewYearlyBaseYearProvider.notifier)
+          .update((y) => y - _yearGridWindowYears);
     }
 
     void nextWindow() {
-      ref.read(_calendarViewYearlyBaseYearProvider.notifier).update((y) => y + _yearCount);
+      ref
+          .read(_calendarViewYearlyBaseYearProvider.notifier)
+          .update((y) => y + _yearGridWindowYears);
     }
 
     return valuesAsync.when(
       data: (values) {
-        final max = analytics.rollingMax(values, days: 365 * _yearCount);
+        final max = analytics.rollingMax(
+          values,
+          days: 365 * _yearGridWindowYears,
+        );
 
-        return Focus(
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                previousWindow();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                nextWindow();
-                return KeyEventResult.handled;
-              }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: previousWindow,
+        // Arrow-key paging is handled once for every calendar by
+        // [_CalendarView] above — see [_CalendarView._page].
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: previousWindow,
+                ),
+                Text(
+                  '$baseYear – ${baseYear + _yearGridWindowYears - 1}',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-                  Text(
-                    '$baseYear – ${baseYear + _yearCount - 1}',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: nextWindow,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  for (var i = 0; i < _yearCount; i++)
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(right: i < _yearCount - 1 ? 6 : 0),
-                        child: _YearGridBox(
-                          tracker: tracker,
-                          periodDate: DateTime(baseYear + i),
-                          values: values,
-                          maxInPeriod: max,
-                          analytics: analytics,
-                        ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: nextWindow,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                for (var i = 0; i < _yearGridWindowYears; i++)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: i < _yearGridWindowYears - 1 ? 6 : 0,
+                      ),
+                      child: _YearGridBox(
+                        tracker: tracker,
+                        periodDate: DateTime(baseYear + i),
+                        values: values,
+                        maxInPeriod: max,
+                        analytics: analytics,
                       ),
                     ),
-                ],
-              ),
-            ],
-          ),
+                  ),
+              ],
+            ),
+          ],
         );
       },
       loading: () => const SizedBox(
@@ -3966,8 +4688,16 @@ class _YearGridBox extends ConsumerStatefulWidget {
 
 class _YearGridBoxState extends ConsumerState<_YearGridBox> {
   TrackerValue? _findValue() {
+    // Match the canonical year period-start exactly (Jan 1). Matching the
+    // year alone would also pick up any daily/monthly row in that year, so a
+    // tracker toggled to yearly would surface an unrelated value as the
+    // year's — and overwrite it on edit.
     return widget.values.cast<TrackerValue?>().firstWhere(
-      (v) => v != null && v.periodStart.year == widget.periodDate.year,
+      (v) =>
+          v != null &&
+          v.periodStart.year == widget.periodDate.year &&
+          v.periodStart.month == widget.periodDate.month &&
+          v.periodStart.day == widget.periodDate.day,
       orElse: () => null,
     );
   }
@@ -3987,8 +4717,8 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
     final bgColor = value == null
         ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
         : intensity == 0
-            ? color.withValues(alpha: 0.10)
-            : color.withValues(alpha: 0.15 + 0.85 * intensity);
+        ? color.withValues(alpha: 0.10)
+        : color.withValues(alpha: 0.15 + 0.85 * intensity);
 
     return Column(
       children: [
@@ -3996,12 +4726,17 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
           aspectRatio: 1,
           child: _hoverTooltip(
             context: context,
-            periodLabel: _tooltipPeriodLabel(widget.periodDate, TrackerCadence.yearly),
+            periodLabel: _tooltipPeriodLabel(
+              widget.periodDate,
+              TrackerCadence.yearly,
+            ),
             type: widget.tracker.type,
             value: value,
             tracker: widget.tracker,
             periodDate: widget.periodDate,
-            valueColor: value == null ? null : _heatmapValueColor(color, intensity),
+            valueColor: value == null
+                ? null
+                : _heatmapValueColor(color, intensity),
             onSaved: () {
               ref.invalidate(trackerValuesProvider(widget.tracker.id));
               ref.invalidate(pendingStatEntriesProvider);
@@ -4011,6 +4746,9 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                boxShadow: value == null
+                    ? const []
+                    : _heatmapGlow(color, intensity),
               ),
             ),
           ),
@@ -4066,10 +4804,12 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
     super.initState();
     final t = widget.tracker;
     _nameController = TextEditingController(text: t?.name ?? '');
-    _defaultIntController =
-        TextEditingController(text: t?.defaultInt.toString() ?? '0');
-    _capController =
-        TextEditingController(text: t?.integerCap?.toString() ?? '10');
+    _defaultIntController = TextEditingController(
+      text: t?.defaultInt.toString() ?? '0',
+    );
+    _capController = TextEditingController(
+      text: t?.integerCap?.toString() ?? '10',
+    );
     _type = t?.type ?? TrackerType.integer;
     _cadence = t?.cadence ?? TrackerCadence.daily;
     _trackingStyle = t?.effectiveTrackingStyle ?? TrackerStyle.independent;
@@ -4127,7 +4867,11 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
       elevation: 24,
       titlePadding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      title: Text(widget.tracker != null ? 'Edit statistic tracker' : 'New statistic tracker'),
+      title: Text(
+        widget.tracker != null
+            ? 'Edit statistic tracker'
+            : 'New statistic tracker',
+      ),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -4142,7 +4886,12 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Name',
                   isDense: true,
-                  contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                  contentPadding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 0,
+                    bottom: 12,
+                  ),
                 ),
                 onSubmitted: (_) => _submit(),
               ),
@@ -4159,8 +4908,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                       ),
                     )
                     .toList(),
-                onChanged: (value) =>
-                    setState(() => _type = value ?? _type),
+                onChanged: (value) => setState(() => _type = value ?? _type),
               ),
               // TrackingStyle only for integers
               if (_type == TrackerType.integer) ...[
@@ -4221,8 +4969,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 title: const Text('Show on calendar'),
                 value: _showOnCalendar,
                 activeColor: accent,
-                onChanged: (value) =>
-                    setState(() => _showOnCalendar = value),
+                onChanged: (value) => setState(() => _showOnCalendar = value),
               ),
               if (_type == TrackerType.integer) ...[
                 if (!_hasCap) ...[
@@ -4234,7 +4981,12 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                     decoration: const InputDecoration(
                       labelText: 'Default value',
                       isDense: true,
-                      contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                      contentPadding: EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 0,
+                        bottom: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -4260,12 +5012,19 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                           controller: _defaultIntController,
                           focusNode: _lowerFocusNode,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           accentColor: accent,
                           decoration: const InputDecoration(
                             labelText: 'Lower limit',
                             isDense: true,
-                            contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                            contentPadding: EdgeInsets.only(
+                              left: 16,
+                              right: 16,
+                              top: 0,
+                              bottom: 12,
+                            ),
                           ),
                         ),
                       ),
@@ -4273,7 +5032,9 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Text(
                           '-',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: accent),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleLarge?.copyWith(color: accent),
                         ),
                       ),
                       Expanded(
@@ -4281,12 +5042,19 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                           controller: _capController,
                           focusNode: _upperFocusNode,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           accentColor: accent,
                           decoration: const InputDecoration(
                             labelText: 'Upper limit',
                             isDense: true,
-                            contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                            contentPadding: EdgeInsets.only(
+                              left: 16,
+                              right: 16,
+                              top: 0,
+                              bottom: 12,
+                            ),
                           ),
                         ),
                       ),
@@ -4300,8 +5068,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   title: const Text('Default checked'),
                   value: _defaultBool,
                   activeColor: accent,
-                  onChanged: (value) =>
-                      setState(() => _defaultBool = value),
+                  onChanged: (value) => setState(() => _defaultBool = value),
                 ),
               if (_type == TrackerType.enumType) ...[
                 if (_optionControllers.isNotEmpty) ...[
@@ -4321,9 +5088,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                                 index: i,
                                 child: Icon(
                                   Icons.drag_handle,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
+                                  color: Theme.of(context).colorScheme.onSurface
                                       .withValues(alpha: 0.5),
                                 ),
                               ),
@@ -4344,7 +5109,9 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                                   ),
                                   onChanged: (_) => setState(() {
                                     _optionError = null;
-                                    if (!_enumOptions.contains(_defaultEnumOption)) {
+                                    if (!_enumOptions.contains(
+                                      _defaultEnumOption,
+                                    )) {
                                       _defaultEnumOption = null;
                                     }
                                   }),
@@ -4369,10 +5136,16 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   decoration: const InputDecoration(
                     labelText: 'Add option',
                     isDense: true,
-                    contentPadding: EdgeInsets.only(left: 16, right: 16, top: 0, bottom: 12),
+                    contentPadding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 0,
+                      bottom: 12,
+                    ),
                   ),
                   onChanged: (_) {
-                    if (_optionError != null) setState(() => _optionError = null);
+                    if (_optionError != null)
+                      setState(() => _optionError = null);
                   },
                   onSubmitted: (_) => _addOption(),
                 ),
@@ -4414,9 +5187,14 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
               ColorPickerField(
                 label: 'Tracker color',
                 value: _colorValue,
-                maxHeight: paletteViewportHeight(18, visibleRows: 3, clipPartialNextRow: true) - 4,
-                onChanged: (value) =>
-                    setState(() => _colorValue = value),
+                maxHeight:
+                    paletteViewportHeight(
+                      18,
+                      visibleRows: 3,
+                      clipPartialNextRow: true,
+                    ) -
+                    4,
+                onChanged: (value) => setState(() => _colorValue = value),
               ),
             ],
           ),
@@ -4425,16 +5203,12 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          style: TextButton.styleFrom(
-            foregroundColor: accent,
-          ),
+          style: TextButton.styleFrom(foregroundColor: accent),
           child: const Text('Cancel'),
         ),
         FilledButton(
           onPressed: _submit,
-          style: FilledButton.styleFrom(
-            backgroundColor: accent,
-          ),
+          style: FilledButton.styleFrom(backgroundColor: accent),
           child: Text(widget.tracker != null ? 'Save' : 'Create'),
         ),
       ],
@@ -4529,8 +5303,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         enumOptions: enumOptions,
         defaultEnumOption: _defaultEnumOption,
         // Only set trackingStyle for integer type; null for others
-        trackingStyle:
-            _type == TrackerType.integer ? _trackingStyle : null,
+        trackingStyle: _type == TrackerType.integer ? _trackingStyle : null,
         starred: widget.tracker?.starred ?? false,
         sortOrder: widget.tracker?.sortOrder ?? 0,
         createdAt: widget.tracker?.createdAt ?? now,
@@ -4551,4 +5324,3 @@ String _typeLabel(TrackerType type) {
     TrackerType.enumType => 'Dropdown',
   };
 }
-

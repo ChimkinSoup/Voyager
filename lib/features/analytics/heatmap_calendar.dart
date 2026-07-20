@@ -51,7 +51,10 @@ class HeatmapCalendar extends StatelessWidget {
               tracker.colorValue,
             ).withValues(alpha: 0.2 + (0.8 * intensity)),
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.1),
+              width: 1,
+            ),
           ),
         );
       }),

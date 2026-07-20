@@ -9,6 +9,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
@@ -856,6 +857,546 @@ class DriftTrackerRepository implements TrackerRepository {
   );
 }
 
+class DriftFinanceRepository implements FinanceRepository {
+  DriftFinanceRepository(this._db);
+
+  final AppDatabase _db;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<List<FinancialTransaction>> listTransactions({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.transactionsTable).get();
+    final transactions = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_map)
+        .toList();
+    // Newest first — the ledger is a reverse-chronological feed.
+    transactions.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    return transactions;
+  }
+
+  @override
+  Future<void> upsertTransaction(FinancialTransaction transaction) async {
+    await _db
+        .into(_db.transactionsTable)
+        .insertOnConflictUpdate(
+          TransactionsTableCompanion(
+            id: Value(transaction.id),
+            type: Value(transaction.type.name),
+            amountCents: Value(transaction.amountCents),
+            note: Value(transaction.note),
+            tagsJson: Value(jsonEncode(transaction.tags)),
+            occurredAt: Value(transaction.occurredAt),
+            createdAt: Value(transaction.createdAt),
+            updatedAt: Value(transaction.updatedAt),
+            version: Value(transaction.version),
+            deletedAt: Value(transaction.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteTransaction(String id) async {
+    await (_db.update(
+      _db.transactionsTable,
+    )..where((t) => t.id.equals(id))).write(
+      TransactionsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<List<Subscription>> listSubscriptions({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.subscriptionsTable).get();
+    final subscriptions = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapSubscription)
+        .toList();
+    // Soonest due first — the radar is a countdown to the next bill.
+    subscriptions.sort((a, b) => a.nextDue().compareTo(b.nextDue()));
+    return subscriptions;
+  }
+
+  @override
+  Future<void> upsertSubscription(Subscription subscription) async {
+    await _db
+        .into(_db.subscriptionsTable)
+        .insertOnConflictUpdate(
+          SubscriptionsTableCompanion(
+            id: Value(subscription.id),
+            name: Value(subscription.name),
+            amountCents: Value(subscription.amountCents),
+            period: Value(subscription.period.name),
+            anchorDueDate: Value(subscription.anchorDueDate),
+            colorValue: Value(subscription.colorValue),
+            note: Value(subscription.note),
+            createdAt: Value(subscription.createdAt),
+            updatedAt: Value(subscription.updatedAt),
+            version: Value(subscription.version),
+            deletedAt: Value(subscription.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteSubscription(String id) async {
+    await (_db.update(
+      _db.subscriptionsTable,
+    )..where((t) => t.id.equals(id))).write(
+      SubscriptionsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<List<Budget>> listBudgets({bool includeDeleted = false}) async {
+    final rows = await _db.select(_db.budgetsTable).get();
+    final budgets = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapBudget)
+        .toList();
+    budgets.sort((a, b) => a.tag.toLowerCase().compareTo(b.tag.toLowerCase()));
+    return budgets;
+  }
+
+  @override
+  Future<void> upsertBudget(Budget budget) async {
+    await _db
+        .into(_db.budgetsTable)
+        .insertOnConflictUpdate(
+          BudgetsTableCompanion(
+            id: Value(budget.id),
+            tag: Value(budget.tag),
+            limitCents: Value(budget.limitCents),
+            createdAt: Value(budget.createdAt),
+            updatedAt: Value(budget.updatedAt),
+            version: Value(budget.version),
+            deletedAt: Value(budget.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteBudget(String id) async {
+    await (_db.update(_db.budgetsTable)..where((t) => t.id.equals(id))).write(
+      BudgetsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<List<FinanceCategory>> listCategories({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.financeCategoriesTable).get();
+    final categories = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapCategory)
+        .toList();
+    categories
+        .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return categories;
+  }
+
+  @override
+  Future<void> upsertCategory(FinanceCategory category) async {
+    await _db
+        .into(_db.financeCategoriesTable)
+        .insertOnConflictUpdate(
+          FinanceCategoriesTableCompanion(
+            id: Value(category.id),
+            name: Value(category.name),
+            colorValue: Value(category.colorValue),
+            tagsJson: Value(jsonEncode(category.tags)),
+            createdAt: Value(category.createdAt),
+            updatedAt: Value(category.updatedAt),
+            version: Value(category.version),
+            deletedAt: Value(category.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteCategory(String id) async {
+    await (_db.update(
+      _db.financeCategoriesTable,
+    )..where((t) => t.id.equals(id))).write(
+      FinanceCategoriesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<List<Asset>> listAssets({bool includeDeleted = false}) async {
+    final rows = await _db.select(_db.assetsTable).get();
+    final assets = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapAsset)
+        .toList();
+    assets.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return assets;
+  }
+
+  @override
+  Future<void> upsertAsset(Asset asset) async {
+    await _db
+        .into(_db.assetsTable)
+        .insertOnConflictUpdate(
+          AssetsTableCompanion(
+            id: Value(asset.id),
+            name: Value(asset.name),
+            note: Value(asset.note),
+            colorValue: Value(asset.colorValue),
+            createdAt: Value(asset.createdAt),
+            updatedAt: Value(asset.updatedAt),
+            version: Value(asset.version),
+            deletedAt: Value(asset.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteAsset(String id) async {
+    await (_db.update(_db.assetsTable)..where((t) => t.id.equals(id))).write(
+      AssetsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    // Tombstone the asset's valuations too, so a deleted asset stops
+    // contributing to historical net-worth points.
+    await (_db.update(
+      _db.assetValuationsTable,
+    )..where((t) => t.assetId.equals(id) & t.deletedAt.isNull())).write(
+      AssetValuationsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<List<AssetValuation>> listAssetValuations({
+    String? assetId,
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.assetValuationsTable).get();
+    final valuations = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .where((r) => assetId == null || r.assetId == assetId)
+        .map(_mapValuation)
+        .toList();
+    valuations.sort((a, b) => b.asOf.compareTo(a.asOf));
+    return valuations;
+  }
+
+  @override
+  Future<void> upsertAssetValuation(AssetValuation valuation) async {
+    await _db
+        .into(_db.assetValuationsTable)
+        .insertOnConflictUpdate(
+          AssetValuationsTableCompanion(
+            id: Value(valuation.id),
+            assetId: Value(valuation.assetId),
+            valueCents: Value(valuation.valueCents),
+            asOf: Value(valuation.asOf),
+            createdAt: Value(valuation.createdAt),
+            updatedAt: Value(valuation.updatedAt),
+            version: Value(valuation.version),
+            deletedAt: Value(valuation.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteAssetValuation(String id) async {
+    await (_db.update(
+      _db.assetValuationsTable,
+    )..where((t) => t.id.equals(id))).write(
+      AssetValuationsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<List<SavingsGoal>> listSavingsGoals({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.savingsGoalsTable).get();
+    final goals = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapGoal)
+        .toList();
+    goals.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return goals;
+  }
+
+  @override
+  Future<void> upsertSavingsGoal(SavingsGoal goal) async {
+    await _db
+        .into(_db.savingsGoalsTable)
+        .insertOnConflictUpdate(
+          SavingsGoalsTableCompanion(
+            id: Value(goal.id),
+            name: Value(goal.name),
+            targetCents: Value(goal.targetCents),
+            colorValue: Value(goal.colorValue),
+            note: Value(goal.note),
+            targetDate: Value(goal.targetDate),
+            createdAt: Value(goal.createdAt),
+            updatedAt: Value(goal.updatedAt),
+            version: Value(goal.version),
+            deletedAt: Value(goal.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteSavingsGoal(String id) async {
+    await (_db.update(
+      _db.savingsGoalsTable,
+    )..where((t) => t.id.equals(id))).write(
+      SavingsGoalsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    // Tombstone the goal's allocations so they stop counting toward progress.
+    await (_db.update(
+      _db.goalAllocationsTable,
+    )..where((t) => t.goalId.equals(id) & t.deletedAt.isNull())).write(
+      GoalAllocationsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  @override
+  Future<List<GoalAllocation>> listGoalAllocations({
+    String? goalId,
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.goalAllocationsTable).get();
+    final allocations = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .where((r) => goalId == null || r.goalId == goalId)
+        .map(_mapAllocation)
+        .toList();
+    allocations.sort((a, b) => b.allocatedAt.compareTo(a.allocatedAt));
+    return allocations;
+  }
+
+  @override
+  Future<void> upsertGoalAllocation(GoalAllocation allocation) async {
+    await _db
+        .into(_db.goalAllocationsTable)
+        .insertOnConflictUpdate(
+          GoalAllocationsTableCompanion(
+            id: Value(allocation.id),
+            goalId: Value(allocation.goalId),
+            amountCents: Value(allocation.amountCents),
+            allocatedAt: Value(allocation.allocatedAt),
+            note: Value(allocation.note),
+            createdAt: Value(allocation.createdAt),
+            updatedAt: Value(allocation.updatedAt),
+            version: Value(allocation.version),
+            deletedAt: Value(allocation.deletedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> softDeleteGoalAllocation(String id) async {
+    await (_db.update(
+      _db.goalAllocationsTable,
+    )..where((t) => t.id.equals(id))).write(
+      GoalAllocationsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+  }
+
+  SavingsGoal _mapGoal(SavingsGoalsTableData row) => SavingsGoal(
+    id: row.id,
+    name: row.name,
+    targetCents: row.targetCents,
+    colorValue: row.colorValue,
+    note: row.note,
+    targetDate: row.targetDate,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  GoalAllocation _mapAllocation(GoalAllocationsTableData row) => GoalAllocation(
+    id: row.id,
+    goalId: row.goalId,
+    amountCents: row.amountCents,
+    allocatedAt: row.allocatedAt,
+    note: row.note,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  FinanceCategory _mapCategory(FinanceCategoriesTableData row) =>
+      FinanceCategory(
+        id: row.id,
+        name: row.name,
+        colorValue: row.colorValue,
+        tags: List<String>.from(jsonDecode(row.tagsJson) as List),
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  Asset _mapAsset(AssetsTableData row) => Asset(
+    id: row.id,
+    name: row.name,
+    note: row.note,
+    colorValue: row.colorValue,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  AssetValuation _mapValuation(AssetValuationsTableData row) => AssetValuation(
+    id: row.id,
+    assetId: row.assetId,
+    valueCents: row.valueCents,
+    asOf: row.asOf,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    final rows = await _db.select(_db.transactionsTable).get();
+    for (final row in rows) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.transactionsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    final subscriptions = await _db.select(_db.subscriptionsTable).get();
+    for (final row in subscriptions) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.subscriptionsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    final budgets = await _db.select(_db.budgetsTable).get();
+    for (final row in budgets) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.budgetsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    final categories = await _db.select(_db.financeCategoriesTable).get();
+    for (final row in categories) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.financeCategoriesTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    final valuations = await _db.select(_db.assetValuationsTable).get();
+    for (final row in valuations) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.assetValuationsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    final assets = await _db.select(_db.assetsTable).get();
+    for (final row in assets) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.assetsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    final allocations = await _db.select(_db.goalAllocationsTable).get();
+    for (final row in allocations) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.goalAllocationsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    final goals = await _db.select(_db.savingsGoalsTable).get();
+    for (final row in goals) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.savingsGoalsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+  }
+
+  Budget _mapBudget(BudgetsTableData row) => Budget(
+    id: row.id,
+    tag: row.tag,
+    limitCents: row.limitCents,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  Subscription _mapSubscription(SubscriptionsTableData row) => Subscription(
+    id: row.id,
+    name: row.name,
+    amountCents: row.amountCents,
+    period: BillingPeriod.values.byName(row.period),
+    anchorDueDate: row.anchorDueDate,
+    colorValue: row.colorValue,
+    note: row.note,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  FinancialTransaction _map(TransactionsTableData row) => FinancialTransaction(
+    id: row.id,
+    type: TransactionType.values.byName(row.type),
+    amountCents: row.amountCents,
+    note: row.note,
+    tags: List<String>.from(jsonDecode(row.tagsJson) as List),
+    occurredAt: row.occurredAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+}
+
 class DriftSettingsRepository implements SettingsRepository {
   DriftSettingsRepository(this._db);
 
@@ -875,6 +1416,8 @@ class DriftSettingsRepository implements SettingsRepository {
       accentColor: row.accentColor,
       weekStartsOnMonday: row.weekStartsOnMonday,
       showQuotes: row.showQuotes,
+      showDefaultTrackersInGrid: row.showDefaultTrackersInGrid,
+      showDefaultTrackersInCalendar: row.showDefaultTrackersInCalendar,
       journalHotkey: row.journalHotkey,
       todoHotkey: row.todoHotkey,
       calendarNavigateLeftKey: row.calendarNavigateLeftKey,
@@ -915,6 +1458,32 @@ class DriftSettingsRepository implements SettingsRepository {
       geometricTextureFocalPointX: row.geometricTextureFocalPointX,
       geometricTextureFocalPointY: row.geometricTextureFocalPointY,
       geometricTextureVariationFloor: row.geometricTextureVariationFloor,
+      geometricWaveEnabled: row.geometricWaveEnabled,
+      geometricWaveShape: GeometricWaveShape.values.byName(
+        row.geometricWaveShape,
+      ),
+      geometricWaveDirectionDegrees: row.geometricWaveDirectionDegrees,
+      geometricWaveSpeed: row.geometricWaveSpeed,
+      geometricWaveWidth: row.geometricWaveWidth,
+      geometricWavePeriod: row.geometricWavePeriod,
+      geometricWavePopHoldSeconds: row.geometricWavePopHoldSeconds,
+      geometricWavePopScale: row.geometricWavePopScale,
+      geometricWavePopBrightness: row.geometricWavePopBrightness,
+      geometricWaveMaskDensity: row.geometricWaveMaskDensity,
+      geometricWaveMaskClusterScale: row.geometricWaveMaskClusterScale,
+      geometricWaveTwinkleSparsity: row.geometricWaveTwinkleSparsity,
+      geometricWaveShadowLightDegrees: row.geometricWaveShadowLightDegrees,
+      geometricWaveShadowOffset: row.geometricWaveShadowOffset,
+      geometricWaveShadowSoftness: row.geometricWaveShadowSoftness,
+      geometricWaveShadowStrength: row.geometricWaveShadowStrength,
+      geometricWavePopBrightnessVariance:
+          row.geometricWavePopBrightnessVariance,
+      geometricWaveTiltAmount: row.geometricWaveTiltAmount,
+      geometricWaveTiltShading: row.geometricWaveTiltShading,
+      geometricWaveMassLagSeconds: row.geometricWaveMassLagSeconds,
+      geometricWaveMassSpring: row.geometricWaveMassSpring,
+      geometricWaveScatterMode: row.geometricWaveScatterMode,
+      geometricWaveScatterLitAmount: row.geometricWaveScatterLitAmount,
       weatherForecastJson: row.weatherForecastJson,
       weatherChartTempColor: row.weatherChartTempColor,
       weatherChartRainColor: row.weatherChartRainColor,
@@ -926,6 +1495,8 @@ class DriftSettingsRepository implements SettingsRepository {
       startupPageMode: StartupPageMode.values.byName(row.startupPageMode),
       customStartupPage: row.customStartupPage,
       lastSeenNavPage: row.lastSeenNavPage,
+      todoCompletedSectionExpanded: row.todoCompletedSectionExpanded,
+      showAnnualizedSubscriptionCost: row.showAnnualizedSubscriptionCost,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
     );
   }
@@ -940,6 +1511,10 @@ class DriftSettingsRepository implements SettingsRepository {
             accentColor: Value(settings.accentColor),
             weekStartsOnMonday: Value(settings.weekStartsOnMonday),
             showQuotes: Value(settings.showQuotes),
+            showDefaultTrackersInGrid:
+                Value(settings.showDefaultTrackersInGrid),
+            showDefaultTrackersInCalendar:
+                Value(settings.showDefaultTrackersInCalendar),
             journalHotkey: Value(settings.journalHotkey),
             todoHotkey: Value(settings.todoHotkey),
             calendarNavigateLeftKey: Value(settings.calendarNavigateLeftKey),
@@ -987,6 +1562,42 @@ class DriftSettingsRepository implements SettingsRepository {
                 Value(settings.geometricTextureFocalPointY),
             geometricTextureVariationFloor:
                 Value(settings.geometricTextureVariationFloor),
+            geometricWaveEnabled: Value(settings.geometricWaveEnabled),
+            geometricWaveShape: Value(settings.geometricWaveShape.name),
+            geometricWaveDirectionDegrees:
+                Value(settings.geometricWaveDirectionDegrees),
+            geometricWaveSpeed: Value(settings.geometricWaveSpeed),
+            geometricWaveWidth: Value(settings.geometricWaveWidth),
+            geometricWavePeriod: Value(settings.geometricWavePeriod),
+            geometricWavePopHoldSeconds:
+                Value(settings.geometricWavePopHoldSeconds),
+            geometricWavePopScale: Value(settings.geometricWavePopScale),
+            geometricWavePopBrightness:
+                Value(settings.geometricWavePopBrightness),
+            geometricWaveMaskDensity: Value(settings.geometricWaveMaskDensity),
+            geometricWaveMaskClusterScale:
+                Value(settings.geometricWaveMaskClusterScale),
+            geometricWaveTwinkleSparsity:
+                Value(settings.geometricWaveTwinkleSparsity),
+            geometricWaveShadowLightDegrees:
+                Value(settings.geometricWaveShadowLightDegrees),
+            geometricWaveShadowOffset:
+                Value(settings.geometricWaveShadowOffset),
+            geometricWaveShadowSoftness:
+                Value(settings.geometricWaveShadowSoftness),
+            geometricWaveShadowStrength:
+                Value(settings.geometricWaveShadowStrength),
+            geometricWavePopBrightnessVariance:
+                Value(settings.geometricWavePopBrightnessVariance),
+            geometricWaveTiltAmount: Value(settings.geometricWaveTiltAmount),
+            geometricWaveTiltShading: Value(settings.geometricWaveTiltShading),
+            geometricWaveMassLagSeconds:
+                Value(settings.geometricWaveMassLagSeconds),
+            geometricWaveMassSpring: Value(settings.geometricWaveMassSpring),
+            geometricWaveScatterMode:
+                Value(settings.geometricWaveScatterMode),
+            geometricWaveScatterLitAmount:
+                Value(settings.geometricWaveScatterLitAmount),
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),
@@ -1000,6 +1611,10 @@ class DriftSettingsRepository implements SettingsRepository {
             startupPageMode: Value(settings.startupPageMode.name),
             customStartupPage: Value(settings.customStartupPage),
             lastSeenNavPage: Value(settings.lastSeenNavPage),
+            todoCompletedSectionExpanded:
+                Value(settings.todoCompletedSectionExpanded),
+            showAnnualizedSubscriptionCost:
+                Value(settings.showAnnualizedSubscriptionCost),
             colorPaletteJson: Value(
               encodeColorPaletteJson(settings.colorPalette),
             ),

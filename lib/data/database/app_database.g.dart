@@ -5737,6 +5737,36 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _showDefaultTrackersInGridMeta =
+      const VerificationMeta('showDefaultTrackersInGrid');
+  @override
+  late final GeneratedColumn<bool> showDefaultTrackersInGrid =
+      GeneratedColumn<bool>(
+        'show_default_trackers_in_grid',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("show_default_trackers_in_grid" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  static const VerificationMeta _showDefaultTrackersInCalendarMeta =
+      const VerificationMeta('showDefaultTrackersInCalendar');
+  @override
+  late final GeneratedColumn<bool> showDefaultTrackersInCalendar =
+      GeneratedColumn<bool>(
+        'show_default_trackers_in_calendar',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("show_default_trackers_in_calendar" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
   static const VerificationMeta _journalHotkeyMeta = const VerificationMeta(
     'journalHotkey',
   );
@@ -6309,6 +6339,287 @@ class $SettingsTableTable extends SettingsTable
         requiredDuringInsert: false,
         defaultValue: const Constant(0.75),
       );
+  static const VerificationMeta _geometricWaveEnabledMeta =
+      const VerificationMeta('geometricWaveEnabled');
+  @override
+  late final GeneratedColumn<bool> geometricWaveEnabled = GeneratedColumn<bool>(
+    'geometric_wave_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("geometric_wave_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _geometricWaveShapeMeta =
+      const VerificationMeta('geometricWaveShape');
+  @override
+  late final GeneratedColumn<String> geometricWaveShape =
+      GeneratedColumn<String>(
+        'geometric_wave_shape',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('linear'),
+      );
+  static const VerificationMeta _geometricWaveDirectionDegreesMeta =
+      const VerificationMeta('geometricWaveDirectionDegrees');
+  @override
+  late final GeneratedColumn<double> geometricWaveDirectionDegrees =
+      GeneratedColumn<double>(
+        'geometric_wave_direction_degrees',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(135.0),
+      );
+  static const VerificationMeta _geometricWaveSpeedMeta =
+      const VerificationMeta('geometricWaveSpeed');
+  @override
+  late final GeneratedColumn<double> geometricWaveSpeed =
+      GeneratedColumn<double>(
+        'geometric_wave_speed',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.4),
+      );
+  static const VerificationMeta _geometricWaveWidthMeta =
+      const VerificationMeta('geometricWaveWidth');
+  @override
+  late final GeneratedColumn<double> geometricWaveWidth =
+      GeneratedColumn<double>(
+        'geometric_wave_width',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.08),
+      );
+  static const VerificationMeta _geometricWavePeriodMeta =
+      const VerificationMeta('geometricWavePeriod');
+  @override
+  late final GeneratedColumn<double> geometricWavePeriod =
+      GeneratedColumn<double>(
+        'geometric_wave_period',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(7.0),
+      );
+  static const VerificationMeta _geometricWavePopHoldSecondsMeta =
+      const VerificationMeta('geometricWavePopHoldSeconds');
+  @override
+  late final GeneratedColumn<double> geometricWavePopHoldSeconds =
+      GeneratedColumn<double>(
+        'geometric_wave_pop_hold_seconds',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.6),
+      );
+  static const VerificationMeta _geometricWavePopScaleMeta =
+      const VerificationMeta('geometricWavePopScale');
+  @override
+  late final GeneratedColumn<double> geometricWavePopScale =
+      GeneratedColumn<double>(
+        'geometric_wave_pop_scale',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(1.4),
+      );
+  static const VerificationMeta _geometricWavePopBrightnessMeta =
+      const VerificationMeta('geometricWavePopBrightness');
+  @override
+  late final GeneratedColumn<double> geometricWavePopBrightness =
+      GeneratedColumn<double>(
+        'geometric_wave_pop_brightness',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.32),
+      );
+  static const VerificationMeta _geometricWaveMaskDensityMeta =
+      const VerificationMeta('geometricWaveMaskDensity');
+  @override
+  late final GeneratedColumn<double> geometricWaveMaskDensity =
+      GeneratedColumn<double>(
+        'geometric_wave_mask_density',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.5),
+      );
+  static const VerificationMeta _geometricWaveMaskClusterScaleMeta =
+      const VerificationMeta('geometricWaveMaskClusterScale');
+  @override
+  late final GeneratedColumn<double> geometricWaveMaskClusterScale =
+      GeneratedColumn<double>(
+        'geometric_wave_mask_cluster_scale',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(5.0),
+      );
+  static const VerificationMeta _geometricWaveTwinkleSparsityMeta =
+      const VerificationMeta('geometricWaveTwinkleSparsity');
+  @override
+  late final GeneratedColumn<double> geometricWaveTwinkleSparsity =
+      GeneratedColumn<double>(
+        'geometric_wave_twinkle_sparsity',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.15),
+      );
+  static const VerificationMeta _geometricWaveShadowLightDegreesMeta =
+      const VerificationMeta('geometricWaveShadowLightDegrees');
+  @override
+  late final GeneratedColumn<double> geometricWaveShadowLightDegrees =
+      GeneratedColumn<double>(
+        'geometric_wave_shadow_light_degrees',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(225.0),
+      );
+  static const VerificationMeta _geometricWaveShadowOffsetMeta =
+      const VerificationMeta('geometricWaveShadowOffset');
+  @override
+  late final GeneratedColumn<double> geometricWaveShadowOffset =
+      GeneratedColumn<double>(
+        'geometric_wave_shadow_offset',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.06),
+      );
+  static const VerificationMeta _geometricWaveShadowSoftnessMeta =
+      const VerificationMeta('geometricWaveShadowSoftness');
+  @override
+  late final GeneratedColumn<double> geometricWaveShadowSoftness =
+      GeneratedColumn<double>(
+        'geometric_wave_shadow_softness',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.04),
+      );
+  static const VerificationMeta _geometricWaveShadowStrengthMeta =
+      const VerificationMeta('geometricWaveShadowStrength');
+  @override
+  late final GeneratedColumn<double> geometricWaveShadowStrength =
+      GeneratedColumn<double>(
+        'geometric_wave_shadow_strength',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.45),
+      );
+  static const VerificationMeta _geometricWavePopBrightnessVarianceMeta =
+      const VerificationMeta('geometricWavePopBrightnessVariance');
+  @override
+  late final GeneratedColumn<double> geometricWavePopBrightnessVariance =
+      GeneratedColumn<double>(
+        'geometric_wave_pop_brightness_variance',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.4),
+      );
+  static const VerificationMeta _geometricWaveTiltAmountMeta =
+      const VerificationMeta('geometricWaveTiltAmount');
+  @override
+  late final GeneratedColumn<double> geometricWaveTiltAmount =
+      GeneratedColumn<double>(
+        'geometric_wave_tilt_amount',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.7),
+      );
+  static const VerificationMeta _geometricWaveTiltShadingMeta =
+      const VerificationMeta('geometricWaveTiltShading');
+  @override
+  late final GeneratedColumn<double> geometricWaveTiltShading =
+      GeneratedColumn<double>(
+        'geometric_wave_tilt_shading',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.5),
+      );
+  static const VerificationMeta _geometricWaveMassLagSecondsMeta =
+      const VerificationMeta('geometricWaveMassLagSeconds');
+  @override
+  late final GeneratedColumn<double> geometricWaveMassLagSeconds =
+      GeneratedColumn<double>(
+        'geometric_wave_mass_lag_seconds',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.12),
+      );
+  static const VerificationMeta _geometricWaveMassSpringMeta =
+      const VerificationMeta('geometricWaveMassSpring');
+  @override
+  late final GeneratedColumn<double> geometricWaveMassSpring =
+      GeneratedColumn<double>(
+        'geometric_wave_mass_spring',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.3),
+      );
+  static const VerificationMeta _geometricWaveScatterModeMeta =
+      const VerificationMeta('geometricWaveScatterMode');
+  @override
+  late final GeneratedColumn<bool> geometricWaveScatterMode =
+      GeneratedColumn<bool>(
+        'geometric_wave_scatter_mode',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("geometric_wave_scatter_mode" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _geometricWaveScatterLitAmountMeta =
+      const VerificationMeta('geometricWaveScatterLitAmount');
+  @override
+  late final GeneratedColumn<double> geometricWaveScatterLitAmount =
+      GeneratedColumn<double>(
+        'geometric_wave_scatter_lit_amount',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.12),
+      );
   static const VerificationMeta _navPageOrderJsonMeta = const VerificationMeta(
     'navPageOrderJson',
   );
@@ -6355,12 +6666,44 @@ class $SettingsTableTable extends SettingsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _todoCompletedSectionExpandedMeta =
+      const VerificationMeta('todoCompletedSectionExpanded');
+  @override
+  late final GeneratedColumn<bool> todoCompletedSectionExpanded =
+      GeneratedColumn<bool>(
+        'todo_completed_section_expanded',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("todo_completed_section_expanded" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  static const VerificationMeta _showAnnualizedSubscriptionCostMeta =
+      const VerificationMeta('showAnnualizedSubscriptionCost');
+  @override
+  late final GeneratedColumn<bool> showAnnualizedSubscriptionCost =
+      GeneratedColumn<bool>(
+        'show_annualized_subscription_cost',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("show_annualized_subscription_cost" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     accentColor,
     weekStartsOnMonday,
     showQuotes,
+    showDefaultTrackersInGrid,
+    showDefaultTrackersInCalendar,
     journalHotkey,
     todoHotkey,
     calendarNavigateLeftKey,
@@ -6407,10 +6750,35 @@ class $SettingsTableTable extends SettingsTable
     geometricTextureFocalPointX,
     geometricTextureFocalPointY,
     geometricTextureVariationFloor,
+    geometricWaveEnabled,
+    geometricWaveShape,
+    geometricWaveDirectionDegrees,
+    geometricWaveSpeed,
+    geometricWaveWidth,
+    geometricWavePeriod,
+    geometricWavePopHoldSeconds,
+    geometricWavePopScale,
+    geometricWavePopBrightness,
+    geometricWaveMaskDensity,
+    geometricWaveMaskClusterScale,
+    geometricWaveTwinkleSparsity,
+    geometricWaveShadowLightDegrees,
+    geometricWaveShadowOffset,
+    geometricWaveShadowSoftness,
+    geometricWaveShadowStrength,
+    geometricWavePopBrightnessVariance,
+    geometricWaveTiltAmount,
+    geometricWaveTiltShading,
+    geometricWaveMassLagSeconds,
+    geometricWaveMassSpring,
+    geometricWaveScatterMode,
+    geometricWaveScatterLitAmount,
     navPageOrderJson,
     startupPageMode,
     customStartupPage,
     lastSeenNavPage,
+    todoCompletedSectionExpanded,
+    showAnnualizedSubscriptionCost,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6449,6 +6817,24 @@ class $SettingsTableTable extends SettingsTable
       context.handle(
         _showQuotesMeta,
         showQuotes.isAcceptableOrUnknown(data['show_quotes']!, _showQuotesMeta),
+      );
+    }
+    if (data.containsKey('show_default_trackers_in_grid')) {
+      context.handle(
+        _showDefaultTrackersInGridMeta,
+        showDefaultTrackersInGrid.isAcceptableOrUnknown(
+          data['show_default_trackers_in_grid']!,
+          _showDefaultTrackersInGridMeta,
+        ),
+      );
+    }
+    if (data.containsKey('show_default_trackers_in_calendar')) {
+      context.handle(
+        _showDefaultTrackersInCalendarMeta,
+        showDefaultTrackersInCalendar.isAcceptableOrUnknown(
+          data['show_default_trackers_in_calendar']!,
+          _showDefaultTrackersInCalendarMeta,
+        ),
       );
     }
     if (data.containsKey('journal_hotkey')) {
@@ -6850,6 +7236,213 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('geometric_wave_enabled')) {
+      context.handle(
+        _geometricWaveEnabledMeta,
+        geometricWaveEnabled.isAcceptableOrUnknown(
+          data['geometric_wave_enabled']!,
+          _geometricWaveEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_shape')) {
+      context.handle(
+        _geometricWaveShapeMeta,
+        geometricWaveShape.isAcceptableOrUnknown(
+          data['geometric_wave_shape']!,
+          _geometricWaveShapeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_direction_degrees')) {
+      context.handle(
+        _geometricWaveDirectionDegreesMeta,
+        geometricWaveDirectionDegrees.isAcceptableOrUnknown(
+          data['geometric_wave_direction_degrees']!,
+          _geometricWaveDirectionDegreesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_speed')) {
+      context.handle(
+        _geometricWaveSpeedMeta,
+        geometricWaveSpeed.isAcceptableOrUnknown(
+          data['geometric_wave_speed']!,
+          _geometricWaveSpeedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_width')) {
+      context.handle(
+        _geometricWaveWidthMeta,
+        geometricWaveWidth.isAcceptableOrUnknown(
+          data['geometric_wave_width']!,
+          _geometricWaveWidthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_period')) {
+      context.handle(
+        _geometricWavePeriodMeta,
+        geometricWavePeriod.isAcceptableOrUnknown(
+          data['geometric_wave_period']!,
+          _geometricWavePeriodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_pop_hold_seconds')) {
+      context.handle(
+        _geometricWavePopHoldSecondsMeta,
+        geometricWavePopHoldSeconds.isAcceptableOrUnknown(
+          data['geometric_wave_pop_hold_seconds']!,
+          _geometricWavePopHoldSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_pop_scale')) {
+      context.handle(
+        _geometricWavePopScaleMeta,
+        geometricWavePopScale.isAcceptableOrUnknown(
+          data['geometric_wave_pop_scale']!,
+          _geometricWavePopScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_pop_brightness')) {
+      context.handle(
+        _geometricWavePopBrightnessMeta,
+        geometricWavePopBrightness.isAcceptableOrUnknown(
+          data['geometric_wave_pop_brightness']!,
+          _geometricWavePopBrightnessMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_mask_density')) {
+      context.handle(
+        _geometricWaveMaskDensityMeta,
+        geometricWaveMaskDensity.isAcceptableOrUnknown(
+          data['geometric_wave_mask_density']!,
+          _geometricWaveMaskDensityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_mask_cluster_scale')) {
+      context.handle(
+        _geometricWaveMaskClusterScaleMeta,
+        geometricWaveMaskClusterScale.isAcceptableOrUnknown(
+          data['geometric_wave_mask_cluster_scale']!,
+          _geometricWaveMaskClusterScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_twinkle_sparsity')) {
+      context.handle(
+        _geometricWaveTwinkleSparsityMeta,
+        geometricWaveTwinkleSparsity.isAcceptableOrUnknown(
+          data['geometric_wave_twinkle_sparsity']!,
+          _geometricWaveTwinkleSparsityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_shadow_light_degrees')) {
+      context.handle(
+        _geometricWaveShadowLightDegreesMeta,
+        geometricWaveShadowLightDegrees.isAcceptableOrUnknown(
+          data['geometric_wave_shadow_light_degrees']!,
+          _geometricWaveShadowLightDegreesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_shadow_offset')) {
+      context.handle(
+        _geometricWaveShadowOffsetMeta,
+        geometricWaveShadowOffset.isAcceptableOrUnknown(
+          data['geometric_wave_shadow_offset']!,
+          _geometricWaveShadowOffsetMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_shadow_softness')) {
+      context.handle(
+        _geometricWaveShadowSoftnessMeta,
+        geometricWaveShadowSoftness.isAcceptableOrUnknown(
+          data['geometric_wave_shadow_softness']!,
+          _geometricWaveShadowSoftnessMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_shadow_strength')) {
+      context.handle(
+        _geometricWaveShadowStrengthMeta,
+        geometricWaveShadowStrength.isAcceptableOrUnknown(
+          data['geometric_wave_shadow_strength']!,
+          _geometricWaveShadowStrengthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_pop_brightness_variance')) {
+      context.handle(
+        _geometricWavePopBrightnessVarianceMeta,
+        geometricWavePopBrightnessVariance.isAcceptableOrUnknown(
+          data['geometric_wave_pop_brightness_variance']!,
+          _geometricWavePopBrightnessVarianceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_tilt_amount')) {
+      context.handle(
+        _geometricWaveTiltAmountMeta,
+        geometricWaveTiltAmount.isAcceptableOrUnknown(
+          data['geometric_wave_tilt_amount']!,
+          _geometricWaveTiltAmountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_tilt_shading')) {
+      context.handle(
+        _geometricWaveTiltShadingMeta,
+        geometricWaveTiltShading.isAcceptableOrUnknown(
+          data['geometric_wave_tilt_shading']!,
+          _geometricWaveTiltShadingMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_mass_lag_seconds')) {
+      context.handle(
+        _geometricWaveMassLagSecondsMeta,
+        geometricWaveMassLagSeconds.isAcceptableOrUnknown(
+          data['geometric_wave_mass_lag_seconds']!,
+          _geometricWaveMassLagSecondsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_mass_spring')) {
+      context.handle(
+        _geometricWaveMassSpringMeta,
+        geometricWaveMassSpring.isAcceptableOrUnknown(
+          data['geometric_wave_mass_spring']!,
+          _geometricWaveMassSpringMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_scatter_mode')) {
+      context.handle(
+        _geometricWaveScatterModeMeta,
+        geometricWaveScatterMode.isAcceptableOrUnknown(
+          data['geometric_wave_scatter_mode']!,
+          _geometricWaveScatterModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('geometric_wave_scatter_lit_amount')) {
+      context.handle(
+        _geometricWaveScatterLitAmountMeta,
+        geometricWaveScatterLitAmount.isAcceptableOrUnknown(
+          data['geometric_wave_scatter_lit_amount']!,
+          _geometricWaveScatterLitAmountMeta,
+        ),
+      );
+    }
     if (data.containsKey('nav_page_order_json')) {
       context.handle(
         _navPageOrderJsonMeta,
@@ -6886,6 +7479,24 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('todo_completed_section_expanded')) {
+      context.handle(
+        _todoCompletedSectionExpandedMeta,
+        todoCompletedSectionExpanded.isAcceptableOrUnknown(
+          data['todo_completed_section_expanded']!,
+          _todoCompletedSectionExpandedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('show_annualized_subscription_cost')) {
+      context.handle(
+        _showAnnualizedSubscriptionCostMeta,
+        showAnnualizedSubscriptionCost.isAcceptableOrUnknown(
+          data['show_annualized_subscription_cost']!,
+          _showAnnualizedSubscriptionCostMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -6910,6 +7521,14 @@ class $SettingsTableTable extends SettingsTable
       showQuotes: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}show_quotes'],
+      )!,
+      showDefaultTrackersInGrid: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_default_trackers_in_grid'],
+      )!,
+      showDefaultTrackersInCalendar: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_default_trackers_in_calendar'],
       )!,
       journalHotkey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -7095,6 +7714,98 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.double,
         data['${effectivePrefix}geometric_texture_variation_floor'],
       )!,
+      geometricWaveEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}geometric_wave_enabled'],
+      )!,
+      geometricWaveShape: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}geometric_wave_shape'],
+      )!,
+      geometricWaveDirectionDegrees: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_direction_degrees'],
+      )!,
+      geometricWaveSpeed: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_speed'],
+      )!,
+      geometricWaveWidth: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_width'],
+      )!,
+      geometricWavePeriod: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_period'],
+      )!,
+      geometricWavePopHoldSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_pop_hold_seconds'],
+      )!,
+      geometricWavePopScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_pop_scale'],
+      )!,
+      geometricWavePopBrightness: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_pop_brightness'],
+      )!,
+      geometricWaveMaskDensity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_mask_density'],
+      )!,
+      geometricWaveMaskClusterScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_mask_cluster_scale'],
+      )!,
+      geometricWaveTwinkleSparsity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_twinkle_sparsity'],
+      )!,
+      geometricWaveShadowLightDegrees: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_shadow_light_degrees'],
+      )!,
+      geometricWaveShadowOffset: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_shadow_offset'],
+      )!,
+      geometricWaveShadowSoftness: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_shadow_softness'],
+      )!,
+      geometricWaveShadowStrength: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_shadow_strength'],
+      )!,
+      geometricWavePopBrightnessVariance: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_pop_brightness_variance'],
+      )!,
+      geometricWaveTiltAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_tilt_amount'],
+      )!,
+      geometricWaveTiltShading: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_tilt_shading'],
+      )!,
+      geometricWaveMassLagSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_mass_lag_seconds'],
+      )!,
+      geometricWaveMassSpring: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_mass_spring'],
+      )!,
+      geometricWaveScatterMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}geometric_wave_scatter_mode'],
+      )!,
+      geometricWaveScatterLitAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}geometric_wave_scatter_lit_amount'],
+      )!,
       navPageOrderJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}nav_page_order_json'],
@@ -7111,6 +7822,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}last_seen_nav_page'],
       ),
+      todoCompletedSectionExpanded: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}todo_completed_section_expanded'],
+      )!,
+      showAnnualizedSubscriptionCost: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_annualized_subscription_cost'],
+      )!,
     );
   }
 
@@ -7126,6 +7845,8 @@ class SettingsTableData extends DataClass
   final int accentColor;
   final bool weekStartsOnMonday;
   final bool showQuotes;
+  final bool showDefaultTrackersInGrid;
+  final bool showDefaultTrackersInCalendar;
   final String journalHotkey;
   final String todoHotkey;
   final String calendarNavigateLeftKey;
@@ -7172,15 +7893,42 @@ class SettingsTableData extends DataClass
   final double geometricTextureFocalPointX;
   final double geometricTextureFocalPointY;
   final double geometricTextureVariationFloor;
+  final bool geometricWaveEnabled;
+  final String geometricWaveShape;
+  final double geometricWaveDirectionDegrees;
+  final double geometricWaveSpeed;
+  final double geometricWaveWidth;
+  final double geometricWavePeriod;
+  final double geometricWavePopHoldSeconds;
+  final double geometricWavePopScale;
+  final double geometricWavePopBrightness;
+  final double geometricWaveMaskDensity;
+  final double geometricWaveMaskClusterScale;
+  final double geometricWaveTwinkleSparsity;
+  final double geometricWaveShadowLightDegrees;
+  final double geometricWaveShadowOffset;
+  final double geometricWaveShadowSoftness;
+  final double geometricWaveShadowStrength;
+  final double geometricWavePopBrightnessVariance;
+  final double geometricWaveTiltAmount;
+  final double geometricWaveTiltShading;
+  final double geometricWaveMassLagSeconds;
+  final double geometricWaveMassSpring;
+  final bool geometricWaveScatterMode;
+  final double geometricWaveScatterLitAmount;
   final String? navPageOrderJson;
   final String startupPageMode;
   final String? customStartupPage;
   final String? lastSeenNavPage;
+  final bool todoCompletedSectionExpanded;
+  final bool showAnnualizedSubscriptionCost;
   const SettingsTableData({
     required this.id,
     required this.accentColor,
     required this.weekStartsOnMonday,
     required this.showQuotes,
+    required this.showDefaultTrackersInGrid,
+    required this.showDefaultTrackersInCalendar,
     required this.journalHotkey,
     required this.todoHotkey,
     required this.calendarNavigateLeftKey,
@@ -7227,10 +7975,35 @@ class SettingsTableData extends DataClass
     required this.geometricTextureFocalPointX,
     required this.geometricTextureFocalPointY,
     required this.geometricTextureVariationFloor,
+    required this.geometricWaveEnabled,
+    required this.geometricWaveShape,
+    required this.geometricWaveDirectionDegrees,
+    required this.geometricWaveSpeed,
+    required this.geometricWaveWidth,
+    required this.geometricWavePeriod,
+    required this.geometricWavePopHoldSeconds,
+    required this.geometricWavePopScale,
+    required this.geometricWavePopBrightness,
+    required this.geometricWaveMaskDensity,
+    required this.geometricWaveMaskClusterScale,
+    required this.geometricWaveTwinkleSparsity,
+    required this.geometricWaveShadowLightDegrees,
+    required this.geometricWaveShadowOffset,
+    required this.geometricWaveShadowSoftness,
+    required this.geometricWaveShadowStrength,
+    required this.geometricWavePopBrightnessVariance,
+    required this.geometricWaveTiltAmount,
+    required this.geometricWaveTiltShading,
+    required this.geometricWaveMassLagSeconds,
+    required this.geometricWaveMassSpring,
+    required this.geometricWaveScatterMode,
+    required this.geometricWaveScatterLitAmount,
     this.navPageOrderJson,
     required this.startupPageMode,
     this.customStartupPage,
     this.lastSeenNavPage,
+    required this.todoCompletedSectionExpanded,
+    required this.showAnnualizedSubscriptionCost,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7239,6 +8012,12 @@ class SettingsTableData extends DataClass
     map['accent_color'] = Variable<int>(accentColor);
     map['week_starts_on_monday'] = Variable<bool>(weekStartsOnMonday);
     map['show_quotes'] = Variable<bool>(showQuotes);
+    map['show_default_trackers_in_grid'] = Variable<bool>(
+      showDefaultTrackersInGrid,
+    );
+    map['show_default_trackers_in_calendar'] = Variable<bool>(
+      showDefaultTrackersInCalendar,
+    );
     map['journal_hotkey'] = Variable<String>(journalHotkey);
     map['todo_hotkey'] = Variable<String>(todoHotkey);
     map['calendar_navigate_left_key'] = Variable<String>(
@@ -7351,6 +8130,63 @@ class SettingsTableData extends DataClass
     map['geometric_texture_variation_floor'] = Variable<double>(
       geometricTextureVariationFloor,
     );
+    map['geometric_wave_enabled'] = Variable<bool>(geometricWaveEnabled);
+    map['geometric_wave_shape'] = Variable<String>(geometricWaveShape);
+    map['geometric_wave_direction_degrees'] = Variable<double>(
+      geometricWaveDirectionDegrees,
+    );
+    map['geometric_wave_speed'] = Variable<double>(geometricWaveSpeed);
+    map['geometric_wave_width'] = Variable<double>(geometricWaveWidth);
+    map['geometric_wave_period'] = Variable<double>(geometricWavePeriod);
+    map['geometric_wave_pop_hold_seconds'] = Variable<double>(
+      geometricWavePopHoldSeconds,
+    );
+    map['geometric_wave_pop_scale'] = Variable<double>(geometricWavePopScale);
+    map['geometric_wave_pop_brightness'] = Variable<double>(
+      geometricWavePopBrightness,
+    );
+    map['geometric_wave_mask_density'] = Variable<double>(
+      geometricWaveMaskDensity,
+    );
+    map['geometric_wave_mask_cluster_scale'] = Variable<double>(
+      geometricWaveMaskClusterScale,
+    );
+    map['geometric_wave_twinkle_sparsity'] = Variable<double>(
+      geometricWaveTwinkleSparsity,
+    );
+    map['geometric_wave_shadow_light_degrees'] = Variable<double>(
+      geometricWaveShadowLightDegrees,
+    );
+    map['geometric_wave_shadow_offset'] = Variable<double>(
+      geometricWaveShadowOffset,
+    );
+    map['geometric_wave_shadow_softness'] = Variable<double>(
+      geometricWaveShadowSoftness,
+    );
+    map['geometric_wave_shadow_strength'] = Variable<double>(
+      geometricWaveShadowStrength,
+    );
+    map['geometric_wave_pop_brightness_variance'] = Variable<double>(
+      geometricWavePopBrightnessVariance,
+    );
+    map['geometric_wave_tilt_amount'] = Variable<double>(
+      geometricWaveTiltAmount,
+    );
+    map['geometric_wave_tilt_shading'] = Variable<double>(
+      geometricWaveTiltShading,
+    );
+    map['geometric_wave_mass_lag_seconds'] = Variable<double>(
+      geometricWaveMassLagSeconds,
+    );
+    map['geometric_wave_mass_spring'] = Variable<double>(
+      geometricWaveMassSpring,
+    );
+    map['geometric_wave_scatter_mode'] = Variable<bool>(
+      geometricWaveScatterMode,
+    );
+    map['geometric_wave_scatter_lit_amount'] = Variable<double>(
+      geometricWaveScatterLitAmount,
+    );
     if (!nullToAbsent || navPageOrderJson != null) {
       map['nav_page_order_json'] = Variable<String>(navPageOrderJson);
     }
@@ -7361,6 +8197,12 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || lastSeenNavPage != null) {
       map['last_seen_nav_page'] = Variable<String>(lastSeenNavPage);
     }
+    map['todo_completed_section_expanded'] = Variable<bool>(
+      todoCompletedSectionExpanded,
+    );
+    map['show_annualized_subscription_cost'] = Variable<bool>(
+      showAnnualizedSubscriptionCost,
+    );
     return map;
   }
 
@@ -7370,6 +8212,8 @@ class SettingsTableData extends DataClass
       accentColor: Value(accentColor),
       weekStartsOnMonday: Value(weekStartsOnMonday),
       showQuotes: Value(showQuotes),
+      showDefaultTrackersInGrid: Value(showDefaultTrackersInGrid),
+      showDefaultTrackersInCalendar: Value(showDefaultTrackersInCalendar),
       journalHotkey: Value(journalHotkey),
       todoHotkey: Value(todoHotkey),
       calendarNavigateLeftKey: Value(calendarNavigateLeftKey),
@@ -7452,6 +8296,31 @@ class SettingsTableData extends DataClass
       geometricTextureFocalPointX: Value(geometricTextureFocalPointX),
       geometricTextureFocalPointY: Value(geometricTextureFocalPointY),
       geometricTextureVariationFloor: Value(geometricTextureVariationFloor),
+      geometricWaveEnabled: Value(geometricWaveEnabled),
+      geometricWaveShape: Value(geometricWaveShape),
+      geometricWaveDirectionDegrees: Value(geometricWaveDirectionDegrees),
+      geometricWaveSpeed: Value(geometricWaveSpeed),
+      geometricWaveWidth: Value(geometricWaveWidth),
+      geometricWavePeriod: Value(geometricWavePeriod),
+      geometricWavePopHoldSeconds: Value(geometricWavePopHoldSeconds),
+      geometricWavePopScale: Value(geometricWavePopScale),
+      geometricWavePopBrightness: Value(geometricWavePopBrightness),
+      geometricWaveMaskDensity: Value(geometricWaveMaskDensity),
+      geometricWaveMaskClusterScale: Value(geometricWaveMaskClusterScale),
+      geometricWaveTwinkleSparsity: Value(geometricWaveTwinkleSparsity),
+      geometricWaveShadowLightDegrees: Value(geometricWaveShadowLightDegrees),
+      geometricWaveShadowOffset: Value(geometricWaveShadowOffset),
+      geometricWaveShadowSoftness: Value(geometricWaveShadowSoftness),
+      geometricWaveShadowStrength: Value(geometricWaveShadowStrength),
+      geometricWavePopBrightnessVariance: Value(
+        geometricWavePopBrightnessVariance,
+      ),
+      geometricWaveTiltAmount: Value(geometricWaveTiltAmount),
+      geometricWaveTiltShading: Value(geometricWaveTiltShading),
+      geometricWaveMassLagSeconds: Value(geometricWaveMassLagSeconds),
+      geometricWaveMassSpring: Value(geometricWaveMassSpring),
+      geometricWaveScatterMode: Value(geometricWaveScatterMode),
+      geometricWaveScatterLitAmount: Value(geometricWaveScatterLitAmount),
       navPageOrderJson: navPageOrderJson == null && nullToAbsent
           ? const Value.absent()
           : Value(navPageOrderJson),
@@ -7462,6 +8331,8 @@ class SettingsTableData extends DataClass
       lastSeenNavPage: lastSeenNavPage == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSeenNavPage),
+      todoCompletedSectionExpanded: Value(todoCompletedSectionExpanded),
+      showAnnualizedSubscriptionCost: Value(showAnnualizedSubscriptionCost),
     );
   }
 
@@ -7475,6 +8346,12 @@ class SettingsTableData extends DataClass
       accentColor: serializer.fromJson<int>(json['accentColor']),
       weekStartsOnMonday: serializer.fromJson<bool>(json['weekStartsOnMonday']),
       showQuotes: serializer.fromJson<bool>(json['showQuotes']),
+      showDefaultTrackersInGrid: serializer.fromJson<bool>(
+        json['showDefaultTrackersInGrid'],
+      ),
+      showDefaultTrackersInCalendar: serializer.fromJson<bool>(
+        json['showDefaultTrackersInCalendar'],
+      ),
       journalHotkey: serializer.fromJson<String>(json['journalHotkey']),
       todoHotkey: serializer.fromJson<String>(json['todoHotkey']),
       calendarNavigateLeftKey: serializer.fromJson<String>(
@@ -7583,12 +8460,87 @@ class SettingsTableData extends DataClass
       geometricTextureVariationFloor: serializer.fromJson<double>(
         json['geometricTextureVariationFloor'],
       ),
+      geometricWaveEnabled: serializer.fromJson<bool>(
+        json['geometricWaveEnabled'],
+      ),
+      geometricWaveShape: serializer.fromJson<String>(
+        json['geometricWaveShape'],
+      ),
+      geometricWaveDirectionDegrees: serializer.fromJson<double>(
+        json['geometricWaveDirectionDegrees'],
+      ),
+      geometricWaveSpeed: serializer.fromJson<double>(
+        json['geometricWaveSpeed'],
+      ),
+      geometricWaveWidth: serializer.fromJson<double>(
+        json['geometricWaveWidth'],
+      ),
+      geometricWavePeriod: serializer.fromJson<double>(
+        json['geometricWavePeriod'],
+      ),
+      geometricWavePopHoldSeconds: serializer.fromJson<double>(
+        json['geometricWavePopHoldSeconds'],
+      ),
+      geometricWavePopScale: serializer.fromJson<double>(
+        json['geometricWavePopScale'],
+      ),
+      geometricWavePopBrightness: serializer.fromJson<double>(
+        json['geometricWavePopBrightness'],
+      ),
+      geometricWaveMaskDensity: serializer.fromJson<double>(
+        json['geometricWaveMaskDensity'],
+      ),
+      geometricWaveMaskClusterScale: serializer.fromJson<double>(
+        json['geometricWaveMaskClusterScale'],
+      ),
+      geometricWaveTwinkleSparsity: serializer.fromJson<double>(
+        json['geometricWaveTwinkleSparsity'],
+      ),
+      geometricWaveShadowLightDegrees: serializer.fromJson<double>(
+        json['geometricWaveShadowLightDegrees'],
+      ),
+      geometricWaveShadowOffset: serializer.fromJson<double>(
+        json['geometricWaveShadowOffset'],
+      ),
+      geometricWaveShadowSoftness: serializer.fromJson<double>(
+        json['geometricWaveShadowSoftness'],
+      ),
+      geometricWaveShadowStrength: serializer.fromJson<double>(
+        json['geometricWaveShadowStrength'],
+      ),
+      geometricWavePopBrightnessVariance: serializer.fromJson<double>(
+        json['geometricWavePopBrightnessVariance'],
+      ),
+      geometricWaveTiltAmount: serializer.fromJson<double>(
+        json['geometricWaveTiltAmount'],
+      ),
+      geometricWaveTiltShading: serializer.fromJson<double>(
+        json['geometricWaveTiltShading'],
+      ),
+      geometricWaveMassLagSeconds: serializer.fromJson<double>(
+        json['geometricWaveMassLagSeconds'],
+      ),
+      geometricWaveMassSpring: serializer.fromJson<double>(
+        json['geometricWaveMassSpring'],
+      ),
+      geometricWaveScatterMode: serializer.fromJson<bool>(
+        json['geometricWaveScatterMode'],
+      ),
+      geometricWaveScatterLitAmount: serializer.fromJson<double>(
+        json['geometricWaveScatterLitAmount'],
+      ),
       navPageOrderJson: serializer.fromJson<String?>(json['navPageOrderJson']),
       startupPageMode: serializer.fromJson<String>(json['startupPageMode']),
       customStartupPage: serializer.fromJson<String?>(
         json['customStartupPage'],
       ),
       lastSeenNavPage: serializer.fromJson<String?>(json['lastSeenNavPage']),
+      todoCompletedSectionExpanded: serializer.fromJson<bool>(
+        json['todoCompletedSectionExpanded'],
+      ),
+      showAnnualizedSubscriptionCost: serializer.fromJson<bool>(
+        json['showAnnualizedSubscriptionCost'],
+      ),
     );
   }
   @override
@@ -7599,6 +8551,12 @@ class SettingsTableData extends DataClass
       'accentColor': serializer.toJson<int>(accentColor),
       'weekStartsOnMonday': serializer.toJson<bool>(weekStartsOnMonday),
       'showQuotes': serializer.toJson<bool>(showQuotes),
+      'showDefaultTrackersInGrid': serializer.toJson<bool>(
+        showDefaultTrackersInGrid,
+      ),
+      'showDefaultTrackersInCalendar': serializer.toJson<bool>(
+        showDefaultTrackersInCalendar,
+      ),
       'journalHotkey': serializer.toJson<String>(journalHotkey),
       'todoHotkey': serializer.toJson<String>(todoHotkey),
       'calendarNavigateLeftKey': serializer.toJson<String>(
@@ -7677,10 +8635,73 @@ class SettingsTableData extends DataClass
       'geometricTextureVariationFloor': serializer.toJson<double>(
         geometricTextureVariationFloor,
       ),
+      'geometricWaveEnabled': serializer.toJson<bool>(geometricWaveEnabled),
+      'geometricWaveShape': serializer.toJson<String>(geometricWaveShape),
+      'geometricWaveDirectionDegrees': serializer.toJson<double>(
+        geometricWaveDirectionDegrees,
+      ),
+      'geometricWaveSpeed': serializer.toJson<double>(geometricWaveSpeed),
+      'geometricWaveWidth': serializer.toJson<double>(geometricWaveWidth),
+      'geometricWavePeriod': serializer.toJson<double>(geometricWavePeriod),
+      'geometricWavePopHoldSeconds': serializer.toJson<double>(
+        geometricWavePopHoldSeconds,
+      ),
+      'geometricWavePopScale': serializer.toJson<double>(geometricWavePopScale),
+      'geometricWavePopBrightness': serializer.toJson<double>(
+        geometricWavePopBrightness,
+      ),
+      'geometricWaveMaskDensity': serializer.toJson<double>(
+        geometricWaveMaskDensity,
+      ),
+      'geometricWaveMaskClusterScale': serializer.toJson<double>(
+        geometricWaveMaskClusterScale,
+      ),
+      'geometricWaveTwinkleSparsity': serializer.toJson<double>(
+        geometricWaveTwinkleSparsity,
+      ),
+      'geometricWaveShadowLightDegrees': serializer.toJson<double>(
+        geometricWaveShadowLightDegrees,
+      ),
+      'geometricWaveShadowOffset': serializer.toJson<double>(
+        geometricWaveShadowOffset,
+      ),
+      'geometricWaveShadowSoftness': serializer.toJson<double>(
+        geometricWaveShadowSoftness,
+      ),
+      'geometricWaveShadowStrength': serializer.toJson<double>(
+        geometricWaveShadowStrength,
+      ),
+      'geometricWavePopBrightnessVariance': serializer.toJson<double>(
+        geometricWavePopBrightnessVariance,
+      ),
+      'geometricWaveTiltAmount': serializer.toJson<double>(
+        geometricWaveTiltAmount,
+      ),
+      'geometricWaveTiltShading': serializer.toJson<double>(
+        geometricWaveTiltShading,
+      ),
+      'geometricWaveMassLagSeconds': serializer.toJson<double>(
+        geometricWaveMassLagSeconds,
+      ),
+      'geometricWaveMassSpring': serializer.toJson<double>(
+        geometricWaveMassSpring,
+      ),
+      'geometricWaveScatterMode': serializer.toJson<bool>(
+        geometricWaveScatterMode,
+      ),
+      'geometricWaveScatterLitAmount': serializer.toJson<double>(
+        geometricWaveScatterLitAmount,
+      ),
       'navPageOrderJson': serializer.toJson<String?>(navPageOrderJson),
       'startupPageMode': serializer.toJson<String>(startupPageMode),
       'customStartupPage': serializer.toJson<String?>(customStartupPage),
       'lastSeenNavPage': serializer.toJson<String?>(lastSeenNavPage),
+      'todoCompletedSectionExpanded': serializer.toJson<bool>(
+        todoCompletedSectionExpanded,
+      ),
+      'showAnnualizedSubscriptionCost': serializer.toJson<bool>(
+        showAnnualizedSubscriptionCost,
+      ),
     };
   }
 
@@ -7689,6 +8710,8 @@ class SettingsTableData extends DataClass
     int? accentColor,
     bool? weekStartsOnMonday,
     bool? showQuotes,
+    bool? showDefaultTrackersInGrid,
+    bool? showDefaultTrackersInCalendar,
     String? journalHotkey,
     String? todoHotkey,
     String? calendarNavigateLeftKey,
@@ -7735,15 +8758,44 @@ class SettingsTableData extends DataClass
     double? geometricTextureFocalPointX,
     double? geometricTextureFocalPointY,
     double? geometricTextureVariationFloor,
+    bool? geometricWaveEnabled,
+    String? geometricWaveShape,
+    double? geometricWaveDirectionDegrees,
+    double? geometricWaveSpeed,
+    double? geometricWaveWidth,
+    double? geometricWavePeriod,
+    double? geometricWavePopHoldSeconds,
+    double? geometricWavePopScale,
+    double? geometricWavePopBrightness,
+    double? geometricWaveMaskDensity,
+    double? geometricWaveMaskClusterScale,
+    double? geometricWaveTwinkleSparsity,
+    double? geometricWaveShadowLightDegrees,
+    double? geometricWaveShadowOffset,
+    double? geometricWaveShadowSoftness,
+    double? geometricWaveShadowStrength,
+    double? geometricWavePopBrightnessVariance,
+    double? geometricWaveTiltAmount,
+    double? geometricWaveTiltShading,
+    double? geometricWaveMassLagSeconds,
+    double? geometricWaveMassSpring,
+    bool? geometricWaveScatterMode,
+    double? geometricWaveScatterLitAmount,
     Value<String?> navPageOrderJson = const Value.absent(),
     String? startupPageMode,
     Value<String?> customStartupPage = const Value.absent(),
     Value<String?> lastSeenNavPage = const Value.absent(),
+    bool? todoCompletedSectionExpanded,
+    bool? showAnnualizedSubscriptionCost,
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
     weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
     showQuotes: showQuotes ?? this.showQuotes,
+    showDefaultTrackersInGrid:
+        showDefaultTrackersInGrid ?? this.showDefaultTrackersInGrid,
+    showDefaultTrackersInCalendar:
+        showDefaultTrackersInCalendar ?? this.showDefaultTrackersInCalendar,
     journalHotkey: journalHotkey ?? this.journalHotkey,
     todoHotkey: todoHotkey ?? this.todoHotkey,
     calendarNavigateLeftKey:
@@ -7830,6 +8882,47 @@ class SettingsTableData extends DataClass
         geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
     geometricTextureVariationFloor:
         geometricTextureVariationFloor ?? this.geometricTextureVariationFloor,
+    geometricWaveEnabled: geometricWaveEnabled ?? this.geometricWaveEnabled,
+    geometricWaveShape: geometricWaveShape ?? this.geometricWaveShape,
+    geometricWaveDirectionDegrees:
+        geometricWaveDirectionDegrees ?? this.geometricWaveDirectionDegrees,
+    geometricWaveSpeed: geometricWaveSpeed ?? this.geometricWaveSpeed,
+    geometricWaveWidth: geometricWaveWidth ?? this.geometricWaveWidth,
+    geometricWavePeriod: geometricWavePeriod ?? this.geometricWavePeriod,
+    geometricWavePopHoldSeconds:
+        geometricWavePopHoldSeconds ?? this.geometricWavePopHoldSeconds,
+    geometricWavePopScale: geometricWavePopScale ?? this.geometricWavePopScale,
+    geometricWavePopBrightness:
+        geometricWavePopBrightness ?? this.geometricWavePopBrightness,
+    geometricWaveMaskDensity:
+        geometricWaveMaskDensity ?? this.geometricWaveMaskDensity,
+    geometricWaveMaskClusterScale:
+        geometricWaveMaskClusterScale ?? this.geometricWaveMaskClusterScale,
+    geometricWaveTwinkleSparsity:
+        geometricWaveTwinkleSparsity ?? this.geometricWaveTwinkleSparsity,
+    geometricWaveShadowLightDegrees:
+        geometricWaveShadowLightDegrees ?? this.geometricWaveShadowLightDegrees,
+    geometricWaveShadowOffset:
+        geometricWaveShadowOffset ?? this.geometricWaveShadowOffset,
+    geometricWaveShadowSoftness:
+        geometricWaveShadowSoftness ?? this.geometricWaveShadowSoftness,
+    geometricWaveShadowStrength:
+        geometricWaveShadowStrength ?? this.geometricWaveShadowStrength,
+    geometricWavePopBrightnessVariance:
+        geometricWavePopBrightnessVariance ??
+        this.geometricWavePopBrightnessVariance,
+    geometricWaveTiltAmount:
+        geometricWaveTiltAmount ?? this.geometricWaveTiltAmount,
+    geometricWaveTiltShading:
+        geometricWaveTiltShading ?? this.geometricWaveTiltShading,
+    geometricWaveMassLagSeconds:
+        geometricWaveMassLagSeconds ?? this.geometricWaveMassLagSeconds,
+    geometricWaveMassSpring:
+        geometricWaveMassSpring ?? this.geometricWaveMassSpring,
+    geometricWaveScatterMode:
+        geometricWaveScatterMode ?? this.geometricWaveScatterMode,
+    geometricWaveScatterLitAmount:
+        geometricWaveScatterLitAmount ?? this.geometricWaveScatterLitAmount,
     navPageOrderJson: navPageOrderJson.present
         ? navPageOrderJson.value
         : this.navPageOrderJson,
@@ -7840,6 +8933,10 @@ class SettingsTableData extends DataClass
     lastSeenNavPage: lastSeenNavPage.present
         ? lastSeenNavPage.value
         : this.lastSeenNavPage,
+    todoCompletedSectionExpanded:
+        todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
+    showAnnualizedSubscriptionCost:
+        showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
     return SettingsTableData(
@@ -7853,6 +8950,12 @@ class SettingsTableData extends DataClass
       showQuotes: data.showQuotes.present
           ? data.showQuotes.value
           : this.showQuotes,
+      showDefaultTrackersInGrid: data.showDefaultTrackersInGrid.present
+          ? data.showDefaultTrackersInGrid.value
+          : this.showDefaultTrackersInGrid,
+      showDefaultTrackersInCalendar: data.showDefaultTrackersInCalendar.present
+          ? data.showDefaultTrackersInCalendar.value
+          : this.showDefaultTrackersInCalendar,
       journalHotkey: data.journalHotkey.present
           ? data.journalHotkey.value
           : this.journalHotkey,
@@ -7990,6 +9093,77 @@ class SettingsTableData extends DataClass
           data.geometricTextureVariationFloor.present
           ? data.geometricTextureVariationFloor.value
           : this.geometricTextureVariationFloor,
+      geometricWaveEnabled: data.geometricWaveEnabled.present
+          ? data.geometricWaveEnabled.value
+          : this.geometricWaveEnabled,
+      geometricWaveShape: data.geometricWaveShape.present
+          ? data.geometricWaveShape.value
+          : this.geometricWaveShape,
+      geometricWaveDirectionDegrees: data.geometricWaveDirectionDegrees.present
+          ? data.geometricWaveDirectionDegrees.value
+          : this.geometricWaveDirectionDegrees,
+      geometricWaveSpeed: data.geometricWaveSpeed.present
+          ? data.geometricWaveSpeed.value
+          : this.geometricWaveSpeed,
+      geometricWaveWidth: data.geometricWaveWidth.present
+          ? data.geometricWaveWidth.value
+          : this.geometricWaveWidth,
+      geometricWavePeriod: data.geometricWavePeriod.present
+          ? data.geometricWavePeriod.value
+          : this.geometricWavePeriod,
+      geometricWavePopHoldSeconds: data.geometricWavePopHoldSeconds.present
+          ? data.geometricWavePopHoldSeconds.value
+          : this.geometricWavePopHoldSeconds,
+      geometricWavePopScale: data.geometricWavePopScale.present
+          ? data.geometricWavePopScale.value
+          : this.geometricWavePopScale,
+      geometricWavePopBrightness: data.geometricWavePopBrightness.present
+          ? data.geometricWavePopBrightness.value
+          : this.geometricWavePopBrightness,
+      geometricWaveMaskDensity: data.geometricWaveMaskDensity.present
+          ? data.geometricWaveMaskDensity.value
+          : this.geometricWaveMaskDensity,
+      geometricWaveMaskClusterScale: data.geometricWaveMaskClusterScale.present
+          ? data.geometricWaveMaskClusterScale.value
+          : this.geometricWaveMaskClusterScale,
+      geometricWaveTwinkleSparsity: data.geometricWaveTwinkleSparsity.present
+          ? data.geometricWaveTwinkleSparsity.value
+          : this.geometricWaveTwinkleSparsity,
+      geometricWaveShadowLightDegrees:
+          data.geometricWaveShadowLightDegrees.present
+          ? data.geometricWaveShadowLightDegrees.value
+          : this.geometricWaveShadowLightDegrees,
+      geometricWaveShadowOffset: data.geometricWaveShadowOffset.present
+          ? data.geometricWaveShadowOffset.value
+          : this.geometricWaveShadowOffset,
+      geometricWaveShadowSoftness: data.geometricWaveShadowSoftness.present
+          ? data.geometricWaveShadowSoftness.value
+          : this.geometricWaveShadowSoftness,
+      geometricWaveShadowStrength: data.geometricWaveShadowStrength.present
+          ? data.geometricWaveShadowStrength.value
+          : this.geometricWaveShadowStrength,
+      geometricWavePopBrightnessVariance:
+          data.geometricWavePopBrightnessVariance.present
+          ? data.geometricWavePopBrightnessVariance.value
+          : this.geometricWavePopBrightnessVariance,
+      geometricWaveTiltAmount: data.geometricWaveTiltAmount.present
+          ? data.geometricWaveTiltAmount.value
+          : this.geometricWaveTiltAmount,
+      geometricWaveTiltShading: data.geometricWaveTiltShading.present
+          ? data.geometricWaveTiltShading.value
+          : this.geometricWaveTiltShading,
+      geometricWaveMassLagSeconds: data.geometricWaveMassLagSeconds.present
+          ? data.geometricWaveMassLagSeconds.value
+          : this.geometricWaveMassLagSeconds,
+      geometricWaveMassSpring: data.geometricWaveMassSpring.present
+          ? data.geometricWaveMassSpring.value
+          : this.geometricWaveMassSpring,
+      geometricWaveScatterMode: data.geometricWaveScatterMode.present
+          ? data.geometricWaveScatterMode.value
+          : this.geometricWaveScatterMode,
+      geometricWaveScatterLitAmount: data.geometricWaveScatterLitAmount.present
+          ? data.geometricWaveScatterLitAmount.value
+          : this.geometricWaveScatterLitAmount,
       navPageOrderJson: data.navPageOrderJson.present
           ? data.navPageOrderJson.value
           : this.navPageOrderJson,
@@ -8002,6 +9176,13 @@ class SettingsTableData extends DataClass
       lastSeenNavPage: data.lastSeenNavPage.present
           ? data.lastSeenNavPage.value
           : this.lastSeenNavPage,
+      todoCompletedSectionExpanded: data.todoCompletedSectionExpanded.present
+          ? data.todoCompletedSectionExpanded.value
+          : this.todoCompletedSectionExpanded,
+      showAnnualizedSubscriptionCost:
+          data.showAnnualizedSubscriptionCost.present
+          ? data.showAnnualizedSubscriptionCost.value
+          : this.showAnnualizedSubscriptionCost,
     );
   }
 
@@ -8012,6 +9193,10 @@ class SettingsTableData extends DataClass
           ..write('accentColor: $accentColor, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
           ..write('showQuotes: $showQuotes, ')
+          ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
+          ..write(
+            'showDefaultTrackersInCalendar: $showDefaultTrackersInCalendar, ',
+          )
           ..write('journalHotkey: $journalHotkey, ')
           ..write('todoHotkey: $todoHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
@@ -8064,10 +9249,51 @@ class SettingsTableData extends DataClass
           ..write(
             'geometricTextureVariationFloor: $geometricTextureVariationFloor, ',
           )
+          ..write('geometricWaveEnabled: $geometricWaveEnabled, ')
+          ..write('geometricWaveShape: $geometricWaveShape, ')
+          ..write(
+            'geometricWaveDirectionDegrees: $geometricWaveDirectionDegrees, ',
+          )
+          ..write('geometricWaveSpeed: $geometricWaveSpeed, ')
+          ..write('geometricWaveWidth: $geometricWaveWidth, ')
+          ..write('geometricWavePeriod: $geometricWavePeriod, ')
+          ..write('geometricWavePopHoldSeconds: $geometricWavePopHoldSeconds, ')
+          ..write('geometricWavePopScale: $geometricWavePopScale, ')
+          ..write('geometricWavePopBrightness: $geometricWavePopBrightness, ')
+          ..write('geometricWaveMaskDensity: $geometricWaveMaskDensity, ')
+          ..write(
+            'geometricWaveMaskClusterScale: $geometricWaveMaskClusterScale, ',
+          )
+          ..write(
+            'geometricWaveTwinkleSparsity: $geometricWaveTwinkleSparsity, ',
+          )
+          ..write(
+            'geometricWaveShadowLightDegrees: $geometricWaveShadowLightDegrees, ',
+          )
+          ..write('geometricWaveShadowOffset: $geometricWaveShadowOffset, ')
+          ..write('geometricWaveShadowSoftness: $geometricWaveShadowSoftness, ')
+          ..write('geometricWaveShadowStrength: $geometricWaveShadowStrength, ')
+          ..write(
+            'geometricWavePopBrightnessVariance: $geometricWavePopBrightnessVariance, ',
+          )
+          ..write('geometricWaveTiltAmount: $geometricWaveTiltAmount, ')
+          ..write('geometricWaveTiltShading: $geometricWaveTiltShading, ')
+          ..write('geometricWaveMassLagSeconds: $geometricWaveMassLagSeconds, ')
+          ..write('geometricWaveMassSpring: $geometricWaveMassSpring, ')
+          ..write('geometricWaveScatterMode: $geometricWaveScatterMode, ')
+          ..write(
+            'geometricWaveScatterLitAmount: $geometricWaveScatterLitAmount, ',
+          )
           ..write('navPageOrderJson: $navPageOrderJson, ')
           ..write('startupPageMode: $startupPageMode, ')
           ..write('customStartupPage: $customStartupPage, ')
-          ..write('lastSeenNavPage: $lastSeenNavPage')
+          ..write('lastSeenNavPage: $lastSeenNavPage, ')
+          ..write(
+            'todoCompletedSectionExpanded: $todoCompletedSectionExpanded, ',
+          )
+          ..write(
+            'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost',
+          )
           ..write(')'))
         .toString();
   }
@@ -8078,6 +9304,8 @@ class SettingsTableData extends DataClass
     accentColor,
     weekStartsOnMonday,
     showQuotes,
+    showDefaultTrackersInGrid,
+    showDefaultTrackersInCalendar,
     journalHotkey,
     todoHotkey,
     calendarNavigateLeftKey,
@@ -8124,10 +9352,35 @@ class SettingsTableData extends DataClass
     geometricTextureFocalPointX,
     geometricTextureFocalPointY,
     geometricTextureVariationFloor,
+    geometricWaveEnabled,
+    geometricWaveShape,
+    geometricWaveDirectionDegrees,
+    geometricWaveSpeed,
+    geometricWaveWidth,
+    geometricWavePeriod,
+    geometricWavePopHoldSeconds,
+    geometricWavePopScale,
+    geometricWavePopBrightness,
+    geometricWaveMaskDensity,
+    geometricWaveMaskClusterScale,
+    geometricWaveTwinkleSparsity,
+    geometricWaveShadowLightDegrees,
+    geometricWaveShadowOffset,
+    geometricWaveShadowSoftness,
+    geometricWaveShadowStrength,
+    geometricWavePopBrightnessVariance,
+    geometricWaveTiltAmount,
+    geometricWaveTiltShading,
+    geometricWaveMassLagSeconds,
+    geometricWaveMassSpring,
+    geometricWaveScatterMode,
+    geometricWaveScatterLitAmount,
     navPageOrderJson,
     startupPageMode,
     customStartupPage,
     lastSeenNavPage,
+    todoCompletedSectionExpanded,
+    showAnnualizedSubscriptionCost,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -8137,6 +9390,9 @@ class SettingsTableData extends DataClass
           other.accentColor == this.accentColor &&
           other.weekStartsOnMonday == this.weekStartsOnMonday &&
           other.showQuotes == this.showQuotes &&
+          other.showDefaultTrackersInGrid == this.showDefaultTrackersInGrid &&
+          other.showDefaultTrackersInCalendar ==
+              this.showDefaultTrackersInCalendar &&
           other.journalHotkey == this.journalHotkey &&
           other.todoHotkey == this.todoHotkey &&
           other.calendarNavigateLeftKey == this.calendarNavigateLeftKey &&
@@ -8189,10 +9445,47 @@ class SettingsTableData extends DataClass
               this.geometricTextureFocalPointY &&
           other.geometricTextureVariationFloor ==
               this.geometricTextureVariationFloor &&
+          other.geometricWaveEnabled == this.geometricWaveEnabled &&
+          other.geometricWaveShape == this.geometricWaveShape &&
+          other.geometricWaveDirectionDegrees ==
+              this.geometricWaveDirectionDegrees &&
+          other.geometricWaveSpeed == this.geometricWaveSpeed &&
+          other.geometricWaveWidth == this.geometricWaveWidth &&
+          other.geometricWavePeriod == this.geometricWavePeriod &&
+          other.geometricWavePopHoldSeconds ==
+              this.geometricWavePopHoldSeconds &&
+          other.geometricWavePopScale == this.geometricWavePopScale &&
+          other.geometricWavePopBrightness == this.geometricWavePopBrightness &&
+          other.geometricWaveMaskDensity == this.geometricWaveMaskDensity &&
+          other.geometricWaveMaskClusterScale ==
+              this.geometricWaveMaskClusterScale &&
+          other.geometricWaveTwinkleSparsity ==
+              this.geometricWaveTwinkleSparsity &&
+          other.geometricWaveShadowLightDegrees ==
+              this.geometricWaveShadowLightDegrees &&
+          other.geometricWaveShadowOffset == this.geometricWaveShadowOffset &&
+          other.geometricWaveShadowSoftness ==
+              this.geometricWaveShadowSoftness &&
+          other.geometricWaveShadowStrength ==
+              this.geometricWaveShadowStrength &&
+          other.geometricWavePopBrightnessVariance ==
+              this.geometricWavePopBrightnessVariance &&
+          other.geometricWaveTiltAmount == this.geometricWaveTiltAmount &&
+          other.geometricWaveTiltShading == this.geometricWaveTiltShading &&
+          other.geometricWaveMassLagSeconds ==
+              this.geometricWaveMassLagSeconds &&
+          other.geometricWaveMassSpring == this.geometricWaveMassSpring &&
+          other.geometricWaveScatterMode == this.geometricWaveScatterMode &&
+          other.geometricWaveScatterLitAmount ==
+              this.geometricWaveScatterLitAmount &&
           other.navPageOrderJson == this.navPageOrderJson &&
           other.startupPageMode == this.startupPageMode &&
           other.customStartupPage == this.customStartupPage &&
-          other.lastSeenNavPage == this.lastSeenNavPage);
+          other.lastSeenNavPage == this.lastSeenNavPage &&
+          other.todoCompletedSectionExpanded ==
+              this.todoCompletedSectionExpanded &&
+          other.showAnnualizedSubscriptionCost ==
+              this.showAnnualizedSubscriptionCost);
 }
 
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
@@ -8200,6 +9493,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<int> accentColor;
   final Value<bool> weekStartsOnMonday;
   final Value<bool> showQuotes;
+  final Value<bool> showDefaultTrackersInGrid;
+  final Value<bool> showDefaultTrackersInCalendar;
   final Value<String> journalHotkey;
   final Value<String> todoHotkey;
   final Value<String> calendarNavigateLeftKey;
@@ -8246,15 +9541,42 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<double> geometricTextureFocalPointX;
   final Value<double> geometricTextureFocalPointY;
   final Value<double> geometricTextureVariationFloor;
+  final Value<bool> geometricWaveEnabled;
+  final Value<String> geometricWaveShape;
+  final Value<double> geometricWaveDirectionDegrees;
+  final Value<double> geometricWaveSpeed;
+  final Value<double> geometricWaveWidth;
+  final Value<double> geometricWavePeriod;
+  final Value<double> geometricWavePopHoldSeconds;
+  final Value<double> geometricWavePopScale;
+  final Value<double> geometricWavePopBrightness;
+  final Value<double> geometricWaveMaskDensity;
+  final Value<double> geometricWaveMaskClusterScale;
+  final Value<double> geometricWaveTwinkleSparsity;
+  final Value<double> geometricWaveShadowLightDegrees;
+  final Value<double> geometricWaveShadowOffset;
+  final Value<double> geometricWaveShadowSoftness;
+  final Value<double> geometricWaveShadowStrength;
+  final Value<double> geometricWavePopBrightnessVariance;
+  final Value<double> geometricWaveTiltAmount;
+  final Value<double> geometricWaveTiltShading;
+  final Value<double> geometricWaveMassLagSeconds;
+  final Value<double> geometricWaveMassSpring;
+  final Value<bool> geometricWaveScatterMode;
+  final Value<double> geometricWaveScatterLitAmount;
   final Value<String?> navPageOrderJson;
   final Value<String> startupPageMode;
   final Value<String?> customStartupPage;
   final Value<String?> lastSeenNavPage;
+  final Value<bool> todoCompletedSectionExpanded;
+  final Value<bool> showAnnualizedSubscriptionCost;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
     this.showQuotes = const Value.absent(),
+    this.showDefaultTrackersInGrid = const Value.absent(),
+    this.showDefaultTrackersInCalendar = const Value.absent(),
     this.journalHotkey = const Value.absent(),
     this.todoHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
@@ -8301,16 +9623,43 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.geometricTextureFocalPointX = const Value.absent(),
     this.geometricTextureFocalPointY = const Value.absent(),
     this.geometricTextureVariationFloor = const Value.absent(),
+    this.geometricWaveEnabled = const Value.absent(),
+    this.geometricWaveShape = const Value.absent(),
+    this.geometricWaveDirectionDegrees = const Value.absent(),
+    this.geometricWaveSpeed = const Value.absent(),
+    this.geometricWaveWidth = const Value.absent(),
+    this.geometricWavePeriod = const Value.absent(),
+    this.geometricWavePopHoldSeconds = const Value.absent(),
+    this.geometricWavePopScale = const Value.absent(),
+    this.geometricWavePopBrightness = const Value.absent(),
+    this.geometricWaveMaskDensity = const Value.absent(),
+    this.geometricWaveMaskClusterScale = const Value.absent(),
+    this.geometricWaveTwinkleSparsity = const Value.absent(),
+    this.geometricWaveShadowLightDegrees = const Value.absent(),
+    this.geometricWaveShadowOffset = const Value.absent(),
+    this.geometricWaveShadowSoftness = const Value.absent(),
+    this.geometricWaveShadowStrength = const Value.absent(),
+    this.geometricWavePopBrightnessVariance = const Value.absent(),
+    this.geometricWaveTiltAmount = const Value.absent(),
+    this.geometricWaveTiltShading = const Value.absent(),
+    this.geometricWaveMassLagSeconds = const Value.absent(),
+    this.geometricWaveMassSpring = const Value.absent(),
+    this.geometricWaveScatterMode = const Value.absent(),
+    this.geometricWaveScatterLitAmount = const Value.absent(),
     this.navPageOrderJson = const Value.absent(),
     this.startupPageMode = const Value.absent(),
     this.customStartupPage = const Value.absent(),
     this.lastSeenNavPage = const Value.absent(),
+    this.todoCompletedSectionExpanded = const Value.absent(),
+    this.showAnnualizedSubscriptionCost = const Value.absent(),
   });
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
     this.showQuotes = const Value.absent(),
+    this.showDefaultTrackersInGrid = const Value.absent(),
+    this.showDefaultTrackersInCalendar = const Value.absent(),
     this.journalHotkey = const Value.absent(),
     this.todoHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
@@ -8357,16 +9706,43 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.geometricTextureFocalPointX = const Value.absent(),
     this.geometricTextureFocalPointY = const Value.absent(),
     this.geometricTextureVariationFloor = const Value.absent(),
+    this.geometricWaveEnabled = const Value.absent(),
+    this.geometricWaveShape = const Value.absent(),
+    this.geometricWaveDirectionDegrees = const Value.absent(),
+    this.geometricWaveSpeed = const Value.absent(),
+    this.geometricWaveWidth = const Value.absent(),
+    this.geometricWavePeriod = const Value.absent(),
+    this.geometricWavePopHoldSeconds = const Value.absent(),
+    this.geometricWavePopScale = const Value.absent(),
+    this.geometricWavePopBrightness = const Value.absent(),
+    this.geometricWaveMaskDensity = const Value.absent(),
+    this.geometricWaveMaskClusterScale = const Value.absent(),
+    this.geometricWaveTwinkleSparsity = const Value.absent(),
+    this.geometricWaveShadowLightDegrees = const Value.absent(),
+    this.geometricWaveShadowOffset = const Value.absent(),
+    this.geometricWaveShadowSoftness = const Value.absent(),
+    this.geometricWaveShadowStrength = const Value.absent(),
+    this.geometricWavePopBrightnessVariance = const Value.absent(),
+    this.geometricWaveTiltAmount = const Value.absent(),
+    this.geometricWaveTiltShading = const Value.absent(),
+    this.geometricWaveMassLagSeconds = const Value.absent(),
+    this.geometricWaveMassSpring = const Value.absent(),
+    this.geometricWaveScatterMode = const Value.absent(),
+    this.geometricWaveScatterLitAmount = const Value.absent(),
     this.navPageOrderJson = const Value.absent(),
     this.startupPageMode = const Value.absent(),
     this.customStartupPage = const Value.absent(),
     this.lastSeenNavPage = const Value.absent(),
+    this.todoCompletedSectionExpanded = const Value.absent(),
+    this.showAnnualizedSubscriptionCost = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
     Expression<int>? accentColor,
     Expression<bool>? weekStartsOnMonday,
     Expression<bool>? showQuotes,
+    Expression<bool>? showDefaultTrackersInGrid,
+    Expression<bool>? showDefaultTrackersInCalendar,
     Expression<String>? journalHotkey,
     Expression<String>? todoHotkey,
     Expression<String>? calendarNavigateLeftKey,
@@ -8413,10 +9789,35 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<double>? geometricTextureFocalPointX,
     Expression<double>? geometricTextureFocalPointY,
     Expression<double>? geometricTextureVariationFloor,
+    Expression<bool>? geometricWaveEnabled,
+    Expression<String>? geometricWaveShape,
+    Expression<double>? geometricWaveDirectionDegrees,
+    Expression<double>? geometricWaveSpeed,
+    Expression<double>? geometricWaveWidth,
+    Expression<double>? geometricWavePeriod,
+    Expression<double>? geometricWavePopHoldSeconds,
+    Expression<double>? geometricWavePopScale,
+    Expression<double>? geometricWavePopBrightness,
+    Expression<double>? geometricWaveMaskDensity,
+    Expression<double>? geometricWaveMaskClusterScale,
+    Expression<double>? geometricWaveTwinkleSparsity,
+    Expression<double>? geometricWaveShadowLightDegrees,
+    Expression<double>? geometricWaveShadowOffset,
+    Expression<double>? geometricWaveShadowSoftness,
+    Expression<double>? geometricWaveShadowStrength,
+    Expression<double>? geometricWavePopBrightnessVariance,
+    Expression<double>? geometricWaveTiltAmount,
+    Expression<double>? geometricWaveTiltShading,
+    Expression<double>? geometricWaveMassLagSeconds,
+    Expression<double>? geometricWaveMassSpring,
+    Expression<bool>? geometricWaveScatterMode,
+    Expression<double>? geometricWaveScatterLitAmount,
     Expression<String>? navPageOrderJson,
     Expression<String>? startupPageMode,
     Expression<String>? customStartupPage,
     Expression<String>? lastSeenNavPage,
+    Expression<bool>? todoCompletedSectionExpanded,
+    Expression<bool>? showAnnualizedSubscriptionCost,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -8424,6 +9825,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (weekStartsOnMonday != null)
         'week_starts_on_monday': weekStartsOnMonday,
       if (showQuotes != null) 'show_quotes': showQuotes,
+      if (showDefaultTrackersInGrid != null)
+        'show_default_trackers_in_grid': showDefaultTrackersInGrid,
+      if (showDefaultTrackersInCalendar != null)
+        'show_default_trackers_in_calendar': showDefaultTrackersInCalendar,
       if (journalHotkey != null) 'journal_hotkey': journalHotkey,
       if (todoHotkey != null) 'todo_hotkey': todoHotkey,
       if (calendarNavigateLeftKey != null)
@@ -8506,10 +9911,61 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'geometric_texture_focal_point_y': geometricTextureFocalPointY,
       if (geometricTextureVariationFloor != null)
         'geometric_texture_variation_floor': geometricTextureVariationFloor,
+      if (geometricWaveEnabled != null)
+        'geometric_wave_enabled': geometricWaveEnabled,
+      if (geometricWaveShape != null)
+        'geometric_wave_shape': geometricWaveShape,
+      if (geometricWaveDirectionDegrees != null)
+        'geometric_wave_direction_degrees': geometricWaveDirectionDegrees,
+      if (geometricWaveSpeed != null)
+        'geometric_wave_speed': geometricWaveSpeed,
+      if (geometricWaveWidth != null)
+        'geometric_wave_width': geometricWaveWidth,
+      if (geometricWavePeriod != null)
+        'geometric_wave_period': geometricWavePeriod,
+      if (geometricWavePopHoldSeconds != null)
+        'geometric_wave_pop_hold_seconds': geometricWavePopHoldSeconds,
+      if (geometricWavePopScale != null)
+        'geometric_wave_pop_scale': geometricWavePopScale,
+      if (geometricWavePopBrightness != null)
+        'geometric_wave_pop_brightness': geometricWavePopBrightness,
+      if (geometricWaveMaskDensity != null)
+        'geometric_wave_mask_density': geometricWaveMaskDensity,
+      if (geometricWaveMaskClusterScale != null)
+        'geometric_wave_mask_cluster_scale': geometricWaveMaskClusterScale,
+      if (geometricWaveTwinkleSparsity != null)
+        'geometric_wave_twinkle_sparsity': geometricWaveTwinkleSparsity,
+      if (geometricWaveShadowLightDegrees != null)
+        'geometric_wave_shadow_light_degrees': geometricWaveShadowLightDegrees,
+      if (geometricWaveShadowOffset != null)
+        'geometric_wave_shadow_offset': geometricWaveShadowOffset,
+      if (geometricWaveShadowSoftness != null)
+        'geometric_wave_shadow_softness': geometricWaveShadowSoftness,
+      if (geometricWaveShadowStrength != null)
+        'geometric_wave_shadow_strength': geometricWaveShadowStrength,
+      if (geometricWavePopBrightnessVariance != null)
+        'geometric_wave_pop_brightness_variance':
+            geometricWavePopBrightnessVariance,
+      if (geometricWaveTiltAmount != null)
+        'geometric_wave_tilt_amount': geometricWaveTiltAmount,
+      if (geometricWaveTiltShading != null)
+        'geometric_wave_tilt_shading': geometricWaveTiltShading,
+      if (geometricWaveMassLagSeconds != null)
+        'geometric_wave_mass_lag_seconds': geometricWaveMassLagSeconds,
+      if (geometricWaveMassSpring != null)
+        'geometric_wave_mass_spring': geometricWaveMassSpring,
+      if (geometricWaveScatterMode != null)
+        'geometric_wave_scatter_mode': geometricWaveScatterMode,
+      if (geometricWaveScatterLitAmount != null)
+        'geometric_wave_scatter_lit_amount': geometricWaveScatterLitAmount,
       if (navPageOrderJson != null) 'nav_page_order_json': navPageOrderJson,
       if (startupPageMode != null) 'startup_page_mode': startupPageMode,
       if (customStartupPage != null) 'custom_startup_page': customStartupPage,
       if (lastSeenNavPage != null) 'last_seen_nav_page': lastSeenNavPage,
+      if (todoCompletedSectionExpanded != null)
+        'todo_completed_section_expanded': todoCompletedSectionExpanded,
+      if (showAnnualizedSubscriptionCost != null)
+        'show_annualized_subscription_cost': showAnnualizedSubscriptionCost,
     });
   }
 
@@ -8518,6 +9974,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<int>? accentColor,
     Value<bool>? weekStartsOnMonday,
     Value<bool>? showQuotes,
+    Value<bool>? showDefaultTrackersInGrid,
+    Value<bool>? showDefaultTrackersInCalendar,
     Value<String>? journalHotkey,
     Value<String>? todoHotkey,
     Value<String>? calendarNavigateLeftKey,
@@ -8564,16 +10022,45 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<double>? geometricTextureFocalPointX,
     Value<double>? geometricTextureFocalPointY,
     Value<double>? geometricTextureVariationFloor,
+    Value<bool>? geometricWaveEnabled,
+    Value<String>? geometricWaveShape,
+    Value<double>? geometricWaveDirectionDegrees,
+    Value<double>? geometricWaveSpeed,
+    Value<double>? geometricWaveWidth,
+    Value<double>? geometricWavePeriod,
+    Value<double>? geometricWavePopHoldSeconds,
+    Value<double>? geometricWavePopScale,
+    Value<double>? geometricWavePopBrightness,
+    Value<double>? geometricWaveMaskDensity,
+    Value<double>? geometricWaveMaskClusterScale,
+    Value<double>? geometricWaveTwinkleSparsity,
+    Value<double>? geometricWaveShadowLightDegrees,
+    Value<double>? geometricWaveShadowOffset,
+    Value<double>? geometricWaveShadowSoftness,
+    Value<double>? geometricWaveShadowStrength,
+    Value<double>? geometricWavePopBrightnessVariance,
+    Value<double>? geometricWaveTiltAmount,
+    Value<double>? geometricWaveTiltShading,
+    Value<double>? geometricWaveMassLagSeconds,
+    Value<double>? geometricWaveMassSpring,
+    Value<bool>? geometricWaveScatterMode,
+    Value<double>? geometricWaveScatterLitAmount,
     Value<String?>? navPageOrderJson,
     Value<String>? startupPageMode,
     Value<String?>? customStartupPage,
     Value<String?>? lastSeenNavPage,
+    Value<bool>? todoCompletedSectionExpanded,
+    Value<bool>? showAnnualizedSubscriptionCost,
   }) {
     return SettingsTableCompanion(
       id: id ?? this.id,
       accentColor: accentColor ?? this.accentColor,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
       showQuotes: showQuotes ?? this.showQuotes,
+      showDefaultTrackersInGrid:
+          showDefaultTrackersInGrid ?? this.showDefaultTrackersInGrid,
+      showDefaultTrackersInCalendar:
+          showDefaultTrackersInCalendar ?? this.showDefaultTrackersInCalendar,
       journalHotkey: journalHotkey ?? this.journalHotkey,
       todoHotkey: todoHotkey ?? this.todoHotkey,
       calendarNavigateLeftKey:
@@ -8642,10 +10129,57 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
       geometricTextureVariationFloor:
           geometricTextureVariationFloor ?? this.geometricTextureVariationFloor,
+      geometricWaveEnabled: geometricWaveEnabled ?? this.geometricWaveEnabled,
+      geometricWaveShape: geometricWaveShape ?? this.geometricWaveShape,
+      geometricWaveDirectionDegrees:
+          geometricWaveDirectionDegrees ?? this.geometricWaveDirectionDegrees,
+      geometricWaveSpeed: geometricWaveSpeed ?? this.geometricWaveSpeed,
+      geometricWaveWidth: geometricWaveWidth ?? this.geometricWaveWidth,
+      geometricWavePeriod: geometricWavePeriod ?? this.geometricWavePeriod,
+      geometricWavePopHoldSeconds:
+          geometricWavePopHoldSeconds ?? this.geometricWavePopHoldSeconds,
+      geometricWavePopScale:
+          geometricWavePopScale ?? this.geometricWavePopScale,
+      geometricWavePopBrightness:
+          geometricWavePopBrightness ?? this.geometricWavePopBrightness,
+      geometricWaveMaskDensity:
+          geometricWaveMaskDensity ?? this.geometricWaveMaskDensity,
+      geometricWaveMaskClusterScale:
+          geometricWaveMaskClusterScale ?? this.geometricWaveMaskClusterScale,
+      geometricWaveTwinkleSparsity:
+          geometricWaveTwinkleSparsity ?? this.geometricWaveTwinkleSparsity,
+      geometricWaveShadowLightDegrees:
+          geometricWaveShadowLightDegrees ??
+          this.geometricWaveShadowLightDegrees,
+      geometricWaveShadowOffset:
+          geometricWaveShadowOffset ?? this.geometricWaveShadowOffset,
+      geometricWaveShadowSoftness:
+          geometricWaveShadowSoftness ?? this.geometricWaveShadowSoftness,
+      geometricWaveShadowStrength:
+          geometricWaveShadowStrength ?? this.geometricWaveShadowStrength,
+      geometricWavePopBrightnessVariance:
+          geometricWavePopBrightnessVariance ??
+          this.geometricWavePopBrightnessVariance,
+      geometricWaveTiltAmount:
+          geometricWaveTiltAmount ?? this.geometricWaveTiltAmount,
+      geometricWaveTiltShading:
+          geometricWaveTiltShading ?? this.geometricWaveTiltShading,
+      geometricWaveMassLagSeconds:
+          geometricWaveMassLagSeconds ?? this.geometricWaveMassLagSeconds,
+      geometricWaveMassSpring:
+          geometricWaveMassSpring ?? this.geometricWaveMassSpring,
+      geometricWaveScatterMode:
+          geometricWaveScatterMode ?? this.geometricWaveScatterMode,
+      geometricWaveScatterLitAmount:
+          geometricWaveScatterLitAmount ?? this.geometricWaveScatterLitAmount,
       navPageOrderJson: navPageOrderJson ?? this.navPageOrderJson,
       startupPageMode: startupPageMode ?? this.startupPageMode,
       customStartupPage: customStartupPage ?? this.customStartupPage,
       lastSeenNavPage: lastSeenNavPage ?? this.lastSeenNavPage,
+      todoCompletedSectionExpanded:
+          todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
+      showAnnualizedSubscriptionCost:
+          showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
     );
   }
 
@@ -8663,6 +10197,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (showQuotes.present) {
       map['show_quotes'] = Variable<bool>(showQuotes.value);
+    }
+    if (showDefaultTrackersInGrid.present) {
+      map['show_default_trackers_in_grid'] = Variable<bool>(
+        showDefaultTrackersInGrid.value,
+      );
+    }
+    if (showDefaultTrackersInCalendar.present) {
+      map['show_default_trackers_in_calendar'] = Variable<bool>(
+        showDefaultTrackersInCalendar.value,
+      );
     }
     if (journalHotkey.present) {
       map['journal_hotkey'] = Variable<String>(journalHotkey.value);
@@ -8860,6 +10404,115 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         geometricTextureVariationFloor.value,
       );
     }
+    if (geometricWaveEnabled.present) {
+      map['geometric_wave_enabled'] = Variable<bool>(
+        geometricWaveEnabled.value,
+      );
+    }
+    if (geometricWaveShape.present) {
+      map['geometric_wave_shape'] = Variable<String>(geometricWaveShape.value);
+    }
+    if (geometricWaveDirectionDegrees.present) {
+      map['geometric_wave_direction_degrees'] = Variable<double>(
+        geometricWaveDirectionDegrees.value,
+      );
+    }
+    if (geometricWaveSpeed.present) {
+      map['geometric_wave_speed'] = Variable<double>(geometricWaveSpeed.value);
+    }
+    if (geometricWaveWidth.present) {
+      map['geometric_wave_width'] = Variable<double>(geometricWaveWidth.value);
+    }
+    if (geometricWavePeriod.present) {
+      map['geometric_wave_period'] = Variable<double>(
+        geometricWavePeriod.value,
+      );
+    }
+    if (geometricWavePopHoldSeconds.present) {
+      map['geometric_wave_pop_hold_seconds'] = Variable<double>(
+        geometricWavePopHoldSeconds.value,
+      );
+    }
+    if (geometricWavePopScale.present) {
+      map['geometric_wave_pop_scale'] = Variable<double>(
+        geometricWavePopScale.value,
+      );
+    }
+    if (geometricWavePopBrightness.present) {
+      map['geometric_wave_pop_brightness'] = Variable<double>(
+        geometricWavePopBrightness.value,
+      );
+    }
+    if (geometricWaveMaskDensity.present) {
+      map['geometric_wave_mask_density'] = Variable<double>(
+        geometricWaveMaskDensity.value,
+      );
+    }
+    if (geometricWaveMaskClusterScale.present) {
+      map['geometric_wave_mask_cluster_scale'] = Variable<double>(
+        geometricWaveMaskClusterScale.value,
+      );
+    }
+    if (geometricWaveTwinkleSparsity.present) {
+      map['geometric_wave_twinkle_sparsity'] = Variable<double>(
+        geometricWaveTwinkleSparsity.value,
+      );
+    }
+    if (geometricWaveShadowLightDegrees.present) {
+      map['geometric_wave_shadow_light_degrees'] = Variable<double>(
+        geometricWaveShadowLightDegrees.value,
+      );
+    }
+    if (geometricWaveShadowOffset.present) {
+      map['geometric_wave_shadow_offset'] = Variable<double>(
+        geometricWaveShadowOffset.value,
+      );
+    }
+    if (geometricWaveShadowSoftness.present) {
+      map['geometric_wave_shadow_softness'] = Variable<double>(
+        geometricWaveShadowSoftness.value,
+      );
+    }
+    if (geometricWaveShadowStrength.present) {
+      map['geometric_wave_shadow_strength'] = Variable<double>(
+        geometricWaveShadowStrength.value,
+      );
+    }
+    if (geometricWavePopBrightnessVariance.present) {
+      map['geometric_wave_pop_brightness_variance'] = Variable<double>(
+        geometricWavePopBrightnessVariance.value,
+      );
+    }
+    if (geometricWaveTiltAmount.present) {
+      map['geometric_wave_tilt_amount'] = Variable<double>(
+        geometricWaveTiltAmount.value,
+      );
+    }
+    if (geometricWaveTiltShading.present) {
+      map['geometric_wave_tilt_shading'] = Variable<double>(
+        geometricWaveTiltShading.value,
+      );
+    }
+    if (geometricWaveMassLagSeconds.present) {
+      map['geometric_wave_mass_lag_seconds'] = Variable<double>(
+        geometricWaveMassLagSeconds.value,
+      );
+    }
+    if (geometricWaveMassSpring.present) {
+      map['geometric_wave_mass_spring'] = Variable<double>(
+        geometricWaveMassSpring.value,
+      );
+    }
+    if (geometricWaveScatterMode.present) {
+      map['geometric_wave_scatter_mode'] = Variable<bool>(
+        geometricWaveScatterMode.value,
+      );
+    }
+    if (geometricWaveScatterLitAmount.present) {
+      map['geometric_wave_scatter_lit_amount'] = Variable<double>(
+        geometricWaveScatterLitAmount.value,
+      );
+    }
     if (navPageOrderJson.present) {
       map['nav_page_order_json'] = Variable<String>(navPageOrderJson.value);
     }
@@ -8872,6 +10525,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (lastSeenNavPage.present) {
       map['last_seen_nav_page'] = Variable<String>(lastSeenNavPage.value);
     }
+    if (todoCompletedSectionExpanded.present) {
+      map['todo_completed_section_expanded'] = Variable<bool>(
+        todoCompletedSectionExpanded.value,
+      );
+    }
+    if (showAnnualizedSubscriptionCost.present) {
+      map['show_annualized_subscription_cost'] = Variable<bool>(
+        showAnnualizedSubscriptionCost.value,
+      );
+    }
     return map;
   }
 
@@ -8882,6 +10545,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('accentColor: $accentColor, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
           ..write('showQuotes: $showQuotes, ')
+          ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
+          ..write(
+            'showDefaultTrackersInCalendar: $showDefaultTrackersInCalendar, ',
+          )
           ..write('journalHotkey: $journalHotkey, ')
           ..write('todoHotkey: $todoHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
@@ -8934,10 +10601,51 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write(
             'geometricTextureVariationFloor: $geometricTextureVariationFloor, ',
           )
+          ..write('geometricWaveEnabled: $geometricWaveEnabled, ')
+          ..write('geometricWaveShape: $geometricWaveShape, ')
+          ..write(
+            'geometricWaveDirectionDegrees: $geometricWaveDirectionDegrees, ',
+          )
+          ..write('geometricWaveSpeed: $geometricWaveSpeed, ')
+          ..write('geometricWaveWidth: $geometricWaveWidth, ')
+          ..write('geometricWavePeriod: $geometricWavePeriod, ')
+          ..write('geometricWavePopHoldSeconds: $geometricWavePopHoldSeconds, ')
+          ..write('geometricWavePopScale: $geometricWavePopScale, ')
+          ..write('geometricWavePopBrightness: $geometricWavePopBrightness, ')
+          ..write('geometricWaveMaskDensity: $geometricWaveMaskDensity, ')
+          ..write(
+            'geometricWaveMaskClusterScale: $geometricWaveMaskClusterScale, ',
+          )
+          ..write(
+            'geometricWaveTwinkleSparsity: $geometricWaveTwinkleSparsity, ',
+          )
+          ..write(
+            'geometricWaveShadowLightDegrees: $geometricWaveShadowLightDegrees, ',
+          )
+          ..write('geometricWaveShadowOffset: $geometricWaveShadowOffset, ')
+          ..write('geometricWaveShadowSoftness: $geometricWaveShadowSoftness, ')
+          ..write('geometricWaveShadowStrength: $geometricWaveShadowStrength, ')
+          ..write(
+            'geometricWavePopBrightnessVariance: $geometricWavePopBrightnessVariance, ',
+          )
+          ..write('geometricWaveTiltAmount: $geometricWaveTiltAmount, ')
+          ..write('geometricWaveTiltShading: $geometricWaveTiltShading, ')
+          ..write('geometricWaveMassLagSeconds: $geometricWaveMassLagSeconds, ')
+          ..write('geometricWaveMassSpring: $geometricWaveMassSpring, ')
+          ..write('geometricWaveScatterMode: $geometricWaveScatterMode, ')
+          ..write(
+            'geometricWaveScatterLitAmount: $geometricWaveScatterLitAmount, ',
+          )
           ..write('navPageOrderJson: $navPageOrderJson, ')
           ..write('startupPageMode: $startupPageMode, ')
           ..write('customStartupPage: $customStartupPage, ')
-          ..write('lastSeenNavPage: $lastSeenNavPage')
+          ..write('lastSeenNavPage: $lastSeenNavPage, ')
+          ..write(
+            'todoCompletedSectionExpanded: $todoCompletedSectionExpanded, ',
+          )
+          ..write(
+            'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost',
+          )
           ..write(')'))
         .toString();
   }
@@ -10077,6 +11785,4461 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
   }
 }
 
+class $TransactionsTableTable extends TransactionsTable
+    with TableInfo<$TransactionsTableTable, TransactionsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransactionsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountCentsMeta = const VerificationMeta(
+    'amountCents',
+  );
+  @override
+  late final GeneratedColumn<int> amountCents = GeneratedColumn<int>(
+    'amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tagsJsonMeta = const VerificationMeta(
+    'tagsJson',
+  );
+  @override
+  late final GeneratedColumn<String> tagsJson = GeneratedColumn<String>(
+    'tags_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _occurredAtMeta = const VerificationMeta(
+    'occurredAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> occurredAt = GeneratedColumn<DateTime>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    type,
+    amountCents,
+    note,
+    tagsJson,
+    occurredAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transactions_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TransactionsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('amount_cents')) {
+      context.handle(
+        _amountCentsMeta,
+        amountCents.isAcceptableOrUnknown(
+          data['amount_cents']!,
+          _amountCentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_amountCentsMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('tags_json')) {
+      context.handle(
+        _tagsJsonMeta,
+        tagsJson.isAcceptableOrUnknown(data['tags_json']!, _tagsJsonMeta),
+      );
+    }
+    if (data.containsKey('occurred_at')) {
+      context.handle(
+        _occurredAtMeta,
+        occurredAt.isAcceptableOrUnknown(data['occurred_at']!, _occurredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TransactionsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransactionsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      amountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_cents'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      tagsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags_json'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $TransactionsTableTable createAlias(String alias) {
+    return $TransactionsTableTable(attachedDatabase, alias);
+  }
+}
+
+class TransactionsTableData extends DataClass
+    implements Insertable<TransactionsTableData> {
+  final String id;
+  final String type;
+  final int amountCents;
+  final String? note;
+  final String tagsJson;
+  final DateTime occurredAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const TransactionsTableData({
+    required this.id,
+    required this.type,
+    required this.amountCents,
+    this.note,
+    required this.tagsJson,
+    required this.occurredAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['type'] = Variable<String>(type);
+    map['amount_cents'] = Variable<int>(amountCents);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['tags_json'] = Variable<String>(tagsJson);
+    map['occurred_at'] = Variable<DateTime>(occurredAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  TransactionsTableCompanion toCompanion(bool nullToAbsent) {
+    return TransactionsTableCompanion(
+      id: Value(id),
+      type: Value(type),
+      amountCents: Value(amountCents),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      tagsJson: Value(tagsJson),
+      occurredAt: Value(occurredAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory TransactionsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransactionsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      type: serializer.fromJson<String>(json['type']),
+      amountCents: serializer.fromJson<int>(json['amountCents']),
+      note: serializer.fromJson<String?>(json['note']),
+      tagsJson: serializer.fromJson<String>(json['tagsJson']),
+      occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'type': serializer.toJson<String>(type),
+      'amountCents': serializer.toJson<int>(amountCents),
+      'note': serializer.toJson<String?>(note),
+      'tagsJson': serializer.toJson<String>(tagsJson),
+      'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  TransactionsTableData copyWith({
+    String? id,
+    String? type,
+    int? amountCents,
+    Value<String?> note = const Value.absent(),
+    String? tagsJson,
+    DateTime? occurredAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => TransactionsTableData(
+    id: id ?? this.id,
+    type: type ?? this.type,
+    amountCents: amountCents ?? this.amountCents,
+    note: note.present ? note.value : this.note,
+    tagsJson: tagsJson ?? this.tagsJson,
+    occurredAt: occurredAt ?? this.occurredAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  TransactionsTableData copyWithCompanion(TransactionsTableCompanion data) {
+    return TransactionsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      type: data.type.present ? data.type.value : this.type,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      note: data.note.present ? data.note.value : this.note,
+      tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
+      occurredAt: data.occurredAt.present
+          ? data.occurredAt.value
+          : this.occurredAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransactionsTableData(')
+          ..write('id: $id, ')
+          ..write('type: $type, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('note: $note, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    type,
+    amountCents,
+    note,
+    tagsJson,
+    occurredAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransactionsTableData &&
+          other.id == this.id &&
+          other.type == this.type &&
+          other.amountCents == this.amountCents &&
+          other.note == this.note &&
+          other.tagsJson == this.tagsJson &&
+          other.occurredAt == this.occurredAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class TransactionsTableCompanion
+    extends UpdateCompanion<TransactionsTableData> {
+  final Value<String> id;
+  final Value<String> type;
+  final Value<int> amountCents;
+  final Value<String?> note;
+  final Value<String> tagsJson;
+  final Value<DateTime> occurredAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const TransactionsTableCompanion({
+    this.id = const Value.absent(),
+    this.type = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.note = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    this.occurredAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransactionsTableCompanion.insert({
+    required String id,
+    required String type,
+    required int amountCents,
+    this.note = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    required DateTime occurredAt,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       type = Value(type),
+       amountCents = Value(amountCents),
+       occurredAt = Value(occurredAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<TransactionsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? type,
+    Expression<int>? amountCents,
+    Expression<String>? note,
+    Expression<String>? tagsJson,
+    Expression<DateTime>? occurredAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (type != null) 'type': type,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (note != null) 'note': note,
+      if (tagsJson != null) 'tags_json': tagsJson,
+      if (occurredAt != null) 'occurred_at': occurredAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransactionsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? type,
+    Value<int>? amountCents,
+    Value<String?>? note,
+    Value<String>? tagsJson,
+    Value<DateTime>? occurredAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return TransactionsTableCompanion(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      amountCents: amountCents ?? this.amountCents,
+      note: note ?? this.note,
+      tagsJson: tagsJson ?? this.tagsJson,
+      occurredAt: occurredAt ?? this.occurredAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(amountCents.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (tagsJson.present) {
+      map['tags_json'] = Variable<String>(tagsJson.value);
+    }
+    if (occurredAt.present) {
+      map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransactionsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('type: $type, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('note: $note, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SubscriptionsTableTable extends SubscriptionsTable
+    with TableInfo<$SubscriptionsTableTable, SubscriptionsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SubscriptionsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountCentsMeta = const VerificationMeta(
+    'amountCents',
+  );
+  @override
+  late final GeneratedColumn<int> amountCents = GeneratedColumn<int>(
+    'amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _periodMeta = const VerificationMeta('period');
+  @override
+  late final GeneratedColumn<String> period = GeneratedColumn<String>(
+    'period',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _anchorDueDateMeta = const VerificationMeta(
+    'anchorDueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> anchorDueDate =
+      GeneratedColumn<DateTime>(
+        'anchor_due_date',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0xFF7C9EFF),
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    amountCents,
+    period,
+    anchorDueDate,
+    colorValue,
+    note,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'subscriptions_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SubscriptionsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('amount_cents')) {
+      context.handle(
+        _amountCentsMeta,
+        amountCents.isAcceptableOrUnknown(
+          data['amount_cents']!,
+          _amountCentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_amountCentsMeta);
+    }
+    if (data.containsKey('period')) {
+      context.handle(
+        _periodMeta,
+        period.isAcceptableOrUnknown(data['period']!, _periodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_periodMeta);
+    }
+    if (data.containsKey('anchor_due_date')) {
+      context.handle(
+        _anchorDueDateMeta,
+        anchorDueDate.isAcceptableOrUnknown(
+          data['anchor_due_date']!,
+          _anchorDueDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_anchorDueDateMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SubscriptionsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SubscriptionsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      amountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_cents'],
+      )!,
+      period: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}period'],
+      )!,
+      anchorDueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}anchor_due_date'],
+      )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $SubscriptionsTableTable createAlias(String alias) {
+    return $SubscriptionsTableTable(attachedDatabase, alias);
+  }
+}
+
+class SubscriptionsTableData extends DataClass
+    implements Insertable<SubscriptionsTableData> {
+  final String id;
+  final String name;
+  final int amountCents;
+  final String period;
+  final DateTime anchorDueDate;
+  final int colorValue;
+  final String? note;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const SubscriptionsTableData({
+    required this.id,
+    required this.name,
+    required this.amountCents,
+    required this.period,
+    required this.anchorDueDate,
+    required this.colorValue,
+    this.note,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['amount_cents'] = Variable<int>(amountCents);
+    map['period'] = Variable<String>(period);
+    map['anchor_due_date'] = Variable<DateTime>(anchorDueDate);
+    map['color_value'] = Variable<int>(colorValue);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  SubscriptionsTableCompanion toCompanion(bool nullToAbsent) {
+    return SubscriptionsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      amountCents: Value(amountCents),
+      period: Value(period),
+      anchorDueDate: Value(anchorDueDate),
+      colorValue: Value(colorValue),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory SubscriptionsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SubscriptionsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      amountCents: serializer.fromJson<int>(json['amountCents']),
+      period: serializer.fromJson<String>(json['period']),
+      anchorDueDate: serializer.fromJson<DateTime>(json['anchorDueDate']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'amountCents': serializer.toJson<int>(amountCents),
+      'period': serializer.toJson<String>(period),
+      'anchorDueDate': serializer.toJson<DateTime>(anchorDueDate),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  SubscriptionsTableData copyWith({
+    String? id,
+    String? name,
+    int? amountCents,
+    String? period,
+    DateTime? anchorDueDate,
+    int? colorValue,
+    Value<String?> note = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => SubscriptionsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    amountCents: amountCents ?? this.amountCents,
+    period: period ?? this.period,
+    anchorDueDate: anchorDueDate ?? this.anchorDueDate,
+    colorValue: colorValue ?? this.colorValue,
+    note: note.present ? note.value : this.note,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  SubscriptionsTableData copyWithCompanion(SubscriptionsTableCompanion data) {
+    return SubscriptionsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      period: data.period.present ? data.period.value : this.period,
+      anchorDueDate: data.anchorDueDate.present
+          ? data.anchorDueDate.value
+          : this.anchorDueDate,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubscriptionsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('period: $period, ')
+          ..write('anchorDueDate: $anchorDueDate, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    amountCents,
+    period,
+    anchorDueDate,
+    colorValue,
+    note,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SubscriptionsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.amountCents == this.amountCents &&
+          other.period == this.period &&
+          other.anchorDueDate == this.anchorDueDate &&
+          other.colorValue == this.colorValue &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SubscriptionsTableCompanion
+    extends UpdateCompanion<SubscriptionsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> amountCents;
+  final Value<String> period;
+  final Value<DateTime> anchorDueDate;
+  final Value<int> colorValue;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const SubscriptionsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.period = const Value.absent(),
+    this.anchorDueDate = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SubscriptionsTableCompanion.insert({
+    required String id,
+    required String name,
+    required int amountCents,
+    required String period,
+    required DateTime anchorDueDate,
+    this.colorValue = const Value.absent(),
+    this.note = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       amountCents = Value(amountCents),
+       period = Value(period),
+       anchorDueDate = Value(anchorDueDate),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<SubscriptionsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? amountCents,
+    Expression<String>? period,
+    Expression<DateTime>? anchorDueDate,
+    Expression<int>? colorValue,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (period != null) 'period': period,
+      if (anchorDueDate != null) 'anchor_due_date': anchorDueDate,
+      if (colorValue != null) 'color_value': colorValue,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SubscriptionsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? amountCents,
+    Value<String>? period,
+    Value<DateTime>? anchorDueDate,
+    Value<int>? colorValue,
+    Value<String?>? note,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SubscriptionsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      amountCents: amountCents ?? this.amountCents,
+      period: period ?? this.period,
+      anchorDueDate: anchorDueDate ?? this.anchorDueDate,
+      colorValue: colorValue ?? this.colorValue,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(amountCents.value);
+    }
+    if (period.present) {
+      map['period'] = Variable<String>(period.value);
+    }
+    if (anchorDueDate.present) {
+      map['anchor_due_date'] = Variable<DateTime>(anchorDueDate.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SubscriptionsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('period: $period, ')
+          ..write('anchorDueDate: $anchorDueDate, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BudgetsTableTable extends BudgetsTable
+    with TableInfo<$BudgetsTableTable, BudgetsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BudgetsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tagMeta = const VerificationMeta('tag');
+  @override
+  late final GeneratedColumn<String> tag = GeneratedColumn<String>(
+    'tag',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _limitCentsMeta = const VerificationMeta(
+    'limitCents',
+  );
+  @override
+  late final GeneratedColumn<int> limitCents = GeneratedColumn<int>(
+    'limit_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    tag,
+    limitCents,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'budgets_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BudgetsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('tag')) {
+      context.handle(
+        _tagMeta,
+        tag.isAcceptableOrUnknown(data['tag']!, _tagMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tagMeta);
+    }
+    if (data.containsKey('limit_cents')) {
+      context.handle(
+        _limitCentsMeta,
+        limitCents.isAcceptableOrUnknown(data['limit_cents']!, _limitCentsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_limitCentsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BudgetsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BudgetsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      tag: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tag'],
+      )!,
+      limitCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}limit_cents'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $BudgetsTableTable createAlias(String alias) {
+    return $BudgetsTableTable(attachedDatabase, alias);
+  }
+}
+
+class BudgetsTableData extends DataClass
+    implements Insertable<BudgetsTableData> {
+  final String id;
+  final String tag;
+  final int limitCents;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const BudgetsTableData({
+    required this.id,
+    required this.tag,
+    required this.limitCents,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['tag'] = Variable<String>(tag);
+    map['limit_cents'] = Variable<int>(limitCents);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  BudgetsTableCompanion toCompanion(bool nullToAbsent) {
+    return BudgetsTableCompanion(
+      id: Value(id),
+      tag: Value(tag),
+      limitCents: Value(limitCents),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory BudgetsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BudgetsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      tag: serializer.fromJson<String>(json['tag']),
+      limitCents: serializer.fromJson<int>(json['limitCents']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'tag': serializer.toJson<String>(tag),
+      'limitCents': serializer.toJson<int>(limitCents),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  BudgetsTableData copyWith({
+    String? id,
+    String? tag,
+    int? limitCents,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => BudgetsTableData(
+    id: id ?? this.id,
+    tag: tag ?? this.tag,
+    limitCents: limitCents ?? this.limitCents,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  BudgetsTableData copyWithCompanion(BudgetsTableCompanion data) {
+    return BudgetsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      tag: data.tag.present ? data.tag.value : this.tag,
+      limitCents: data.limitCents.present
+          ? data.limitCents.value
+          : this.limitCents,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BudgetsTableData(')
+          ..write('id: $id, ')
+          ..write('tag: $tag, ')
+          ..write('limitCents: $limitCents, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    tag,
+    limitCents,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BudgetsTableData &&
+          other.id == this.id &&
+          other.tag == this.tag &&
+          other.limitCents == this.limitCents &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class BudgetsTableCompanion extends UpdateCompanion<BudgetsTableData> {
+  final Value<String> id;
+  final Value<String> tag;
+  final Value<int> limitCents;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const BudgetsTableCompanion({
+    this.id = const Value.absent(),
+    this.tag = const Value.absent(),
+    this.limitCents = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BudgetsTableCompanion.insert({
+    required String id,
+    required String tag,
+    required int limitCents,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       tag = Value(tag),
+       limitCents = Value(limitCents),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<BudgetsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? tag,
+    Expression<int>? limitCents,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (tag != null) 'tag': tag,
+      if (limitCents != null) 'limit_cents': limitCents,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BudgetsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? tag,
+    Value<int>? limitCents,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return BudgetsTableCompanion(
+      id: id ?? this.id,
+      tag: tag ?? this.tag,
+      limitCents: limitCents ?? this.limitCents,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (tag.present) {
+      map['tag'] = Variable<String>(tag.value);
+    }
+    if (limitCents.present) {
+      map['limit_cents'] = Variable<int>(limitCents.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BudgetsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('tag: $tag, ')
+          ..write('limitCents: $limitCents, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FinanceCategoriesTableTable extends FinanceCategoriesTable
+    with TableInfo<$FinanceCategoriesTableTable, FinanceCategoriesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FinanceCategoriesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0xFF7C9EFF),
+  );
+  static const VerificationMeta _tagsJsonMeta = const VerificationMeta(
+    'tagsJson',
+  );
+  @override
+  late final GeneratedColumn<String> tagsJson = GeneratedColumn<String>(
+    'tags_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    colorValue,
+    tagsJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'finance_categories_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FinanceCategoriesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    }
+    if (data.containsKey('tags_json')) {
+      context.handle(
+        _tagsJsonMeta,
+        tagsJson.isAcceptableOrUnknown(data['tags_json']!, _tagsJsonMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FinanceCategoriesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FinanceCategoriesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      )!,
+      tagsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags_json'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $FinanceCategoriesTableTable createAlias(String alias) {
+    return $FinanceCategoriesTableTable(attachedDatabase, alias);
+  }
+}
+
+class FinanceCategoriesTableData extends DataClass
+    implements Insertable<FinanceCategoriesTableData> {
+  final String id;
+  final String name;
+  final int colorValue;
+  final String tagsJson;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const FinanceCategoriesTableData({
+    required this.id,
+    required this.name,
+    required this.colorValue,
+    required this.tagsJson,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['color_value'] = Variable<int>(colorValue);
+    map['tags_json'] = Variable<String>(tagsJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  FinanceCategoriesTableCompanion toCompanion(bool nullToAbsent) {
+    return FinanceCategoriesTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      colorValue: Value(colorValue),
+      tagsJson: Value(tagsJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory FinanceCategoriesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FinanceCategoriesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      tagsJson: serializer.fromJson<String>(json['tagsJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'tagsJson': serializer.toJson<String>(tagsJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  FinanceCategoriesTableData copyWith({
+    String? id,
+    String? name,
+    int? colorValue,
+    String? tagsJson,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => FinanceCategoriesTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    colorValue: colorValue ?? this.colorValue,
+    tagsJson: tagsJson ?? this.tagsJson,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  FinanceCategoriesTableData copyWithCompanion(
+    FinanceCategoriesTableCompanion data,
+  ) {
+    return FinanceCategoriesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
+      tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FinanceCategoriesTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    colorValue,
+    tagsJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FinanceCategoriesTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.colorValue == this.colorValue &&
+          other.tagsJson == this.tagsJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class FinanceCategoriesTableCompanion
+    extends UpdateCompanion<FinanceCategoriesTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> colorValue;
+  final Value<String> tagsJson;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const FinanceCategoriesTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FinanceCategoriesTableCompanion.insert({
+    required String id,
+    required String name,
+    this.colorValue = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<FinanceCategoriesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? colorValue,
+    Expression<String>? tagsJson,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (colorValue != null) 'color_value': colorValue,
+      if (tagsJson != null) 'tags_json': tagsJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FinanceCategoriesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? colorValue,
+    Value<String>? tagsJson,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return FinanceCategoriesTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
+      tagsJson: tagsJson ?? this.tagsJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (tagsJson.present) {
+      map['tags_json'] = Variable<String>(tagsJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FinanceCategoriesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AssetsTableTable extends AssetsTable
+    with TableInfo<$AssetsTableTable, AssetsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AssetsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0xFF7C9EFF),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    note,
+    colorValue,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'assets_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AssetsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AssetsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AssetsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $AssetsTableTable createAlias(String alias) {
+    return $AssetsTableTable(attachedDatabase, alias);
+  }
+}
+
+class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
+  final String id;
+  final String name;
+  final String? note;
+  final int colorValue;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const AssetsTableData({
+    required this.id,
+    required this.name,
+    this.note,
+    required this.colorValue,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['color_value'] = Variable<int>(colorValue);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  AssetsTableCompanion toCompanion(bool nullToAbsent) {
+    return AssetsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      colorValue: Value(colorValue),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory AssetsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AssetsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      note: serializer.fromJson<String?>(json['note']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'note': serializer.toJson<String?>(note),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  AssetsTableData copyWith({
+    String? id,
+    String? name,
+    Value<String?> note = const Value.absent(),
+    int? colorValue,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => AssetsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    note: note.present ? note.value : this.note,
+    colorValue: colorValue ?? this.colorValue,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  AssetsTableData copyWithCompanion(AssetsTableCompanion data) {
+    return AssetsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      note: data.note.present ? data.note.value : this.note,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('note: $note, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    note,
+    colorValue,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AssetsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.note == this.note &&
+          other.colorValue == this.colorValue &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> note;
+  final Value<int> colorValue;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const AssetsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.note = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AssetsTableCompanion.insert({
+    required String id,
+    required String name,
+    this.note = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<AssetsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? note,
+    Expression<int>? colorValue,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (note != null) 'note': note,
+      if (colorValue != null) 'color_value': colorValue,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AssetsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? note,
+    Value<int>? colorValue,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return AssetsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      note: note ?? this.note,
+      colorValue: colorValue ?? this.colorValue,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('note: $note, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AssetValuationsTableTable extends AssetValuationsTable
+    with TableInfo<$AssetValuationsTableTable, AssetValuationsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AssetValuationsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _assetIdMeta = const VerificationMeta(
+    'assetId',
+  );
+  @override
+  late final GeneratedColumn<String> assetId = GeneratedColumn<String>(
+    'asset_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueCentsMeta = const VerificationMeta(
+    'valueCents',
+  );
+  @override
+  late final GeneratedColumn<int> valueCents = GeneratedColumn<int>(
+    'value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _asOfMeta = const VerificationMeta('asOf');
+  @override
+  late final GeneratedColumn<DateTime> asOf = GeneratedColumn<DateTime>(
+    'as_of',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    assetId,
+    valueCents,
+    asOf,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'asset_valuations_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AssetValuationsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('asset_id')) {
+      context.handle(
+        _assetIdMeta,
+        assetId.isAcceptableOrUnknown(data['asset_id']!, _assetIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assetIdMeta);
+    }
+    if (data.containsKey('value_cents')) {
+      context.handle(
+        _valueCentsMeta,
+        valueCents.isAcceptableOrUnknown(data['value_cents']!, _valueCentsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueCentsMeta);
+    }
+    if (data.containsKey('as_of')) {
+      context.handle(
+        _asOfMeta,
+        asOf.isAcceptableOrUnknown(data['as_of']!, _asOfMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_asOfMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AssetValuationsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AssetValuationsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      assetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}asset_id'],
+      )!,
+      valueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}value_cents'],
+      )!,
+      asOf: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}as_of'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $AssetValuationsTableTable createAlias(String alias) {
+    return $AssetValuationsTableTable(attachedDatabase, alias);
+  }
+}
+
+class AssetValuationsTableData extends DataClass
+    implements Insertable<AssetValuationsTableData> {
+  final String id;
+  final String assetId;
+  final int valueCents;
+  final DateTime asOf;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const AssetValuationsTableData({
+    required this.id,
+    required this.assetId,
+    required this.valueCents,
+    required this.asOf,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['asset_id'] = Variable<String>(assetId);
+    map['value_cents'] = Variable<int>(valueCents);
+    map['as_of'] = Variable<DateTime>(asOf);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  AssetValuationsTableCompanion toCompanion(bool nullToAbsent) {
+    return AssetValuationsTableCompanion(
+      id: Value(id),
+      assetId: Value(assetId),
+      valueCents: Value(valueCents),
+      asOf: Value(asOf),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory AssetValuationsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AssetValuationsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      assetId: serializer.fromJson<String>(json['assetId']),
+      valueCents: serializer.fromJson<int>(json['valueCents']),
+      asOf: serializer.fromJson<DateTime>(json['asOf']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'assetId': serializer.toJson<String>(assetId),
+      'valueCents': serializer.toJson<int>(valueCents),
+      'asOf': serializer.toJson<DateTime>(asOf),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  AssetValuationsTableData copyWith({
+    String? id,
+    String? assetId,
+    int? valueCents,
+    DateTime? asOf,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => AssetValuationsTableData(
+    id: id ?? this.id,
+    assetId: assetId ?? this.assetId,
+    valueCents: valueCents ?? this.valueCents,
+    asOf: asOf ?? this.asOf,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  AssetValuationsTableData copyWithCompanion(
+    AssetValuationsTableCompanion data,
+  ) {
+    return AssetValuationsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      assetId: data.assetId.present ? data.assetId.value : this.assetId,
+      valueCents: data.valueCents.present
+          ? data.valueCents.value
+          : this.valueCents,
+      asOf: data.asOf.present ? data.asOf.value : this.asOf,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetValuationsTableData(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('valueCents: $valueCents, ')
+          ..write('asOf: $asOf, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    assetId,
+    valueCents,
+    asOf,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AssetValuationsTableData &&
+          other.id == this.id &&
+          other.assetId == this.assetId &&
+          other.valueCents == this.valueCents &&
+          other.asOf == this.asOf &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class AssetValuationsTableCompanion
+    extends UpdateCompanion<AssetValuationsTableData> {
+  final Value<String> id;
+  final Value<String> assetId;
+  final Value<int> valueCents;
+  final Value<DateTime> asOf;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const AssetValuationsTableCompanion({
+    this.id = const Value.absent(),
+    this.assetId = const Value.absent(),
+    this.valueCents = const Value.absent(),
+    this.asOf = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AssetValuationsTableCompanion.insert({
+    required String id,
+    required String assetId,
+    required int valueCents,
+    required DateTime asOf,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       assetId = Value(assetId),
+       valueCents = Value(valueCents),
+       asOf = Value(asOf),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<AssetValuationsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? assetId,
+    Expression<int>? valueCents,
+    Expression<DateTime>? asOf,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (assetId != null) 'asset_id': assetId,
+      if (valueCents != null) 'value_cents': valueCents,
+      if (asOf != null) 'as_of': asOf,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AssetValuationsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? assetId,
+    Value<int>? valueCents,
+    Value<DateTime>? asOf,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return AssetValuationsTableCompanion(
+      id: id ?? this.id,
+      assetId: assetId ?? this.assetId,
+      valueCents: valueCents ?? this.valueCents,
+      asOf: asOf ?? this.asOf,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (assetId.present) {
+      map['asset_id'] = Variable<String>(assetId.value);
+    }
+    if (valueCents.present) {
+      map['value_cents'] = Variable<int>(valueCents.value);
+    }
+    if (asOf.present) {
+      map['as_of'] = Variable<DateTime>(asOf.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetValuationsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('valueCents: $valueCents, ')
+          ..write('asOf: $asOf, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SavingsGoalsTableTable extends SavingsGoalsTable
+    with TableInfo<$SavingsGoalsTableTable, SavingsGoalsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SavingsGoalsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetCentsMeta = const VerificationMeta(
+    'targetCents',
+  );
+  @override
+  late final GeneratedColumn<int> targetCents = GeneratedColumn<int>(
+    'target_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0xFF7C9EFF),
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _targetDateMeta = const VerificationMeta(
+    'targetDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> targetDate = GeneratedColumn<DateTime>(
+    'target_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    targetCents,
+    colorValue,
+    note,
+    targetDate,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'savings_goals_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SavingsGoalsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('target_cents')) {
+      context.handle(
+        _targetCentsMeta,
+        targetCents.isAcceptableOrUnknown(
+          data['target_cents']!,
+          _targetCentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_targetCentsMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('target_date')) {
+      context.handle(
+        _targetDateMeta,
+        targetDate.isAcceptableOrUnknown(data['target_date']!, _targetDateMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SavingsGoalsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SavingsGoalsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      targetCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}target_cents'],
+      )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      targetDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}target_date'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $SavingsGoalsTableTable createAlias(String alias) {
+    return $SavingsGoalsTableTable(attachedDatabase, alias);
+  }
+}
+
+class SavingsGoalsTableData extends DataClass
+    implements Insertable<SavingsGoalsTableData> {
+  final String id;
+  final String name;
+  final int targetCents;
+  final int colorValue;
+  final String? note;
+  final DateTime? targetDate;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const SavingsGoalsTableData({
+    required this.id,
+    required this.name,
+    required this.targetCents,
+    required this.colorValue,
+    this.note,
+    this.targetDate,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['target_cents'] = Variable<int>(targetCents);
+    map['color_value'] = Variable<int>(colorValue);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || targetDate != null) {
+      map['target_date'] = Variable<DateTime>(targetDate);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  SavingsGoalsTableCompanion toCompanion(bool nullToAbsent) {
+    return SavingsGoalsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      targetCents: Value(targetCents),
+      colorValue: Value(colorValue),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      targetDate: targetDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetDate),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory SavingsGoalsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SavingsGoalsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      targetCents: serializer.fromJson<int>(json['targetCents']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      note: serializer.fromJson<String?>(json['note']),
+      targetDate: serializer.fromJson<DateTime?>(json['targetDate']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'targetCents': serializer.toJson<int>(targetCents),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'note': serializer.toJson<String?>(note),
+      'targetDate': serializer.toJson<DateTime?>(targetDate),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  SavingsGoalsTableData copyWith({
+    String? id,
+    String? name,
+    int? targetCents,
+    int? colorValue,
+    Value<String?> note = const Value.absent(),
+    Value<DateTime?> targetDate = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => SavingsGoalsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    targetCents: targetCents ?? this.targetCents,
+    colorValue: colorValue ?? this.colorValue,
+    note: note.present ? note.value : this.note,
+    targetDate: targetDate.present ? targetDate.value : this.targetDate,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  SavingsGoalsTableData copyWithCompanion(SavingsGoalsTableCompanion data) {
+    return SavingsGoalsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      targetCents: data.targetCents.present
+          ? data.targetCents.value
+          : this.targetCents,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
+      note: data.note.present ? data.note.value : this.note,
+      targetDate: data.targetDate.present
+          ? data.targetDate.value
+          : this.targetDate,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavingsGoalsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('targetCents: $targetCents, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('note: $note, ')
+          ..write('targetDate: $targetDate, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    targetCents,
+    colorValue,
+    note,
+    targetDate,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SavingsGoalsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.targetCents == this.targetCents &&
+          other.colorValue == this.colorValue &&
+          other.note == this.note &&
+          other.targetDate == this.targetDate &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SavingsGoalsTableCompanion
+    extends UpdateCompanion<SavingsGoalsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> targetCents;
+  final Value<int> colorValue;
+  final Value<String?> note;
+  final Value<DateTime?> targetDate;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const SavingsGoalsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.targetCents = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.note = const Value.absent(),
+    this.targetDate = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SavingsGoalsTableCompanion.insert({
+    required String id,
+    required String name,
+    required int targetCents,
+    this.colorValue = const Value.absent(),
+    this.note = const Value.absent(),
+    this.targetDate = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       targetCents = Value(targetCents),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<SavingsGoalsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? targetCents,
+    Expression<int>? colorValue,
+    Expression<String>? note,
+    Expression<DateTime>? targetDate,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (targetCents != null) 'target_cents': targetCents,
+      if (colorValue != null) 'color_value': colorValue,
+      if (note != null) 'note': note,
+      if (targetDate != null) 'target_date': targetDate,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SavingsGoalsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? targetCents,
+    Value<int>? colorValue,
+    Value<String?>? note,
+    Value<DateTime?>? targetDate,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SavingsGoalsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      targetCents: targetCents ?? this.targetCents,
+      colorValue: colorValue ?? this.colorValue,
+      note: note ?? this.note,
+      targetDate: targetDate ?? this.targetDate,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (targetCents.present) {
+      map['target_cents'] = Variable<int>(targetCents.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (targetDate.present) {
+      map['target_date'] = Variable<DateTime>(targetDate.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavingsGoalsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('targetCents: $targetCents, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('note: $note, ')
+          ..write('targetDate: $targetDate, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GoalAllocationsTableTable extends GoalAllocationsTable
+    with TableInfo<$GoalAllocationsTableTable, GoalAllocationsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GoalAllocationsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _goalIdMeta = const VerificationMeta('goalId');
+  @override
+  late final GeneratedColumn<String> goalId = GeneratedColumn<String>(
+    'goal_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountCentsMeta = const VerificationMeta(
+    'amountCents',
+  );
+  @override
+  late final GeneratedColumn<int> amountCents = GeneratedColumn<int>(
+    'amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _allocatedAtMeta = const VerificationMeta(
+    'allocatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> allocatedAt = GeneratedColumn<DateTime>(
+    'allocated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    goalId,
+    amountCents,
+    allocatedAt,
+    note,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'goal_allocations_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GoalAllocationsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('goal_id')) {
+      context.handle(
+        _goalIdMeta,
+        goalId.isAcceptableOrUnknown(data['goal_id']!, _goalIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_goalIdMeta);
+    }
+    if (data.containsKey('amount_cents')) {
+      context.handle(
+        _amountCentsMeta,
+        amountCents.isAcceptableOrUnknown(
+          data['amount_cents']!,
+          _amountCentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_amountCentsMeta);
+    }
+    if (data.containsKey('allocated_at')) {
+      context.handle(
+        _allocatedAtMeta,
+        allocatedAt.isAcceptableOrUnknown(
+          data['allocated_at']!,
+          _allocatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_allocatedAtMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GoalAllocationsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GoalAllocationsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      goalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}goal_id'],
+      )!,
+      amountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_cents'],
+      )!,
+      allocatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}allocated_at'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $GoalAllocationsTableTable createAlias(String alias) {
+    return $GoalAllocationsTableTable(attachedDatabase, alias);
+  }
+}
+
+class GoalAllocationsTableData extends DataClass
+    implements Insertable<GoalAllocationsTableData> {
+  final String id;
+  final String goalId;
+  final int amountCents;
+  final DateTime allocatedAt;
+  final String? note;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const GoalAllocationsTableData({
+    required this.id,
+    required this.goalId,
+    required this.amountCents,
+    required this.allocatedAt,
+    this.note,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['goal_id'] = Variable<String>(goalId);
+    map['amount_cents'] = Variable<int>(amountCents);
+    map['allocated_at'] = Variable<DateTime>(allocatedAt);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  GoalAllocationsTableCompanion toCompanion(bool nullToAbsent) {
+    return GoalAllocationsTableCompanion(
+      id: Value(id),
+      goalId: Value(goalId),
+      amountCents: Value(amountCents),
+      allocatedAt: Value(allocatedAt),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory GoalAllocationsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GoalAllocationsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      goalId: serializer.fromJson<String>(json['goalId']),
+      amountCents: serializer.fromJson<int>(json['amountCents']),
+      allocatedAt: serializer.fromJson<DateTime>(json['allocatedAt']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'goalId': serializer.toJson<String>(goalId),
+      'amountCents': serializer.toJson<int>(amountCents),
+      'allocatedAt': serializer.toJson<DateTime>(allocatedAt),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  GoalAllocationsTableData copyWith({
+    String? id,
+    String? goalId,
+    int? amountCents,
+    DateTime? allocatedAt,
+    Value<String?> note = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => GoalAllocationsTableData(
+    id: id ?? this.id,
+    goalId: goalId ?? this.goalId,
+    amountCents: amountCents ?? this.amountCents,
+    allocatedAt: allocatedAt ?? this.allocatedAt,
+    note: note.present ? note.value : this.note,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  GoalAllocationsTableData copyWithCompanion(
+    GoalAllocationsTableCompanion data,
+  ) {
+    return GoalAllocationsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      goalId: data.goalId.present ? data.goalId.value : this.goalId,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      allocatedAt: data.allocatedAt.present
+          ? data.allocatedAt.value
+          : this.allocatedAt,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GoalAllocationsTableData(')
+          ..write('id: $id, ')
+          ..write('goalId: $goalId, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('allocatedAt: $allocatedAt, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    goalId,
+    amountCents,
+    allocatedAt,
+    note,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GoalAllocationsTableData &&
+          other.id == this.id &&
+          other.goalId == this.goalId &&
+          other.amountCents == this.amountCents &&
+          other.allocatedAt == this.allocatedAt &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class GoalAllocationsTableCompanion
+    extends UpdateCompanion<GoalAllocationsTableData> {
+  final Value<String> id;
+  final Value<String> goalId;
+  final Value<int> amountCents;
+  final Value<DateTime> allocatedAt;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const GoalAllocationsTableCompanion({
+    this.id = const Value.absent(),
+    this.goalId = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.allocatedAt = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GoalAllocationsTableCompanion.insert({
+    required String id,
+    required String goalId,
+    required int amountCents,
+    required DateTime allocatedAt,
+    this.note = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       goalId = Value(goalId),
+       amountCents = Value(amountCents),
+       allocatedAt = Value(allocatedAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<GoalAllocationsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? goalId,
+    Expression<int>? amountCents,
+    Expression<DateTime>? allocatedAt,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (goalId != null) 'goal_id': goalId,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (allocatedAt != null) 'allocated_at': allocatedAt,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GoalAllocationsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? goalId,
+    Value<int>? amountCents,
+    Value<DateTime>? allocatedAt,
+    Value<String?>? note,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return GoalAllocationsTableCompanion(
+      id: id ?? this.id,
+      goalId: goalId ?? this.goalId,
+      amountCents: amountCents ?? this.amountCents,
+      allocatedAt: allocatedAt ?? this.allocatedAt,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (goalId.present) {
+      map['goal_id'] = Variable<String>(goalId.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(amountCents.value);
+    }
+    if (allocatedAt.present) {
+      map['allocated_at'] = Variable<DateTime>(allocatedAt.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GoalAllocationsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('goalId: $goalId, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('allocatedAt: $allocatedAt, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -10097,6 +16260,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SyncConflictsTableTable(this);
   late final $PendingUploadsTableTable pendingUploadsTable =
       $PendingUploadsTableTable(this);
+  late final $TransactionsTableTable transactionsTable =
+      $TransactionsTableTable(this);
+  late final $SubscriptionsTableTable subscriptionsTable =
+      $SubscriptionsTableTable(this);
+  late final $BudgetsTableTable budgetsTable = $BudgetsTableTable(this);
+  late final $FinanceCategoriesTableTable financeCategoriesTable =
+      $FinanceCategoriesTableTable(this);
+  late final $AssetsTableTable assetsTable = $AssetsTableTable(this);
+  late final $AssetValuationsTableTable assetValuationsTable =
+      $AssetValuationsTableTable(this);
+  late final $SavingsGoalsTableTable savingsGoalsTable =
+      $SavingsGoalsTableTable(this);
+  late final $GoalAllocationsTableTable goalAllocationsTable =
+      $GoalAllocationsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10114,6 +16291,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     tagColorsTable,
     syncConflictsTable,
     pendingUploadsTable,
+    transactionsTable,
+    subscriptionsTable,
+    budgetsTable,
+    financeCategoriesTable,
+    assetsTable,
+    assetValuationsTable,
+    savingsGoalsTable,
+    goalAllocationsTable,
   ];
 }
 
@@ -12889,6 +19074,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<int> accentColor,
       Value<bool> weekStartsOnMonday,
       Value<bool> showQuotes,
+      Value<bool> showDefaultTrackersInGrid,
+      Value<bool> showDefaultTrackersInCalendar,
       Value<String> journalHotkey,
       Value<String> todoHotkey,
       Value<String> calendarNavigateLeftKey,
@@ -12935,10 +19122,35 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<double> geometricTextureFocalPointX,
       Value<double> geometricTextureFocalPointY,
       Value<double> geometricTextureVariationFloor,
+      Value<bool> geometricWaveEnabled,
+      Value<String> geometricWaveShape,
+      Value<double> geometricWaveDirectionDegrees,
+      Value<double> geometricWaveSpeed,
+      Value<double> geometricWaveWidth,
+      Value<double> geometricWavePeriod,
+      Value<double> geometricWavePopHoldSeconds,
+      Value<double> geometricWavePopScale,
+      Value<double> geometricWavePopBrightness,
+      Value<double> geometricWaveMaskDensity,
+      Value<double> geometricWaveMaskClusterScale,
+      Value<double> geometricWaveTwinkleSparsity,
+      Value<double> geometricWaveShadowLightDegrees,
+      Value<double> geometricWaveShadowOffset,
+      Value<double> geometricWaveShadowSoftness,
+      Value<double> geometricWaveShadowStrength,
+      Value<double> geometricWavePopBrightnessVariance,
+      Value<double> geometricWaveTiltAmount,
+      Value<double> geometricWaveTiltShading,
+      Value<double> geometricWaveMassLagSeconds,
+      Value<double> geometricWaveMassSpring,
+      Value<bool> geometricWaveScatterMode,
+      Value<double> geometricWaveScatterLitAmount,
       Value<String?> navPageOrderJson,
       Value<String> startupPageMode,
       Value<String?> customStartupPage,
       Value<String?> lastSeenNavPage,
+      Value<bool> todoCompletedSectionExpanded,
+      Value<bool> showAnnualizedSubscriptionCost,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
@@ -12946,6 +19158,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<int> accentColor,
       Value<bool> weekStartsOnMonday,
       Value<bool> showQuotes,
+      Value<bool> showDefaultTrackersInGrid,
+      Value<bool> showDefaultTrackersInCalendar,
       Value<String> journalHotkey,
       Value<String> todoHotkey,
       Value<String> calendarNavigateLeftKey,
@@ -12992,10 +19206,35 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<double> geometricTextureFocalPointX,
       Value<double> geometricTextureFocalPointY,
       Value<double> geometricTextureVariationFloor,
+      Value<bool> geometricWaveEnabled,
+      Value<String> geometricWaveShape,
+      Value<double> geometricWaveDirectionDegrees,
+      Value<double> geometricWaveSpeed,
+      Value<double> geometricWaveWidth,
+      Value<double> geometricWavePeriod,
+      Value<double> geometricWavePopHoldSeconds,
+      Value<double> geometricWavePopScale,
+      Value<double> geometricWavePopBrightness,
+      Value<double> geometricWaveMaskDensity,
+      Value<double> geometricWaveMaskClusterScale,
+      Value<double> geometricWaveTwinkleSparsity,
+      Value<double> geometricWaveShadowLightDegrees,
+      Value<double> geometricWaveShadowOffset,
+      Value<double> geometricWaveShadowSoftness,
+      Value<double> geometricWaveShadowStrength,
+      Value<double> geometricWavePopBrightnessVariance,
+      Value<double> geometricWaveTiltAmount,
+      Value<double> geometricWaveTiltShading,
+      Value<double> geometricWaveMassLagSeconds,
+      Value<double> geometricWaveMassSpring,
+      Value<bool> geometricWaveScatterMode,
+      Value<double> geometricWaveScatterLitAmount,
       Value<String?> navPageOrderJson,
       Value<String> startupPageMode,
       Value<String?> customStartupPage,
       Value<String?> lastSeenNavPage,
+      Value<bool> todoCompletedSectionExpanded,
+      Value<bool> showAnnualizedSubscriptionCost,
     });
 
 class $$SettingsTableTableFilterComposer
@@ -13024,6 +19263,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get showQuotes => $composableBuilder(
     column: $table.showQuotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showDefaultTrackersInGrid => $composableBuilder(
+    column: $table.showDefaultTrackersInGrid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showDefaultTrackersInCalendar => $composableBuilder(
+    column: $table.showDefaultTrackersInCalendar,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13259,6 +19508,123 @@ class $$SettingsTableTableFilterComposer
         builder: (column) => ColumnFilters(column),
       );
 
+  ColumnFilters<bool> get geometricWaveEnabled => $composableBuilder(
+    column: $table.geometricWaveEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get geometricWaveShape => $composableBuilder(
+    column: $table.geometricWaveShape,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveDirectionDegrees => $composableBuilder(
+    column: $table.geometricWaveDirectionDegrees,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveSpeed => $composableBuilder(
+    column: $table.geometricWaveSpeed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveWidth => $composableBuilder(
+    column: $table.geometricWaveWidth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWavePeriod => $composableBuilder(
+    column: $table.geometricWavePeriod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWavePopHoldSeconds => $composableBuilder(
+    column: $table.geometricWavePopHoldSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWavePopScale => $composableBuilder(
+    column: $table.geometricWavePopScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWavePopBrightness => $composableBuilder(
+    column: $table.geometricWavePopBrightness,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveMaskDensity => $composableBuilder(
+    column: $table.geometricWaveMaskDensity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveMaskClusterScale => $composableBuilder(
+    column: $table.geometricWaveMaskClusterScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveTwinkleSparsity => $composableBuilder(
+    column: $table.geometricWaveTwinkleSparsity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveShadowLightDegrees =>
+      $composableBuilder(
+        column: $table.geometricWaveShadowLightDegrees,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<double> get geometricWaveShadowOffset => $composableBuilder(
+    column: $table.geometricWaveShadowOffset,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveShadowSoftness => $composableBuilder(
+    column: $table.geometricWaveShadowSoftness,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveShadowStrength => $composableBuilder(
+    column: $table.geometricWaveShadowStrength,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWavePopBrightnessVariance =>
+      $composableBuilder(
+        column: $table.geometricWavePopBrightnessVariance,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<double> get geometricWaveTiltAmount => $composableBuilder(
+    column: $table.geometricWaveTiltAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveTiltShading => $composableBuilder(
+    column: $table.geometricWaveTiltShading,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveMassLagSeconds => $composableBuilder(
+    column: $table.geometricWaveMassLagSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveMassSpring => $composableBuilder(
+    column: $table.geometricWaveMassSpring,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get geometricWaveScatterMode => $composableBuilder(
+    column: $table.geometricWaveScatterMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get geometricWaveScatterLitAmount => $composableBuilder(
+    column: $table.geometricWaveScatterLitAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get navPageOrderJson => $composableBuilder(
     column: $table.navPageOrderJson,
     builder: (column) => ColumnFilters(column),
@@ -13276,6 +19642,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get lastSeenNavPage => $composableBuilder(
     column: $table.lastSeenNavPage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get todoCompletedSectionExpanded => $composableBuilder(
+    column: $table.todoCompletedSectionExpanded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showAnnualizedSubscriptionCost => $composableBuilder(
+    column: $table.showAnnualizedSubscriptionCost,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13306,6 +19682,16 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<bool> get showQuotes => $composableBuilder(
     column: $table.showQuotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get showDefaultTrackersInGrid => $composableBuilder(
+    column: $table.showDefaultTrackersInGrid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get showDefaultTrackersInCalendar => $composableBuilder(
+    column: $table.showDefaultTrackersInCalendar,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -13542,6 +19928,127 @@ class $$SettingsTableTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<bool> get geometricWaveEnabled => $composableBuilder(
+    column: $table.geometricWaveEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get geometricWaveShape => $composableBuilder(
+    column: $table.geometricWaveShape,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveDirectionDegrees =>
+      $composableBuilder(
+        column: $table.geometricWaveDirectionDegrees,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<double> get geometricWaveSpeed => $composableBuilder(
+    column: $table.geometricWaveSpeed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveWidth => $composableBuilder(
+    column: $table.geometricWaveWidth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWavePeriod => $composableBuilder(
+    column: $table.geometricWavePeriod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWavePopHoldSeconds => $composableBuilder(
+    column: $table.geometricWavePopHoldSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWavePopScale => $composableBuilder(
+    column: $table.geometricWavePopScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWavePopBrightness => $composableBuilder(
+    column: $table.geometricWavePopBrightness,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveMaskDensity => $composableBuilder(
+    column: $table.geometricWaveMaskDensity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveMaskClusterScale =>
+      $composableBuilder(
+        column: $table.geometricWaveMaskClusterScale,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<double> get geometricWaveTwinkleSparsity =>
+      $composableBuilder(
+        column: $table.geometricWaveTwinkleSparsity,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<double> get geometricWaveShadowLightDegrees =>
+      $composableBuilder(
+        column: $table.geometricWaveShadowLightDegrees,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<double> get geometricWaveShadowOffset => $composableBuilder(
+    column: $table.geometricWaveShadowOffset,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveShadowSoftness => $composableBuilder(
+    column: $table.geometricWaveShadowSoftness,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveShadowStrength => $composableBuilder(
+    column: $table.geometricWaveShadowStrength,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWavePopBrightnessVariance =>
+      $composableBuilder(
+        column: $table.geometricWavePopBrightnessVariance,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<double> get geometricWaveTiltAmount => $composableBuilder(
+    column: $table.geometricWaveTiltAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveTiltShading => $composableBuilder(
+    column: $table.geometricWaveTiltShading,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveMassLagSeconds => $composableBuilder(
+    column: $table.geometricWaveMassLagSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveMassSpring => $composableBuilder(
+    column: $table.geometricWaveMassSpring,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get geometricWaveScatterMode => $composableBuilder(
+    column: $table.geometricWaveScatterMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get geometricWaveScatterLitAmount =>
+      $composableBuilder(
+        column: $table.geometricWaveScatterLitAmount,
+        builder: (column) => ColumnOrderings(column),
+      );
+
   ColumnOrderings<String> get navPageOrderJson => $composableBuilder(
     column: $table.navPageOrderJson,
     builder: (column) => ColumnOrderings(column),
@@ -13561,6 +20068,17 @@ class $$SettingsTableTableOrderingComposer
     column: $table.lastSeenNavPage,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get todoCompletedSectionExpanded => $composableBuilder(
+    column: $table.todoCompletedSectionExpanded,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get showAnnualizedSubscriptionCost =>
+      $composableBuilder(
+        column: $table.showAnnualizedSubscriptionCost,
+        builder: (column) => ColumnOrderings(column),
+      );
 }
 
 class $$SettingsTableTableAnnotationComposer
@@ -13587,6 +20105,16 @@ class $$SettingsTableTableAnnotationComposer
 
   GeneratedColumn<bool> get showQuotes => $composableBuilder(
     column: $table.showQuotes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get showDefaultTrackersInGrid => $composableBuilder(
+    column: $table.showDefaultTrackersInGrid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get showDefaultTrackersInCalendar => $composableBuilder(
+    column: $table.showDefaultTrackersInCalendar,
     builder: (column) => column,
   );
 
@@ -13819,6 +20347,127 @@ class $$SettingsTableTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<bool> get geometricWaveEnabled => $composableBuilder(
+    column: $table.geometricWaveEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get geometricWaveShape => $composableBuilder(
+    column: $table.geometricWaveShape,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveDirectionDegrees =>
+      $composableBuilder(
+        column: $table.geometricWaveDirectionDegrees,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get geometricWaveSpeed => $composableBuilder(
+    column: $table.geometricWaveSpeed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveWidth => $composableBuilder(
+    column: $table.geometricWaveWidth,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWavePeriod => $composableBuilder(
+    column: $table.geometricWavePeriod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWavePopHoldSeconds => $composableBuilder(
+    column: $table.geometricWavePopHoldSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWavePopScale => $composableBuilder(
+    column: $table.geometricWavePopScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWavePopBrightness => $composableBuilder(
+    column: $table.geometricWavePopBrightness,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveMaskDensity => $composableBuilder(
+    column: $table.geometricWaveMaskDensity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveMaskClusterScale =>
+      $composableBuilder(
+        column: $table.geometricWaveMaskClusterScale,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get geometricWaveTwinkleSparsity =>
+      $composableBuilder(
+        column: $table.geometricWaveTwinkleSparsity,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get geometricWaveShadowLightDegrees =>
+      $composableBuilder(
+        column: $table.geometricWaveShadowLightDegrees,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get geometricWaveShadowOffset => $composableBuilder(
+    column: $table.geometricWaveShadowOffset,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveShadowSoftness => $composableBuilder(
+    column: $table.geometricWaveShadowSoftness,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveShadowStrength => $composableBuilder(
+    column: $table.geometricWaveShadowStrength,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWavePopBrightnessVariance =>
+      $composableBuilder(
+        column: $table.geometricWavePopBrightnessVariance,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get geometricWaveTiltAmount => $composableBuilder(
+    column: $table.geometricWaveTiltAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveTiltShading => $composableBuilder(
+    column: $table.geometricWaveTiltShading,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveMassLagSeconds => $composableBuilder(
+    column: $table.geometricWaveMassLagSeconds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveMassSpring => $composableBuilder(
+    column: $table.geometricWaveMassSpring,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get geometricWaveScatterMode => $composableBuilder(
+    column: $table.geometricWaveScatterMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get geometricWaveScatterLitAmount =>
+      $composableBuilder(
+        column: $table.geometricWaveScatterLitAmount,
+        builder: (column) => column,
+      );
+
   GeneratedColumn<String> get navPageOrderJson => $composableBuilder(
     column: $table.navPageOrderJson,
     builder: (column) => column,
@@ -13838,6 +20487,17 @@ class $$SettingsTableTableAnnotationComposer
     column: $table.lastSeenNavPage,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get todoCompletedSectionExpanded => $composableBuilder(
+    column: $table.todoCompletedSectionExpanded,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get showAnnualizedSubscriptionCost =>
+      $composableBuilder(
+        column: $table.showAnnualizedSubscriptionCost,
+        builder: (column) => column,
+      );
 }
 
 class $$SettingsTableTableTableManager
@@ -13879,6 +20539,9 @@ class $$SettingsTableTableTableManager
                 Value<int> accentColor = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
+                Value<bool> showDefaultTrackersInGrid = const Value.absent(),
+                Value<bool> showDefaultTrackersInCalendar =
+                    const Value.absent(),
                 Value<String> journalHotkey = const Value.absent(),
                 Value<String> todoHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
@@ -13932,15 +20595,53 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<double> geometricTextureVariationFloor =
                     const Value.absent(),
+                Value<bool> geometricWaveEnabled = const Value.absent(),
+                Value<String> geometricWaveShape = const Value.absent(),
+                Value<double> geometricWaveDirectionDegrees =
+                    const Value.absent(),
+                Value<double> geometricWaveSpeed = const Value.absent(),
+                Value<double> geometricWaveWidth = const Value.absent(),
+                Value<double> geometricWavePeriod = const Value.absent(),
+                Value<double> geometricWavePopHoldSeconds =
+                    const Value.absent(),
+                Value<double> geometricWavePopScale = const Value.absent(),
+                Value<double> geometricWavePopBrightness = const Value.absent(),
+                Value<double> geometricWaveMaskDensity = const Value.absent(),
+                Value<double> geometricWaveMaskClusterScale =
+                    const Value.absent(),
+                Value<double> geometricWaveTwinkleSparsity =
+                    const Value.absent(),
+                Value<double> geometricWaveShadowLightDegrees =
+                    const Value.absent(),
+                Value<double> geometricWaveShadowOffset = const Value.absent(),
+                Value<double> geometricWaveShadowSoftness =
+                    const Value.absent(),
+                Value<double> geometricWaveShadowStrength =
+                    const Value.absent(),
+                Value<double> geometricWavePopBrightnessVariance =
+                    const Value.absent(),
+                Value<double> geometricWaveTiltAmount = const Value.absent(),
+                Value<double> geometricWaveTiltShading = const Value.absent(),
+                Value<double> geometricWaveMassLagSeconds =
+                    const Value.absent(),
+                Value<double> geometricWaveMassSpring = const Value.absent(),
+                Value<bool> geometricWaveScatterMode = const Value.absent(),
+                Value<double> geometricWaveScatterLitAmount =
+                    const Value.absent(),
                 Value<String?> navPageOrderJson = const Value.absent(),
                 Value<String> startupPageMode = const Value.absent(),
                 Value<String?> customStartupPage = const Value.absent(),
                 Value<String?> lastSeenNavPage = const Value.absent(),
+                Value<bool> todoCompletedSectionExpanded = const Value.absent(),
+                Value<bool> showAnnualizedSubscriptionCost =
+                    const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
                 weekStartsOnMonday: weekStartsOnMonday,
                 showQuotes: showQuotes,
+                showDefaultTrackersInGrid: showDefaultTrackersInGrid,
+                showDefaultTrackersInCalendar: showDefaultTrackersInCalendar,
                 journalHotkey: journalHotkey,
                 todoHotkey: todoHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
@@ -13988,10 +20689,37 @@ class $$SettingsTableTableTableManager
                 geometricTextureFocalPointX: geometricTextureFocalPointX,
                 geometricTextureFocalPointY: geometricTextureFocalPointY,
                 geometricTextureVariationFloor: geometricTextureVariationFloor,
+                geometricWaveEnabled: geometricWaveEnabled,
+                geometricWaveShape: geometricWaveShape,
+                geometricWaveDirectionDegrees: geometricWaveDirectionDegrees,
+                geometricWaveSpeed: geometricWaveSpeed,
+                geometricWaveWidth: geometricWaveWidth,
+                geometricWavePeriod: geometricWavePeriod,
+                geometricWavePopHoldSeconds: geometricWavePopHoldSeconds,
+                geometricWavePopScale: geometricWavePopScale,
+                geometricWavePopBrightness: geometricWavePopBrightness,
+                geometricWaveMaskDensity: geometricWaveMaskDensity,
+                geometricWaveMaskClusterScale: geometricWaveMaskClusterScale,
+                geometricWaveTwinkleSparsity: geometricWaveTwinkleSparsity,
+                geometricWaveShadowLightDegrees:
+                    geometricWaveShadowLightDegrees,
+                geometricWaveShadowOffset: geometricWaveShadowOffset,
+                geometricWaveShadowSoftness: geometricWaveShadowSoftness,
+                geometricWaveShadowStrength: geometricWaveShadowStrength,
+                geometricWavePopBrightnessVariance:
+                    geometricWavePopBrightnessVariance,
+                geometricWaveTiltAmount: geometricWaveTiltAmount,
+                geometricWaveTiltShading: geometricWaveTiltShading,
+                geometricWaveMassLagSeconds: geometricWaveMassLagSeconds,
+                geometricWaveMassSpring: geometricWaveMassSpring,
+                geometricWaveScatterMode: geometricWaveScatterMode,
+                geometricWaveScatterLitAmount: geometricWaveScatterLitAmount,
                 navPageOrderJson: navPageOrderJson,
                 startupPageMode: startupPageMode,
                 customStartupPage: customStartupPage,
                 lastSeenNavPage: lastSeenNavPage,
+                todoCompletedSectionExpanded: todoCompletedSectionExpanded,
+                showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
               ),
           createCompanionCallback:
               ({
@@ -13999,6 +20727,9 @@ class $$SettingsTableTableTableManager
                 Value<int> accentColor = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
+                Value<bool> showDefaultTrackersInGrid = const Value.absent(),
+                Value<bool> showDefaultTrackersInCalendar =
+                    const Value.absent(),
                 Value<String> journalHotkey = const Value.absent(),
                 Value<String> todoHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
@@ -14052,15 +20783,53 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<double> geometricTextureVariationFloor =
                     const Value.absent(),
+                Value<bool> geometricWaveEnabled = const Value.absent(),
+                Value<String> geometricWaveShape = const Value.absent(),
+                Value<double> geometricWaveDirectionDegrees =
+                    const Value.absent(),
+                Value<double> geometricWaveSpeed = const Value.absent(),
+                Value<double> geometricWaveWidth = const Value.absent(),
+                Value<double> geometricWavePeriod = const Value.absent(),
+                Value<double> geometricWavePopHoldSeconds =
+                    const Value.absent(),
+                Value<double> geometricWavePopScale = const Value.absent(),
+                Value<double> geometricWavePopBrightness = const Value.absent(),
+                Value<double> geometricWaveMaskDensity = const Value.absent(),
+                Value<double> geometricWaveMaskClusterScale =
+                    const Value.absent(),
+                Value<double> geometricWaveTwinkleSparsity =
+                    const Value.absent(),
+                Value<double> geometricWaveShadowLightDegrees =
+                    const Value.absent(),
+                Value<double> geometricWaveShadowOffset = const Value.absent(),
+                Value<double> geometricWaveShadowSoftness =
+                    const Value.absent(),
+                Value<double> geometricWaveShadowStrength =
+                    const Value.absent(),
+                Value<double> geometricWavePopBrightnessVariance =
+                    const Value.absent(),
+                Value<double> geometricWaveTiltAmount = const Value.absent(),
+                Value<double> geometricWaveTiltShading = const Value.absent(),
+                Value<double> geometricWaveMassLagSeconds =
+                    const Value.absent(),
+                Value<double> geometricWaveMassSpring = const Value.absent(),
+                Value<bool> geometricWaveScatterMode = const Value.absent(),
+                Value<double> geometricWaveScatterLitAmount =
+                    const Value.absent(),
                 Value<String?> navPageOrderJson = const Value.absent(),
                 Value<String> startupPageMode = const Value.absent(),
                 Value<String?> customStartupPage = const Value.absent(),
                 Value<String?> lastSeenNavPage = const Value.absent(),
+                Value<bool> todoCompletedSectionExpanded = const Value.absent(),
+                Value<bool> showAnnualizedSubscriptionCost =
+                    const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
                 weekStartsOnMonday: weekStartsOnMonday,
                 showQuotes: showQuotes,
+                showDefaultTrackersInGrid: showDefaultTrackersInGrid,
+                showDefaultTrackersInCalendar: showDefaultTrackersInCalendar,
                 journalHotkey: journalHotkey,
                 todoHotkey: todoHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
@@ -14108,10 +20877,37 @@ class $$SettingsTableTableTableManager
                 geometricTextureFocalPointX: geometricTextureFocalPointX,
                 geometricTextureFocalPointY: geometricTextureFocalPointY,
                 geometricTextureVariationFloor: geometricTextureVariationFloor,
+                geometricWaveEnabled: geometricWaveEnabled,
+                geometricWaveShape: geometricWaveShape,
+                geometricWaveDirectionDegrees: geometricWaveDirectionDegrees,
+                geometricWaveSpeed: geometricWaveSpeed,
+                geometricWaveWidth: geometricWaveWidth,
+                geometricWavePeriod: geometricWavePeriod,
+                geometricWavePopHoldSeconds: geometricWavePopHoldSeconds,
+                geometricWavePopScale: geometricWavePopScale,
+                geometricWavePopBrightness: geometricWavePopBrightness,
+                geometricWaveMaskDensity: geometricWaveMaskDensity,
+                geometricWaveMaskClusterScale: geometricWaveMaskClusterScale,
+                geometricWaveTwinkleSparsity: geometricWaveTwinkleSparsity,
+                geometricWaveShadowLightDegrees:
+                    geometricWaveShadowLightDegrees,
+                geometricWaveShadowOffset: geometricWaveShadowOffset,
+                geometricWaveShadowSoftness: geometricWaveShadowSoftness,
+                geometricWaveShadowStrength: geometricWaveShadowStrength,
+                geometricWavePopBrightnessVariance:
+                    geometricWavePopBrightnessVariance,
+                geometricWaveTiltAmount: geometricWaveTiltAmount,
+                geometricWaveTiltShading: geometricWaveTiltShading,
+                geometricWaveMassLagSeconds: geometricWaveMassLagSeconds,
+                geometricWaveMassSpring: geometricWaveMassSpring,
+                geometricWaveScatterMode: geometricWaveScatterMode,
+                geometricWaveScatterLitAmount: geometricWaveScatterLitAmount,
                 navPageOrderJson: navPageOrderJson,
                 startupPageMode: startupPageMode,
                 customStartupPage: customStartupPage,
                 lastSeenNavPage: lastSeenNavPage,
+                todoCompletedSectionExpanded: todoCompletedSectionExpanded,
+                showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -14795,6 +21591,2313 @@ typedef $$PendingUploadsTableTableProcessedTableManager =
       PendingUploadData,
       PrefetchHooks Function()
     >;
+typedef $$TransactionsTableTableCreateCompanionBuilder =
+    TransactionsTableCompanion Function({
+      required String id,
+      required String type,
+      required int amountCents,
+      Value<String?> note,
+      Value<String> tagsJson,
+      required DateTime occurredAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$TransactionsTableTableUpdateCompanionBuilder =
+    TransactionsTableCompanion Function({
+      Value<String> id,
+      Value<String> type,
+      Value<int> amountCents,
+      Value<String?> note,
+      Value<String> tagsJson,
+      Value<DateTime> occurredAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$TransactionsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $TransactionsTableTable> {
+  $$TransactionsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$TransactionsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransactionsTableTable> {
+  $$TransactionsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TransactionsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransactionsTableTable> {
+  $$TransactionsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get tagsJson =>
+      $composableBuilder(column: $table.tagsJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$TransactionsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TransactionsTableTable,
+          TransactionsTableData,
+          $$TransactionsTableTableFilterComposer,
+          $$TransactionsTableTableOrderingComposer,
+          $$TransactionsTableTableAnnotationComposer,
+          $$TransactionsTableTableCreateCompanionBuilder,
+          $$TransactionsTableTableUpdateCompanionBuilder,
+          (
+            TransactionsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $TransactionsTableTable,
+              TransactionsTableData
+            >,
+          ),
+          TransactionsTableData,
+          PrefetchHooks Function()
+        > {
+  $$TransactionsTableTableTableManager(
+    _$AppDatabase db,
+    $TransactionsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransactionsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransactionsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransactionsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<int> amountCents = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                Value<DateTime> occurredAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransactionsTableCompanion(
+                id: id,
+                type: type,
+                amountCents: amountCents,
+                note: note,
+                tagsJson: tagsJson,
+                occurredAt: occurredAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String type,
+                required int amountCents,
+                Value<String?> note = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                required DateTime occurredAt,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TransactionsTableCompanion.insert(
+                id: id,
+                type: type,
+                amountCents: amountCents,
+                note: note,
+                tagsJson: tagsJson,
+                occurredAt: occurredAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$TransactionsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TransactionsTableTable,
+      TransactionsTableData,
+      $$TransactionsTableTableFilterComposer,
+      $$TransactionsTableTableOrderingComposer,
+      $$TransactionsTableTableAnnotationComposer,
+      $$TransactionsTableTableCreateCompanionBuilder,
+      $$TransactionsTableTableUpdateCompanionBuilder,
+      (
+        TransactionsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $TransactionsTableTable,
+          TransactionsTableData
+        >,
+      ),
+      TransactionsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$SubscriptionsTableTableCreateCompanionBuilder =
+    SubscriptionsTableCompanion Function({
+      required String id,
+      required String name,
+      required int amountCents,
+      required String period,
+      required DateTime anchorDueDate,
+      Value<int> colorValue,
+      Value<String?> note,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SubscriptionsTableTableUpdateCompanionBuilder =
+    SubscriptionsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> amountCents,
+      Value<String> period,
+      Value<DateTime> anchorDueDate,
+      Value<int> colorValue,
+      Value<String?> note,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$SubscriptionsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SubscriptionsTableTable> {
+  $$SubscriptionsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get period => $composableBuilder(
+    column: $table.period,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get anchorDueDate => $composableBuilder(
+    column: $table.anchorDueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SubscriptionsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SubscriptionsTableTable> {
+  $$SubscriptionsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get period => $composableBuilder(
+    column: $table.period,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get anchorDueDate => $composableBuilder(
+    column: $table.anchorDueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SubscriptionsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SubscriptionsTableTable> {
+  $$SubscriptionsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get period =>
+      $composableBuilder(column: $table.period, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get anchorDueDate => $composableBuilder(
+    column: $table.anchorDueDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$SubscriptionsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SubscriptionsTableTable,
+          SubscriptionsTableData,
+          $$SubscriptionsTableTableFilterComposer,
+          $$SubscriptionsTableTableOrderingComposer,
+          $$SubscriptionsTableTableAnnotationComposer,
+          $$SubscriptionsTableTableCreateCompanionBuilder,
+          $$SubscriptionsTableTableUpdateCompanionBuilder,
+          (
+            SubscriptionsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SubscriptionsTableTable,
+              SubscriptionsTableData
+            >,
+          ),
+          SubscriptionsTableData,
+          PrefetchHooks Function()
+        > {
+  $$SubscriptionsTableTableTableManager(
+    _$AppDatabase db,
+    $SubscriptionsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SubscriptionsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SubscriptionsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SubscriptionsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> amountCents = const Value.absent(),
+                Value<String> period = const Value.absent(),
+                Value<DateTime> anchorDueDate = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubscriptionsTableCompanion(
+                id: id,
+                name: name,
+                amountCents: amountCents,
+                period: period,
+                anchorDueDate: anchorDueDate,
+                colorValue: colorValue,
+                note: note,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required int amountCents,
+                required String period,
+                required DateTime anchorDueDate,
+                Value<int> colorValue = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SubscriptionsTableCompanion.insert(
+                id: id,
+                name: name,
+                amountCents: amountCents,
+                period: period,
+                anchorDueDate: anchorDueDate,
+                colorValue: colorValue,
+                note: note,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SubscriptionsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SubscriptionsTableTable,
+      SubscriptionsTableData,
+      $$SubscriptionsTableTableFilterComposer,
+      $$SubscriptionsTableTableOrderingComposer,
+      $$SubscriptionsTableTableAnnotationComposer,
+      $$SubscriptionsTableTableCreateCompanionBuilder,
+      $$SubscriptionsTableTableUpdateCompanionBuilder,
+      (
+        SubscriptionsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $SubscriptionsTableTable,
+          SubscriptionsTableData
+        >,
+      ),
+      SubscriptionsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$BudgetsTableTableCreateCompanionBuilder =
+    BudgetsTableCompanion Function({
+      required String id,
+      required String tag,
+      required int limitCents,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$BudgetsTableTableUpdateCompanionBuilder =
+    BudgetsTableCompanion Function({
+      Value<String> id,
+      Value<String> tag,
+      Value<int> limitCents,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$BudgetsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $BudgetsTableTable> {
+  $$BudgetsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get limitCents => $composableBuilder(
+    column: $table.limitCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BudgetsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $BudgetsTableTable> {
+  $$BudgetsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tag => $composableBuilder(
+    column: $table.tag,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get limitCents => $composableBuilder(
+    column: $table.limitCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BudgetsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BudgetsTableTable> {
+  $$BudgetsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get tag =>
+      $composableBuilder(column: $table.tag, builder: (column) => column);
+
+  GeneratedColumn<int> get limitCents => $composableBuilder(
+    column: $table.limitCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$BudgetsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BudgetsTableTable,
+          BudgetsTableData,
+          $$BudgetsTableTableFilterComposer,
+          $$BudgetsTableTableOrderingComposer,
+          $$BudgetsTableTableAnnotationComposer,
+          $$BudgetsTableTableCreateCompanionBuilder,
+          $$BudgetsTableTableUpdateCompanionBuilder,
+          (
+            BudgetsTableData,
+            BaseReferences<_$AppDatabase, $BudgetsTableTable, BudgetsTableData>,
+          ),
+          BudgetsTableData,
+          PrefetchHooks Function()
+        > {
+  $$BudgetsTableTableTableManager(_$AppDatabase db, $BudgetsTableTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BudgetsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BudgetsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BudgetsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> tag = const Value.absent(),
+                Value<int> limitCents = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BudgetsTableCompanion(
+                id: id,
+                tag: tag,
+                limitCents: limitCents,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String tag,
+                required int limitCents,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BudgetsTableCompanion.insert(
+                id: id,
+                tag: tag,
+                limitCents: limitCents,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BudgetsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BudgetsTableTable,
+      BudgetsTableData,
+      $$BudgetsTableTableFilterComposer,
+      $$BudgetsTableTableOrderingComposer,
+      $$BudgetsTableTableAnnotationComposer,
+      $$BudgetsTableTableCreateCompanionBuilder,
+      $$BudgetsTableTableUpdateCompanionBuilder,
+      (
+        BudgetsTableData,
+        BaseReferences<_$AppDatabase, $BudgetsTableTable, BudgetsTableData>,
+      ),
+      BudgetsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$FinanceCategoriesTableTableCreateCompanionBuilder =
+    FinanceCategoriesTableCompanion Function({
+      required String id,
+      required String name,
+      Value<int> colorValue,
+      Value<String> tagsJson,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$FinanceCategoriesTableTableUpdateCompanionBuilder =
+    FinanceCategoriesTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> colorValue,
+      Value<String> tagsJson,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$FinanceCategoriesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $FinanceCategoriesTableTable> {
+  $$FinanceCategoriesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FinanceCategoriesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $FinanceCategoriesTableTable> {
+  $$FinanceCategoriesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FinanceCategoriesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FinanceCategoriesTableTable> {
+  $$FinanceCategoriesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tagsJson =>
+      $composableBuilder(column: $table.tagsJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$FinanceCategoriesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FinanceCategoriesTableTable,
+          FinanceCategoriesTableData,
+          $$FinanceCategoriesTableTableFilterComposer,
+          $$FinanceCategoriesTableTableOrderingComposer,
+          $$FinanceCategoriesTableTableAnnotationComposer,
+          $$FinanceCategoriesTableTableCreateCompanionBuilder,
+          $$FinanceCategoriesTableTableUpdateCompanionBuilder,
+          (
+            FinanceCategoriesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $FinanceCategoriesTableTable,
+              FinanceCategoriesTableData
+            >,
+          ),
+          FinanceCategoriesTableData,
+          PrefetchHooks Function()
+        > {
+  $$FinanceCategoriesTableTableTableManager(
+    _$AppDatabase db,
+    $FinanceCategoriesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FinanceCategoriesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$FinanceCategoriesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$FinanceCategoriesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FinanceCategoriesTableCompanion(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                tagsJson: tagsJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<int> colorValue = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FinanceCategoriesTableCompanion.insert(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                tagsJson: tagsJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FinanceCategoriesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FinanceCategoriesTableTable,
+      FinanceCategoriesTableData,
+      $$FinanceCategoriesTableTableFilterComposer,
+      $$FinanceCategoriesTableTableOrderingComposer,
+      $$FinanceCategoriesTableTableAnnotationComposer,
+      $$FinanceCategoriesTableTableCreateCompanionBuilder,
+      $$FinanceCategoriesTableTableUpdateCompanionBuilder,
+      (
+        FinanceCategoriesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $FinanceCategoriesTableTable,
+          FinanceCategoriesTableData
+        >,
+      ),
+      FinanceCategoriesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$AssetsTableTableCreateCompanionBuilder =
+    AssetsTableCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> note,
+      Value<int> colorValue,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$AssetsTableTableUpdateCompanionBuilder =
+    AssetsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> note,
+      Value<int> colorValue,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$AssetsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $AssetsTableTable> {
+  $$AssetsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AssetsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $AssetsTableTable> {
+  $$AssetsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AssetsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AssetsTableTable> {
+  $$AssetsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$AssetsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AssetsTableTable,
+          AssetsTableData,
+          $$AssetsTableTableFilterComposer,
+          $$AssetsTableTableOrderingComposer,
+          $$AssetsTableTableAnnotationComposer,
+          $$AssetsTableTableCreateCompanionBuilder,
+          $$AssetsTableTableUpdateCompanionBuilder,
+          (
+            AssetsTableData,
+            BaseReferences<_$AppDatabase, $AssetsTableTable, AssetsTableData>,
+          ),
+          AssetsTableData,
+          PrefetchHooks Function()
+        > {
+  $$AssetsTableTableTableManager(_$AppDatabase db, $AssetsTableTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AssetsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AssetsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AssetsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssetsTableCompanion(
+                id: id,
+                name: name,
+                note: note,
+                colorValue: colorValue,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> note = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssetsTableCompanion.insert(
+                id: id,
+                name: name,
+                note: note,
+                colorValue: colorValue,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AssetsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AssetsTableTable,
+      AssetsTableData,
+      $$AssetsTableTableFilterComposer,
+      $$AssetsTableTableOrderingComposer,
+      $$AssetsTableTableAnnotationComposer,
+      $$AssetsTableTableCreateCompanionBuilder,
+      $$AssetsTableTableUpdateCompanionBuilder,
+      (
+        AssetsTableData,
+        BaseReferences<_$AppDatabase, $AssetsTableTable, AssetsTableData>,
+      ),
+      AssetsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$AssetValuationsTableTableCreateCompanionBuilder =
+    AssetValuationsTableCompanion Function({
+      required String id,
+      required String assetId,
+      required int valueCents,
+      required DateTime asOf,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$AssetValuationsTableTableUpdateCompanionBuilder =
+    AssetValuationsTableCompanion Function({
+      Value<String> id,
+      Value<String> assetId,
+      Value<int> valueCents,
+      Value<DateTime> asOf,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$AssetValuationsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $AssetValuationsTableTable> {
+  $$AssetValuationsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assetId => $composableBuilder(
+    column: $table.assetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get valueCents => $composableBuilder(
+    column: $table.valueCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get asOf => $composableBuilder(
+    column: $table.asOf,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AssetValuationsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $AssetValuationsTableTable> {
+  $$AssetValuationsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assetId => $composableBuilder(
+    column: $table.assetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get valueCents => $composableBuilder(
+    column: $table.valueCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get asOf => $composableBuilder(
+    column: $table.asOf,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AssetValuationsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AssetValuationsTableTable> {
+  $$AssetValuationsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get assetId =>
+      $composableBuilder(column: $table.assetId, builder: (column) => column);
+
+  GeneratedColumn<int> get valueCents => $composableBuilder(
+    column: $table.valueCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get asOf =>
+      $composableBuilder(column: $table.asOf, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$AssetValuationsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AssetValuationsTableTable,
+          AssetValuationsTableData,
+          $$AssetValuationsTableTableFilterComposer,
+          $$AssetValuationsTableTableOrderingComposer,
+          $$AssetValuationsTableTableAnnotationComposer,
+          $$AssetValuationsTableTableCreateCompanionBuilder,
+          $$AssetValuationsTableTableUpdateCompanionBuilder,
+          (
+            AssetValuationsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $AssetValuationsTableTable,
+              AssetValuationsTableData
+            >,
+          ),
+          AssetValuationsTableData,
+          PrefetchHooks Function()
+        > {
+  $$AssetValuationsTableTableTableManager(
+    _$AppDatabase db,
+    $AssetValuationsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AssetValuationsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AssetValuationsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$AssetValuationsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> assetId = const Value.absent(),
+                Value<int> valueCents = const Value.absent(),
+                Value<DateTime> asOf = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssetValuationsTableCompanion(
+                id: id,
+                assetId: assetId,
+                valueCents: valueCents,
+                asOf: asOf,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String assetId,
+                required int valueCents,
+                required DateTime asOf,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssetValuationsTableCompanion.insert(
+                id: id,
+                assetId: assetId,
+                valueCents: valueCents,
+                asOf: asOf,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AssetValuationsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AssetValuationsTableTable,
+      AssetValuationsTableData,
+      $$AssetValuationsTableTableFilterComposer,
+      $$AssetValuationsTableTableOrderingComposer,
+      $$AssetValuationsTableTableAnnotationComposer,
+      $$AssetValuationsTableTableCreateCompanionBuilder,
+      $$AssetValuationsTableTableUpdateCompanionBuilder,
+      (
+        AssetValuationsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $AssetValuationsTableTable,
+          AssetValuationsTableData
+        >,
+      ),
+      AssetValuationsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$SavingsGoalsTableTableCreateCompanionBuilder =
+    SavingsGoalsTableCompanion Function({
+      required String id,
+      required String name,
+      required int targetCents,
+      Value<int> colorValue,
+      Value<String?> note,
+      Value<DateTime?> targetDate,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SavingsGoalsTableTableUpdateCompanionBuilder =
+    SavingsGoalsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> targetCents,
+      Value<int> colorValue,
+      Value<String?> note,
+      Value<DateTime?> targetDate,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$SavingsGoalsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SavingsGoalsTableTable> {
+  $$SavingsGoalsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get targetCents => $composableBuilder(
+    column: $table.targetCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get targetDate => $composableBuilder(
+    column: $table.targetDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SavingsGoalsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SavingsGoalsTableTable> {
+  $$SavingsGoalsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get targetCents => $composableBuilder(
+    column: $table.targetCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get targetDate => $composableBuilder(
+    column: $table.targetDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SavingsGoalsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SavingsGoalsTableTable> {
+  $$SavingsGoalsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get targetCents => $composableBuilder(
+    column: $table.targetCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get targetDate => $composableBuilder(
+    column: $table.targetDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$SavingsGoalsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SavingsGoalsTableTable,
+          SavingsGoalsTableData,
+          $$SavingsGoalsTableTableFilterComposer,
+          $$SavingsGoalsTableTableOrderingComposer,
+          $$SavingsGoalsTableTableAnnotationComposer,
+          $$SavingsGoalsTableTableCreateCompanionBuilder,
+          $$SavingsGoalsTableTableUpdateCompanionBuilder,
+          (
+            SavingsGoalsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SavingsGoalsTableTable,
+              SavingsGoalsTableData
+            >,
+          ),
+          SavingsGoalsTableData,
+          PrefetchHooks Function()
+        > {
+  $$SavingsGoalsTableTableTableManager(
+    _$AppDatabase db,
+    $SavingsGoalsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SavingsGoalsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SavingsGoalsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SavingsGoalsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> targetCents = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime?> targetDate = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SavingsGoalsTableCompanion(
+                id: id,
+                name: name,
+                targetCents: targetCents,
+                colorValue: colorValue,
+                note: note,
+                targetDate: targetDate,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required int targetCents,
+                Value<int> colorValue = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime?> targetDate = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SavingsGoalsTableCompanion.insert(
+                id: id,
+                name: name,
+                targetCents: targetCents,
+                colorValue: colorValue,
+                note: note,
+                targetDate: targetDate,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SavingsGoalsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SavingsGoalsTableTable,
+      SavingsGoalsTableData,
+      $$SavingsGoalsTableTableFilterComposer,
+      $$SavingsGoalsTableTableOrderingComposer,
+      $$SavingsGoalsTableTableAnnotationComposer,
+      $$SavingsGoalsTableTableCreateCompanionBuilder,
+      $$SavingsGoalsTableTableUpdateCompanionBuilder,
+      (
+        SavingsGoalsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $SavingsGoalsTableTable,
+          SavingsGoalsTableData
+        >,
+      ),
+      SavingsGoalsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$GoalAllocationsTableTableCreateCompanionBuilder =
+    GoalAllocationsTableCompanion Function({
+      required String id,
+      required String goalId,
+      required int amountCents,
+      required DateTime allocatedAt,
+      Value<String?> note,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$GoalAllocationsTableTableUpdateCompanionBuilder =
+    GoalAllocationsTableCompanion Function({
+      Value<String> id,
+      Value<String> goalId,
+      Value<int> amountCents,
+      Value<DateTime> allocatedAt,
+      Value<String?> note,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$GoalAllocationsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GoalAllocationsTableTable> {
+  $$GoalAllocationsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get goalId => $composableBuilder(
+    column: $table.goalId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get allocatedAt => $composableBuilder(
+    column: $table.allocatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GoalAllocationsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GoalAllocationsTableTable> {
+  $$GoalAllocationsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get goalId => $composableBuilder(
+    column: $table.goalId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get allocatedAt => $composableBuilder(
+    column: $table.allocatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GoalAllocationsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GoalAllocationsTableTable> {
+  $$GoalAllocationsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get goalId =>
+      $composableBuilder(column: $table.goalId, builder: (column) => column);
+
+  GeneratedColumn<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get allocatedAt => $composableBuilder(
+    column: $table.allocatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$GoalAllocationsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GoalAllocationsTableTable,
+          GoalAllocationsTableData,
+          $$GoalAllocationsTableTableFilterComposer,
+          $$GoalAllocationsTableTableOrderingComposer,
+          $$GoalAllocationsTableTableAnnotationComposer,
+          $$GoalAllocationsTableTableCreateCompanionBuilder,
+          $$GoalAllocationsTableTableUpdateCompanionBuilder,
+          (
+            GoalAllocationsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GoalAllocationsTableTable,
+              GoalAllocationsTableData
+            >,
+          ),
+          GoalAllocationsTableData,
+          PrefetchHooks Function()
+        > {
+  $$GoalAllocationsTableTableTableManager(
+    _$AppDatabase db,
+    $GoalAllocationsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GoalAllocationsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GoalAllocationsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GoalAllocationsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> goalId = const Value.absent(),
+                Value<int> amountCents = const Value.absent(),
+                Value<DateTime> allocatedAt = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GoalAllocationsTableCompanion(
+                id: id,
+                goalId: goalId,
+                amountCents: amountCents,
+                allocatedAt: allocatedAt,
+                note: note,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String goalId,
+                required int amountCents,
+                required DateTime allocatedAt,
+                Value<String?> note = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GoalAllocationsTableCompanion.insert(
+                id: id,
+                goalId: goalId,
+                amountCents: amountCents,
+                allocatedAt: allocatedAt,
+                note: note,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GoalAllocationsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GoalAllocationsTableTable,
+      GoalAllocationsTableData,
+      $$GoalAllocationsTableTableFilterComposer,
+      $$GoalAllocationsTableTableOrderingComposer,
+      $$GoalAllocationsTableTableAnnotationComposer,
+      $$GoalAllocationsTableTableCreateCompanionBuilder,
+      $$GoalAllocationsTableTableUpdateCompanionBuilder,
+      (
+        GoalAllocationsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GoalAllocationsTableTable,
+          GoalAllocationsTableData
+        >,
+      ),
+      GoalAllocationsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -14823,4 +23926,23 @@ class $AppDatabaseManager {
       $$SyncConflictsTableTableTableManager(_db, _db.syncConflictsTable);
   $$PendingUploadsTableTableTableManager get pendingUploadsTable =>
       $$PendingUploadsTableTableTableManager(_db, _db.pendingUploadsTable);
+  $$TransactionsTableTableTableManager get transactionsTable =>
+      $$TransactionsTableTableTableManager(_db, _db.transactionsTable);
+  $$SubscriptionsTableTableTableManager get subscriptionsTable =>
+      $$SubscriptionsTableTableTableManager(_db, _db.subscriptionsTable);
+  $$BudgetsTableTableTableManager get budgetsTable =>
+      $$BudgetsTableTableTableManager(_db, _db.budgetsTable);
+  $$FinanceCategoriesTableTableTableManager get financeCategoriesTable =>
+      $$FinanceCategoriesTableTableTableManager(
+        _db,
+        _db.financeCategoriesTable,
+      );
+  $$AssetsTableTableTableManager get assetsTable =>
+      $$AssetsTableTableTableManager(_db, _db.assetsTable);
+  $$AssetValuationsTableTableTableManager get assetValuationsTable =>
+      $$AssetValuationsTableTableTableManager(_db, _db.assetValuationsTable);
+  $$SavingsGoalsTableTableTableManager get savingsGoalsTable =>
+      $$SavingsGoalsTableTableTableManager(_db, _db.savingsGoalsTable);
+  $$GoalAllocationsTableTableTableManager get goalAllocationsTable =>
+      $$GoalAllocationsTableTableTableManager(_db, _db.goalAllocationsTable);
 }

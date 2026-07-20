@@ -47,7 +47,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
   final _completionOverrides = <String, bool>{};
   final _taskOverrides = <String, TodoTask>{};
   final GlobalKey _taskListKey = GlobalKey();
-  var _completedExpanded = true;
+  // Local override for the completed-section expand state. Null means "use the
+  // persisted setting"; a non-null value reflects a toggle in this session for
+  // immediate responsiveness before the settings stream updates. The persisted
+  // value lives device-locally in settings (see [_persistCompletedExpanded]).
+  bool? _completedExpandedOverride;
   var _showAllTasks = false;
   // Cache subtask stats futures by task ID to avoid re-querying the DB on
   // every rebuild (e.g. during drag-to-scroll), which would cause
@@ -94,6 +98,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   void _markListViewed(String listId) {
     unawaited(_persistLastViewedList(listId));
+  }
+
+  Future<void> _persistCompletedExpanded(bool expanded) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.todoCompletedSectionExpanded == expanded) return;
+    await settingsRepo.saveSettings(
+      settings.copyWith(todoCompletedSectionExpanded: expanded),
+    );
   }
 
   TodoTask? _panelTaskFor(List<TodoTask> sorted) {
@@ -667,6 +680,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
       orElse: () => false,
     );
     final effectiveHideCompleted = hideCompleted && !_showAllTasks;
+    final completedExpanded = _completedExpandedOverride ??
+        settings?.todoCompletedSectionExpanded ??
+        true;
     final listsAsync = ref.watch(todoListsProvider);
     final statsAsync = ref.watch(todoListStatsProvider);
 
@@ -910,9 +926,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                     children: [
                                       const Divider(height: 32),
                                       InkWell(
-                                        onTap: () => setState(
-                                          () => _completedExpanded = !_completedExpanded,
-                                        ),
+                                        onTap: () {
+                                          final next = !completedExpanded;
+                                          setState(
+                                            () => _completedExpandedOverride =
+                                                next,
+                                          );
+                                          unawaited(
+                                            _persistCompletedExpanded(next),
+                                          );
+                                        },
                                         borderRadius: BorderRadius.circular(14),
                                         child: Padding(
                                           padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -925,7 +948,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                                 ),
                                               ),
                                               Icon(
-                                                _completedExpanded
+                                                completedExpanded
                                                     ? PhosphorIconsRegular.caretUp
                                                     : PhosphorIconsRegular.caretDown,
                                               ),
@@ -936,7 +959,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                     ],
                                   ),
                                 ),
-                              if (!effectiveHideCompleted && completed.isNotEmpty && _completedExpanded)
+                              if (!effectiveHideCompleted && completed.isNotEmpty && completedExpanded)
                                 SliverList(
                                   delegate: SliverChildListDelegate([
                                     for (final task in completed)

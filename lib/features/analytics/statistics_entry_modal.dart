@@ -12,7 +12,9 @@ import 'package:voyager/domain/models/enums.dart';
 
 /// Opens the statistics entry modal sheet.
 Future<void> showStatisticsEntryModal(
-    BuildContext context, WidgetRef ref) async {
+  BuildContext context,
+  WidgetRef ref,
+) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -35,8 +37,7 @@ class _StatisticsEntryModal extends ConsumerStatefulWidget {
       _StatisticsEntryModalState();
 }
 
-class _StatisticsEntryModalState
-    extends ConsumerState<_StatisticsEntryModal> {
+class _StatisticsEntryModalState extends ConsumerState<_StatisticsEntryModal> {
   late DateTime _selectedDate;
 
   @override
@@ -65,8 +66,9 @@ class _StatisticsEntryModalState
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color:
-                    theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                color: theme.colorScheme.onSurfaceVariant.withValues(
+                  alpha: 0.3,
+                ),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -150,8 +152,7 @@ class _StatisticsEntryModalState
                   ),
                 );
               },
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('$e')),
             ),
           ),
@@ -204,8 +205,7 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
   @override
   void initState() {
     super.initState();
-    _intController.text =
-        widget.tracker.defaultInt.toString();
+    _intController.text = widget.tracker.defaultInt.toString();
   }
 
   @override
@@ -261,8 +261,9 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
               Expanded(
                 child: Text(
                   widget.tracker.name,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w500),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -308,8 +309,10 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       isDense: true,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                     ),
                     onSubmitted: (_) => _saveInt(existing),
                   ),
@@ -322,7 +325,9 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
                       '$minVal-$cap',
                       style: theme.textTheme.labelSmall?.copyWith(
                         fontSize: 8,
-                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ),
@@ -333,7 +338,10 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
             FilledButton(
               onPressed: () => _saveInt(existing),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 visualDensity: VisualDensity.compact,
               ),
               child: const Text('Save'),
@@ -377,10 +385,11 @@ class _TrackerEntryRowState extends ConsumerState<_TrackerEntryRow> {
     String? enumValue,
   }) async {
     final now = utcNow();
-    await ref.read(trackerRepositoryProvider).upsertValue(
+    await ref
+        .read(trackerRepositoryProvider)
+        .upsertValue(
           TrackerValue(
-            id: current?.id ??
-                '${widget.tracker.id}_${widget.date.millisecondsSinceEpoch}',
+            id: current?.id ?? trackerValueId(widget.tracker.id, widget.date),
             trackerId: widget.tracker.id,
             periodStart: widget.date,
             intValue: intValue,

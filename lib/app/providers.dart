@@ -33,8 +33,10 @@ import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
+import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -83,6 +85,10 @@ final calendarRepositoryProvider = Provider<CalendarRepository>((ref) {
 
 final trackerRepositoryProvider = Provider<TrackerRepository>((ref) {
   return DriftTrackerRepository(ref.watch(databaseProvider));
+});
+
+final financeRepositoryProvider = Provider<FinanceRepository>((ref) {
+  return DriftFinanceRepository(ref.watch(databaseProvider));
 });
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
@@ -202,7 +208,9 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
   return service;
 });
 
-final journalWriteCoordinatorProvider = Provider<JournalWriteCoordinator>((ref) {
+final journalWriteCoordinatorProvider = Provider<JournalWriteCoordinator>((
+  ref,
+) {
   return JournalWriteCoordinator(
     journalRepository: ref.watch(journalRepositoryProvider),
     remoteSync: ref.watch(remoteSyncServiceProvider),
@@ -316,6 +324,7 @@ final backgroundSyncOrchestratorProvider = Provider((ref) {
     todoRepository: ref.watch(todoRepositoryProvider),
     calendarRepository: ref.watch(calendarRepositoryProvider),
     trackerRepository: ref.watch(trackerRepositoryProvider),
+    financeRepository: ref.watch(financeRepositoryProvider),
   );
 });
 
@@ -341,7 +350,9 @@ final journalEntriesProvider = FutureProvider((ref) {
 
 final allJournalEntriesProvider = FutureProvider((ref) {
   ref.keepAlive();
-  return ref.watch(journalRepositoryProvider).getAllEntries(includeDeleted: false);
+  return ref
+      .watch(journalRepositoryProvider)
+      .getAllEntries(includeDeleted: false);
 });
 
 /// Journal entry list scope: [allJournalEntriesScope] for recent entries across
@@ -356,8 +367,9 @@ void invalidateJournalEntryProviders(Ref ref) {
   ref.invalidate(journalAllEntryIdsProvider);
 }
 
-final journalEntryCountsProvider =
-    FutureProvider<Map<String, int>>((ref) async {
+final journalEntryCountsProvider = FutureProvider<Map<String, int>>((
+  ref,
+) async {
   ref.keepAlive();
   return ref.watch(journalRepositoryProvider).countEntriesByJournal();
 });
@@ -374,15 +386,15 @@ final journalAllEntryIdsProvider = FutureProvider<Set<String>>((ref) async {
   return {for (final e in entries) e.id};
 });
 
-final journalListEntriesProvider = FutureProvider.family<
-    List<JournalEntry>, String>((ref, scope) {
-  ref.keepAlive();
-  final repo = ref.watch(journalRepositoryProvider);
-  if (scope == allJournalEntriesScope) {
-    return repo.listEntries();
-  }
-  return repo.listEntries(journalId: scope);
-});
+final journalListEntriesProvider =
+    FutureProvider.family<List<JournalEntry>, String>((ref, scope) {
+      ref.keepAlive();
+      final repo = ref.watch(journalRepositoryProvider);
+      if (scope == allJournalEntriesScope) {
+        return repo.listEntries();
+      }
+      return repo.listEntries(journalId: scope);
+    });
 
 final historicalJournalEntriesProvider = FutureProvider.family((
   ref,
@@ -417,19 +429,19 @@ final allTodoTasksProvider = FutureProvider<List<TodoTask>>((ref) async {
 
 final todoListStatsProvider =
     FutureProvider<Map<String, ({int active, int completed})>>((ref) async {
-  ref.keepAlive();
-  final repo = ref.watch(todoRepositoryProvider);
-  final lists = await ref.watch(todoListsProvider.future);
-  final stats = <String, ({int active, int completed})>{};
-  for (final list in lists) {
-    final tasks = await repo.listTasks(list.id);
-    stats[list.id] = (
-      active: tasks.where((t) => !t.completed).length,
-      completed: tasks.where((t) => t.completed).length,
-    );
-  }
-  return stats;
-});
+      ref.keepAlive();
+      final repo = ref.watch(todoRepositoryProvider);
+      final lists = await ref.watch(todoListsProvider.future);
+      final stats = <String, ({int active, int completed})>{};
+      for (final list in lists) {
+        final tasks = await repo.listTasks(list.id);
+        stats[list.id] = (
+          active: tasks.where((t) => !t.completed).length,
+          completed: tasks.where((t) => t.completed).length,
+        );
+      }
+      return stats;
+    });
 
 final calendarsProvider = FutureProvider((ref) {
   ref.keepAlive();
@@ -440,14 +452,15 @@ final calendarsProvider = FutureProvider((ref) {
 /// events), otherwise a specific calendar id for that calendar's events only.
 final calendarEventsProvider =
     FutureProvider.family<List<CalendarEvent>, String?>((ref, calendarId) {
-  ref.keepAlive();
-  final repo = ref.watch(calendarRepositoryProvider);
-  if (calendarId == null) return repo.listEvents();
-  return repo.listEvents(calendarId: calendarId);
-});
+      ref.keepAlive();
+      final repo = ref.watch(calendarRepositoryProvider);
+      if (calendarId == null) return repo.listEvents();
+      return repo.listEvents(calendarId: calendarId);
+    });
 
-final calendarTodoMarkersProvider =
-    FutureProvider<List<CalendarTodoMarker>>((ref) async {
+final calendarTodoMarkersProvider = FutureProvider<List<CalendarTodoMarker>>((
+  ref,
+) async {
   ref.keepAlive();
   final tasks = await ref.watch(allTodoTasksProvider.future);
   final lists = await ref.watch(todoListsProvider.future);
@@ -465,8 +478,80 @@ final trackersProvider = FutureProvider((ref) {
   return ref.watch(trackerRepositoryProvider).listTrackers();
 });
 
-final trackerValuesProvider = FutureProvider.family((ref, String trackerId) {
+/// All non-deleted ledger transactions, newest first.
+final transactionsProvider = FutureProvider<List<FinancialTransaction>>((ref) {
   ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listTransactions();
+});
+
+/// Shared tag -> ARGB color map (reused across journal + finance tagging).
+final tagColorsProvider = FutureProvider<Map<String, int>>((ref) {
+  ref.keepAlive();
+  return ref.watch(settingsRepositoryProvider).getTagColors();
+});
+
+/// All non-deleted recurring subscriptions, soonest-due first.
+final subscriptionsProvider = FutureProvider<List<Subscription>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listSubscriptions();
+});
+
+/// All non-deleted tag budgets, alphabetical by tag.
+final budgetsProvider = FutureProvider<List<Budget>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listBudgets();
+});
+
+/// Tag-grouping categories used by the macro analytics breakdown.
+final financeCategoriesProvider = FutureProvider<List<FinanceCategory>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listCategories();
+});
+
+/// Tracked assets contributing to net worth, alphabetical by name.
+final assetsProvider = FutureProvider<List<Asset>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listAssets();
+});
+
+/// Every asset valuation, newest first.
+final assetValuationsProvider = FutureProvider<List<AssetValuation>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listAssetValuations();
+});
+
+/// Savings goals in creation order.
+final savingsGoalsProvider = FutureProvider<List<SavingsGoal>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listSavingsGoals();
+});
+
+/// Every goal allocation, newest first.
+final goalAllocationsProvider = FutureProvider<List<GoalAllocation>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listGoalAllocations();
+});
+
+final trackerValuesProvider = FutureProvider.family((
+  ref,
+  String trackerId,
+) async {
+  ref.keepAlive();
+  // The built-in trackers are virtual: their values are derived from the
+  // user's journal entries rather than stored in the tracker table.
+  if (trackerId == kJournalEntriesTrackerId) {
+    final entries = await ref.watch(allJournalEntriesProvider.future);
+    return journalEntriesTrackerValues(entries);
+  }
+  if (trackerId == kStreakTrackerId) {
+    final entries = await ref.watch(allJournalEntriesProvider.future);
+    return streakTrackerValues(entries);
+  }
+  if (trackerId == kWordCountTrackerId) {
+    final entries = await ref.watch(allJournalEntriesProvider.future);
+    final analytics = ref.watch(analyticsServiceProvider);
+    return wordCountTrackerValues(entries, countWords: analytics.countWords);
+  }
   return ref.watch(trackerRepositoryProvider).listValues(trackerId);
 });
 
@@ -499,12 +584,14 @@ final geometricShaderProvider = FutureProvider<FragmentProgram?>((ref) async {
   try {
     return await FragmentProgram.fromAsset('shaders/geometric_texture.frag');
   } catch (e, st) {
-    FlutterError.reportError(FlutterErrorDetails(
-      exception: e,
-      stack: st,
-      library: 'geometric_texture',
-      context: ErrorDescription('loading geometric texture shader'),
-    ));
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: e,
+        stack: st,
+        library: 'geometric_texture',
+        context: ErrorDescription('loading geometric texture shader'),
+      ),
+    );
     return null;
   }
 });
@@ -569,9 +656,70 @@ final geometricTextureParamsProvider =
       GeometricTextureParams
     >((ref) => GeometricTextureParamsNotifier(ref));
 
+/// Live-tunable geometric texture wave parameters (persisted in local settings).
+class GeometricWaveParamsNotifier extends StateNotifier<GeometricWaveParams> {
+  GeometricWaveParamsNotifier(this._ref) : super(GeometricWaveParams.defaults) {
+    _ref.listen<AsyncValue<AppSettings>>(settingsProvider, (_, next) {
+      next.whenData(syncFromSettings);
+    });
+    final cached = _ref.read(settingsProvider).valueOrNull;
+    if (cached != null) {
+      syncFromSettings(cached);
+    }
+  }
+
+  final Ref _ref;
+  Timer? _saveTimer;
+
+  void syncFromSettings(AppSettings settings) {
+    final next = geometricWaveParamsFromSettings(settings);
+    if (next != state) {
+      state = next;
+    }
+  }
+
+  void update(GeometricWaveParams params) {
+    state = params;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_persist(params));
+    });
+  }
+
+  Future<void> resetToDefaults() async {
+    _saveTimer?.cancel();
+    state = GeometricWaveParams.defaults;
+    await _persist(GeometricWaveParams.defaults);
+  }
+
+  Future<void> _persist(GeometricWaveParams params) async {
+    final repo = _ref.read(settingsRepositoryProvider);
+    final settings = await repo.getSettings();
+    await repo.saveSettings(
+      appSettingsWithGeometricWaveParams(settings, params),
+    );
+    _ref.invalidate(settingsProvider);
+  }
+
+  @override
+  void dispose() {
+    _saveTimer?.cancel();
+    super.dispose();
+  }
+}
+
+final geometricWaveParamsProvider =
+    StateNotifierProvider<GeometricWaveParamsNotifier, GeometricWaveParams>(
+      (ref) => GeometricWaveParamsNotifier(ref),
+    );
+
 /// Whether the dev-menu geometric texture slider panel is expanded.
-final devGeometricTexturePanelOpenProvider =
-    StateProvider<bool>((ref) => false);
+final devGeometricTexturePanelOpenProvider = StateProvider<bool>(
+  (ref) => false,
+);
+
+/// Whether the dev-menu geometric wave slider panel is expanded.
+final devGeometricWavePanelOpenProvider = StateProvider<bool>((ref) => false);
 
 final shellDataWarmupProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
@@ -623,19 +771,19 @@ final journalDebugLoggerProvider = ChangeNotifierProvider<JournalDebugLogger>((
   return controller;
 });
 
-final todoSortDebugLoggerProvider = ChangeNotifierProvider<TodoSortDebugLogger>((
-  ref,
-) {
-  final controller = TodoSortDebugLogger(
-    settingsRepository: ref.watch(settingsRepositoryProvider),
-    todoRepository: ref.watch(todoRepositoryProvider),
-  );
-  unawaited(controller.loadFromSettings());
-  ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
-    next.whenData(controller.applySettings);
-  });
-  return controller;
-});
+final todoSortDebugLoggerProvider = ChangeNotifierProvider<TodoSortDebugLogger>(
+  (ref) {
+    final controller = TodoSortDebugLogger(
+      settingsRepository: ref.watch(settingsRepositoryProvider),
+      todoRepository: ref.watch(todoRepositoryProvider),
+    );
+    unawaited(controller.loadFromSettings());
+    ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+      next.whenData(controller.applySettings);
+    });
+    return controller;
+  },
+);
 
 final devSettingsProvider = ChangeNotifierProvider<DevSettingsController>((
   ref,
@@ -681,10 +829,16 @@ final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
     cacheStatusFromAsync('Settings', ref.watch(settingsProvider)),
     cacheStatusFromAsync('Journals', ref.watch(journalsProvider)),
     cacheStatusFromAsync('Journal entries', ref.watch(journalEntriesProvider)),
-    cacheStatusFromAsync('Calendar events', ref.watch(calendarEventsProvider(null))),
+    cacheStatusFromAsync(
+      'Calendar events',
+      ref.watch(calendarEventsProvider(null)),
+    ),
     cacheStatusFromAsync('Trackers', ref.watch(trackersProvider)),
     cacheStatusFromAsync('Current weather', ref.watch(currentWeatherProvider)),
-    cacheStatusFromAsync('Weather forecast', ref.watch(weatherForecastProvider)),
+    cacheStatusFromAsync(
+      'Weather forecast',
+      ref.watch(weatherForecastProvider),
+    ),
     cacheStatusFromAsync('Shell warmup', ref.watch(shellDataWarmupProvider)),
   ];
 

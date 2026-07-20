@@ -3,6 +3,14 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
+/// How long to keep [VoyagerDropdownButtonFormField.onMenuStateChanged] held at
+/// `true` after the menu is dismissed. [showMenu]'s future resolves at
+/// pop-start — before the menu plays its close animation — so it can't mark
+/// "fully closed" on its own. This is the popup route's own transition duration
+/// (`_kMenuDuration`, 300ms) plus a small buffer so the gate lifts only after
+/// the menu has animated away and left the overlay.
+const Duration _kMenuCloseSettleDuration = Duration(milliseconds: 340);
+
 /// Form-field dropdown that uses Voyager-styled popup menus.
 class VoyagerDropdownButtonFormField<T> extends FormField<T> {
   VoyagerDropdownButtonFormField({
@@ -16,6 +24,7 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
     super.enabled = true,
     this.isExpanded = false,
     this.accentColor,
+    this.onMenuStateChanged,
   }) : assert(items.isNotEmpty),
        super(
          builder: (field) {
@@ -51,6 +60,7 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
                enabled: dropdown.enabled,
                isExpanded: isExpanded,
                accentColor: dropdown.accentColor,
+               onMenuStateChanged: dropdown.onMenuStateChanged,
                onChanged: (value) {
                  field.didChange(value);
                  onChanged?.call(value);
@@ -65,6 +75,12 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
   final ValueChanged<T?>? onChanged;
   final bool isExpanded;
   final Color? accentColor;
+
+  /// Called with `true` when the popup menu opens and `false` once it has
+  /// fully closed (after its exit animation completes). Lets callers gate
+  /// other overlays — e.g. hover tooltips — so nothing paints over the menu
+  /// while it animates.
+  final ValueChanged<bool>? onMenuStateChanged;
 }
 
 class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
@@ -75,6 +91,7 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
     required this.isExpanded,
     required this.onChanged,
     this.accentColor,
+    this.onMenuStateChanged,
   });
 
   final FormFieldState<T> field;
@@ -83,6 +100,7 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
   final bool isExpanded;
   final ValueChanged<T?> onChanged;
   final Color? accentColor;
+  final ValueChanged<bool>? onMenuStateChanged;
 
   @override
   State<_VoyagerDropdownFieldControl<T>> createState() =>
@@ -91,6 +109,10 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
 
 class _VoyagerDropdownFieldControlState<T>
     extends State<_VoyagerDropdownFieldControl<T>> {
+  /// Bumped each time the menu opens so a delayed "menu closed" callback from a
+  /// previous open is discarded if the menu is reopened before it fires.
+  int _menuGeneration = 0;
+
   DropdownMenuItem<T>? _selectedItem() {
     final value = widget.field.value;
     for (final item in widget.items) {
@@ -115,23 +137,42 @@ class _VoyagerDropdownFieldControlState<T>
     );
     final enabledItems = widget.items.where((item) => item.enabled).toList();
 
-    final picked = await showVoyagerMenu<T>(
-      context: context,
-      position: RelativeRect.fromRect(menuRect, Offset.zero & overlay.size),
-      constraints: BoxConstraints(
-        minWidth: buttonRect.width,
-        maxWidth: buttonRect.width,
-      ),
-      accentColor: widget.accentColor,
-      items: [
-        for (var i = 0; i < enabledItems.length; i++)
-          VoyagerPopupMenuItem<T>(
-            value: enabledItems[i].value,
-            position: VoyagerMenuTheme.positionFor(i, enabledItems.length),
-            child: enabledItems[i].child,
-          ),
-      ],
-    );
+    // Held true for the whole menu lifecycle. [showVoyagerMenu]'s future
+    // resolves at pop-start, before the menu's close animation runs, so the
+    // `false` is scheduled a transition-length later (see
+    // [_kMenuCloseSettleDuration]) rather than fired the instant the future
+    // completes — otherwise it lifts while the menu is still animating away.
+    final generation = ++_menuGeneration;
+    widget.onMenuStateChanged?.call(true);
+    T? picked;
+    try {
+      picked = await showVoyagerMenu<T>(
+        context: context,
+        position: RelativeRect.fromRect(menuRect, Offset.zero & overlay.size),
+        constraints: BoxConstraints(
+          minWidth: buttonRect.width,
+          maxWidth: buttonRect.width,
+        ),
+        accentColor: widget.accentColor,
+        items: [
+          for (var i = 0; i < enabledItems.length; i++)
+            VoyagerPopupMenuItem<T>(
+              value: enabledItems[i].value,
+              position: VoyagerMenuTheme.positionFor(i, enabledItems.length),
+              child: enabledItems[i].child,
+            ),
+        ],
+      );
+    } finally {
+      final callback = widget.onMenuStateChanged;
+      if (callback != null) {
+        Future<void>.delayed(_kMenuCloseSettleDuration, () {
+          // Skip if the menu was reopened in the meantime — that newer open
+          // owns the gate now.
+          if (_menuGeneration == generation) callback(false);
+        });
+      }
+    }
 
     if (picked != null) {
       widget.onChanged(picked);

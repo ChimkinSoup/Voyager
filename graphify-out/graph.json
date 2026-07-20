@@ -1660,7 +1660,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journalrepositoryprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journalrepositoryprovider"
     },
     {
@@ -1890,7 +1890,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journalwritecoordinatorprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journalwritecoordinatorprovider"
     },
     {
@@ -1900,7 +1900,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journalentrycacheinvalidatorprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journalentrycacheinvalidatorprovider"
     },
     {
@@ -1960,7 +1960,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_weatherforecastprovider",
-      "community": 203,
+      "community": 219,
       "norm_label": "weatherforecastprovider"
     },
     {
@@ -1990,7 +1990,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_searchserviceprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "searchserviceprovider"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_settingsprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "settingsprovider"
     },
     {
@@ -2110,7 +2110,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journalsprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journalsprovider"
     },
     {
@@ -2150,7 +2150,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journalentrycountsprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journalentrycountsprovider"
     },
     {
@@ -2160,7 +2160,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journalallentryidsprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journalallentryidsprovider"
     },
     {
@@ -2180,7 +2180,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journallistentriesprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journallistentriesprovider"
     },
     {
@@ -2510,7 +2510,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_journaldebugloggerprovider",
-      "community": 216,
+      "community": 69,
       "norm_label": "journaldebugloggerprovider"
     },
     {
@@ -2530,7 +2530,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_devsettingsprovider",
-      "community": 163,
+      "community": 140,
       "norm_label": "devsettingsprovider"
     },
     {
@@ -2570,7 +2570,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_app_providers_cachestatussnapshotprovider",
-      "community": 163,
+      "community": 140,
       "norm_label": "cachestatussnapshotprovider"
     },
     {
@@ -2760,7 +2760,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_cloud_firestore_cloud_firestore_dart",
-      "community": 69,
+      "community": 103,
       "norm_label": "package:cloud_firestore/cloud_firestore.dart"
     },
     {
@@ -2770,7 +2770,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_cloud_functions_cloud_functions_dart",
-      "community": 69,
+      "community": 103,
       "norm_label": "package:cloud_functions/cloud_functions.dart"
     },
     {
@@ -2950,7 +2950,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_core_platform_platform_info_dart",
-      "community": 110,
+      "community": 144,
       "norm_label": "package:voyager/core/platform/platform_info.dart"
     },
     {
@@ -2960,7 +2960,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_core_widgets_geometric_texture_dart",
-      "community": 223,
+      "community": 216,
       "norm_label": "package:voyager/core/widgets/geometric_texture.dart"
     },
     {
@@ -3020,7 +3020,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_data_remote_http_callable_client_dart",
-      "community": 69,
+      "community": 103,
       "norm_label": "package:voyager/data/remote/http_callable_client.dart"
     },
     {
@@ -3120,7 +3120,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_domain_models_weather_models_dart",
-      "community": 69,
+      "community": 103,
       "norm_label": "package:voyager/domain/models/weather_models.dart"
     },
     {
@@ -3490,7 +3490,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_window_manager_window_manager_dart",
-      "community": 110,
+      "community": 144,
       "norm_label": "package:window_manager/window_manager.dart"
     },
     {
@@ -3510,7 +3510,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_core_theme_app_fonts_dart",
-      "community": 202,
+      "community": 203,
       "norm_label": "package:voyager/core/theme/app_fonts.dart"
     },
     {
@@ -4900,7 +4900,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "future",
-      "community": 119,
+      "community": 135,
       "norm_label": "future"
     },
     {
@@ -5100,7 +5100,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "dart_io",
-      "community": 103,
+      "community": 152,
       "norm_label": "dart:io"
     },
     {
@@ -5120,7 +5120,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_path_provider_path_provider_dart",
-      "community": 119,
+      "community": 135,
       "norm_label": "package:path_provider/path_provider.dart"
     },
     {
@@ -5450,7 +5450,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "datetime",
-      "community": 185,
+      "community": 202,
       "norm_label": "datetime"
     },
     {
@@ -5950,7 +5950,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger",
-      "community": 119,
+      "community": 135,
       "norm_label": "sync_compare_logger.dart"
     },
     {
@@ -5970,7 +5970,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_logfilename",
-      "community": 119,
+      "community": 135,
       "norm_label": "_logfilename"
     },
     {
@@ -5980,7 +5980,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_maxlogbytes",
-      "community": 119,
+      "community": 135,
       "norm_label": "_maxlogbytes"
     },
     {
@@ -5990,7 +5990,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_writechain",
-      "community": 119,
+      "community": 135,
       "norm_label": "_writechain"
     },
     {
@@ -6000,7 +6000,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_logfilepath",
-      "community": 119,
+      "community": 135,
       "norm_label": "logfilepath"
     },
     {
@@ -6010,7 +6010,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_readlog",
-      "community": 119,
+      "community": 135,
       "norm_label": "readlog"
     },
     {
@@ -6020,7 +6020,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_clearlog",
-      "community": 119,
+      "community": 135,
       "norm_label": "clearlog"
     },
     {
@@ -6030,7 +6030,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_log",
-      "community": 119,
+      "community": 135,
       "norm_label": "log"
     },
     {
@@ -6040,7 +6040,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_dev_sync_compare_logger_enqueue",
-      "community": 119,
+      "community": 135,
       "norm_label": "_enqueue"
     },
     {
@@ -6460,7 +6460,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_desktop_window",
-      "community": 110,
+      "community": 144,
       "norm_label": "desktop_window.dart"
     },
     {
@@ -6470,7 +6470,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_desktop_window_desktopwindowconfigured",
-      "community": 110,
+      "community": 144,
       "norm_label": "_desktopwindowconfigured"
     },
     {
@@ -6480,7 +6480,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_desktop_window_desktopwindowchromeactive",
-      "community": 110,
+      "community": 144,
       "norm_label": "desktopwindowchromeactive"
     },
     {
@@ -6490,7 +6490,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_desktop_window_configuredesktopwindow",
-      "community": 110,
+      "community": 144,
       "norm_label": "configuredesktopwindow"
     },
     {
@@ -6510,7 +6510,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_platform_adaptive",
-      "community": 110,
+      "community": 144,
       "norm_label": "platform_adaptive.dart"
     },
     {
@@ -6520,7 +6520,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_platform_adaptive_platformadaptivescaffold",
-      "community": 110,
+      "community": 144,
       "norm_label": "platformadaptivescaffold"
     },
     {
@@ -6540,7 +6540,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_platform_adaptive_body",
-      "community": 110,
+      "community": 144,
       "norm_label": "body"
     },
     {
@@ -6560,7 +6560,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_platform_adaptive_floatingactionbutton",
-      "community": 110,
+      "community": 144,
       "norm_label": "floatingactionbutton"
     },
     {
@@ -6570,7 +6570,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_platform_adaptive_build",
-      "community": 110,
+      "community": 144,
       "norm_label": "build"
     },
     {
@@ -6620,7 +6620,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_windows_keyboard_workaround",
-      "community": 171,
+      "community": 185,
       "norm_label": "windows_keyboard_workaround.dart"
     },
     {
@@ -6630,7 +6630,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_windows_keyboard_workaround_previous",
-      "community": 171,
+      "community": 185,
       "norm_label": "previous"
     },
     {
@@ -6640,7 +6640,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_windows_keyboard_workaround_exception",
-      "community": 171,
+      "community": 185,
       "norm_label": "exception"
     },
     {
@@ -6650,7 +6650,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_windows_keyboard_workaround_message",
-      "community": 171,
+      "community": 185,
       "norm_label": "message"
     },
     {
@@ -6660,7 +6660,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_windows_keyboard_workaround_installwindowskeyboardworkaround",
-      "community": 171,
+      "community": 185,
       "norm_label": "installwindowskeyboardworkaround"
     },
     {
@@ -6670,7 +6670,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_windows_keyboard_workaround_isknownwindowskeyboarddesync",
-      "community": 171,
+      "community": 185,
       "norm_label": "_isknownwindowskeyboarddesync"
     },
     {
@@ -6680,7 +6680,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_platform_windows_keyboard_workaround_resyncwindowskeyboardstate",
-      "community": 171,
+      "community": 185,
       "norm_label": "resyncwindowskeyboardstate"
     },
     {
@@ -10290,7 +10290,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_theme_voyager_theme",
-      "community": 202,
+      "community": 203,
       "norm_label": "voyager_theme.dart"
     },
     {
@@ -10300,7 +10300,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_theme_voyager_theme_voyagertheme",
-      "community": 202,
+      "community": 203,
       "norm_label": "voyagertheme"
     },
     {
@@ -10310,7 +10310,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_theme_voyager_theme_dark",
-      "community": 202,
+      "community": 203,
       "norm_label": "dark"
     },
     {
@@ -10320,7 +10320,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_core_theme_voyager_menu_theme_dart",
-      "community": 202,
+      "community": 203,
       "norm_label": "package:voyager/core/theme/voyager_menu_theme.dart"
     },
     {
@@ -10330,7 +10330,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "outlinedborder",
-      "community": 202,
+      "community": 203,
       "norm_label": "outlinedborder"
     },
     {
@@ -11790,7 +11790,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_context_menu_contextmenulayoutdelegate",
-      "community": 231,
+      "community": 223,
       "norm_label": "_contextmenulayoutdelegate"
     },
     {
@@ -11800,7 +11800,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "singlechildlayoutdelegate",
-      "community": 231,
+      "community": 223,
       "norm_label": "singlechildlayoutdelegate"
     },
     {
@@ -12390,7 +12390,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_contextual_popover_popoverlayoutdelegate",
-      "community": 231,
+      "community": 223,
       "norm_label": "_popoverlayoutdelegate"
     },
     {
@@ -14770,7 +14770,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_geometric_texture_settings",
-      "community": 223,
+      "community": 216,
       "norm_label": "geometric_texture_settings.dart"
     },
     {
@@ -14780,7 +14780,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_geometric_texture_settings_geometrictextureparamsfromsettings",
-      "community": 223,
+      "community": 216,
       "norm_label": "geometrictextureparamsfromsettings"
     },
     {
@@ -14790,7 +14790,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_geometric_texture_settings_appsettingswithgeometrictextureparams",
-      "community": 223,
+      "community": 216,
       "norm_label": "appsettingswithgeometrictextureparams"
     },
     {
@@ -14800,7 +14800,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_geometric_texture_settings_copywith",
-      "community": 223,
+      "community": 216,
       "norm_label": "copywith"
     },
     {
@@ -14810,7 +14810,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag",
-      "community": 140,
+      "community": 109,
       "norm_label": "journal_color_flag.dart"
     },
     {
@@ -14820,7 +14820,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_journaltitlecornerflag",
-      "community": 140,
+      "community": 109,
       "norm_label": "journaltitlecornerflag"
     },
     {
@@ -14830,7 +14830,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_journalbookmarkflag",
-      "community": 140,
+      "community": 109,
       "norm_label": "journalbookmarkflag"
     },
     {
@@ -14840,7 +14840,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_colorcornerflag",
-      "community": 140,
+      "community": 109,
       "norm_label": "colorcornerflag"
     },
     {
@@ -14860,7 +14860,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_colorvalue",
-      "community": 140,
+      "community": 109,
       "norm_label": "colorvalue"
     },
     {
@@ -14870,7 +14870,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_onselected",
-      "community": 140,
+      "community": 109,
       "norm_label": "onselected"
     },
     {
@@ -14880,7 +14880,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_size",
-      "community": 140,
+      "community": 109,
       "norm_label": "size"
     },
     {
@@ -14890,7 +14890,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_tooltip",
-      "community": 140,
+      "community": 109,
       "norm_label": "tooltip"
     },
     {
@@ -14900,7 +14900,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_snaptotopedge",
-      "community": 140,
+      "community": 109,
       "norm_label": "snaptotopedge"
     },
     {
@@ -14910,7 +14910,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_richcolor",
-      "community": 140,
+      "community": 109,
       "norm_label": "richcolor"
     },
     {
@@ -14920,7 +14920,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_color",
-      "community": 140,
+      "community": 109,
       "norm_label": "color"
     },
     {
@@ -14930,7 +14930,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_build",
-      "community": 140,
+      "community": 109,
       "norm_label": "build"
     },
     {
@@ -14940,7 +14940,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_paint",
-      "community": 140,
+      "community": 109,
       "norm_label": "paint"
     },
     {
@@ -14950,7 +14950,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_core_widgets_journal_color_flag_shouldrepaint",
-      "community": 140,
+      "community": 109,
       "norm_label": "shouldrepaint"
     },
     {
@@ -21760,7 +21760,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_body",
-      "community": 234,
+      "community": 240,
       "norm_label": "body"
     },
     {
@@ -22350,7 +22350,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_cadence",
-      "community": 236,
+      "community": 242,
       "norm_label": "cadence"
     },
     {
@@ -22580,7 +22580,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_boolvalue",
-      "community": 235,
+      "community": 241,
       "norm_label": "boolvalue"
     },
     {
@@ -22630,7 +22630,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_accentcolor",
-      "community": 222,
+      "community": 234,
       "norm_label": "accentcolor"
     },
     {
@@ -22790,7 +22790,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_birthyear",
-      "community": 232,
+      "community": 239,
       "norm_label": "birthyear"
     },
     {
@@ -22810,7 +22810,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_alertonperiodicprompts",
-      "community": 229,
+      "community": 236,
       "norm_label": "alertonperiodicprompts"
     },
     {
@@ -22830,7 +22830,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_alerttimehour",
-      "community": 230,
+      "community": 238,
       "norm_label": "alerttimehour"
     },
     {
@@ -23920,7 +23920,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_database_app_database_g_dart_lib_data_database_app_database_addedat",
-      "community": 227,
+      "community": 235,
       "norm_label": "addedat"
     },
     {
@@ -24080,7 +24080,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client",
-      "community": 69,
+      "community": 103,
       "norm_label": "cloud_function_weather_client.dart"
     },
     {
@@ -24090,7 +24090,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_cloudfunctionweatherclient",
-      "community": 69,
+      "community": 103,
       "norm_label": "cloudfunctionweatherclient"
     },
     {
@@ -24100,7 +24100,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_firestoreweatherreader",
-      "community": 69,
+      "community": 103,
       "norm_label": "firestoreweatherreader"
     },
     {
@@ -24110,7 +24110,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_functions",
-      "community": 69,
+      "community": 103,
       "norm_label": "_functions"
     },
     {
@@ -24120,7 +24120,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "firebasefunctions",
-      "community": 69,
+      "community": 103,
       "norm_label": "firebasefunctions?"
     },
     {
@@ -24130,7 +24130,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_httpcallable",
-      "community": 69,
+      "community": 103,
       "norm_label": "_httpcallable"
     },
     {
@@ -24140,7 +24140,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_firestore",
-      "community": 69,
+      "community": 103,
       "norm_label": "_firestore"
     },
     {
@@ -24150,7 +24150,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_userid",
-      "community": 69,
+      "community": 103,
       "norm_label": "_userid"
     },
     {
@@ -24160,7 +24160,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_weatherdoc",
-      "community": 69,
+      "community": 103,
       "norm_label": "_weatherdoc"
     },
     {
@@ -24180,7 +24180,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_call",
-      "community": 69,
+      "community": 103,
       "norm_label": "_call"
     },
     {
@@ -24190,7 +24190,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_refreshweather",
-      "community": 69,
+      "community": 103,
       "norm_label": "refreshweather"
     },
     {
@@ -24200,7 +24200,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_refreshforecast",
-      "community": 69,
+      "community": 103,
       "norm_label": "refreshforecast"
     },
     {
@@ -24210,7 +24210,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_getcurrentweather",
-      "community": 69,
+      "community": 103,
       "norm_label": "getcurrentweather"
     },
     {
@@ -24220,7 +24220,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_cloud_function_weather_client_watchcurrentweather",
-      "community": 69,
+      "community": 103,
       "norm_label": "watchcurrentweather"
     },
     {
@@ -24230,7 +24230,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_desktop_google_oauth",
-      "community": 103,
+      "community": 152,
       "norm_label": "desktop_google_oauth.dart"
     },
     {
@@ -24240,7 +24240,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_desktop_google_oauth_desktopgoogleoauth",
-      "community": 103,
+      "community": 152,
       "norm_label": "desktopgoogleoauth"
     },
     {
@@ -24250,7 +24250,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_desktop_google_oauth_authorizationendpoint",
-      "community": 103,
+      "community": 152,
       "norm_label": "_authorizationendpoint"
     },
     {
@@ -24260,7 +24260,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "static_final_uri",
-      "community": 103,
+      "community": 152,
       "norm_label": "static final uri"
     },
     {
@@ -24270,7 +24270,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_desktop_google_oauth_tokenendpoint",
-      "community": 103,
+      "community": 152,
       "norm_label": "_tokenendpoint"
     },
     {
@@ -24280,7 +24280,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_desktop_google_oauth_redirecturi",
-      "community": 103,
+      "community": 152,
       "norm_label": "redirecturi"
     },
     {
@@ -24290,7 +24290,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "static_uri_get",
-      "community": 103,
+      "community": 152,
       "norm_label": "static uri get"
     },
     {
@@ -24300,7 +24300,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_oauth2_oauth2_dart",
-      "community": 103,
+      "community": 152,
       "norm_label": "package:oauth2/oauth2.dart"
     },
     {
@@ -24310,7 +24310,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_url_launcher_url_launcher_dart",
-      "community": 103,
+      "community": 152,
       "norm_label": "package:url_launcher/url_launcher.dart"
     },
     {
@@ -24340,7 +24340,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_data_remote_dev_openweather_client_devopenweatherclient",
-      "community": 69,
+      "community": 103,
       "norm_label": "devopenweatherclient"
     },
     {
@@ -29280,7 +29280,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_domain_repositories_weather_api_client",
-      "community": 69,
+      "community": 103,
       "norm_label": "weather_api_client.dart"
     },
     {
@@ -29290,7 +29290,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_domain_repositories_weather_api_client_weatherapiclient",
-      "community": 69,
+      "community": 103,
       "norm_label": "weatherapiclient"
     },
     {
@@ -29300,7 +29300,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_domain_repositories_weather_api_client_refreshweather",
-      "community": 69,
+      "community": 103,
       "norm_label": "refreshweather"
     },
     {
@@ -29310,7 +29310,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_domain_repositories_weather_api_client_refreshforecast",
-      "community": 69,
+      "community": 103,
       "norm_label": "refreshforecast"
     },
     {
@@ -31550,7 +31550,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_domain_services_weather_forecast_chart_dart",
-      "community": 219,
+      "community": 222,
       "norm_label": "package:voyager/domain/services/weather_forecast_chart.dart"
     },
     {
@@ -35430,7 +35430,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_day_grid_morphdayeventstack",
-      "community": 238,
+      "community": 227,
       "norm_label": "morphdayeventstack"
     },
     {
@@ -35440,7 +35440,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_day_grid_morphdayeventstackstate",
-      "community": 238,
+      "community": 227,
       "norm_label": "_morphdayeventstackstate"
     },
     {
@@ -38050,7 +38050,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_event_panel_defaulteventcolor",
-      "community": 216,
+      "community": 69,
       "norm_label": "_defaulteventcolor"
     },
     {
@@ -39840,7 +39840,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_page_calendarmorphwarmup",
-      "community": 239,
+      "community": 229,
       "norm_label": "calendarmorphwarmup"
     },
     {
@@ -39850,7 +39850,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_page_calendarmorphwarmupstate",
-      "community": 239,
+      "community": 229,
       "norm_label": "_calendarmorphwarmupstate"
     },
     {
@@ -39870,7 +39870,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_page_morphanimationlayer",
-      "community": 241,
+      "community": 231,
       "norm_label": "_morphanimationlayer"
     },
     {
@@ -39880,7 +39880,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_page_morphanimationlayerstate",
-      "community": 241,
+      "community": 231,
       "norm_label": "_morphanimationlayerstate"
     },
     {
@@ -39940,7 +39940,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_page_monthweekmorphlayer",
-      "community": 240,
+      "community": 230,
       "norm_label": "_monthweekmorphlayer"
     },
     {
@@ -39950,7 +39950,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_page_monthweekmorphlayerstate",
-      "community": 240,
+      "community": 230,
       "norm_label": "_monthweekmorphlayerstate"
     },
     {
@@ -41560,7 +41560,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_page_scaledmorphduration",
-      "community": 163,
+      "community": 140,
       "norm_label": "_scaledmorphduration"
     },
     {
@@ -43610,7 +43610,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_todo_panel_build",
-      "community": 216,
+      "community": 69,
       "norm_label": "build"
     },
     {
@@ -43680,7 +43680,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_week_timeline_calendarweektimeline",
-      "community": 242,
+      "community": 232,
       "norm_label": "calendarweektimeline"
     },
     {
@@ -43690,7 +43690,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_calendar_calendar_week_timeline_calendarweektimelinestate",
-      "community": 242,
+      "community": 232,
       "norm_label": "_calendarweektimelinestate"
     },
     {
@@ -44910,7 +44910,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_cache_status_tile_devcachestatussection",
-      "community": 163,
+      "community": 140,
       "norm_label": "devcachestatussection"
     },
     {
@@ -44920,7 +44920,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_cache_status_tile_cachestatusoverlay",
-      "community": 163,
+      "community": 140,
       "norm_label": "cachestatusoverlay"
     },
     {
@@ -44970,7 +44970,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_cache_status_tile_build",
-      "community": 163,
+      "community": 140,
       "norm_label": "build"
     },
     {
@@ -44980,7 +44980,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_calendar_debug_tile",
-      "community": 163,
+      "community": 140,
       "norm_label": "dev_calendar_debug_tile.dart"
     },
     {
@@ -44990,7 +44990,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_calendar_debug_tile_devcalendardebugsection",
-      "community": 163,
+      "community": 140,
       "norm_label": "devcalendardebugsection"
     },
     {
@@ -45000,7 +45000,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_calendar_debug_tile_devanalyticsmonthoverride",
-      "community": 163,
+      "community": 140,
       "norm_label": "devanalyticsmonthoverride"
     },
     {
@@ -45010,7 +45010,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_calendar_debug_tile_devanalyticsmonthoverrideprovider",
-      "community": 163,
+      "community": 140,
       "norm_label": "devanalyticsmonthoverrideprovider"
     },
     {
@@ -45020,7 +45020,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_calendar_debug_tile_build",
-      "community": 163,
+      "community": 140,
       "norm_label": "build"
     },
     {
@@ -45170,7 +45170,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_journal_debug_tile",
-      "community": 216,
+      "community": 69,
       "norm_label": "dev_journal_debug_tile.dart"
     },
     {
@@ -45180,7 +45180,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_journal_debug_tile_devjournaldebugsection",
-      "community": 216,
+      "community": 69,
       "norm_label": "devjournaldebugsection"
     },
     {
@@ -45190,7 +45190,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_journal_debug_tile_build",
-      "community": 216,
+      "community": 69,
       "norm_label": "build"
     },
     {
@@ -45200,7 +45200,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_dev_dev_journal_debug_tile_showlogdialog",
-      "community": 216,
+      "community": 69,
       "norm_label": "_showlogdialog"
     },
     {
@@ -46360,7 +46360,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_list_actions_renamejournallist",
-      "community": 216,
+      "community": 69,
       "norm_label": "renamejournallist"
     },
     {
@@ -46380,7 +46380,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_list_actions_changejournallistcolor",
-      "community": 216,
+      "community": 69,
       "norm_label": "changejournallistcolor"
     },
     {
@@ -46550,7 +46550,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_manage_sheet_reload",
-      "community": 216,
+      "community": 69,
       "norm_label": "_reload"
     },
     {
@@ -46570,7 +46570,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_manage_sheet_persistcreatedjournal",
-      "community": 216,
+      "community": 69,
       "norm_label": "_persistcreatedjournal"
     },
     {
@@ -46580,7 +46580,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_manage_sheet_renamejournal",
-      "community": 216,
+      "community": 69,
       "norm_label": "_renamejournal"
     },
     {
@@ -46650,7 +46650,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_journalpage",
-      "community": 216,
+      "community": 69,
       "norm_label": "journalpage"
     },
     {
@@ -46660,7 +46660,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_journalpagestate",
-      "community": 216,
+      "community": 69,
       "norm_label": "_journalpagestate"
     },
     {
@@ -47370,7 +47370,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_initstate",
-      "community": 216,
+      "community": 69,
       "norm_label": "initstate"
     },
     {
@@ -47410,7 +47410,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_prefetchinitialjournalentries",
-      "community": 216,
+      "community": 69,
       "norm_label": "_prefetchinitialjournalentries"
     },
     {
@@ -47420,7 +47420,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_selectjournal",
-      "community": 216,
+      "community": 69,
       "norm_label": "_selectjournal"
     },
     {
@@ -47430,7 +47430,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_toggleviewalljournals",
-      "community": 216,
+      "community": 69,
       "norm_label": "_toggleviewalljournals"
     },
     {
@@ -47510,7 +47510,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_journalrepoornull",
-      "community": 216,
+      "community": 69,
       "norm_label": "_journalrepoornull"
     },
     {
@@ -47520,7 +47520,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_writecoordinatorornull",
-      "community": 216,
+      "community": 69,
       "norm_label": "_writecoordinatorornull"
     },
     {
@@ -47530,7 +47530,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_pinflushdependencies",
-      "community": 216,
+      "community": 69,
       "norm_label": "_pinflushdependencies"
     },
     {
@@ -47650,7 +47650,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_createjournalfromdropdown",
-      "community": 216,
+      "community": 69,
       "norm_label": "_createjournalfromdropdown"
     },
     {
@@ -47670,7 +47670,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_refreshpendingjournal",
-      "community": 216,
+      "community": 69,
       "norm_label": "_refreshpendingjournal"
     },
     {
@@ -47830,7 +47830,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_createentry",
-      "community": 216,
+      "community": 69,
       "norm_label": "_createentry"
     },
     {
@@ -47840,7 +47840,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_createentrywhenready",
-      "community": 216,
+      "community": 69,
       "norm_label": "_createentrywhenready"
     },
     {
@@ -48040,7 +48040,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_changeentrydateandtime",
-      "community": 216,
+      "community": 69,
       "norm_label": "_changeentrydateandtime"
     },
     {
@@ -48070,7 +48070,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_deleteentry",
-      "community": 216,
+      "community": 69,
       "norm_label": "_deleteentry"
     },
     {
@@ -48080,7 +48080,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_deleteentryitem",
-      "community": 216,
+      "community": 69,
       "norm_label": "_deleteentryitem"
     },
     {
@@ -48090,7 +48090,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_moveentryitemtojournal",
-      "community": 216,
+      "community": 69,
       "norm_label": "_moveentryitemtojournal"
     },
     {
@@ -48130,7 +48130,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_editquote",
-      "community": 216,
+      "community": 69,
       "norm_label": "_editquote"
     },
     {
@@ -48140,7 +48140,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_moveentrytojournal",
-      "community": 216,
+      "community": 69,
       "norm_label": "_moveentrytojournal"
     },
     {
@@ -48180,7 +48180,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_journal_journal_page_build",
-      "community": 216,
+      "community": 69,
       "norm_label": "build"
     },
     {
@@ -48490,7 +48490,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_search_search_page_searchpage",
-      "community": 216,
+      "community": 69,
       "norm_label": "searchpage"
     },
     {
@@ -48500,7 +48500,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_search_search_page_searchpagestate",
-      "community": 216,
+      "community": 69,
       "norm_label": "_searchpagestate"
     },
     {
@@ -48750,7 +48750,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_search_search_page_build",
-      "community": 216,
+      "community": 69,
       "norm_label": "build"
     },
     {
@@ -48780,7 +48780,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_search_search_page_save",
-      "community": 216,
+      "community": 69,
       "norm_label": "_save"
     },
     {
@@ -48800,7 +48800,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_search_search_page_changeentrydateandtime",
-      "community": 216,
+      "community": 69,
       "norm_label": "_changeentrydateandtime"
     },
     {
@@ -48810,7 +48810,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_search_search_page_movetojournal",
-      "community": 216,
+      "community": 69,
       "norm_label": "_movetojournal"
     },
     {
@@ -49460,7 +49460,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_features_shell_shell_destinations_dart",
-      "community": 135,
+      "community": 119,
       "norm_label": "package:voyager/features/shell/shell_destinations.dart"
     },
     {
@@ -49650,7 +49650,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_shell_app_shell_appshell",
-      "community": 216,
+      "community": 69,
       "norm_label": "appshell"
     },
     {
@@ -51450,7 +51450,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_shell_weather_chart_transition_warmup_populateplotcacheidle",
-      "community": 203,
+      "community": 219,
       "norm_label": "_populateplotcacheidle"
     },
     {
@@ -53140,7 +53140,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_shell_weather_forecast_sheet_weatherforecastdialog",
-      "community": 203,
+      "community": 219,
       "norm_label": "_weatherforecastdialog"
     },
     {
@@ -53300,7 +53300,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_shell_weather_forecast_sheet_build",
-      "community": 203,
+      "community": 219,
       "norm_label": "build"
     },
     {
@@ -55410,7 +55410,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_features_todo_todo_page_initstate",
-      "community": 216,
+      "community": 69,
       "norm_label": "initstate"
     },
     {
@@ -56130,7 +56130,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_routing_app_router",
-      "community": 135,
+      "community": 119,
       "norm_label": "app_router.dart"
     },
     {
@@ -56150,7 +56150,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_routing_app_router_auth",
-      "community": 135,
+      "community": 119,
       "norm_label": "auth"
     },
     {
@@ -56160,7 +56160,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_routing_app_router_settingsrepo",
-      "community": 135,
+      "community": 119,
       "norm_label": "settingsrepo"
     },
     {
@@ -56170,7 +56170,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "c_users_juno_code_voyager_lib_routing_app_router",
-      "community": 135,
+      "community": 119,
       "norm_label": "_"
     },
     {
@@ -56180,7 +56180,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "lib_routing_app_router_child",
-      "community": 135,
+      "community": 119,
       "norm_label": "child"
     },
     {
@@ -56190,7 +56190,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_core_widgets_desktop_window_frame_dart",
-      "community": 135,
+      "community": 119,
       "norm_label": "package:voyager/core/widgets/desktop_window_frame.dart"
     },
     {
@@ -56200,7 +56200,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_features_auth_login_page_dart",
-      "community": 135,
+      "community": 119,
       "norm_label": "package:voyager/features/auth/login_page.dart"
     },
     {
@@ -56210,7 +56210,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_features_shell_app_shell_dart",
-      "community": 135,
+      "community": 119,
       "norm_label": "package:voyager/features/shell/app_shell.dart"
     },
     {
@@ -56220,7 +56220,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_voyager_features_shell_shell_page_transition_dart",
-      "community": 135,
+      "community": 119,
       "norm_label": "package:voyager/features/shell/shell_page_transition.dart"
     },
     {
@@ -56230,7 +56230,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "gorouter",
-      "community": 135,
+      "community": 119,
       "norm_label": "gorouter"
     },
     {
@@ -56680,7 +56680,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_fakes_fake_weather_api_client_fakeweatherapiclient",
-      "community": 69,
+      "community": 103,
       "norm_label": "fakeweatherapiclient"
     },
     {
@@ -57750,7 +57750,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_forecast_chart_test",
-      "community": 219,
+      "community": 222,
       "norm_label": "weather_forecast_chart_test.dart"
     },
     {
@@ -57760,7 +57760,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_forecast_chart_test_period",
-      "community": 219,
+      "community": 222,
       "norm_label": "_period"
     },
     {
@@ -57770,7 +57770,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_forecast_chart_test_main",
-      "community": 219,
+      "community": 222,
       "norm_label": "main"
     },
     {
@@ -57820,7 +57820,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_models_test",
-      "community": 185,
+      "community": 202,
       "norm_label": "weather_models_test.dart"
     },
     {
@@ -57830,7 +57830,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_models_test_faketimestamp",
-      "community": 185,
+      "community": 202,
       "norm_label": "_faketimestamp"
     },
     {
@@ -57840,7 +57840,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_models_test_value",
-      "community": 185,
+      "community": 202,
       "norm_label": "value"
     },
     {
@@ -57850,7 +57850,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_models_test_todate",
-      "community": 185,
+      "community": 202,
       "norm_label": "todate"
     },
     {
@@ -57860,7 +57860,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "test_weather_models_test_main",
-      "community": 185,
+      "community": 202,
       "norm_label": "main"
     },
     {
@@ -59820,7 +59820,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink",
-      "community": 152,
+      "community": 171,
       "norm_label": "eventsink"
     },
     {
@@ -59830,7 +59830,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink_eventsink",
-      "community": 152,
+      "community": 171,
       "norm_label": ".eventsink()"
     },
     {
@@ -59840,7 +59840,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink_success",
-      "community": 152,
+      "community": 171,
       "norm_label": ".success()"
     },
     {
@@ -59850,7 +59850,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_h_t",
-      "community": 152,
+      "community": 171,
       "norm_label": "t"
     },
     {
@@ -59860,7 +59860,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink_error",
-      "community": 152,
+      "community": 171,
       "norm_label": ".error()"
     },
     {
@@ -59870,7 +59870,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_h_string",
-      "community": 152,
+      "community": 171,
       "norm_label": "string"
     },
     {
@@ -59880,7 +59880,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink_endofstream",
-      "community": 152,
+      "community": 171,
       "norm_label": ".endofstream()"
     },
     {
@@ -59890,7 +59890,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink_successinternal",
-      "community": 152,
+      "community": 171,
       "norm_label": "successinternal"
     },
     {
@@ -59900,7 +59900,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink_errorinternal",
-      "community": 152,
+      "community": 171,
       "norm_label": "errorinternal"
     },
     {
@@ -59910,7 +59910,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_sink_eventsink_endofstreaminternal",
-      "community": 152,
+      "community": 171,
       "norm_label": "endofstreaminternal"
     },
     {
@@ -60100,7 +60100,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_streamhandlerfunctions",
-      "community": 144,
+      "community": 163,
       "norm_label": "streamhandlerfunctions"
     },
     {
@@ -60110,7 +60110,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_h_t",
-      "community": 144,
+      "community": 163,
       "norm_label": "t"
     },
     {
@@ -60120,7 +60120,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_streamhandlerfunctions_streamhandlerfunctions",
-      "community": 144,
+      "community": 163,
       "norm_label": ".streamhandlerfunctions()"
     },
     {
@@ -60130,7 +60130,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "streamhandlerlisten",
-      "community": 144,
+      "community": 163,
       "norm_label": "streamhandlerlisten"
     },
     {
@@ -60140,7 +60140,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "streamhandlercancel",
-      "community": 144,
+      "community": 163,
       "norm_label": "streamhandlercancel"
     },
     {
@@ -60150,7 +60150,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_streamhandlerfunctions_onlisteninternal",
-      "community": 144,
+      "community": 163,
       "norm_label": ".onlisteninternal()"
     },
     {
@@ -60160,7 +60160,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_h_unique_ptr",
-      "community": 144,
+      "community": 163,
       "norm_label": "unique_ptr"
     },
     {
@@ -60170,7 +60170,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_streamhandlerfunctions_oncancelinternal",
-      "community": 144,
+      "community": 163,
       "norm_label": ".oncancelinternal()"
     },
     {
@@ -60180,7 +60180,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_streamhandlerfunctions_on_listen",
-      "community": 144,
+      "community": 163,
       "norm_label": "on_listen_"
     },
     {
@@ -60190,7 +60190,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_event_stream_handler_functions_streamhandlerfunctions_on_cancel",
-      "community": 144,
+      "community": 163,
       "norm_label": "on_cancel_"
     },
     {
@@ -60840,7 +60840,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel",
-      "community": 109,
+      "community": 110,
       "norm_label": "methodchannel"
     },
     {
@@ -60850,7 +60850,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_methodchannel",
-      "community": 109,
+      "community": 110,
       "norm_label": ".methodchannel()"
     },
     {
@@ -60860,7 +60860,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_h_string",
-      "community": 109,
+      "community": 110,
       "norm_label": "string"
     },
     {
@@ -60870,7 +60870,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_h_t",
-      "community": 109,
+      "community": 110,
       "norm_label": "t"
     },
     {
@@ -60880,7 +60880,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_invokemethod",
-      "community": 109,
+      "community": 110,
       "norm_label": ".invokemethod()"
     },
     {
@@ -60890,7 +60890,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_h_unique_ptr",
-      "community": 109,
+      "community": 110,
       "norm_label": "unique_ptr"
     },
     {
@@ -60900,7 +60900,7 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_setmethodcallhandler",
-      "community": 109,
+      "community": 110,
       "norm_label": ".setmethodcallhandler()"
     },
     {
@@ -60910,7 +60910,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "methodcallhandler",
-      "community": 109,
+      "community": 110,
       "norm_label": "methodcallhandler"
     },
     {
@@ -60920,7 +60920,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_resize",
-      "community": 109,
+      "community": 110,
       "norm_label": ".resize()"
     },
     {
@@ -60930,7 +60930,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_setwarnsonoverflow",
-      "community": 109,
+      "community": 110,
       "norm_label": ".setwarnsonoverflow()"
     },
     {
@@ -60940,7 +60940,7 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_messenger",
-      "community": 109,
+      "community": 110,
       "norm_label": "messenger_"
     },
     {
@@ -60950,7 +60950,7 @@
       "source_location": "L145",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_name",
-      "community": 109,
+      "community": 110,
       "norm_label": "name_"
     },
     {
@@ -60960,7 +60960,7 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "windows_flutter_ephemeral_cpp_client_wrapper_include_flutter_method_channel_methodchannel_codec",
-      "community": 109,
+      "community": 110,
       "norm_label": "codec_"
     },
     {
@@ -157880,5 +157880,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "a24171cd579764f9fe3b14e5b2ea9474fe03bc77"
+  "built_at_commit": "20b13f8a5c6204a8d1d2744ea818f9a9c06a6a86"
 }

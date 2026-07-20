@@ -7,8 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/platform/platform_info.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
+import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -28,10 +30,14 @@ class SettingsPage extends ConsumerWidget {
     final todoStatsAsync = ref.watch(todoListStatsProvider);
     final journalCount = journalsAsync.valueOrNull?.length;
     final todoStats = todoStatsAsync.valueOrNull;
-    final openTaskCount = todoStats?.values
-        .fold<int>(0, (sum, stat) => sum + stat.active);
-    final completedTaskCount = todoStats?.values
-        .fold<int>(0, (sum, stat) => sum + stat.completed);
+    final openTaskCount = todoStats?.values.fold<int>(
+      0,
+      (sum, stat) => sum + stat.active,
+    );
+    final completedTaskCount = todoStats?.values.fold<int>(
+      0,
+      (sum, stat) => sum + stat.completed,
+    );
 
     return settingsAsync.when(
       data: (settings) => KeepAliveScrollView(
@@ -42,7 +48,8 @@ class SettingsPage extends ConsumerWidget {
             title: const Text('App accent color'),
             subtitle: Text(formatColorHex(settings.accentColor)),
             leading: CircleAvatar(backgroundColor: Color(settings.accentColor)),
-            onTap: () => pickAccentColor(context, ref, settings, (s) => _save(ref, s)),
+            onTap: () =>
+                pickAccentColor(context, ref, settings, (s) => _save(ref, s)),
           ),
           const SizedBox(height: 8),
           SettingsColorPaletteSection(
@@ -64,6 +71,20 @@ class SettingsPage extends ConsumerWidget {
             title: const Text('Completed tasks'),
             trailing: Text(_statCountLabel(completedTaskCount)),
           ),
+          // The old companion toggle for the analytics *calendar* view is
+          // gone with that view itself — a statistic's calendar now opens as
+          // a popup from its grid tile, so this one switch governs whether
+          // built-in trackers show up at all.
+          SwitchListTile(
+            title: const Text('Default trackers in grid view'),
+            subtitle: const Text(
+              'Show built-in trackers like Journal Entries in the analytics '
+              'grid view',
+            ),
+            value: settings.showDefaultTrackersInGrid,
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(showDefaultTrackersInGrid: v)),
+          ),
           const SizedBox(height: 16),
           SwitchListTile(
             title: const Text('Show quotes on journal entries'),
@@ -73,8 +94,12 @@ class SettingsPage extends ConsumerWidget {
           SwitchListTile(
             title: const Text('Week starts on Monday'),
             value: settings.weekStartsOnMonday,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(weekStartsOnMonday: v)),
+            onChanged: (v) async {
+              if (v != settings.weekStartsOnMonday) {
+                await _reanchorWeeklyValues(ref, weekStartsMonday: v);
+              }
+              await _save(ref, settings.copyWith(weekStartsOnMonday: v));
+            },
           ),
           ListTile(
             title: const Text('Calendar: previous period'),
@@ -119,6 +144,21 @@ class SettingsPage extends ConsumerWidget {
           ),
           WeatherLocationTile(settings: settings),
           const SizedBox(height: 16),
+          Text('Finance', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          SwitchListTile(
+            title: const Text('Show annualized subscription cost'),
+            subtitle: const Text(
+              'Displays each recurring bill\'s yearly total in faint text on '
+              'the Bill Radar (e.g. \$180/yr for a \$15/month plan)',
+            ),
+            value: settings.showAnnualizedSubscriptionCost,
+            onChanged: (v) => _save(
+              ref,
+              settings.copyWith(showAnnualizedSubscriptionCost: v),
+            ),
+          ),
+          const SizedBox(height: 16),
           Text('Navigation', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           ListTile(
@@ -133,16 +173,21 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => _showStartupPageDialog(context, ref, settings),
           ),
           const SizedBox(height: 16),
-          Text('Backup & Restore', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Backup & Restore',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           ListTile(
             title: const Text('Export Backup'),
-            subtitle: const Text('Export all journal entries and tasks to a ZIP file'),
+            subtitle: const Text(
+              'Export all journal entries and tasks to a ZIP file',
+            ),
             leading: const Icon(PhosphorIconsRegular.downloadSimple),
             onTap: () async {
               try {
-                String? selectedDirectory =
-                    await FilePicker.platform.getDirectoryPath();
+                String? selectedDirectory = await FilePicker.platform
+                    .getDirectoryPath();
                 if (selectedDirectory == null) return;
 
                 if (context.mounted) {
@@ -151,8 +196,9 @@ class SettingsPage extends ConsumerWidget {
                   );
                 }
 
-                final file =
-                    await ref.read(dataExportServiceProvider).exportDataToZip();
+                final file = await ref
+                    .read(dataExportServiceProvider)
+                    .exportDataToZip();
 
                 final finalPath =
                     '$selectedDirectory/voyager_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
@@ -169,9 +215,9 @@ class SettingsPage extends ConsumerWidget {
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Export failed: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
                 }
               }
             },
@@ -222,9 +268,9 @@ class SettingsPage extends ConsumerWidget {
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Import failed: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
                 }
               }
             },
@@ -279,6 +325,50 @@ class SettingsPage extends ConsumerWidget {
     ref.invalidate(settingsProvider);
   }
 
+  /// Weekly tracker values are stored on their week's start day, which depends
+  /// on the "week starts on Monday" setting. When that setting flips, every
+  /// existing weekly value would otherwise land on the "wrong" weekday and
+  /// vanish from the weekly grid (resurfacing as stray daily data). Re-anchor
+  /// them to the new week-start so nothing is orphaned.
+  Future<void> _reanchorWeeklyValues(
+    WidgetRef ref, {
+    required bool weekStartsMonday,
+  }) async {
+    final trackerRepo = ref.read(trackerRepositoryProvider);
+    final promptService = ref.read(periodicPromptServiceProvider);
+    final trackers = await trackerRepo.listTrackers();
+    final now = utcNow();
+    for (final tracker in trackers) {
+      if (tracker.cadence != TrackerCadence.weekly) continue;
+      final values = await trackerRepo.listValues(tracker.id);
+      for (final value in values) {
+        final anchored = promptService.periodStartFor(
+          value.periodStart,
+          TrackerCadence.weekly,
+          weekStartsMonday: weekStartsMonday,
+        );
+        if (anchored.year == value.periodStart.year &&
+            anchored.month == value.periodStart.month &&
+            anchored.day == value.periodStart.day) {
+          continue;
+        }
+        await trackerRepo.upsertValue(
+          TrackerValue(
+            id: value.id,
+            trackerId: value.trackerId,
+            periodStart: anchored,
+            intValue: value.intValue,
+            boolValue: value.boolValue,
+            enumValue: value.enumValue,
+            createdAt: value.createdAt,
+            updatedAt: now,
+            deletedAt: value.deletedAt,
+          ),
+        );
+      }
+    }
+  }
+
   String _statCountLabel(int? count) {
     if (count == null) return '—';
     return count.toString();
@@ -311,9 +401,9 @@ class SettingsPage extends ConsumerWidget {
         final path = settings.customStartupPage;
         if (path == null) return 'Custom (none selected)';
         final dest = shellDestinations.cast<ShellDestination?>().firstWhere(
-              (d) => d?.path == path,
-              orElse: () => null,
-            );
+          (d) => d?.path == path,
+          orElse: () => null,
+        );
         return dest != null ? 'Custom: ${dest.label}' : 'Custom: $path';
     }
   }
@@ -434,7 +524,7 @@ class SettingsPage extends ConsumerWidget {
                                   Text(d.label),
                                 ],
                               ),
-                            )
+                            ),
                         ],
                         onChanged: (v) => setState(() => customPath = v),
                       ),

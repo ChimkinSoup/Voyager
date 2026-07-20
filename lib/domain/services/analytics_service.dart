@@ -72,11 +72,24 @@ class AnalyticsService {
   /// as [WeatherChartCurve] to fill gaps between recorded values. The X axis
   /// is the day offset from [from]; the Y axis is the recorded or interpolated
   /// integer value. If fewer than 2 data points exist the raw spots are returned.
+  ///
+  /// [upperBound] is the tracker's integer cap, when it has one. A cubic
+  /// Hermite segment isn't bounded by its endpoints — it overshoots whenever
+  /// the neighbouring points give a steep tangent — so an interpolated day
+  /// between two in-range values could otherwise be drawn above the cap (or,
+  /// symmetrically, below zero). Interpolated values are clamped into
+  /// `[0, upperBound]` so the curve stays inside the range the user can
+  /// actually record.
   List<FlSpot> interpolateConsecutive({
     required List<TrackerValue> values,
     required DateTime from,
     required DateTime to,
+    int maxDays = 365,
+    int? upperBound,
   }) {
+    final maxY = (upperBound != null && upperBound > 0)
+        ? upperBound.toDouble()
+        : double.infinity;
     // Build day-index → value map from raw data
     final dayMap = <int, double>{};
     for (final v in values) {
@@ -146,7 +159,7 @@ class AnalyticsService {
 
     final result = <FlSpot>[];
 
-    for (var day = 0; day <= math.min(totalDays, 365); day++) {
+    for (var day = 0; day <= math.min(totalDays, maxDays); day++) {
       if (dayMap.containsKey(day)) {
         result.add(FlSpot(day.toDouble(), dayMap[day]!));
         continue;
@@ -172,7 +185,7 @@ class AnalyticsService {
       final p1 = knownSpots[segIdx + 1];
       final dx = p1.x - p0.x;
       final t = dx <= 0 ? 0.0 : (day - p0.x) / dx;
-      final y = hermite(segIdx, t).clamp(0.0, double.infinity);
+      final y = hermite(segIdx, t).clamp(0.0, maxY);
       result.add(FlSpot(day.toDouble(), y));
     }
 

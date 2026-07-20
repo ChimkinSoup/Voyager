@@ -19,18 +19,16 @@ class StatisticsActionFab extends ConsumerWidget {
     final accent = Theme.of(context).colorScheme.primary;
     final pending = pendingAsync.valueOrNull ?? 0;
 
-    final glowColor = accent.withValues(alpha: pending > 0 ? popupGlowAlpha : 0.0);
+    final glowColor = accent.withValues(
+      alpha: pending > 0 ? popupGlowAlpha : 0.0,
+    );
 
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         boxShadow: [
           if (pending > 0)
-            BoxShadow(
-              color: glowColor,
-              blurRadius: 14.0,
-              spreadRadius: 4.0,
-            ),
+            BoxShadow(color: glowColor, blurRadius: 14.0, spreadRadius: 4.0),
         ],
       ),
       child: FloatingActionButton(

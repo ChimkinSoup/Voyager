@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
@@ -106,6 +107,7 @@ void main() {
           routeIsCurrent: true,
           rootNavigatorCanPop: false,
           textInputFocused: false,
+          subtreeIsVisible: true,
         ),
         isTrue,
       );
@@ -117,6 +119,7 @@ void main() {
           routeIsCurrent: true,
           rootNavigatorCanPop: false,
           textInputFocused: true,
+          subtreeIsVisible: true,
         ),
         isFalse,
       );
@@ -128,9 +131,61 @@ void main() {
           routeIsCurrent: true,
           rootNavigatorCanPop: true,
           textInputFocused: false,
+          subtreeIsVisible: true,
         ),
         isFalse,
       );
+    });
+
+    // The shell keeps every branch mounted, so a hidden branch's page is still
+    // the current route of its own navigator — without this, one arrow press
+    // would page every mounted calendar at once.
+    test('disabled while the branch is mounted but not on screen', () {
+      expect(
+        calendarNavShortcutsEnabledForState(
+          routeIsCurrent: true,
+          rootNavigatorCanPop: false,
+          textInputFocused: false,
+          subtreeIsVisible: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('subtreeIsVisible', () {
+    testWidgets('follows the enclosing TickerMode', (tester) async {
+      late BuildContext enabledContext;
+      late BuildContext disabledContext;
+
+      await tester.pumpWidget(
+        Column(
+          textDirection: TextDirection.ltr,
+          children: [
+            TickerMode(
+              enabled: true,
+              child: Builder(
+                builder: (context) {
+                  enabledContext = context;
+                  return const SizedBox();
+                },
+              ),
+            ),
+            TickerMode(
+              enabled: false,
+              child: Builder(
+                builder: (context) {
+                  disabledContext = context;
+                  return const SizedBox();
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+
+      expect(subtreeIsVisible(enabledContext), isTrue);
+      expect(subtreeIsVisible(disabledContext), isFalse);
     });
   });
 }

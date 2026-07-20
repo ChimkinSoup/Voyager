@@ -4,6 +4,7 @@ import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/features/analytics/analytics_page.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_page.dart';
+import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/journal/journal_page.dart';
 import 'package:voyager/features/search/search_page.dart';
 import 'package:voyager/features/settings/settings_page.dart';
@@ -55,6 +56,12 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.chartLine,
     label: 'Analytics',
     page: AnalyticsPage(),
+  ),
+  ShellDestination(
+    path: '/finance',
+    icon: PhosphorIconsRegular.wallet,
+    label: 'Finance',
+    page: FinancePage(),
   ),
   ShellDestination(
     path: '/dev',

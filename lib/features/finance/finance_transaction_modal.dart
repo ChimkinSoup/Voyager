@@ -1,0 +1,348 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/utils/journal_tags.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/finance_models.dart';
+
+/// The green used for money flowing in, across the finance feature. Chosen to
+/// stay legible on both the light and dark surfaces.
+const Color kIncomeGreen = Color(0xFF3BA776);
+
+/// Opens the animated "log a transaction" modal. When [existing] is provided
+/// the modal edits that transaction in place instead of creating a new one.
+Future<void> showFinanceTransactionModal(
+  BuildContext context,
+  WidgetRef ref, {
+  FinancialTransaction? existing,
+}) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => ProviderScope(
+      parent: ProviderScope.containerOf(context),
+      child: _TransactionModal(existing: existing),
+    ),
+  );
+}
+
+class _TransactionModal extends ConsumerStatefulWidget {
+  const _TransactionModal({this.existing});
+
+  final FinancialTransaction? existing;
+
+  @override
+  ConsumerState<_TransactionModal> createState() => _TransactionModalState();
+}
+
+class _TransactionModalState extends ConsumerState<_TransactionModal> {
+  late TransactionType _type;
+  late final TextEditingController _amountController;
+  late final TextEditingController _noteController;
+  late final TextEditingController _tagsController;
+  late DateTime _date;
+  bool _datePopoverOpen = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _type = existing?.type ?? TransactionType.expense;
+    _amountController = TextEditingController(
+      text: existing == null ? '' : (existing.amountCents / 100).toStringAsFixed(2),
+    );
+    _noteController = TextEditingController(text: existing?.note ?? '');
+    _tagsController = TextEditingController(
+      text: existing == null
+          ? ''
+          : existing.tags.map((t) => '#$t').join(' '),
+    );
+    final base = existing?.occurredAt ?? DateTime.now();
+    _date = DateTime(base.year, base.month, base.day);
+    _amountController.addListener(_onAmountChanged);
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _noteController.dispose();
+    _tagsController.dispose();
+    super.dispose();
+  }
+
+  void _onAmountChanged() => setState(() {});
+
+  int? get _parsedCents {
+    final cleaned = _amountController.text.replaceAll(RegExp(r'[^0-9.]'), '');
+    if (cleaned.isEmpty) return null;
+    final value = double.tryParse(cleaned);
+    if (value == null || value <= 0) return null;
+    return (value * 100).round();
+  }
+
+  /// Parses the tags field into clean tag names (no leading `#`). Accepts both
+  /// `#hashtag` and bare word styles, split on whitespace or commas.
+  List<String> get _parsedTags {
+    final raw = _tagsController.text.split(RegExp(r'[\s,]+'));
+    final seen = <String>{};
+    for (final token in raw) {
+      final tag = token.replaceAll('#', '').trim();
+      if (tag.isNotEmpty) seen.add(tag);
+    }
+    return seen.toList();
+  }
+
+  Future<void> _pickDate(BuildContext buttonContext) async {
+    final accent = Theme.of(context).colorScheme.primary;
+    setState(() => _datePopoverOpen = true);
+    final range = await showContextualPopover<DateTimeRange>(
+      context: context,
+      buttonContext: buttonContext,
+      width: 320,
+      height: 380,
+      accentColor: accent,
+      builder: (_) => DateSelectorPopover(
+        initialStartDate: _date,
+        initialEndDate: _date,
+        singleDateMode: true,
+        accentColor: accent,
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _datePopoverOpen = false;
+      if (range != null) {
+        _date = DateTime(range.start.year, range.start.month, range.start.day);
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    final cents = _parsedCents;
+    if (cents == null || _saving) return;
+    setState(() => _saving = true);
+
+    final now = utcNow();
+    final tags = _parsedTags;
+    final existing = widget.existing;
+    // Preserve the time-of-day for a fresh entry so same-day transactions keep
+    // a stable chronological order in the feed.
+    final wall = DateTime.now();
+    final occurredAt = DateTime(
+      _date.year,
+      _date.month,
+      _date.day,
+      existing?.occurredAt.hour ?? wall.hour,
+      existing?.occurredAt.minute ?? wall.minute,
+      existing?.occurredAt.second ?? wall.second,
+    );
+
+    final transaction = FinancialTransaction(
+      id: existing?.id ?? newId(),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      version: existing == null ? 0 : existing.version + 1,
+      type: _type,
+      amountCents: cents,
+      occurredAt: occurredAt,
+      note: _noteController.text.trim().isEmpty
+          ? null
+          : _noteController.text.trim(),
+      tags: tags,
+    );
+
+    final financeRepo = ref.read(financeRepositoryProvider);
+    await financeRepo.upsertTransaction(transaction);
+    await _persistTagColors(tags);
+
+    ref.invalidate(transactionsProvider);
+    ref.invalidate(tagColorsProvider);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _persistTagColors(List<String> tags) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final colors = await settingsRepo.getTagColors();
+    for (final tag in tags) {
+      if (!colors.containsKey(tag)) {
+        await settingsRepo.setTagColor(tag, colorForTag(tag));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final isDeposit = _type == TransactionType.deposit;
+    final amountColor = isDeposit ? kIncomeGreen : accent;
+    final canSave = _parsedCents != null && !_saving;
+    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: viewInsets),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Header row
+              Row(
+                children: [
+                  Text(
+                    widget.existing == null
+                        ? 'New transaction'
+                        : 'Edit transaction',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: Navigator.of(context).pop,
+                    icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                    tooltip: 'Close',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Expense / Deposit toggle
+              SegmentedButton<TransactionType>(
+                showSelectedIcon: false,
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: amountColor.withValues(alpha: 0.18),
+                  selectedForegroundColor: amountColor,
+                ),
+                segments: const [
+                  ButtonSegment(
+                    value: TransactionType.expense,
+                    icon: Icon(PhosphorIconsRegular.arrowUp, size: 16),
+                    label: Text('Expense'),
+                  ),
+                  ButtonSegment(
+                    value: TransactionType.deposit,
+                    icon: Icon(PhosphorIconsRegular.arrowDown, size: 16),
+                    label: Text('Deposit'),
+                  ),
+                ],
+                selected: {_type},
+                onSelectionChanged: (set) {
+                  if (set.isNotEmpty) setState(() => _type = set.first);
+                },
+              ),
+              const SizedBox(height: 16),
+              // Amount
+              VoyagerTextField(
+                controller: _amountController,
+                autofocus: widget.existing == null,
+                accentColor: amountColor,
+                cursorColor: amountColor,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                ],
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: amountColor,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Amount',
+                  prefixText: r'$ ',
+                ),
+                onSubmitted: (_) => _save(),
+              ),
+              const SizedBox(height: 16),
+              // Tags
+              VoyagerTextField(
+                controller: _tagsController,
+                accentColor: accent,
+                decoration: const InputDecoration(
+                  labelText: 'Tags',
+                  hintText: '#groceries #travel',
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Note
+              VoyagerTextField(
+                controller: _noteController,
+                accentColor: accent,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Note',
+                  hintText: 'Dinner with friends',
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Date
+              Row(
+                children: [
+                  Text(
+                    'Date',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Builder(
+                    builder: (buttonContext) => SelectorPill(
+                      icon: PhosphorIconsRegular.calendar,
+                      label: _formatDate(_date),
+                      isActive: _datePopoverOpen,
+                      accentColor: accent,
+                      onTap: () => _pickDate(buttonContext),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: canSave ? _save : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: amountColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: Text(widget.existing == null ? 'Add' : 'Save'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (d == today) return 'Today';
+    if (d == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    return DateFormat('MMM d, yyyy').format(d);
+  }
+}

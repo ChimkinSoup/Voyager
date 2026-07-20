@@ -40,36 +40,7 @@ class DevCalendarDebugSection extends ConsumerWidget {
             );
           },
         ),
-        ListTile(
-          title: const Text('Analytics Calendar Month Override'),
-          subtitle: const Text('Force the heatmap calendar to a specific layout size'),
-          trailing: DropdownButton<DevAnalyticsMonthOverride>(
-            value: ref.watch(devAnalyticsMonthOverrideProvider),
-            onChanged: (v) {
-              if (v != null) {
-                ref.read(devAnalyticsMonthOverrideProvider.notifier).state = v;
-              }
-            },
-            items: const [
-              DropdownMenuItem(value: DevAnalyticsMonthOverride.none, child: Text('None (Current)')),
-              DropdownMenuItem(value: DevAnalyticsMonthOverride.fourRows, child: Text('4 rows (Feb 2026)')),
-              DropdownMenuItem(value: DevAnalyticsMonthOverride.fiveRows, child: Text('5 rows (Jul 2026)')),
-              DropdownMenuItem(value: DevAnalyticsMonthOverride.sixRows, child: Text('6 rows (May 2026)')),
-            ],
-          ),
-        ),
       ],
     );
   }
 }
-
-enum DevAnalyticsMonthOverride {
-  none,
-  fourRows,
-  fiveRows,
-  sixRows,
-}
-
-final devAnalyticsMonthOverrideProvider = StateProvider<DevAnalyticsMonthOverride>(
-  (ref) => DevAnalyticsMonthOverride.none,
-);
