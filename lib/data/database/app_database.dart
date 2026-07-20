@@ -160,6 +160,129 @@ class TrackerValuesTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+class TransactionsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get type => text()();
+  IntColumn get amountCents => integer()();
+  TextColumn get note => text().nullable()();
+  TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get occurredAt => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class SubscriptionsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get amountCents => integer()();
+  TextColumn get period => text()();
+  DateTimeColumn get anchorDueDate => dateTime()();
+  IntColumn get colorValue =>
+      integer().withDefault(const Constant(0xFF7C9EFF))();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class BudgetsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get tag => text()();
+  IntColumn get limitCents => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class FinanceCategoriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get colorValue =>
+      integer().withDefault(const Constant(0xFF7C9EFF))();
+  TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class AssetsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get note => text().nullable()();
+  IntColumn get colorValue =>
+      integer().withDefault(const Constant(0xFF7C9EFF))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class AssetValuationsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get assetId => text()();
+  IntColumn get valueCents => integer()();
+  DateTimeColumn get asOf => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class SavingsGoalsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get targetCents => integer()();
+  IntColumn get colorValue =>
+      integer().withDefault(const Constant(0xFF7C9EFF))();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get targetDate => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class GoalAllocationsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get goalId => text()();
+  IntColumn get amountCents => integer()();
+  DateTimeColumn get allocatedAt => dateTime()();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class SettingsTable extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
   IntColumn get accentColor =>
@@ -167,6 +290,10 @@ class SettingsTable extends Table {
   BoolColumn get weekStartsOnMonday =>
       boolean().withDefault(const Constant(true))();
   BoolColumn get showQuotes => boolean().withDefault(const Constant(true))();
+  BoolColumn get showDefaultTrackersInGrid =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get showDefaultTrackersInCalendar =>
+      boolean().withDefault(const Constant(true))();
   TextColumn get journalHotkey =>
       text().withDefault(const Constant(defaultJournalHotkey))();
   TextColumn get todoHotkey =>
@@ -240,10 +367,60 @@ class SettingsTable extends Table {
       real().withDefault(const Constant(0.5))();
   RealColumn get geometricTextureVariationFloor =>
       real().withDefault(const Constant(0.75))();
+  BoolColumn get geometricWaveEnabled =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get geometricWaveShape =>
+      text().withDefault(const Constant('linear'))();
+  RealColumn get geometricWaveDirectionDegrees =>
+      real().withDefault(const Constant(135.0))();
+  RealColumn get geometricWaveSpeed =>
+      real().withDefault(const Constant(0.4))();
+  RealColumn get geometricWaveWidth =>
+      real().withDefault(const Constant(0.08))();
+  RealColumn get geometricWavePeriod =>
+      real().withDefault(const Constant(7.0))();
+  RealColumn get geometricWavePopHoldSeconds =>
+      real().withDefault(const Constant(0.6))();
+  RealColumn get geometricWavePopScale =>
+      real().withDefault(const Constant(1.4))();
+  RealColumn get geometricWavePopBrightness =>
+      real().withDefault(const Constant(0.32))();
+  RealColumn get geometricWaveMaskDensity =>
+      real().withDefault(const Constant(0.5))();
+  RealColumn get geometricWaveMaskClusterScale =>
+      real().withDefault(const Constant(5.0))();
+  RealColumn get geometricWaveTwinkleSparsity =>
+      real().withDefault(const Constant(0.15))();
+  RealColumn get geometricWaveShadowLightDegrees =>
+      real().withDefault(const Constant(225.0))();
+  RealColumn get geometricWaveShadowOffset =>
+      real().withDefault(const Constant(0.06))();
+  RealColumn get geometricWaveShadowSoftness =>
+      real().withDefault(const Constant(0.04))();
+  RealColumn get geometricWaveShadowStrength =>
+      real().withDefault(const Constant(0.45))();
+  RealColumn get geometricWavePopBrightnessVariance =>
+      real().withDefault(const Constant(0.4))();
+  RealColumn get geometricWaveTiltAmount =>
+      real().withDefault(const Constant(0.7))();
+  RealColumn get geometricWaveTiltShading =>
+      real().withDefault(const Constant(0.5))();
+  RealColumn get geometricWaveMassLagSeconds =>
+      real().withDefault(const Constant(0.12))();
+  RealColumn get geometricWaveMassSpring =>
+      real().withDefault(const Constant(0.3))();
+  BoolColumn get geometricWaveScatterMode =>
+      boolean().withDefault(const Constant(false))();
+  RealColumn get geometricWaveScatterLitAmount =>
+      real().withDefault(const Constant(0.12))();
   TextColumn get navPageOrderJson => text().nullable()();
   TextColumn get startupPageMode => text().withDefault(const Constant('first'))();
   TextColumn get customStartupPage => text().nullable()();
   TextColumn get lastSeenNavPage => text().nullable()();
+  BoolColumn get todoCompletedSectionExpanded =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get showAnnualizedSubscriptionCost =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -297,13 +474,21 @@ class PendingUploadsTable extends Table {
     TagColorsTable,
     SyncConflictsTable,
     PendingUploadsTable,
+    TransactionsTable,
+    SubscriptionsTable,
+    BudgetsTable,
+    FinanceCategoriesTable,
+    AssetsTable,
+    AssetValuationsTable,
+    SavingsGoalsTable,
+    GoalAllocationsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 51;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -605,6 +790,193 @@ class AppDatabase extends _$AppDatabase {
           [legacyCalendarId],
         );
       }
+      if (from < 38) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveEnabled,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveShape,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveDirectionDegrees,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveSpeed,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveWidth,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWavePeriod,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWavePopHoldSeconds,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWavePopScale,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWavePopBrightness,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveMaskDensity,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveMaskClusterScale,
+        );
+      }
+      if (from < 39) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveTwinkleSparsity,
+        );
+      }
+      if (from < 40) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveShadowLightDegrees,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveShadowOffset,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveShadowSoftness,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveShadowStrength,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWavePopBrightnessVariance,
+        );
+      }
+      if (from < 41) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveTiltAmount,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveTiltShading,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveMassLagSeconds,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveMassSpring,
+        );
+      }
+      if (from < 42) {
+        // The radiance/light-bleed effect was removed. Schema 41 shipped its
+        // two columns, so local DBs that already ran it still carry them.
+        await _dropSettingsColumnIfExists(
+          migrator,
+          'geometric_wave_radiance_strength',
+        );
+        await _dropSettingsColumnIfExists(
+          migrator,
+          'geometric_wave_radiance_radius',
+        );
+      }
+      if (from < 43) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveScatterMode,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.geometricWaveScatterLitAmount,
+        );
+      }
+      if (from < 44) {
+        // v44 briefly shipped a single combined `show_default_trackers_in_
+        // analytics` toggle. It was split into separate grid/calendar toggles
+        // in v45, handled below (which also drops the old column).
+      }
+      if (from < 45) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.showDefaultTrackersInGrid,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.showDefaultTrackersInCalendar,
+        );
+        // Carry over the old combined preference where it exists, otherwise
+        // default both to on. Guarded so it's a no-op when the legacy column
+        // was never created.
+        final hadLegacy = await customSelect(
+          "SELECT 1 FROM pragma_table_info('settings_table') "
+          "WHERE name = 'show_default_trackers_in_analytics'",
+        ).get();
+        if (hadLegacy.isNotEmpty) {
+          await customStatement(
+            'UPDATE settings_table SET '
+            'show_default_trackers_in_grid = '
+            'COALESCE(show_default_trackers_in_analytics, 1), '
+            'show_default_trackers_in_calendar = '
+            'COALESCE(show_default_trackers_in_analytics, 1)',
+          );
+          await _dropSettingsColumnIfExists(
+            migrator,
+            'show_default_trackers_in_analytics',
+          );
+        }
+        // Ensure non-null values even if the columns pre-existed from branch
+        // churn (which skips the ADD COLUMN that applies the Dart default).
+        await customStatement(
+          'UPDATE settings_table SET show_default_trackers_in_grid = 1 '
+          'WHERE show_default_trackers_in_grid IS NULL',
+        );
+        await customStatement(
+          'UPDATE settings_table SET show_default_trackers_in_calendar = 1 '
+          'WHERE show_default_trackers_in_calendar IS NULL',
+        );
+      }
+      if (from < 46) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.todoCompletedSectionExpanded,
+        );
+      }
+      if (from < 47) {
+        await migrator.createTable(transactionsTable);
+      }
+      if (from < 48) {
+        await migrator.createTable(subscriptionsTable);
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.showAnnualizedSubscriptionCost,
+        );
+      }
+      if (from < 49) {
+        await migrator.createTable(budgetsTable);
+      }
+      if (from < 50) {
+        await migrator.createTable(financeCategoriesTable);
+        await migrator.createTable(assetsTable);
+        await migrator.createTable(assetValuationsTable);
+      }
+      if (from < 51) {
+        await migrator.createTable(savingsGoalsTable);
+        await migrator.createTable(goalAllocationsTable);
+      }
     },
   );
 
@@ -680,6 +1052,45 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       "UPDATE settings_table SET startup_page_mode = 'first' WHERE startup_page_mode IS NULL",
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_enabled = 0 WHERE geometric_wave_enabled IS NULL',
+    );
+    await customStatement(
+      "UPDATE settings_table SET geometric_wave_shape = 'linear' WHERE geometric_wave_shape IS NULL",
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_direction_degrees = 135.0 WHERE geometric_wave_direction_degrees IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_speed = 0.4 WHERE geometric_wave_speed IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_width = 0.08 WHERE geometric_wave_width IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_period = 7.0 WHERE geometric_wave_period IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_pop_hold_seconds = 0.6 WHERE geometric_wave_pop_hold_seconds IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_pop_scale = 1.4 WHERE geometric_wave_pop_scale IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_pop_brightness = 0.32 WHERE geometric_wave_pop_brightness IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_mask_density = 0.5 WHERE geometric_wave_mask_density IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_mask_cluster_scale = 5.0 WHERE geometric_wave_mask_cluster_scale IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET geometric_wave_twinkle_sparsity = 0.15 WHERE geometric_wave_twinkle_sparsity IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET show_annualized_subscription_cost = 0 WHERE show_annualized_subscription_cost IS NULL',
     );
   }
 

@@ -125,6 +125,7 @@ class _GeometricBackground extends ConsumerWidget {
     );
     final program = ref.watch(geometricShaderProvider).valueOrNull;
     final params = ref.watch(geometricTextureParamsProvider);
+    final waveParams = ref.watch(geometricWaveParamsProvider);
     final baseColor = Theme.of(context).scaffoldBackgroundColor;
 
     return Positioned.fill(
@@ -133,6 +134,7 @@ class _GeometricBackground extends ConsumerWidget {
         baseColor: baseColor,
         accentColor: accent,
         params: params,
+        waveParams: waveParams,
       ),
     );
   }

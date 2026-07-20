@@ -18,10 +18,12 @@ bool calendarNavShortcutsEnabledForState({
   required bool routeIsCurrent,
   required bool rootNavigatorCanPop,
   required bool textInputFocused,
+  required bool subtreeIsVisible,
 }) {
   if (!routeIsCurrent) return false;
   if (rootNavigatorCanPop) return false;
   if (textInputFocused) return false;
+  if (!subtreeIsVisible) return false;
   return true;
 }
 
@@ -32,8 +34,27 @@ bool calendarNavShortcutsEnabled(BuildContext context) {
     routeIsCurrent: route?.isCurrent ?? false,
     rootNavigatorCanPop: rootNav?.canPop() ?? false,
     textInputFocused: isTextInputFocused(),
+    subtreeIsVisible: subtreeIsVisible(context),
   );
 }
+
+/// Whether this widget's subtree is the one the user is actually looking at.
+///
+/// [routeIsCurrent] isn't enough on its own: the shell keeps every branch
+/// mounted at once (see `ShellBranchContainer`), each with its own navigator,
+/// so a hidden branch's page is still the current route *of that branch* — and
+/// [HardwareKeyboard] handlers fire regardless of who's on screen. Without
+/// this, an arrow key would drive every mounted calendar at once, silently
+/// paging the ones the user can't see.
+///
+/// [TickerMode] is the signal the shell already flips per branch, and Flutter
+/// disables it for offscreen routes too, so it covers a page being covered by
+/// a pushed route as well. Read via [TickerMode.getValuesNotifier] rather than
+/// [TickerMode.valuesOf] because this is called from a key handler, not a
+/// build — the latter would register an inherited dependency outside of build.
+@visibleForTesting
+bool subtreeIsVisible(BuildContext context) =>
+    TickerMode.getValuesNotifier(context).value.enabled;
 
 @visibleForTesting
 int? calendarNavDeltaForEvent(

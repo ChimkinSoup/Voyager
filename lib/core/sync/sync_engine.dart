@@ -231,15 +231,18 @@ class BackgroundSyncOrchestrator {
     required TodoRepository todoRepository,
     required CalendarRepository calendarRepository,
     required TrackerRepository trackerRepository,
+    required FinanceRepository financeRepository,
   }) : _journalRepository = journalRepository,
        _todoRepository = todoRepository,
        _calendarRepository = calendarRepository,
-       _trackerRepository = trackerRepository;
+       _trackerRepository = trackerRepository,
+       _financeRepository = financeRepository;
 
   final JournalRepository _journalRepository;
   final TodoRepository _todoRepository;
   final CalendarRepository _calendarRepository;
   final TrackerRepository _trackerRepository;
+  final FinanceRepository _financeRepository;
 
   Future<void> purgeExpiredDeleted({DateTime? now}) async {
     final cutoff = now ?? DateTime.now().toUtc();
@@ -248,6 +251,7 @@ class BackgroundSyncOrchestrator {
       _todoRepository.purgeExpiredDeleted(cutoff),
       _calendarRepository.purgeExpiredDeleted(cutoff),
       _trackerRepository.purgeExpiredDeleted(cutoff),
+      _financeRepository.purgeExpiredDeleted(cutoff),
     ]);
   }
 }

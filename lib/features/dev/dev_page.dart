@@ -15,6 +15,7 @@ import 'package:voyager/features/dev/dev_sync_compare_tile.dart';
 import 'package:voyager/features/dev/dev_todo_sort_debug_tile.dart';
 import 'package:voyager/features/dev/dev_journal_debug_tile.dart';
 import 'package:voyager/features/dev/dev_geometric_texture_tile.dart';
+import 'package:voyager/features/dev/dev_geometric_wave_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
@@ -121,6 +122,8 @@ class DevPage extends ConsumerWidget {
         const DevJournalDebugSection(),
         const Divider(height: 32),
         const DevGeometricTextureSection(),
+        const Divider(height: 32),
+        const DevGeometricWaveSection(),
         const Divider(height: 32),
         const DevSyncCompareSection(),
         const Divider(height: 32),

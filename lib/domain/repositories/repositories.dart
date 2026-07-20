@@ -1,5 +1,6 @@
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -82,6 +83,50 @@ abstract class TrackerRepository {
   Future<List<TrackerValue>> listValues(String trackerId);
   Future<void> upsertValue(TrackerValue value);
   Future<void> softDeleteValue(String id);
+
+  Future<void> purgeExpiredDeleted(DateTime now);
+}
+
+abstract class FinanceRepository {
+  Future<List<FinancialTransaction>> listTransactions({
+    bool includeDeleted = false,
+  });
+  Future<void> upsertTransaction(FinancialTransaction transaction);
+  Future<void> softDeleteTransaction(String id);
+
+  Future<List<Subscription>> listSubscriptions({bool includeDeleted = false});
+  Future<void> upsertSubscription(Subscription subscription);
+  Future<void> softDeleteSubscription(String id);
+
+  Future<List<Budget>> listBudgets({bool includeDeleted = false});
+  Future<void> upsertBudget(Budget budget);
+  Future<void> softDeleteBudget(String id);
+
+  Future<List<FinanceCategory>> listCategories({bool includeDeleted = false});
+  Future<void> upsertCategory(FinanceCategory category);
+  Future<void> softDeleteCategory(String id);
+
+  Future<List<Asset>> listAssets({bool includeDeleted = false});
+  Future<void> upsertAsset(Asset asset);
+  Future<void> softDeleteAsset(String id);
+
+  Future<List<AssetValuation>> listAssetValuations({
+    String? assetId,
+    bool includeDeleted = false,
+  });
+  Future<void> upsertAssetValuation(AssetValuation valuation);
+  Future<void> softDeleteAssetValuation(String id);
+
+  Future<List<SavingsGoal>> listSavingsGoals({bool includeDeleted = false});
+  Future<void> upsertSavingsGoal(SavingsGoal goal);
+  Future<void> softDeleteSavingsGoal(String id);
+
+  Future<List<GoalAllocation>> listGoalAllocations({
+    String? goalId,
+    bool includeDeleted = false,
+  });
+  Future<void> upsertGoalAllocation(GoalAllocation allocation);
+  Future<void> softDeleteGoalAllocation(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
 }
