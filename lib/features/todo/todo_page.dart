@@ -15,6 +15,11 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/datetime_selector_popover.dart';
+import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
@@ -80,8 +85,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
         });
       }
     });
-    final savedId =
-        ref.read(settingsProvider).valueOrNull?.lastViewedTodoListId;
+    final savedId = ref
+        .read(settingsProvider)
+        .valueOrNull
+        ?.lastViewedTodoListId;
     if (savedId != null) {
       _selectedListId = savedId;
     }
@@ -209,8 +216,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       ref.read(todoSortDebugLoggerProvider),
       'NEW_TASK',
       task: placed,
-      details:
-          'listId=${task.listId} sortOrder: 0 → ${placed.sortOrder}',
+      details: 'listId=${task.listId} sortOrder: 0 → ${placed.sortOrder}',
     );
     _taskController.clear();
     _taskFocusNode.requestFocus();
@@ -243,8 +249,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
       );
       final batch = applyTaskUncomplete(updated, activeOthers);
       for (final task in batch.tasks) {
-        final toSave =
-            task.id == updated.id ? task.copyWith(completed: false) : task;
+        final toSave = task.id == updated.id
+            ? task.copyWith(completed: false)
+            : task;
         await repo.upsertTask(toSave);
         remoteSync.pushTodoTaskNow(toSave);
       }
@@ -379,14 +386,18 @@ class _TodoPageState extends ConsumerState<TodoPage>
     // don't restart and flash the subtask count badge.
   }
 
-  void _applySortBatchOptimistic(TodoSortBatch batch, List<TodoTask> activeTasks) {
+  void _applySortBatchOptimistic(
+    TodoSortBatch batch,
+    List<TodoTask> activeTasks,
+  ) {
     final byId = {for (final task in activeTasks) task.id: task};
     for (final task in batch.tasks) {
       byId[task.id] = task;
       _taskOverrides[task.id] = task;
     }
-    _optimisticActiveTaskOrder =
-        sortTodoTasks(byId.values).map((task) => task.id).toList();
+    _optimisticActiveTaskOrder = sortTodoTasks(
+      byId.values,
+    ).map((task) => task.id).toList();
   }
 
   Future<void> _applyPersistedSortBatchToUi(
@@ -403,7 +414,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
     final naturalOrder = sortTodoTasks(active).map((task) => task.id).toList();
     final staleOrder = _optimisticActiveTaskOrder;
-    final hadStaleForcedOrder = staleOrder != null &&
+    final hadStaleForcedOrder =
+        staleOrder != null &&
         staleOrder.length == active.length &&
         staleOrder.every(naturalOrder.contains) &&
         !_orderIdsMatchSortOrder(staleOrder, active);
@@ -473,6 +485,150 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
   }
 
+  /// Sets (or replaces) a task's due date from the right-click menu. [localDue]
+  /// is a local wall-clock time; a date-only selection arrives as local
+  /// midnight (hour/minute == 0), matching the edit panel's picker contract.
+  Future<void> _setTaskDueDate(
+    TodoTask task,
+    DateTime localDue,
+    List<TodoTask> activeInList,
+  ) async {
+    final due = localDue.toUtc();
+    if (task.dueDate == due) return;
+    final batch = applyDueDateChange(
+      task,
+      activeInList,
+      dueDate: due,
+      clearDueDate: false,
+    );
+    setState(() {
+      _applySortBatchOptimistic(batch, activeInList);
+      if (_editPanelTask?.id == task.id) {
+        _editPanelTask = batch.tasks.cast<TodoTask?>().firstWhere(
+          (t) => t!.id == task.id,
+          orElse: () => _editPanelTask,
+        );
+      }
+    });
+    await _persistSortBatch(batch, task.listId);
+    final updated = batch.tasks.firstWhere(
+      (t) => t.id == task.id,
+      orElse: () => task,
+    );
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'DUE_DATE_CHANGED',
+      task: updated,
+      details: 'right-click set due ${due.toIso8601String()}',
+    );
+  }
+
+  /// Clears a task's due date from the right-click menu, re-slotting it into the
+  /// undated ordering (mirrors the edit panel's "Reset due date").
+  Future<void> _clearTaskDueDate(
+    TodoTask task,
+    List<TodoTask> activeInList,
+  ) async {
+    if (task.dueDate == null) return;
+    final batch = applyDueDateChange(
+      task,
+      activeInList,
+      dueDate: null,
+      clearDueDate: true,
+    );
+    setState(() {
+      _applySortBatchOptimistic(batch, activeInList);
+      if (_editPanelTask?.id == task.id) {
+        _editPanelTask = batch.tasks.cast<TodoTask?>().firstWhere(
+          (t) => t!.id == task.id,
+          orElse: () => _editPanelTask,
+        );
+      }
+    });
+    await _persistSortBatch(batch, task.listId);
+    final updated = batch.tasks.firstWhere(
+      (t) => t.id == task.id,
+      orElse: () => task,
+    );
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'DUE_DATE_CLEARED',
+      task: updated,
+      details: 'right-click cleared due date',
+    );
+  }
+
+  /// Moves a task to another list from the right-click menu, placing it into the
+  /// destination list's star/due ordering. The current view is left as-is; the
+  /// task simply leaves the source list.
+  Future<void> _moveTaskToList(TodoTask task, String destListId) async {
+    if (destListId == task.listId) return;
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final sourceListId = task.listId;
+    final destSiblings = await repo.listTasks(destListId);
+    final destActive = activeTopLevelTasks(destSiblings);
+    if (!mounted) return;
+
+    final moved = task.copyWith(listId: destListId);
+    final batch = applyTaskListMove(moved, destActive);
+    final placed = batch.tasks.firstWhere(
+      (t) => t.id == task.id,
+      orElse: () => moved,
+    );
+
+    setState(() {
+      _optimisticActiveTaskOrder = null;
+      _applySortBatchOptimistic(batch, [...destActive, moved]);
+      _taskOverrides[task.id] = placed;
+      if (_editPanelTask?.id == task.id) {
+        _editPanelTask = placed;
+      }
+    });
+
+    for (final t in batch.tasks) {
+      await repo.upsertTask(t);
+      remoteSync.pushTodoTaskNow(t);
+    }
+    if (!mounted) return;
+    ref.invalidate(todoTasksProvider(sourceListId));
+    ref.invalidate(todoTasksProvider(destListId));
+    ref.invalidate(allTodoTasksProvider);
+    ref.invalidate(todoListStatsProvider);
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'LIST_MOVE',
+      task: placed,
+      details: 'right-click move from $sourceListId to $destListId',
+    );
+  }
+
+  /// Soft-deletes a task from the right-click menu after a confirmation dialog,
+  /// matching the delete flow used by the edit panel and journal entries.
+  Future<void> _deleteTaskFromRow(TodoTask task) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete task?',
+      message: '"${task.title}" will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+    final deleted = task.copyWith(deletedAt: utcNow());
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    setState(() {
+      _optimisticActiveTaskOrder?.remove(task.id);
+      _taskOverrides.remove(task.id);
+      _completionOverrides.remove(task.id);
+      if (_editPanelTask?.id == task.id) {
+        _closeEditPanel();
+      }
+    });
+    await repo.upsertTask(deleted);
+    await remoteSync.pushTodoTaskNow(deleted);
+    if (!mounted) return;
+    _invalidateTodoListData(listId: task.listId);
+  }
+
   Future<({int completed, int total})> _subtaskStats(String taskId) {
     return _subtaskStatsCache.putIfAbsent(taskId, () async {
       final subtasks = await ref
@@ -492,7 +648,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
   ({int completed, int total})? _subtaskStatsData(String taskId) =>
       _subtaskResultsCache[taskId];
 
-  void _invalidateTodoListData({String? listId, bool preserveSubtaskCache = false}) {
+  void _invalidateTodoListData({
+    String? listId,
+    bool preserveSubtaskCache = false,
+  }) {
     ref.invalidate(todoTasksProvider);
     if (listId != null) {
       ref.invalidate(todoTasksProvider(listId));
@@ -573,9 +732,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
                 .cast<TodoListModel?>()
                 .firstWhere(
                   (l) => l!.id == legacyTodoListId,
-                  orElse: () => updatedLists.isNotEmpty
-                      ? updatedLists.first
-                      : null,
+                  orElse: () =>
+                      updatedLists.isNotEmpty ? updatedLists.first : null,
                 )
                 ?.id;
             _optimisticActiveTaskOrder = null;
@@ -646,21 +804,23 @@ class _TodoPageState extends ConsumerState<TodoPage>
     });
     // Yield to the event loop so the optimistic UI updates render first,
     // before we hit the database and potentially block the frame.
-    unawaited(Future.delayed(Duration.zero, () async {
-      await _persistSortBatch(batch, _selectedListId!);
-      final updated = batch.tasks.firstWhere(
-        (t) => t.id == moved.id,
-        orElse: () => moved,
-      );
-      logTodoSortDebug(
-        ref.read(todoSortDebugLoggerProvider),
-        'MANUAL_REORDER',
-        task: updated,
-        details:
-            'listId=${_selectedListId!} oldIndex=$oldIndex newIndex=$newIndex, '
-            'sortOrder: ${moved.sortOrder} → ${updated.sortOrder}',
-      );
-    }));
+    unawaited(
+      Future.delayed(Duration.zero, () async {
+        await _persistSortBatch(batch, _selectedListId!);
+        final updated = batch.tasks.firstWhere(
+          (t) => t.id == moved.id,
+          orElse: () => moved,
+        );
+        logTodoSortDebug(
+          ref.read(todoSortDebugLoggerProvider),
+          'MANUAL_REORDER',
+          task: updated,
+          details:
+              'listId=${_selectedListId!} oldIndex=$oldIndex newIndex=$newIndex, '
+              'sortOrder: ${moved.sortOrder} → ${updated.sortOrder}',
+        );
+      }),
+    );
   }
 
   List<TodoTask> _applyOptimisticActiveOrder(List<TodoTask> active) {
@@ -680,7 +840,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
       orElse: () => false,
     );
     final effectiveHideCompleted = hideCompleted && !_showAllTasks;
-    final completedExpanded = _completedExpandedOverride ??
+    final completedExpanded =
+        _completedExpandedOverride ??
         settings?.todoCompletedSectionExpanded ??
         true;
     final listsAsync = ref.watch(todoListsProvider);
@@ -731,7 +892,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
                     orElse: () => null,
                   );
 
-
             final panelTask = _panelTaskFor(sorted);
 
             return Column(
@@ -740,59 +900,57 @@ class _TodoPageState extends ConsumerState<TodoPage>
                 const SyncConflictBanner(),
                 Expanded(
                   child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: RoundedDropdown<String>(
-                                value: listId,
-                                displayLabel:
-                                    _showAllTasks ? 'All tasks' : null,
-                                labelColor: Color(
-                                  _showAllTasks
-                                      ? Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .toARGB32()
-                                      : currentList?.colorValue ??
-                                          Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .toARGB32(),
-                                ),
-                                closedTrailing: _showAllTasks
-                                    ? null
-                                    : '${active.length} | ${completed.length}',
-                                onAddList: () =>
-                                    unawaited(_createListFromDropdown()),
-                                manageMenuEntriesFor: (listId) =>
-                                    listId == legacyTodoListId
-                                        ? defaultEntityManageMenuEntries
-                                        : entityManageMenuEntries,
-                                onManage: (listId, action) {
-                                  final stat = _statsForList(
-                                    listId,
-                                    stats,
-                                    activeCount: active.length,
-                                    completedCount: completed.length,
-                                  );
-                                  return _handleListManage(
-                                    listId,
-                                    action,
-                                    lists,
-                                    stat,
-                                  );
-                                },
-                                items: lists
-                                    .map(
-                                      (l) {
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: RoundedDropdown<String>(
+                                      value: listId,
+                                      displayLabel: _showAllTasks
+                                          ? 'All tasks'
+                                          : null,
+                                      labelColor: Color(
+                                        _showAllTasks
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.primary.toARGB32()
+                                            : currentList?.colorValue ??
+                                                  Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                      .toARGB32(),
+                                      ),
+                                      closedTrailing: _showAllTasks
+                                          ? null
+                                          : '${active.length} | ${completed.length}',
+                                      onAddList: () =>
+                                          unawaited(_createListFromDropdown()),
+                                      manageMenuEntriesFor: (listId) =>
+                                          listId == legacyTodoListId
+                                          ? defaultEntityManageMenuEntries
+                                          : entityManageMenuEntries,
+                                      onManage: (listId, action) {
+                                        final stat = _statsForList(
+                                          listId,
+                                          stats,
+                                          activeCount: active.length,
+                                          completedCount: completed.length,
+                                        );
+                                        return _handleListManage(
+                                          listId,
+                                          action,
+                                          lists,
+                                          stat,
+                                        );
+                                      },
+                                      items: lists.map((l) {
                                         final stat = _statsForList(
                                           l.id,
                                           stats,
@@ -812,337 +970,482 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                           trailing:
                                               '${stat.active} | ${stat.completed}',
                                         );
+                                      }).toList(),
+                                      onChanged: (v) {
+                                        setState(() {
+                                          _selectedListId = v;
+                                          _optimisticActiveTaskOrder = null;
+                                        });
+                                        _closeEditPanel();
+                                        _markListViewed(v);
                                       },
-                                    )
-                                    .toList(),
-                                onChanged: (v) {
-                                  setState(() {
-                                    _selectedListId = v;
-                                    _optimisticActiveTaskOrder = null;
-                                  });
-                                  _closeEditPanel();
-                                  _markListViewed(v);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              tooltip: _showAllTasks
-                                  ? 'Show selected list only'
-                                  : 'Show all tasks',
-                              onPressed: () {
-                                if (_showAllTasks) {
-                                  final listId = selectedTask?.listId;
-                                  setState(() {
-                                    if (listId != null &&
-                                        lists.any((l) => l.id == listId)) {
-                                      _selectedListId = listId;
-                                    }
-                                    _showAllTasks = false;
-                                  });
-                                  if (listId != null) {
-                                    _markListViewed(listId);
-                                  }
-                                } else {
-                                  setState(() => _showAllTasks = true);
-                                }
-                              },
-                              icon: Icon(
-                                PhosphorIconsRegular.listMagnifyingGlass,
-                                color: _showAllTasks ? Colors.black : null,
-                              ),
-                              style: IconButton.styleFrom(
-                                backgroundColor: _showAllTasks
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: KeepAliveCustomScrollView(
-                            storageKey: ShellPageStorageKeys.todoTaskList,
-                            cacheExtent: 10000.0,
-                            slivers: [
-                              if (active.isNotEmpty)
-                                if (_showAllTasks)
-                                  SliverList(
-                                    delegate: SliverChildListDelegate([
-                                      for (final task in active)
-                                        _TaskRow(
-                                          key: ValueKey(task.id),
-                                          task: task,
-                                          isSelected: task.id == _selectedTaskId,
-                                          listColor: _listColorFor(task.listId, lists),
-                                          subtaskStats: _subtaskStats(task.id),
-                                          subtaskStatsData: _subtaskStatsData(task.id),
-                                          onToggle: (v) => _toggleTask(task, v),
-                                          onStar: () => _toggleStar(
-                                            task,
-                                            _activeInList(active, task.listId),
-                                          ),
-                                          onEdit: () => _openEditPanel(task),
-                                        ),
-                                    ]),
-                                  )
-                                else
-                                  SliverReorderableList(
-                                    key: _taskListKey,
-                                    proxyDecorator: (child, index, animation) {
-                                      return ClampToTargetBounds(
-                                        targetKey: _taskListKey,
-                                        child: Material(
-                                          type: MaterialType.transparency,
-                                          child: child,
-                                        ),
-                                      );
-                                    },
-                                    onReorderItem: (oldIndex, newIndex) {
-                                      _reorderActiveTasks(active, oldIndex, newIndex);
-                                    },
-                                    itemCount: active.length,
-                                    itemBuilder: (context, i) {
-                                      return ReorderableDragStartListener(
-                                        key: ValueKey(active[i].id),
-                                        index: i,
-                                        child: _TaskRow(
-                                          task: active[i],
-                                          isSelected: active[i].id == _selectedTaskId,
-                                          listColor: currentList?.colorValue,
-                                          subtaskStats: _subtaskStats(active[i].id),
-                                          subtaskStatsData: _subtaskStatsData(active[i].id),
-                                          onToggle: (v) => _toggleTask(active[i], v),
-                                          onStar: () => _toggleStar(active[i], active),
-                                          onEdit: () => _openEditPanel(active[i]),
-                                        ),
-                                      );
-                                    },
+                                    ),
                                   ),
-                              if (!effectiveHideCompleted && completed.isNotEmpty)
-                                SliverToBoxAdapter(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      const Divider(height: 32),
-                                      InkWell(
-                                        onTap: () {
-                                          final next = !completedExpanded;
-                                          setState(
-                                            () => _completedExpandedOverride =
-                                                next,
-                                          );
-                                          unawaited(
-                                            _persistCompletedExpanded(next),
-                                          );
-                                        },
-                                        borderRadius: BorderRadius.circular(14),
-                                        child: Padding(
-                                          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  'Completed (${completed.length})',
-                                                  style: Theme.of(context).textTheme.titleSmall,
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    tooltip: _showAllTasks
+                                        ? 'Show selected list only'
+                                        : 'Show all tasks',
+                                    onPressed: () {
+                                      if (_showAllTasks) {
+                                        final listId = selectedTask?.listId;
+                                        setState(() {
+                                          if (listId != null &&
+                                              lists.any(
+                                                (l) => l.id == listId,
+                                              )) {
+                                            _selectedListId = listId;
+                                          }
+                                          _showAllTasks = false;
+                                        });
+                                        if (listId != null) {
+                                          _markListViewed(listId);
+                                        }
+                                      } else {
+                                        setState(() => _showAllTasks = true);
+                                      }
+                                    },
+                                    icon: Icon(
+                                      PhosphorIconsRegular.listMagnifyingGlass,
+                                      color: _showAllTasks
+                                          ? Colors.black
+                                          : null,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: _showAllTasks
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: KeepAliveCustomScrollView(
+                                  storageKey: ShellPageStorageKeys.todoTaskList,
+                                  cacheExtent: 10000.0,
+                                  slivers: [
+                                    if (active.isNotEmpty)
+                                      if (_showAllTasks)
+                                        SliverList(
+                                          delegate: SliverChildListDelegate([
+                                            for (final task in active)
+                                              _TaskRow(
+                                                key: ValueKey(task.id),
+                                                task: task,
+                                                isSelected:
+                                                    task.id == _selectedTaskId,
+                                                listColor: _listColorFor(
+                                                  task.listId,
+                                                  lists,
+                                                ),
+                                                lists: lists,
+                                                subtaskStats: _subtaskStats(
+                                                  task.id,
+                                                ),
+                                                subtaskStatsData:
+                                                    _subtaskStatsData(task.id),
+                                                onToggle: (v) =>
+                                                    _toggleTask(task, v),
+                                                onStar: () => _toggleStar(
+                                                  task,
+                                                  _activeInList(
+                                                    active,
+                                                    task.listId,
+                                                  ),
+                                                ),
+                                                onSetDueDate: (due) =>
+                                                    _setTaskDueDate(
+                                                      task,
+                                                      due,
+                                                      _activeInList(
+                                                        active,
+                                                        task.listId,
+                                                      ),
+                                                    ),
+                                                onClearDueDate: () =>
+                                                    _clearTaskDueDate(
+                                                      task,
+                                                      _activeInList(
+                                                        active,
+                                                        task.listId,
+                                                      ),
+                                                    ),
+                                                onMoveToList: (destId) =>
+                                                    _moveTaskToList(
+                                                      task,
+                                                      destId,
+                                                    ),
+                                                onDelete: () =>
+                                                    _deleteTaskFromRow(task),
+                                                onEdit: () =>
+                                                    _openEditPanel(task),
+                                              ),
+                                          ]),
+                                        )
+                                      else
+                                        SliverReorderableList(
+                                          key: _taskListKey,
+                                          proxyDecorator:
+                                              (child, index, animation) {
+                                                return ClampToTargetBounds(
+                                                  targetKey: _taskListKey,
+                                                  child: Material(
+                                                    type: MaterialType
+                                                        .transparency,
+                                                    child: child,
+                                                  ),
+                                                );
+                                              },
+                                          onReorderItem: (oldIndex, newIndex) {
+                                            _reorderActiveTasks(
+                                              active,
+                                              oldIndex,
+                                              newIndex,
+                                            );
+                                          },
+                                          itemCount: active.length,
+                                          itemBuilder: (context, i) {
+                                            return ReorderableDragStartListener(
+                                              key: ValueKey(active[i].id),
+                                              index: i,
+                                              child: _TaskRow(
+                                                task: active[i],
+                                                isSelected:
+                                                    active[i].id ==
+                                                    _selectedTaskId,
+                                                listColor:
+                                                    currentList?.colorValue,
+                                                lists: lists,
+                                                subtaskStats: _subtaskStats(
+                                                  active[i].id,
+                                                ),
+                                                subtaskStatsData:
+                                                    _subtaskStatsData(
+                                                      active[i].id,
+                                                    ),
+                                                onToggle: (v) =>
+                                                    _toggleTask(active[i], v),
+                                                onStar: () => _toggleStar(
+                                                  active[i],
+                                                  active,
+                                                ),
+                                                onSetDueDate: (due) =>
+                                                    _setTaskDueDate(
+                                                      active[i],
+                                                      due,
+                                                      active,
+                                                    ),
+                                                onClearDueDate: () =>
+                                                    _clearTaskDueDate(
+                                                      active[i],
+                                                      active,
+                                                    ),
+                                                onMoveToList: (destId) =>
+                                                    _moveTaskToList(
+                                                      active[i],
+                                                      destId,
+                                                    ),
+                                                onDelete: () =>
+                                                    _deleteTaskFromRow(
+                                                      active[i],
+                                                    ),
+                                                onEdit: () =>
+                                                    _openEditPanel(active[i]),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                    if (!effectiveHideCompleted &&
+                                        completed.isNotEmpty)
+                                      SliverToBoxAdapter(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            const Divider(height: 32),
+                                            InkWell(
+                                              onTap: () {
+                                                final next = !completedExpanded;
+                                                setState(
+                                                  () =>
+                                                      _completedExpandedOverride =
+                                                          next,
+                                                );
+                                                unawaited(
+                                                  _persistCompletedExpanded(
+                                                    next,
+                                                  ),
+                                                );
+                                              },
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.fromLTRB(
+                                                      12,
+                                                      8,
+                                                      8,
+                                                      8,
+                                                    ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        'Completed (${completed.length})',
+                                                        style: Theme.of(
+                                                          context,
+                                                        ).textTheme.titleSmall,
+                                                      ),
+                                                    ),
+                                                    Icon(
+                                                      completedExpanded
+                                                          ? PhosphorIconsRegular
+                                                                .caretUp
+                                                          : PhosphorIconsRegular
+                                                                .caretDown,
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                              Icon(
-                                                completedExpanded
-                                                    ? PhosphorIconsRegular.caretUp
-                                                    : PhosphorIconsRegular.caretDown,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    if (!effectiveHideCompleted &&
+                                        completed.isNotEmpty &&
+                                        completedExpanded)
+                                      SliverList(
+                                        delegate: SliverChildListDelegate([
+                                          for (final task in completed)
+                                            _TaskRow(
+                                              key: ValueKey(task.id),
+                                              task: task,
+                                              isSelected:
+                                                  task.id == _selectedTaskId,
+                                              listColor: _listColorFor(
+                                                task.listId,
+                                                lists,
                                               ),
-                                            ],
-                                          ),
-                                        ),
+                                              lists: lists,
+                                              subtaskStats: _subtaskStats(
+                                                task.id,
+                                              ),
+                                              subtaskStatsData:
+                                                  _subtaskStatsData(task.id),
+                                              onToggle: (v) =>
+                                                  _toggleTask(task, v),
+                                              onStar: () => _toggleStar(
+                                                task,
+                                                _activeInList(
+                                                  active,
+                                                  task.listId,
+                                                ),
+                                              ),
+                                              onSetDueDate: (due) =>
+                                                  _setTaskDueDate(
+                                                    task,
+                                                    due,
+                                                    _activeInList(
+                                                      active,
+                                                      task.listId,
+                                                    ),
+                                                  ),
+                                              onClearDueDate: () =>
+                                                  _clearTaskDueDate(
+                                                    task,
+                                                    _activeInList(
+                                                      active,
+                                                      task.listId,
+                                                    ),
+                                                  ),
+                                              onMoveToList: (destId) =>
+                                                  _moveTaskToList(task, destId),
+                                              onDelete: () =>
+                                                  _deleteTaskFromRow(task),
+                                              onEdit: () =>
+                                                  _openEditPanel(task),
+                                            ),
+                                        ]),
                                       ),
-                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: LabeledTextField(
+                                      label: '',
+                                      showLabel: false,
+                                      hintText: 'Add task',
+                                      controller: _taskController,
+                                      focusNode: _taskFocusNode,
+                                      accentColor: Color(
+                                        currentList?.colorValue ??
+                                            Theme.of(
+                                              context,
+                                            ).colorScheme.primary.toARGB32(),
+                                      ),
+                                      onSubmitted: (_) => _addTask(),
+                                    ),
                                   ),
-                                ),
-                              if (!effectiveHideCompleted && completed.isNotEmpty && completedExpanded)
-                                SliverList(
-                                  delegate: SliverChildListDelegate([
-                                    for (final task in completed)
-                                      _TaskRow(
-                                        key: ValueKey(task.id),
-                                        task: task,
-                                        isSelected: task.id == _selectedTaskId,
-                                        listColor: _listColorFor(task.listId, lists),
-                                        subtaskStats: _subtaskStats(task.id),
-                                        subtaskStatsData: _subtaskStatsData(task.id),
-                                        onToggle: (v) => _toggleTask(task, v),
-                                        onStar: () => _toggleStar(
-                                          task,
-                                          _activeInList(active, task.listId),
-                                        ),
-                                        onEdit: () => _openEditPanel(task),
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    height: 48,
+                                    child: FilledButton(
+                                      onPressed: _addTask,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor:
+                                            currentList?.colorValue == null
+                                            ? null
+                                            : Color(currentList!.colorValue!),
+                                        foregroundColor:
+                                            currentList?.colorValue == null
+                                            ? null
+                                            : Colors.white,
                                       ),
-                                  ]),
-                                ),
+                                      child: const Text('Add'),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: LabeledTextField(
-                                label: '',
-                                showLabel: false,
-                                hintText: 'Add task',
-                                controller: _taskController,
-                                focusNode: _taskFocusNode,
-                                accentColor: Color(
-                                  currentList?.colorValue ??
-                                      Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .toARGB32(),
-                                ),
-                                onSubmitted: (_) => _addTask(),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              height: 48,
-                              child: FilledButton(
-                                onPressed: _addTask,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: currentList?.colorValue ==
-                                          null
-                                      ? null
-                                      : Color(currentList!.colorValue!),
-                                  foregroundColor: currentList?.colorValue ==
-                                          null
-                                      ? null
-                                      : Colors.white,
-                                ),
-                                child: const Text('Add'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                ClipRect(
-                  child: AnimatedBuilder(
-                    animation: _panelAnimation,
-                    builder: (context, child) {
-                      return Align(
-                        alignment: Alignment.centerRight,
-                        widthFactor: _panelAnimation.value,
-                        child: child,
-                      );
-                    },
-                    child: SizedBox(
-                      width: _todoEditPanelWidth,
-                      child: panelTask == null
-                          ? const SizedBox.shrink()
-                          : TodoEditPanel(
-                              key: ValueKey(panelTask.id),
-                              task: panelTask,
-                              listColor: _listColorFor(panelTask.listId, lists),
-                              lists: lists,
-                              onClose: () {
-                                _invalidateTodoListData(
-                                  listId: panelTask.listId,
-                                );
-                                _closeEditPanel();
-                              },
-                              onChanged: () {
-                                _invalidateTodoListData();
-                              },
-                              onDeleted: () {
-                                _invalidateTodoListData(
-                                  listId: panelTask.listId,
-                                );
-                                _closeEditPanel();
-                              },
-                              onToggleStar: () => _toggleStar(
-                                panelTask,
-                                sorted.where((t) => !t.completed).toList(),
-                              ),
-                              onSortBatchApplied: (batch) {
-                                unawaited(
-                                  _applyPersistedSortBatchToUi(
-                                    batch,
-                                    reason: 'persisted_sort_batch',
-                                    focusTask: panelTask,
-                                  ),
-                                );
-                              },
-                              onTaskOptimistic: (task) {
-                                final active =
-                                    sorted.where((t) => !t.completed).toList();
-                                final dueDateChanged =
-                                    task.dueDate != panelTask.dueDate ||
-                                    task.dueDateSetAt !=
-                                        panelTask.dueDateSetAt;
-                                final movedList =
-                                    task.listId != panelTask.listId;
-
-                                if (movedList && !task.isSubtask) {
-                                  unawaited(
-                                    _applyListMoveOptimistic(
-                                      task: task,
-                                      panelTask: panelTask,
-                                      active: active,
+                      ),
+                      ClipRect(
+                        child: AnimatedBuilder(
+                          animation: _panelAnimation,
+                          builder: (context, child) {
+                            return Align(
+                              alignment: Alignment.centerRight,
+                              widthFactor: _panelAnimation.value,
+                              child: child,
+                            );
+                          },
+                          child: SizedBox(
+                            width: _todoEditPanelWidth,
+                            child: panelTask == null
+                                ? const SizedBox.shrink()
+                                : TodoEditPanel(
+                                    key: ValueKey(panelTask.id),
+                                    task: panelTask,
+                                    listColor: _listColorFor(
+                                      panelTask.listId,
+                                      lists,
                                     ),
-                                  );
-                                  return;
-                                }
+                                    lists: lists,
+                                    onClose: () {
+                                      _invalidateTodoListData(
+                                        listId: panelTask.listId,
+                                      );
+                                      _closeEditPanel();
+                                    },
+                                    onChanged: () {
+                                      _invalidateTodoListData();
+                                    },
+                                    onDeleted: () {
+                                      _invalidateTodoListData(
+                                        listId: panelTask.listId,
+                                      );
+                                      _closeEditPanel();
+                                    },
+                                    onToggleStar: () => _toggleStar(
+                                      panelTask,
+                                      sorted
+                                          .where((t) => !t.completed)
+                                          .toList(),
+                                    ),
+                                    onSortBatchApplied: (batch) {
+                                      unawaited(
+                                        _applyPersistedSortBatchToUi(
+                                          batch,
+                                          reason: 'persisted_sort_batch',
+                                          focusTask: panelTask,
+                                        ),
+                                      );
+                                    },
+                                    onTaskOptimistic: (task) {
+                                      final active = sorted
+                                          .where((t) => !t.completed)
+                                          .toList();
+                                      final dueDateChanged =
+                                          task.dueDate != panelTask.dueDate ||
+                                          task.dueDateSetAt !=
+                                              panelTask.dueDateSetAt;
+                                      final movedList =
+                                          task.listId != panelTask.listId;
 
-                                if (dueDateChanged && !task.isSubtask) {
-                                  final batch = applyDueDateChange(
-                                    panelTask,
-                                    active,
-                                    dueDate: task.dueDate,
-                                    clearDueDate: task.dueDate == null &&
-                                        panelTask.dueDate != null,
-                                  );
-                                  final sortedTask = batch.tasks.firstWhere(
-                                    (updated) => updated.id == task.id,
-                                    orElse: () => task,
-                                  );
-                                  final merged = sortedTask.copyWith(
-                                    title: task.title,
-                                    notes: task.notes,
-                                    listId: task.listId,
-                                  );
-                                  setState(() {
-                                    _applySortBatchOptimistic(batch, active);
-                                    _taskOverrides[task.id] = merged;
-                                    _editPanelTask = merged;
-                                  });
-                                  return;
-                                }
+                                      if (movedList && !task.isSubtask) {
+                                        unawaited(
+                                          _applyListMoveOptimistic(
+                                            task: task,
+                                            panelTask: panelTask,
+                                            active: active,
+                                          ),
+                                        );
+                                        return;
+                                      }
 
-                                _taskOverrides[task.id] = task;
-                                final affectsSort =
-                                    task.starred != panelTask.starred ||
-                                    task.sortOrder != panelTask.sortOrder ||
-                                    movedList;
-                                if (affectsSort || movedList) {
-                                  setState(() {
-                                    _editPanelTask = task;
-                                    if (movedList) {
-                                      _selectedListId = task.listId;
-                                      _selectedTaskId = task.id;
-                                    }
-                                  });
-                                  if (movedList) {
-                                    _markListViewed(task.listId);
-                                  }
-                                }
-                              },
-                            ),
-                    ),
-                  ),
-                ),
-              ],
+                                      if (dueDateChanged && !task.isSubtask) {
+                                        final batch = applyDueDateChange(
+                                          panelTask,
+                                          active,
+                                          dueDate: task.dueDate,
+                                          clearDueDate:
+                                              task.dueDate == null &&
+                                              panelTask.dueDate != null,
+                                        );
+                                        final sortedTask = batch.tasks
+                                            .firstWhere(
+                                              (updated) =>
+                                                  updated.id == task.id,
+                                              orElse: () => task,
+                                            );
+                                        final merged = sortedTask.copyWith(
+                                          title: task.title,
+                                          notes: task.notes,
+                                          listId: task.listId,
+                                        );
+                                        setState(() {
+                                          _applySortBatchOptimistic(
+                                            batch,
+                                            active,
+                                          );
+                                          _taskOverrides[task.id] = merged;
+                                          _editPanelTask = merged;
+                                        });
+                                        return;
+                                      }
+
+                                      _taskOverrides[task.id] = task;
+                                      final affectsSort =
+                                          task.starred != panelTask.starred ||
+                                          task.sortOrder !=
+                                              panelTask.sortOrder ||
+                                          movedList;
+                                      if (affectsSort || movedList) {
+                                        setState(() {
+                                          _editPanelTask = task;
+                                          if (movedList) {
+                                            _selectedListId = task.listId;
+                                            _selectedTaskId = task.id;
+                                          }
+                                        });
+                                        if (movedList) {
+                                          _markListViewed(task.listId);
+                                        }
+                                      }
+                                    },
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1166,6 +1469,11 @@ class _TaskRow extends StatefulWidget {
     required this.onToggle,
     required this.onStar,
     required this.onEdit,
+    required this.onSetDueDate,
+    required this.onClearDueDate,
+    required this.onMoveToList,
+    required this.onDelete,
+    required this.lists,
     required this.subtaskStats,
     this.subtaskStatsData,
     this.listColor,
@@ -1176,7 +1484,25 @@ class _TaskRow extends StatefulWidget {
   final Future<void> Function(bool?) onToggle;
   final VoidCallback onStar;
   final VoidCallback onEdit;
+
+  /// Applies a due date picked from the right-click menu. The value is a local
+  /// wall-clock time (date-only selections arrive as local midnight).
+  final ValueChanged<DateTime> onSetDueDate;
+
+  /// Clears the task's due date (resets it to nothing).
+  final VoidCallback onClearDueDate;
+
+  /// Moves the task to the list with the given id.
+  final ValueChanged<String> onMoveToList;
+
+  /// Deletes the task (shows its own confirmation dialog).
+  final Future<void> Function() onDelete;
+
+  /// Lists available as move-to targets in the right-click submenu.
+  final List<TodoListModel> lists;
+
   final Future<({int completed, int total})> subtaskStats;
+
   /// Last known resolved value for [subtaskStats]. Passed as [FutureBuilder.initialData]
   /// so remounted rows never show a blank frame while awaiting the future.
   final ({int completed, int total})? subtaskStatsData;
@@ -1193,7 +1519,10 @@ class _TaskRowState extends State<_TaskRow>
 
   var _displayCompleted = false;
   int _toggleGeneration = 0;
-  
+  // True while the pointer is over the checkbox hitbox specifically — drives the
+  // outline "preview" check without coloring in the box.
+  bool _checkHovered = false;
+
   ({int completed, int total})? _cachedStats;
 
   @override
@@ -1272,9 +1601,112 @@ class _TaskRowState extends State<_TaskRow>
     unawaited(widget.onToggle(target));
   }
 
+  /// The task's checkbox. Uses a custom visual (not Material [Checkbox]) so it
+  /// can show an outline preview check while hovered, keep the completion pop
+  /// animation, and not occlude the row-wide hover highlight.
+  Widget _buildCheckbox(Color? listColor) {
+    final theme = Theme.of(context);
+    final accent = listColor ?? theme.colorScheme.primary;
+    return MouseRegion(
+      // opaque:false so the row-wide InkWell hover keeps showing while the
+      // pointer is over the checkbox.
+      opaque: false,
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) {
+        if (!_checkHovered) setState(() => _checkHovered = true);
+      },
+      onExit: (_) {
+        if (_checkHovered) setState(() => _checkHovered = false);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => unawaited(_handleToggle(!_displayCompleted)),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: AnimatedBuilder(
+            animation: _animController,
+            builder: (context, _) => Transform.scale(
+              scale: _checkScale.value,
+              child: _checkboxVisual(
+                theme: theme,
+                accent: accent,
+                progress: _animController.value,
+                hovered: _checkHovered,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _checkboxVisual({
+    required ThemeData theme,
+    required Color accent,
+    required double progress,
+    required bool hovered,
+  }) {
+    final p = progress.clamp(0.0, 1.0);
+    final borderRest = theme.colorScheme.onSurface.withValues(alpha: 0.5);
+    // Show a faint preview check on hover; once completing, the check tracks the
+    // fill so there's no flicker. The box itself is only colored by [p].
+    final checkOpacity = hovered ? (p < 0.5 ? 0.5 : p) : p;
+    return Container(
+      width: 20,
+      height: 20,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: p),
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(
+          color: Color.lerp(borderRest, accent, p)!,
+          width: 1.5,
+        ),
+      ),
+      child: Opacity(
+        opacity: checkOpacity,
+        child: CustomPaint(
+          size: const Size(14, 14),
+          painter: _CheckMarkPainter(
+            color: Color.lerp(accent, Colors.white, p)!,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The star toggle. A plain tappable icon (not [IconButton]) so its mouse
+  /// region doesn't punch a hole in the row-wide hover highlight.
+  Widget _buildStar(Color? listColor) {
+    final starred = widget.task.starred;
+    return MouseRegion(
+      opaque: false,
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onStar,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            starred ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
+            size: 24,
+            color: starred
+                ? (listColor ?? Theme.of(context).colorScheme.primary)
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
   String? _formatDue(DateTime? dueDate) {
     if (dueDate == null) return null;
     final local = dueDate.toLocal();
+    // Midnight is the app-wide sentinel for "date only" (see the edit panel and
+    // _isDueDatePast); don't render a spurious "12:00 AM" for those.
+    if (local.hour == 0 && local.minute == 0) {
+      return DateFormat.MMMd().format(local);
+    }
     return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dueDate)}';
   }
 
@@ -1287,8 +1719,111 @@ class _TaskRowState extends State<_TaskRow>
     return local.isBefore(now);
   }
 
+  List<ContextMenuItem> _buildContextMenuItems(Color? listColor) {
+    final task = widget.task;
+    final theme = Theme.of(context);
+    final accent = listColor ?? theme.colorScheme.primary;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
 
+    return [
+      ContextMenuItem(
+        label: task.starred ? 'Unstar' : 'Star',
+        icon: task.starred ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
+        onTap: widget.onStar,
+      ),
+      ContextMenuItem(
+        label: task.completed ? 'Mark as incomplete' : 'Mark as completed',
+        icon: task.completed
+            ? PhosphorIconsRegular.arrowCounterClockwise
+            : PhosphorIconsRegular.checkCircle,
+        onTap: () => unawaited(_handleToggle(!task.completed)),
+      ),
+      ContextMenuItem(
+        label: 'Due today',
+        icon: PhosphorIconsRegular.calendarDot,
+        onTap: () => widget.onSetDueDate(today),
+      ),
+      ContextMenuItem(
+        label: 'Due tomorrow',
+        icon: PhosphorIconsRegular.calendarPlus,
+        onTap: () => widget.onSetDueDate(tomorrow),
+      ),
+      ContextMenuItem(
+        label: 'Pick a date',
+        icon: PhosphorIconsRegular.calendarBlank,
+        onTap: _openDatePicker,
+      ),
+      if (task.dueDate != null)
+        ContextMenuItem(
+          label: 'Reset due date',
+          icon: PhosphorIconsRegular.calendarX,
+          onTap: widget.onClearDueDate,
+        ),
+      if (widget.lists.isNotEmpty)
+        ContextMenuItem(
+          label: 'Move task to',
+          icon: PhosphorIconsRegular.folder,
+          children: [
+            for (final list in widget.lists)
+              ContextMenuItem(
+                label: list.name,
+                leading: JournalBookmarkFlag(
+                  colorValue:
+                      list.colorValue ?? theme.colorScheme.primary.toARGB32(),
+                  size: 14,
+                ),
+                trailing: list.id == task.listId
+                    ? Icon(PhosphorIconsRegular.check, size: 16, color: accent)
+                    : null,
+                onTap: list.id == task.listId
+                    ? null
+                    : () => widget.onMoveToList(list.id),
+              ),
+          ],
+        ),
+      ContextMenuItem(
+        label: 'Delete task',
+        icon: PhosphorIconsRegular.trash,
+        isDestructive: true,
+        onTap: () => unawaited(widget.onDelete()),
+      ),
+    ];
+  }
 
+  /// Opens the same date/time picker the edit panel uses (date-only by default;
+  /// a time is only attached if the user touches the time field).
+  Future<void> _openDatePicker() async {
+    final task = widget.task;
+    final listColor = widget.listColor == null
+        ? null
+        : Color(widget.listColor!);
+    final localDue = task.dueDate?.toLocal();
+    final hasTime =
+        localDue != null && (localDue.hour != 0 || localDue.minute != 0);
+    final initialDt = task.dueDate != null && hasTime
+        ? task.dueDate!.toLocal()
+        : (task.dueDate != null
+              ? task.dueDate!.toLocal().copyWith(hour: 12, minute: 0)
+              : DateTime.now());
+
+    final picked = await showContextualPopover<DateTime>(
+      context: context,
+      buttonContext: context,
+      width: 500,
+      height: 380,
+      accentColor: listColor,
+      builder: (ctx) => DateTimeSelectorPopover(
+        initialDateTime: initialDt,
+        accentColor: listColor,
+        optionalTime: true,
+        initialHasTime: hasTime,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    widget.onSetDueDate(picked);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1303,199 +1838,215 @@ class _TaskRowState extends State<_TaskRow>
     ).colorScheme.onSurface.withValues(alpha: 0.55);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        decoration: VoyagerListItemSurface.decoration(
-          context,
-          selected: widget.isSelected,
-          borderRadius: 14,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0),
-            child: ScaleTransition(
-              scale: _checkScale,
-              child: Checkbox(
-                value: _displayCompleted,
-                onChanged: _handleToggle,
-                activeColor: listColor,
-              ),
-            ),
+      child: ContextMenuRegion(
+        items: _buildContextMenuItems(listColor),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          decoration: VoyagerListItemSurface.decoration(
+            context,
+            selected: widget.isSelected,
+            borderRadius: 14,
           ),
-          Expanded(
-            child: InkWell(
-              onTap: widget.onEdit,
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 12,
+          child: InkWell(
+            onTap: widget.onEdit,
+            borderRadius: BorderRadius.circular(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: _buildCheckbox(listColor),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOut,
-                          style: Theme.of(context).textTheme.bodyLarge!
-                              .copyWith(
-                                color: _displayCompleted ? strikeColor : null,
-                                decoration: _displayCompleted ? TextDecoration.lineThrough : null,
-                              ),
-                          child: Text(
-                            widget.task.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 12,
                     ),
-                    Builder(
-                      builder: (context) {
-                        final metadataColor = Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.72);
-                        final overdueColor =
-                            Theme.of(context).colorScheme.error;
-                        final textStyle = Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOut,
+                              style: Theme.of(context).textTheme.bodyLarge!
+                                  .copyWith(
+                                    color: _displayCompleted
+                                        ? strikeColor
+                                        : null,
+                                    decoration: _displayCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
+                              child: Text(
+                                widget.task.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Builder(
+                          builder: (context) {
+                            final metadataColor = Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.72);
+                            final overdueColor = Theme.of(
+                              context,
+                            ).colorScheme.error;
+                            final textStyle =
+                                Theme.of(
+                                  context,
+                                ).textTheme.labelSmall?.copyWith(
                                   fontSize: 10,
                                   color: metadataColor,
                                 ) ??
-                            TextStyle(fontSize: 10, color: metadataColor);
+                                TextStyle(fontSize: 10, color: metadataColor);
 
-                        // Stable metadata: never depends on the Future.
-                        final stableWidgets = <Widget>[];
-                        if (dueLabel != null) {
-                          stableWidgets.add(
-                            Text(
-                              dueLabel,
-                              style: dueDatePast
-                                  ? TextStyle(color: overdueColor)
-                                  : null,
-                            ),
-                          );
-                        }
-                        final hasNotes =
-                            widget.task.notes?.trim().isNotEmpty == true;
-                        if (hasNotes) {
-                          if (stableWidgets.isNotEmpty) {
-                            stableWidgets.add(const Text(' · '));
-                          }
-                          stableWidgets.add(
-                            Icon(
-                              PhosphorIconsRegular.note,
-                              size: 10,
-                              color: metadataColor,
-                            ),
-                          );
-                        }
-
-                        // Subtask count: depends on the Future; never hides
-                        // stable widgets when it's loading.
-                        final subtaskWidget = FutureBuilder(
-                          future: widget.subtaskStats,
-                          initialData: widget.subtaskStatsData,
-                          builder: (context, snapshot) {
-                            if (snapshot.hasData) {
-                              _cachedStats = snapshot.data;
-                            }
-                            final stats =
-                                snapshot.hasData ? snapshot.data : _cachedStats;
-                            if (stats == null || stats.total == 0) {
-                              return const SizedBox.shrink();
-                            }
-                            final needsSep = stableWidgets.isNotEmpty;
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (needsSep) const Text(' · '),
-                                Text('${stats.completed} | ${stats.total}'),
-                              ],
-                            );
-                          },
-                        );
-
-                        final hasStable = stableWidgets.isNotEmpty;
-                        // Always show the row if there's any stable content.
-                        // Subtask badge sits alongside it.
-                        if (!hasStable) {
-                          // Only subtask badge; still need to show it.
-                          return FutureBuilder(
-                            future: widget.subtaskStats,
-                            initialData: widget.subtaskStatsData,
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                _cachedStats = snapshot.data;
-                              }
-                              final stats = snapshot.hasData
-                                  ? snapshot.data
-                                  : _cachedStats;
-                              if (stats == null || stats.total == 0) {
-                                return const SizedBox.shrink();
-                              }
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: DefaultTextStyle(
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: textStyle,
-                                  child: Text(
-                                    '${stats.completed} | ${stats.total}',
-                                  ),
+                            // Stable metadata: never depends on the Future.
+                            final stableWidgets = <Widget>[];
+                            if (dueLabel != null) {
+                              stableWidgets.add(
+                                Text(
+                                  dueLabel,
+                                  style: dueDatePast
+                                      ? TextStyle(color: overdueColor)
+                                      : null,
                                 ),
                               );
-                            },
-                          );
-                        }
+                            }
+                            final hasNotes =
+                                widget.task.notes?.trim().isNotEmpty == true;
+                            if (hasNotes) {
+                              if (stableWidgets.isNotEmpty) {
+                                stableWidgets.add(const Text(' · '));
+                              }
+                              stableWidgets.add(
+                                Icon(
+                                  PhosphorIconsRegular.note,
+                                  size: 10,
+                                  color: metadataColor,
+                                ),
+                              );
+                            }
 
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: DefaultTextStyle(
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: textStyle,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ...stableWidgets,
-                                subtaskWidget,
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+                            // Subtask count: depends on the Future; never hides
+                            // stable widgets when it's loading.
+                            final subtaskWidget = FutureBuilder(
+                              future: widget.subtaskStats,
+                              initialData: widget.subtaskStatsData,
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData) {
+                                  _cachedStats = snapshot.data;
+                                }
+                                final stats = snapshot.hasData
+                                    ? snapshot.data
+                                    : _cachedStats;
+                                if (stats == null || stats.total == 0) {
+                                  return const SizedBox.shrink();
+                                }
+                                final needsSep = stableWidgets.isNotEmpty;
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (needsSep) const Text(' · '),
+                                    Text('${stats.completed} | ${stats.total}'),
+                                  ],
+                                );
+                              },
+                            );
+
+                            final hasStable = stableWidgets.isNotEmpty;
+                            // Always show the row if there's any stable content.
+                            // Subtask badge sits alongside it.
+                            if (!hasStable) {
+                              // Only subtask badge; still need to show it.
+                              return FutureBuilder(
+                                future: widget.subtaskStats,
+                                initialData: widget.subtaskStatsData,
+                                builder: (context, snapshot) {
+                                  if (snapshot.hasData) {
+                                    _cachedStats = snapshot.data;
+                                  }
+                                  final stats = snapshot.hasData
+                                      ? snapshot.data
+                                      : _cachedStats;
+                                  if (stats == null || stats.total == 0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: DefaultTextStyle(
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textStyle,
+                                      child: Text(
+                                        '${stats.completed} | ${stats.total}',
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: DefaultTextStyle(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: textStyle,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [...stableWidgets, subtaskWidget],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
-
-                  ],
+                  ),
                 ),
-              ),
+                _buildStar(listColor),
+              ],
             ),
           ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed: widget.onStar,
-            icon: Icon(
-              widget.task.starred
-                  ? PhosphorIconsFill.star
-                  : PhosphorIconsRegular.star,
-            ),
-            color: widget.task.starred
-                ? listColor ?? Theme.of(context).colorScheme.primary
-                : null,
-          ),
-        ],
         ),
       ),
     );
   }
+}
+
+/// Draws the same checkmark shape Material's [Checkbox] uses — the classic
+/// three-point polyline (start → mid → end) at the same relative positions and
+/// 2px stroke — so the custom checkbox reads identically to the stock one.
+class _CheckMarkPainter extends CustomPainter {
+  _CheckMarkPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    final start = Offset(w * 0.15, w * 0.45);
+    final mid = Offset(w * 0.4, w * 0.7);
+    final end = Offset(w * 0.85, w * 0.25);
+    final path = Path()
+      ..moveTo(start.dx, start.dy)
+      ..lineTo(mid.dx, mid.dy)
+      ..lineTo(end.dx, end.dy);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CheckMarkPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

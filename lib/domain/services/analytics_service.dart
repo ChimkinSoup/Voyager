@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -94,16 +95,17 @@ class AnalyticsService {
     final dayMap = <int, double>{};
     for (final v in values) {
       if (v.intValue == null) continue;
-      final diff = v.periodStart
-          .difference(DateTime(from.year, from.month, from.day))
-          .inDays;
+      // Calendar days, not elapsed time — see [calendarDaysBetween]. Across a
+      // DST spring-forward the elapsed-time count comes up an hour short and
+      // truncates, filing a record under the day before the one it was
+      // recorded on.
+      final diff = calendarDaysBetween(from, v.periodStart);
       if (diff >= 0) dayMap[diff] = v.intValue!.toDouble();
     }
 
     if (dayMap.isEmpty) return const [];
 
-    final totalDays =
-        to.difference(DateTime(from.year, from.month, from.day)).inDays;
+    final totalDays = calendarDaysBetween(from, to);
 
     // If only one data point, return it as a flat line
     if (dayMap.length == 1) {
