@@ -136,4 +136,93 @@ void main() {
       }
     });
   });
+
+  _readingTests();
+}
+
+void _readingTests() {
+  group('sparklineValueReading', () {
+    test('a logged period reads as its record, not as an estimate', () {
+      final r = sparklineValueReading(
+        storedLabel: '6',
+        interpolates: true,
+        interpolatedY: 6.4,
+      );
+      expect(r.label, '6');
+      expect(r.isEstimate, isFalse);
+    });
+
+    test('an unlogged period reads the curve, marked as an estimate', () {
+      final r = sparklineValueReading(
+        storedLabel: null,
+        interpolates: true,
+        interpolatedY: 6.4,
+      );
+      // No marker in the string — the caller greys the text instead.
+      expect(r.label, '6.4');
+      expect(r.isEstimate, isTrue);
+    });
+
+    test('a whole-numbered estimate drops its ".0"', () {
+      expect(
+        sparklineValueReading(
+          storedLabel: null,
+          interpolates: true,
+          interpolatedY: 6.0,
+        ).label,
+        '6',
+      );
+    });
+
+    test('a near-whole estimate rounds and drops its decimal', () {
+      // Rounding happens before the ".0" test, so 5.98 shows "6", not "5.98".
+      expect(
+        sparklineValueReading(
+          storedLabel: null,
+          interpolates: true,
+          interpolatedY: 5.98,
+        ).label,
+        '6',
+      );
+    });
+
+    test('an estimate is distinguished only by its flag, never its text', () {
+      // The record and the estimate can now produce the same string, so
+      // isEstimate is the only thing the caller can colour from.
+      final record = sparklineValueReading(
+        storedLabel: '6',
+        interpolates: true,
+        interpolatedY: 6.0,
+      );
+      final estimate = sparklineValueReading(
+        storedLabel: null,
+        interpolates: true,
+        interpolatedY: 6.0,
+      );
+      expect(record.label, estimate.label);
+      expect(record.isEstimate, isFalse);
+      expect(estimate.isEstimate, isTrue);
+    });
+
+    test('trackers with no curve keep the dash', () {
+      final r = sparklineValueReading(
+        storedLabel: null,
+        interpolates: false,
+        interpolatedY: 6.4,
+      );
+      expect(r.label, isNull);
+      expect(r.isEstimate, isFalse);
+    });
+
+    test('a missing curve value keeps the dash', () {
+      expect(
+        sparklineValueReading(
+          storedLabel: null,
+          interpolates: true,
+          interpolatedY: null,
+        ).label,
+        isNull,
+      );
+    });
+  });
 }

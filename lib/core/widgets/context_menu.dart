@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 
 // ---------------------------------------------------------------------------
@@ -9,22 +10,43 @@ import 'package:voyager/core/theme/voyager_menu_theme.dart';
 // ---------------------------------------------------------------------------
 
 /// A single item in a [ContextMenuRegion].
+///
+/// Provide [children] to turn the item into a submenu parent: hovering (or
+/// clicking) it opens a flyout listing the children to the side.
 class ContextMenuItem {
   const ContextMenuItem({
     required this.label,
     this.icon,
+    this.leading,
+    this.trailing,
     this.isDestructive = false,
     this.onTap,
     this.enabled = true,
+    this.children,
   });
 
   final String label;
   final IconData? icon;
+
+  /// Optional widget rendered in the leading (icon) slot. Overrides [icon].
+  final Widget? leading;
+
+  /// Optional widget rendered on the trailing edge (e.g. a checkmark). When the
+  /// item [hasChildren] and no [trailing] is given, a submenu caret is shown.
+  final Widget? trailing;
+
   final bool isDestructive;
   final bool enabled;
 
-  /// Called when the item is tapped. If null, the item is rendered as disabled.
+  /// Called when the item is tapped. If null (and the item has no [children]),
+  /// the item is rendered as disabled.
   final VoidCallback? onTap;
+
+  /// Submenu items. When non-empty this item becomes a submenu parent and its
+  /// own [onTap] is ignored (tapping/hovering opens the flyout instead).
+  final List<ContextMenuItem>? children;
+
+  bool get hasChildren => children != null && children!.isNotEmpty;
 }
 
 /// Wraps [child] so that right-clicking anywhere inside it opens a context
@@ -39,6 +61,14 @@ class ContextMenuItem {
 /// ContextMenuRegion(
 ///   items: [
 ///     ContextMenuItem(label: 'Edit', icon: PhosphorIconsRegular.pencil, onTap: _edit),
+///     ContextMenuItem(
+///       label: 'Move to',
+///       icon: PhosphorIconsRegular.folder,
+///       children: [
+///         ContextMenuItem(label: 'Work', onTap: () => _move('work')),
+///         ContextMenuItem(label: 'Personal', onTap: () => _move('personal')),
+///       ],
+///     ),
 ///     ContextMenuItem(label: 'Delete', icon: PhosphorIconsRegular.trash,
 ///                     isDestructive: true, onTap: _delete),
 ///   ],
@@ -134,12 +164,26 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   late final AnimationController _controller;
   late final Animation<double> _anim;
   final GlobalKey _menuKey = GlobalKey();
+  final GlobalKey _submenuKey = GlobalKey();
 
   // FocusNode stored in state so it is created ONCE and disposed properly.
   // Creating it inside build() leaked nodes and caused focus churn on hover.
   late final FocusNode _focusNode;
 
   int? _hoveredIndex;
+  int? _hoveredSubIndex;
+
+  // Which root item's submenu is currently open (null = none) and the global
+  // rect of that parent tile, used to anchor the flyout.
+  int? _openSubmenuIndex;
+  Rect? _submenuAnchor;
+
+  // GlobalKeys for the root tiles so their on-screen rect can be measured when
+  // a submenu opens.
+  final Map<int, GlobalKey> _itemKeys = {};
+
+  GlobalKey _keyFor(int index) =>
+      _itemKeys.putIfAbsent(index, () => GlobalKey());
 
   static const double _minWidth = 190.0;
   static const double _radius = 12.0;
@@ -171,27 +215,77 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     widget.onDismiss();
   }
 
+  Rect? _rectForKey(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  double _distanceToRect(GlobalKey key, Offset point) {
+    final rect = _rectForKey(key);
+    if (rect == null) return double.infinity;
+    final dx = point.dx < rect.left
+        ? rect.left - point.dx
+        : (point.dx > rect.right ? point.dx - rect.right : 0.0);
+    final dy = point.dy < rect.top
+        ? rect.top - point.dy
+        : (point.dy > rect.bottom ? point.dy - rect.bottom : 0.0);
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
   void _handlePointerMove(PointerEvent event) {
-    if ((event.position - widget.anchor).distance > widget.dismissDistance) {
+    // Dismiss only when the pointer strays far from BOTH menu panels — measured
+    // from the panel edges (not the original anchor) so tall/wide menus and
+    // open submenus don't dismiss while the pointer is still traversing them.
+    final gap = math.min(
+      _distanceToRect(_menuKey, event.position),
+      _distanceToRect(_submenuKey, event.position),
+    );
+    if (gap > widget.dismissDistance) {
       _dismiss();
     }
+  }
+
+  bool _isInsideKey(GlobalKey key, Offset globalPosition) {
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return false;
+    final localOffset = box.globalToLocal(globalPosition);
+    return box.paintBounds.contains(localOffset);
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    final renderBox = _menuKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox != null) {
-      final localOffset = renderBox.globalToLocal(event.position);
-      final isInside = renderBox.paintBounds.contains(localOffset);
-      if (!isInside) {
-        _dismiss();
-      }
-    } else {
-      _dismiss();
+    if (_isInsideKey(_menuKey, event.position) ||
+        _isInsideKey(_submenuKey, event.position)) {
+      return;
     }
+    _dismiss();
+  }
+
+  void _handleRootHover(int index, bool hovering) {
+    setState(() {
+      if (hovering) {
+        _hoveredIndex = index;
+        final item = widget.items[index];
+        if (item.enabled && item.hasChildren) {
+          _openSubmenuIndex = index;
+          _hoveredSubIndex = null;
+          _submenuAnchor = _rectForKey(_keyFor(index));
+        } else {
+          // Hovering a leaf item closes any open submenu.
+          _openSubmenuIndex = null;
+          _submenuAnchor = null;
+        }
+      } else if (_hoveredIndex == index) {
+        _hoveredIndex = null;
+      }
+    });
   }
 
   void _handleItemTap(ContextMenuItem item) {
-    if (!item.enabled || item.onTap == null) return;
+    if (!item.enabled) return;
+    // Submenu parents don't act on tap; the flyout is already shown on hover.
+    if (item.hasChildren) return;
+    if (item.onTap == null) return;
     _dismiss(); // Remove overlay immediately.
     // Microtask so the overlay teardown finishes before the action runs.
     Future.microtask(item.onTap!);
@@ -245,10 +339,13 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                   child: ScaleTransition(
                     scale: Tween<double>(begin: 0.93, end: 1.0).animate(_anim),
                     alignment: Alignment.topLeft,
-                    child: _buildMenu(context),
+                    child: _buildRootMenu(context),
                   ),
                 ),
               ),
+              // The submenu flyout (if any) anchored to the parent tile.
+              if (_openSubmenuIndex != null && _submenuAnchor != null)
+                _buildSubmenu(context),
             ],
           ),
         ),
@@ -256,17 +353,89 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     );
   }
 
-  Widget _buildMenu(BuildContext context) {
+  Widget _buildRootMenu(BuildContext context) {
+    return _MenuPanel(
+      panelKey: _menuKey,
+      items: widget.items,
+      radius: _radius,
+      verticalPadding: _verticalPadding,
+      minWidth: _minWidth,
+      itemRadius: _itemRadius,
+      isHovered: (i) => _hoveredIndex == i || _openSubmenuIndex == i,
+      onHover: _handleRootHover,
+      onTap: _handleItemTap,
+      itemKeyFor: _keyFor,
+    );
+  }
+
+  Widget _buildSubmenu(BuildContext context) {
+    final children = widget.items[_openSubmenuIndex!].children!;
+    return CustomSingleChildLayout(
+      delegate: _SubmenuLayoutDelegate(anchor: _submenuAnchor!),
+      child: FadeTransition(
+        opacity: _anim,
+        child: _MenuPanel(
+          panelKey: _submenuKey,
+          items: children,
+          radius: _radius,
+          verticalPadding: _verticalPadding,
+          minWidth: _minWidth,
+          itemRadius: _itemRadius,
+          isHovered: (i) => _hoveredSubIndex == i,
+          onHover: (i, hovering) => setState(() {
+            if (hovering) {
+              _hoveredSubIndex = i;
+            } else if (_hoveredSubIndex == i) {
+              _hoveredSubIndex = null;
+            }
+          }),
+          onTap: _handleItemTap,
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Menu panel (shared by the root menu and submenu flyouts)
+// ---------------------------------------------------------------------------
+
+class _MenuPanel extends StatelessWidget {
+  const _MenuPanel({
+    required this.panelKey,
+    required this.items,
+    required this.radius,
+    required this.verticalPadding,
+    required this.minWidth,
+    required this.itemRadius,
+    required this.isHovered,
+    required this.onHover,
+    required this.onTap,
+    this.itemKeyFor,
+  });
+
+  final GlobalKey panelKey;
+  final List<ContextMenuItem> items;
+  final double radius;
+  final double verticalPadding;
+  final double minWidth;
+  final BorderRadius Function(int index, int count) itemRadius;
+  final bool Function(int index) isHovered;
+  final void Function(int index, bool hovering) onHover;
+  final void Function(ContextMenuItem item) onTap;
+  final GlobalKey Function(int index)? itemKeyFor;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final items = widget.items;
     return Material(
-      key: _menuKey,
+      key: panelKey,
       color: Colors.transparent,
       child: Container(
-        constraints: const BoxConstraints(minWidth: _minWidth),
+        constraints: BoxConstraints(minWidth: minWidth),
         decoration: BoxDecoration(
           color: VoyagerMenuTheme.menuColor,
-          borderRadius: BorderRadius.circular(_radius),
+          borderRadius: BorderRadius.circular(radius),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.40),
@@ -281,7 +450,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(_radius),
+          borderRadius: BorderRadius.circular(radius),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -293,24 +462,23 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                   Divider(
                     height: 1,
                     thickness: 1,
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.10),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.10),
                     indent: 14,
                     endIndent: 14,
                   ),
                 _ContextMenuItemTile(
+                  key: itemKeyFor?.call(i),
                   item: items[i],
-                  isHovered: _hoveredIndex == i,
-                  borderRadius: _itemRadius(i, items.length),
+                  isHovered: isHovered(i),
+                  borderRadius: itemRadius(i, items.length),
                   padding: EdgeInsets.only(
                     left: 14,
                     right: 14,
-                    top: i == 0 ? 10 + _verticalPadding : 10,
-                    bottom: i == items.length - 1 ? 10 + _verticalPadding : 10,
+                    top: i == 0 ? 10 + verticalPadding : 10,
+                    bottom: i == items.length - 1 ? 10 + verticalPadding : 10,
                   ),
-                  onHover: (v) =>
-                      setState(() => _hoveredIndex = v ? i : null),
-                  onTap: () => _handleItemTap(items[i]),
+                  onHover: (v) => onHover(i, v),
+                  onTap: () => onTap(items[i]),
                 ),
               ],
             ],
@@ -327,6 +495,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
 
 class _ContextMenuItemTile extends StatelessWidget {
   const _ContextMenuItemTile({
+    super.key,
     required this.item,
     required this.isHovered,
     required this.borderRadius,
@@ -345,7 +514,8 @@ class _ContextMenuItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isEnabled = item.enabled && item.onTap != null;
+    // Submenu parents are always interactive even without an onTap.
+    final isEnabled = item.enabled && (item.onTap != null || item.hasChildren);
     final double opacity = isEnabled ? 1.0 : 0.38;
 
     final Color textColor = item.isDestructive
@@ -357,6 +527,16 @@ class _ContextMenuItemTile extends StatelessWidget {
     final Color hoverColor = item.isDestructive
         ? Colors.red.withValues(alpha: 0.12)
         : theme.colorScheme.onSurface.withValues(alpha: 0.08);
+
+    final Widget? leading = item.leading ??
+        (item.icon != null
+            ? Icon(item.icon, size: 16, color: iconColor)
+            : null);
+
+    final Widget? trailing = item.trailing ??
+        (item.hasChildren
+            ? Icon(PhosphorIconsRegular.caretRight, size: 14, color: iconColor)
+            : null);
 
     return MouseRegion(
       onEnter: (_) => onHover(true),
@@ -373,14 +553,13 @@ class _ContextMenuItemTile extends StatelessWidget {
           ),
           padding: padding,
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              if (item.icon != null) ...[
-                Icon(item.icon, size: 16, color: iconColor),
+              if (leading != null) ...[
+                leading,
                 const SizedBox(width: 10),
               ] else
                 const SizedBox(width: 2),
-              Flexible(
+              Expanded(
                 child: Text(
                   item.label,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -390,6 +569,10 @@ class _ContextMenuItemTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (trailing != null) ...[
+                const SizedBox(width: 10),
+                trailing,
+              ],
             ],
           ),
         ),
@@ -399,7 +582,7 @@ class _ContextMenuItemTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Layout delegate
+// Layout delegates
 // ---------------------------------------------------------------------------
 
 class _ContextMenuLayoutDelegate extends SingleChildLayoutDelegate {
@@ -442,5 +625,49 @@ class _ContextMenuLayoutDelegate extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_ContextMenuLayoutDelegate oldDelegate) =>
+      anchor != oldDelegate.anchor;
+}
+
+/// Positions a submenu flyout beside its parent tile [anchor] (a global rect),
+/// preferring the right side and flipping to the left when there isn't room.
+class _SubmenuLayoutDelegate extends SingleChildLayoutDelegate {
+  _SubmenuLayoutDelegate({required this.anchor});
+
+  final Rect anchor;
+
+  static const double _gap = 3.0;
+  static const double _margin = 8.0;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    return BoxConstraints(
+      minWidth: 180,
+      maxWidth: math.min(280.0, constraints.maxWidth - 16),
+      minHeight: 0,
+      maxHeight: constraints.maxHeight * 0.85,
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    // Prefer to the right of the parent; flip left if it would overflow.
+    double x = anchor.right + _gap;
+    if (x + childSize.width > size.width - _margin) {
+      x = anchor.left - _gap - childSize.width;
+    }
+    x = x.clamp(_margin, size.width - childSize.width - _margin);
+
+    // Align the flyout's top with the parent tile's top, then clamp on screen.
+    double y = anchor.top - _gap;
+    if (y + childSize.height > size.height - _margin) {
+      y = size.height - _margin - childSize.height;
+    }
+    y = y.clamp(_margin, size.height - childSize.height - _margin);
+
+    return Offset(x, y);
+  }
+
+  @override
+  bool shouldRelayout(_SubmenuLayoutDelegate oldDelegate) =>
       anchor != oldDelegate.anchor;
 }

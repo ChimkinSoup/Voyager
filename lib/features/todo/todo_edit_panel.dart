@@ -145,6 +145,12 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
           _isSessionReady = true;
         });
       });
+    } else if (oldWidget.task.dueDate != widget.task.dueDate) {
+      // Same task, but its due date changed externally (e.g. via the row's
+      // right-click menu while this panel is open). Sync the locally-held
+      // _dueDate so the pill updates instantly instead of only after the user
+      // reselects the task.
+      _dueDate = widget.task.dueDate;
     }
   }
 
