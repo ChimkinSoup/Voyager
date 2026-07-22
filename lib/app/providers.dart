@@ -721,6 +721,11 @@ final devGeometricTexturePanelOpenProvider = StateProvider<bool>(
 /// Whether the dev-menu geometric wave slider panel is expanded.
 final devGeometricWavePanelOpenProvider = StateProvider<bool>((ref) => false);
 
+/// Dev-only: when true the background is replaced with a row-fade visualiser
+/// that shows the dark<->regular shade transition in isolation. Not persisted —
+/// always off on a fresh launch so it can't be left on by accident.
+final geometricDebugRowFadeProvider = StateProvider<bool>((ref) => false);
+
 final shellDataWarmupProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
   final listsFuture = ref.read(todoListsProvider.future);

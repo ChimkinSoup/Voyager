@@ -406,6 +406,7 @@ class GeometricTexture extends StatefulWidget {
     required this.accentColor,
     this.params = GeometricTextureParams.defaults,
     this.waveParams = GeometricWaveParams.defaults,
+    this.debugRowFade = false,
   });
 
   final FragmentProgram? program;
@@ -413,6 +414,10 @@ class GeometricTexture extends StatefulWidget {
   final Color accentColor;
   final GeometricTextureParams params;
   final GeometricWaveParams waveParams;
+
+  /// Dev-only row fade visualiser (see [GeometricTexturePainter.debugRowFade]).
+  /// Also drives the animation clock so the rows fade even when no wave is on.
+  final bool debugRowFade;
 
   @override
   State<GeometricTexture> createState() => _GeometricTextureState();
@@ -438,6 +443,10 @@ class _GeometricTextureState extends State<GeometricTexture> {
   // wave is a slow ambient effect; it gains nothing from native refresh rate.
   static const _frameInterval = Duration(milliseconds: 33); // ~30fps
 
+  // The wave animates on its own; the debug visualiser also needs the clock
+  // running so its rows can fade.
+  bool get _animating => widget.waveParams.animates || widget.debugRowFade;
+
   @override
   void initState() {
     super.initState();
@@ -453,13 +462,15 @@ class _GeometricTextureState extends State<GeometricTexture> {
       _shader = widget.program?.fragmentShader();
       setState(() {});
     }
-    if (oldWidget.waveParams.animates != widget.waveParams.animates) {
+    final wasAnimating =
+        oldWidget.waveParams.animates || oldWidget.debugRowFade;
+    if (wasAnimating != _animating) {
       _syncAnimation();
     }
   }
 
   void _syncAnimation() {
-    if (widget.waveParams.animates) {
+    if (_animating) {
       if (_timer != null) return;
       _clock.start();
       _timer = Timer.periodic(_frameInterval, (_) {
@@ -497,7 +508,7 @@ class _GeometricTextureState extends State<GeometricTexture> {
     return RepaintBoundary(
       child: CustomPaint(
         isComplex: true,
-        willChange: widget.waveParams.animates,
+        willChange: _animating,
         painter: GeometricTexturePainter(
           shader: shader,
           baseColor: widget.baseColor,
@@ -505,6 +516,7 @@ class _GeometricTextureState extends State<GeometricTexture> {
           params: widget.params,
           waveParams: widget.waveParams,
           time: _elapsed.inMicroseconds / 1e6,
+          debugRowFade: widget.debugRowFade,
         ),
       ),
     );
@@ -519,6 +531,7 @@ class GeometricTexturePainter extends CustomPainter {
     required this.params,
     this.waveParams = GeometricWaveParams.defaults,
     this.time = 0.0,
+    this.debugRowFade = false,
   });
 
   final FragmentShader shader;
@@ -527,6 +540,10 @@ class GeometricTexturePainter extends CustomPainter {
   final GeometricTextureParams params;
   final GeometricWaveParams waveParams;
   final double time;
+
+  /// Dev-only: replace the render with clean rows fading between dark and
+  /// regular so the shade transition curve can be inspected in isolation.
+  final bool debugRowFade;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -568,6 +585,7 @@ class GeometricTexturePainter extends CustomPainter {
     // 39    float u_mass_spring
     // 40    float u_scatter_mode
     // 41    float u_scatter_lit_amount
+    // 42    float u_debug_row_fade
     try {
       shader.setFloat(0, size.width);
       shader.setFloat(1, size.height);
@@ -616,6 +634,7 @@ class GeometricTexturePainter extends CustomPainter {
       shader.setFloat(39, waveParams.massSpring);
       shader.setFloat(40, waveParams.scatterMode ? 1.0 : 0.0);
       shader.setFloat(41, waveParams.scatterLitAmount);
+      shader.setFloat(42, debugRowFade ? 1.0 : 0.0);
 
       final paint = Paint()..shader = shader;
       canvas.drawRect(Offset.zero & size, paint);
@@ -636,6 +655,7 @@ class GeometricTexturePainter extends CustomPainter {
         oldDelegate.accentColor != accentColor ||
         oldDelegate.params != params ||
         oldDelegate.waveParams != waveParams ||
-        oldDelegate.time != time;
+        oldDelegate.time != time ||
+        oldDelegate.debugRowFade != debugRowFade;
   }
 }

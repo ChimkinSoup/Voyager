@@ -16,7 +16,7 @@ void main() {
   // so a shader whose uniform count has drifted from the painter's setFloat
   // calls does not throw — the background just silently stops rendering. This
   // pins the count so that drift fails here instead.
-  test('geometric texture shader exposes exactly 42 float uniforms', () async {
+  test('geometric texture shader exposes exactly 43 float uniforms', () async {
     final program = await FragmentProgram.fromAsset(
       'shaders/geometric_texture.frag',
     );
@@ -41,12 +41,13 @@ void main() {
     //   35    u_pop_brightness_variance 39    u_mass_spring
     //   36    u_tilt_amount             40    u_scatter_mode
     //   37    u_tilt_shading            41    u_scatter_lit_amount
-    for (var i = 0; i <= 41; i++) {
+    //                                   42    u_debug_row_fade
+    for (var i = 0; i <= 42; i++) {
       shader.setFloat(i, 0.5);
     }
 
     expect(
-      () => shader.setFloat(42, 0.5),
+      () => shader.setFloat(43, 0.5),
       throwsA(isA<Error>()),
       reason: 'shader declares more uniforms than the painter writes',
     );
