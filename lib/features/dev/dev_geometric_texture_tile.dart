@@ -13,12 +13,27 @@ class DevGeometricTextureSection extends ConsumerWidget {
     final panelOpen = ref.watch(devGeometricTexturePanelOpenProvider);
     final params = ref.watch(geometricTextureParamsProvider);
     final notifier = ref.read(geometricTextureParamsProvider.notifier);
+    final debugRowFade = ref.watch(geometricDebugRowFadeProvider);
 
     void update(GeometricTextureParams next) => notifier.update(next);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SwitchListTile(
+          title: const Text('Debug: row fade visualiser'),
+          subtitle: const Text(
+            'Clears the background and fades alternating rows between the '
+            'darkest triangle shade (variation floor) and the regular background '
+            'shade — the exact colours a real triangle takes. That range is only '
+            'a few 8-bit levels, so the fade is dithered to read smoothly instead '
+            'of stepping (the faint grain is the dither)',
+          ),
+          value: debugRowFade,
+          onChanged: (value) {
+            ref.read(geometricDebugRowFadeProvider.notifier).state = value;
+          },
+        ),
         SwitchListTile(
           title: const Text('Geometric texture tuning'),
           subtitle: const Text(

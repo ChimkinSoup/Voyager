@@ -640,8 +640,8 @@
     "semantic_hash": ""
   },
   "lib/domain/services/analytics_service.dart": {
-    "mtime": 1784564022.6484666,
-    "ast_hash": "68b0e7158bfb06cb13473c92b5c81fee",
+    "mtime": 1784426478.2914536,
+    "ast_hash": "bc8669338f1b960df00ec77272fae1b2",
     "semantic_hash": ""
   },
   "lib/domain/services/calendar_recurrence.dart": {
@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1784592297.2082982,
-    "ast_hash": "35071dcfa190be48cf3149c38eee7f98",
+    "mtime": 1784515419.9021828,
+    "ast_hash": "b74740faa914e0f39f20a55dd1971532",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -970,8 +970,8 @@
     "semantic_hash": ""
   },
   "lib/features/todo/todo_edit_panel.dart": {
-    "mtime": 1784595779.583625,
-    "ast_hash": "b55444b70931821e7291e55efdc0f22e",
+    "mtime": 1784077632.346645,
+    "ast_hash": "f745f38a3782fb836d66f88d28ac5e91",
     "semantic_hash": ""
   },
   "lib/features/todo/todo_list_actions.dart": {
@@ -985,8 +985,8 @@
     "semantic_hash": ""
   },
   "lib/features/todo/todo_page.dart": {
-    "mtime": 1784595969.7748775,
-    "ast_hash": "9ce1762254503abe8a2b93a544a8261c",
+    "mtime": 1784317867.861102,
+    "ast_hash": "e3fe69e7cb54a40518a607b62340fdf5",
     "semantic_hash": ""
   },
   "lib/firebase_options.dart": {
@@ -1605,8 +1605,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/context_menu.dart": {
-    "mtime": 1784593115.5218892,
-    "ast_hash": "da1f38cf2688e598ceb2010c4d5c8819",
+    "mtime": 1783808665.8216944,
+    "ast_hash": "1a865c4bbe0cc0d7b8728a65a33fff1b",
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
@@ -1640,8 +1640,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/sparkline_touch.dart": {
-    "mtime": 1784591524.247536,
-    "ast_hash": "b0c6b08bf43e335d9f6dd44e0c6a3473",
+    "mtime": 1784427549.0399315,
+    "ast_hash": "56c911b2e0bb36319a625c325a740757",
     "semantic_hash": ""
   },
   "lib/features/analytics/stat_number_format.dart": {
@@ -1745,8 +1745,8 @@
     "semantic_hash": ""
   },
   "test/sparkline_touch_test.dart": {
-    "mtime": 1784591538.375702,
-    "ast_hash": "7d5446076a21412ee5e29b2873ad4083",
+    "mtime": 1784427658.2698321,
+    "ast_hash": "a2ee83297d0b05dd733f84f429f7127c",
     "semantic_hash": ""
   },
   "test/stat_number_format_test.dart": {
@@ -1777,21 +1777,6 @@
   "docs/geometric-wave-animation.md": {
     "mtime": 1784253491.6642275,
     "ast_hash": "993b40dde2c7d92e0ccdefc3eb9f1f24",
-    "semantic_hash": ""
-  },
-  "lib/core/utils/calendar_days.dart": {
-    "mtime": 1784563861.1200716,
-    "ast_hash": "215467a7b8686c4c65610c149c6b6501",
-    "semantic_hash": ""
-  },
-  "test/calendar_days_test.dart": {
-    "mtime": 1784563983.2533076,
-    "ast_hash": "72843233fe424005ba38070c826b1ab8",
-    "semantic_hash": ""
-  },
-  "test/stat_tile_hit_test_layering_test.dart": {
-    "mtime": 1784560075.0678563,
-    "ast_hash": "ebdf5a4df6b9a1a0ab72080085eef50a",
     "semantic_hash": ""
   }
 }

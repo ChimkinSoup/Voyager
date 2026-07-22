@@ -64,6 +64,9 @@ uniform float u_mass_spring;       // 0–1: overshoot/settle on the lift
 uniform float u_scatter_mode;      // 0 = travelling wave, 1 = even scatter
 uniform float u_scatter_lit_amount; // 0–1: fraction of triangles lit at once
 
+// ── Debug ─────────────────────────────────────────────────────────────────
+uniform float u_debug_row_fade;    // 0 = off, 1 = row fade visualiser (dev only)
+
 out vec4 fragColor;
 
 // Row height for equilateral triangles with unit side length. Doubles as the
@@ -112,6 +115,33 @@ float valueNoise(vec2 p) {
     float d = hash1(i + vec2(1.0, 1.0));
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+// Slowly drifting per-triangle mode, in [0,1]: ~0 = dark, ~1 = regular.
+//
+// Each triangle has two modes — dark and regular. Every DRIFT_SECONDS it rolls a
+// fresh binary target (a coin flip on a hash of the seed and the epoch index)
+// and eases toward it over the first TRANSITION fraction of the epoch, then
+// holds. When two consecutive targets match, the triangle simply stays put; when
+// they differ it crosses slowly, so a dark<->regular shift is always a gradual
+// glide, never a snap. This is what keeps no triangle permanently dark while
+// making every mode change slow.
+//
+// Consecutive epochs share their boundary value — the target of epoch k is the
+// starting value of epoch k+1 — so the walk is continuous with no jumps. A
+// per-triangle phase offset desyncs the grid so it never shifts in unison.
+//
+// Driven by u_time, which is frozen while the background isn't animating, so a
+// static background keeps a static mode.
+float driftingMode(vec2 seed) {
+    const float DRIFT_SECONDS = 18.0;
+    const float TRANSITION = 0.35; // fraction of an epoch spent crossing modes
+    float phase = u_time / DRIFT_SECONDS + hash1(seed + 5.0);
+    float k = floor(phase);
+    float f = fract(phase);
+    float prev = step(0.5, hash1(seed + vec2(k, k * 1.7) + 0.5));
+    float curr = step(0.5, hash1(seed + vec2(k + 1.0, (k + 1.0) * 1.7) + 0.5));
+    return mix(prev, curr, smoothstep(0.0, TRANSITION, f));
 }
 
 // Oblique (triangular lattice) coordinates → aspect-corrected UV.
@@ -325,6 +355,26 @@ float lightOf(Wave w) {
     return pulseAt(w.phase, kRise, kDecay) * w.gate * w.brightVar;
 }
 
+// ── Shade lead-in ─────────────────────────────────────────────────────────
+// A dark triangle should not have its darkness overridden the instant its flash
+// fires — that snap is the artifact. This is a much wider, gentler envelope on
+// the *same* flash than the sharp light pulse above: a triangle eases its base
+// shade up to the normal (undarkened) shade over a gradual lead-in as its flash
+// approaches, then eases back to its drifting shade afterward.
+//
+// The half-widths are absolute phase fractions, not multiples of the flash
+// hold, so the lead-in stays gradual regardless of how brief the flash itself
+// is. The approach is wider than the settle, so the rise to normal is slow (the
+// part that was snapping) while the return to the drift shade is a touch
+// quicker. Multiplied by the same fire/eligibility gate as the flash, so only
+// triangles that actually flash lift, and only around the moment they do —
+// pulseAt is exactly 0 at phase 0.5 where the gate can re-roll, so no seam.
+float shadeLiftOf(Wave w) {
+    float kApproach = pulsePower(0.20, 0.05); // wide → slow dark→normal lead-in
+    float kSettle   = pulsePower(0.12, 0.05); // narrower → quicker return after
+    return pulseAt(w.phase, kApproach, kSettle) * w.gate;
+}
+
 // ── Matter ──────────────────────────────────────────────────────────────
 // Mass is not light. It has inertia, so it cannot snap: the lift trails the
 // flash by u_mass_lag, eases in over twice the light's attack, overshoots its
@@ -416,14 +466,73 @@ void main() {
     vec2 pos = uvA * u_scale;
 
     Tri  self  = resolveTriangle(pos);
+
+    // ── Debug: row fade visualiser ────────────────────────────────────────
+    // Dev-only mode that clears the background and paints clean horizontal rows,
+    // each one cycling dark -> regular -> dark so the exact transition is visible
+    // in isolation — no gradient, flashes or shadows. It dwells on each shade
+    // (HOLD) and ramps linearly between them, so the shade changes at a constant
+    // rate across the whole transition rather than easing in and out at the
+    // ends. Adjacent rows sit half a cycle apart, so one holds
+    // dark while its neighbour holds regular. Rows are the lattice t-bands, so
+    // both the up and down triangle in a band share one shade.
+    if (u_debug_row_fade > 0.5) {
+        float rowParity = mod(floor(self.seed.y), 2.0);
+        const float FADE  = 3.0; // seconds to fade between the two shades
+        const float HOLD  = 1.5; // seconds dwelling on each shade
+        const float CYCLE = 2.0 * (FADE + HOLD);
+        float t = mod(u_time + rowParity * (FADE + HOLD), CYCLE);
+        float mode;
+        if (t < HOLD) {
+            mode = 0.0;                                     // hold dark
+        } else if (t < HOLD + FADE) {
+            mode = (t - HOLD) / FADE;                       // dark -> regular (linear)
+        } else if (t < 2.0 * HOLD + FADE) {
+            mode = 1.0;                                     // hold regular
+        } else {
+            mode = 1.0 - (t - 2.0 * HOLD - FADE) / FADE;    // regular -> dark (linear)
+        }
+        // Render the two shades exactly as the real grid does, so the visualiser
+        // stays faithful: `mode` drives `variation` between the dark floor and
+        // the regular shade, and the same 0.08 ambient factor maps it to screen.
+        // A dark row shows the darkest shade a real triangle ever takes
+        // (u_variation_floor); a regular row shows the default background shade
+        // (variation 1.0). No focal burst here, so no accent wash.
+        //
+        // That real range spans only ~4 8-bit levels, so the fade would quantize
+        // into visible steps ("clicks"). A triangular-PDF ordered dither of ±1
+        // LSB, keyed on the fragment position, scatters the quantization across
+        // neighbouring pixels so the smooth `mode` ramp reads as a smooth fade —
+        // at the cost of very faint static grain. The curve being inspected still
+        // lives entirely in `mode`; the dither only affects how it is displayed.
+        float variation = mix(u_variation_floor, 1.0, mode);
+        float intensity = variation * 0.08;
+        vec3  shade  = mix(u_base_color.rgb, u_accent_color.rgb, intensity);
+        vec2  dseed  = FlutterFragCoord().xy;
+        float dither = (hash1(dseed) + hash1(dseed + 17.3) - 1.0) * (1.0 / 255.0);
+        fragColor = vec4(shade + dither, 1.0);
+        return;
+    }
+
     Wave wave  = waveFor(self.seed, self.centerA);
     float light = lightOf(wave);
     float mass  = massOf(wave);
 
-    float triHash = hash1(self.seed);
-
-    // Random per-triangle shade in [u_variation_floor, 1.0]
-    float variation = mix(u_variation_floor, 1.0, triHash);
+    // Each triangle sits in one of two modes — dark (u_variation_floor) or
+    // regular (1.0) — that slowly drift between each other over time (see
+    // driftingMode), so no triangle stays permanently dark and every shift is a
+    // gradual glide. A small static per-triangle jitter keeps a little of the
+    // speckle texture within each mode rather than one flat value.
+    float mode   = driftingMode(self.seed);
+    float jitter = (hash1(self.seed + 2.0) - 0.5) * 0.08;
+    float variationBase = clamp(mix(u_variation_floor, 1.0, mode) + jitter,
+                                u_variation_floor, 1.0);
+    // Before a dark triangle flashes it must first ease all the way up to the
+    // regular shade; shadeLiftOf is that gradual lead-in (and eases back after).
+    // At the flash itself shadeLiftOf is 1, so the triangle is fully regular no
+    // matter which mode it was in. Everything shade-dependent below (ambient,
+    // burst) reads this lifted value.
+    float variation = mix(variationBase, 1.0, shadeLiftOf(wave));
 
     // ── Radial gradient ───────────────────────────────────────────────────
     float dist     = distance(uvA, focalA);
@@ -488,6 +597,9 @@ void main() {
     float occlusion = clamp(h1 - heightHere, 0.0, 1.0);
 
     // ── Final color ───────────────────────────────────────────────────────
+    // The flash itself is a full, uniform pop: by the time it fires the triangle
+    // has already eased up to the normal shade (see shadeLiftOf), so there is no
+    // residual darkness left for the flash to "catch up" over.
     float burstBoost = light * u_pop_brightness * (1.0 + tiltShade);
     float totalIntensity = clamp(ambient + burst + burstBoost, 0.0, 1.0);
     vec3  color = mix(u_base_color.rgb, u_accent_color.rgb, totalIntensity);
@@ -495,23 +607,17 @@ void main() {
     // flashing all the way to white.
     color = mix(color, vec3(1.0), burstBoost * 0.12);
 
-    // "3D pop": temporarily scale each triangle's footprint within its cell
-    // by shrinking the hairline gap between triangles, so popped triangles
-    // visually grow to fill more of their cell as they lift off the grid.
-    // Driven by mass, not light — this is the tile moving, so it lags the flash
-    // and carries the spring's overshoot past u_pop_scale.
-    const float BASE_GROUT = 0.018;
-    const float GROUT_SOFTNESS = 0.012;
+    // Triangles tile edge-to-edge with no grout: adjacent faces meet exactly at
+    // the lattice boundary where each triangle's depth falls to 0, so there is
+    // no hairline gap between them at any pop state.
+    //
+    // u_pop_scale (the old "grow to fill the cell" factor) is intentionally left
+    // unreferenced here. It stays a live, DB-backed parameter and its uniform
+    // slot is still written by GeometricTexturePainter, so the layout Dart
+    // addresses by index is unchanged — it simply no longer drives a seam.
 
-    float growFactor = mix(1.0, max(u_pop_scale, 1.0), mass);
-    float margin     = BASE_GROUT / growFactor;
-    float triFactor  = smoothstep(margin, margin + GROUT_SOFTNESS, self.depth);
-    float seam       = (1.0 - triFactor) * 0.55;
-    color = mix(color, u_base_color.rgb, seam);
-
-    // Shadow goes on last, after the grout, so it darkens the gaps between
-    // triangles too — that gap is exactly where a lifted tile's shadow should
-    // read most clearly.
+    // Shadow darkens the low points between triangles — exactly where a lifted
+    // tile's shadow should read most clearly.
     color *= 1.0 - clamp(u_shadow_strength, 0.0, 1.0) * occlusion;
 
     fragColor = vec4(color, 1.0);
