@@ -23,11 +23,11 @@ class DevGeometricTextureSection extends ConsumerWidget {
         SwitchListTile(
           title: const Text('Debug: row fade visualiser'),
           subtitle: const Text(
-            'Clears the background and fades alternating rows between the '
-            'darkest triangle shade (variation floor) and the regular background '
-            'shade — the exact colours a real triangle takes. That range is only '
-            'a few 8-bit levels, so the fade is dithered to read smoothly instead '
-            'of stepping (the faint grain is the dither)',
+            'Clears the background and fades alternating rows on a neutral '
+            'dark-grey → light-grey ramp so the shade transition curve is '
+            'unmistakably smooth. This does not resemble the real triangle '
+            'colours (those differ by only a few 8-bit levels) — it exists '
+            'purely to read the curve shape',
           ),
           value: debugRowFade,
           onChanged: (value) {

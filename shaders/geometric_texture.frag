@@ -492,25 +492,14 @@ void main() {
         } else {
             mode = 1.0 - (t - 2.0 * HOLD - FADE) / FADE;    // regular -> dark (linear)
         }
-        // Render the two shades exactly as the real grid does, so the visualiser
-        // stays faithful: `mode` drives `variation` between the dark floor and
-        // the regular shade, and the same 0.08 ambient factor maps it to screen.
-        // A dark row shows the darkest shade a real triangle ever takes
-        // (u_variation_floor); a regular row shows the default background shade
-        // (variation 1.0). No focal burst here, so no accent wash.
-        //
-        // That real range spans only ~4 8-bit levels, so the fade would quantize
-        // into visible steps ("clicks"). A triangular-PDF ordered dither of ±1
-        // LSB, keyed on the fragment position, scatters the quantization across
-        // neighbouring pixels so the smooth `mode` ramp reads as a smooth fade —
-        // at the cost of very faint static grain. The curve being inspected still
-        // lives entirely in `mode`; the dither only affects how it is displayed.
-        float variation = mix(u_variation_floor, 1.0, mode);
-        float intensity = variation * 0.08;
-        vec3  shade  = mix(u_base_color.rgb, u_accent_color.rgb, intensity);
-        vec2  dseed  = FlutterFragCoord().xy;
-        float dither = (hash1(dseed) + hash1(dseed + 17.3) - 1.0) * (1.0 / 255.0);
-        fragColor = vec4(shade + dither, 1.0);
+        // Neutral grey ramp: drop the real palette entirely and read the
+        // transition curve directly. `mode` maps across a wide dark-grey →
+        // light-grey band, so the fade spans ~190 8-bit levels and is
+        // unmistakably smooth — the clearest possible view of the curve's shape.
+        // This deliberately does NOT resemble the real triangle colours (those
+        // differ by only ~4 levels); it exists purely to inspect the curve.
+        float g = mix(0.12, 0.85, mode);
+        fragColor = vec4(vec3(g), 1.0);
         return;
     }
 
