@@ -121,11 +121,12 @@ float valueNoise(vec2 p) {
 //
 // Each triangle has two modes — dark and regular. Every DRIFT_SECONDS it rolls a
 // fresh binary target (a coin flip on a hash of the seed and the epoch index)
-// and eases toward it over the first TRANSITION fraction of the epoch, then
-// holds. When two consecutive targets match, the triangle simply stays put; when
-// they differ it crosses slowly, so a dark<->regular shift is always a gradual
-// glide, never a snap. This is what keeps no triangle permanently dark while
-// making every mode change slow.
+// and ramps linearly toward it over the first TRANSITION fraction of the epoch,
+// then holds — a constant-velocity crossing that matches the debug row-fade
+// visualiser. When two consecutive targets match, the triangle simply stays put;
+// when they differ it crosses slowly, so a dark<->regular shift is always a
+// gradual glide, never a snap. This is what keeps no triangle permanently dark
+// while making every mode change slow.
 //
 // Consecutive epochs share their boundary value — the target of epoch k is the
 // starting value of epoch k+1 — so the walk is continuous with no jumps. A
@@ -141,7 +142,7 @@ float driftingMode(vec2 seed) {
     float f = fract(phase);
     float prev = step(0.5, hash1(seed + vec2(k, k * 1.7) + 0.5));
     float curr = step(0.5, hash1(seed + vec2(k + 1.0, (k + 1.0) * 1.7) + 0.5));
-    return mix(prev, curr, smoothstep(0.0, TRANSITION, f));
+    return mix(prev, curr, clamp(f / TRANSITION, 0.0, 1.0));
 }
 
 // Oblique (triangular lattice) coordinates → aspect-corrected UV.
@@ -620,5 +621,12 @@ void main() {
     // tile's shadow should read most clearly.
     color *= 1.0 - clamp(u_shadow_strength, 0.0, 1.0) * occlusion;
 
-    fragColor = vec4(color, 1.0);
+    // Match the debug row-fade view: the drift between the dark and regular
+    // shades spans only a few 8-bit levels, so without dither it bands into
+    // visible steps as a triangle drifts. The same triangular-PDF ±1 LSB dither
+    // the visualiser uses scatters the quantization so the whole background —
+    // drift, accent gradient and shadows alike — renders smoothly.
+    vec2  dseed  = FlutterFragCoord().xy;
+    float dither = (hash1(dseed) + hash1(dseed + 17.3) - 1.0) * (1.0 / 255.0);
+    fragColor = vec4(color + dither, 1.0);
 }
