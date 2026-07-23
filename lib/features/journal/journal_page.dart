@@ -44,6 +44,7 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
+import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/features/journal/journal_list_actions.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
@@ -1451,123 +1452,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   void _showEntryStatistics(JournalEntry entry) {
-    final words = ref.read(analyticsServiceProvider).countWords(entry.body);
-    final chars = entry.body.length;
-    final readingTimeMin = (words / 200).ceil();
-    final sentences = entry.body.trim().isEmpty
-        ? 0
-        : entry.body.split(RegExp(r'[.!?]+(?:\s+|$)')).where((s) => s.trim().isNotEmpty).length;
-    final paragraphs = entry.body.trim().isEmpty
-        ? 0
-        : entry.body.split(RegExp(r'\n\s*\n')).where((p) => p.trim().isNotEmpty).length;
-
-    final formattedDate = DateFormat.yMMMMd().format(entry.entryDate.toLocal());
-    final formattedTime = formatTime12Hour(entry.entryDate.toLocal());
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(PhosphorIconsRegular.chartBar, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              const Text('Entry Statistics'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.title.isEmpty ? 'Untitled Entry' : entry.title,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$formattedDate at $formattedTime',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildStatRow(ctx, 'Word count', '$words'),
-              _buildStatRow(ctx, 'Character count', '$chars'),
-              _buildStatRow(ctx, 'Sentences', '$sentences'),
-              _buildStatRow(ctx, 'Paragraphs', '$paragraphs'),
-              _buildStatRow(ctx, 'Reading time', '$readingTimeMin min'),
-              if (entry.mood != null)
-                _buildStatRow(ctx, 'Mood value', '${entry.mood}/10'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
+    showJournalEntryStatisticsDialog(context, ref, entry);
   }
 
   Future<void> _showChangeJournalDialog(
     JournalEntry entry,
     List<Journal> journals,
   ) async {
-    final targetJournalId = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Move to Journal'),
-          content: SizedBox(
-            width: 300,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: journals.length,
-              itemBuilder: (context, index) {
-                final journal = journals[index];
-                return ListTile(
-                  leading: JournalBookmarkFlag(
-                    colorValue: _journalFlagColor(journal),
-                    size: 16,
-                  ),
-                  title: Text(journal.name),
-                  trailing: journal.id == entry.journalId
-                      ? const Icon(Icons.check)
-                      : null,
-                  onTap: () => Navigator.of(context).pop(journal.id),
-                );
-              },
-            ),
-          ),
-        );
-      },
+    final targetJournalId = await showMoveToJournalDialog(
+      context,
+      journals: journals,
+      currentJournalId: entry.journalId,
     );
     if (targetJournalId != null && mounted) {
       await _moveEntryItemToJournal(entry, targetJournalId);
     }
-  }
-
-  Widget _buildStatRow(BuildContext context, String label, String value) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: theme.textTheme.bodyMedium),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _editQuote() async {

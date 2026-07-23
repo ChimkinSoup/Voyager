@@ -496,6 +496,14 @@ class RemoteSyncService {
     if (_charOpRegistry.session(collection, documentId) != null) return;
 
     final ops = await _listRemoteCharOps(documentId);
+    // The caller can keep editing while the remote op-log is being fetched, in
+    // which case recordTextChange has already opened a session seeded from the
+    // on-screen text. Loading the (now outdated) remote chain over the top
+    // would discard those pending ops and leave the session diffing against a
+    // stale baseline, so leave the live session alone — same as the fast-path
+    // bail-out above.
+    if (_charOpRegistry.session(collection, documentId) != null) return;
+
     if (ops.isNotEmpty) {
       _charOpRegistry.loadSession(
         collection: collection,

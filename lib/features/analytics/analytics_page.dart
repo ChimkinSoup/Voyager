@@ -14,6 +14,8 @@ import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -464,10 +466,16 @@ class _StatTile extends StatefulWidget {
     required this.decoration,
     required this.builder,
     this.dragIndex,
+    this.menuItems = const [],
   });
 
   final StatisticTracker tracker;
   final AnalyticsService analytics;
+
+  /// Right-click menu items shown on the tile's chrome (the same press-and-hold
+  /// drag handle region — never the sparkline or heatmap squares). Empty to
+  /// disable the context menu (e.g. built-in default trackers).
+  final List<ContextMenuItem> menuItems;
 
   /// The tile's fill and border for the current hover state. Painted behind
   /// the gesture layer — see the note on hit testing above.
@@ -501,6 +509,15 @@ class _StatTileState extends State<_StatTile> {
     if (dragIndex != null) {
       tapTarget = _QuickDelayedDragStartListener(
         index: dragIndex,
+        child: tapTarget,
+      );
+    }
+    // Right-click menu lives on this same behind-the-content chrome layer, so it
+    // fires only where a drag/tap does — never over the sparkline or squares,
+    // which claim the pointer above and so never reach here.
+    if (widget.menuItems.isNotEmpty) {
+      tapTarget = ContextMenuRegion(
+        items: widget.menuItems,
         child: tapTarget,
       );
     }
@@ -671,6 +688,11 @@ class _SparklineRow extends ConsumerWidget {
       child: _StatTile(
         tracker: tracker,
         analytics: analytics,
+        menuItems: _statTileMenuItems(
+          context: context,
+          ref: ref,
+          tracker: tracker,
+        ),
         // Around the sparkline: short press opens the detail popup, hold drags
         // the row. On the sparkline itself both gestures belong to the chart
         // and mean "edit this period".
@@ -1415,6 +1437,11 @@ class _HeatmapRow extends ConsumerWidget {
         return _StatTile(
           tracker: tracker,
           analytics: analytics,
+          menuItems: _statTileMenuItems(
+            context: context,
+            ref: ref,
+            tracker: tracker,
+          ),
           dragIndex: dragIndex,
           // The tile has no fill of its own at rest — it only lights up on
           // hover, so the hitbox reads as spanning the whole bar out to the
@@ -3400,6 +3427,75 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
 /// Opens [_StatisticDetailPopup] for [tracker] — the large overlay that
 /// replaced the old Calendar view mode. Dismissed by tapping the scrim, the
 /// close button, or Escape.
+// ---------------------------------------------------------------------------
+// Right-click context menu for stat tiles
+// ---------------------------------------------------------------------------
+
+/// Builds the right-click menu for a stat tile: edit the tracker, view its
+/// common statistics, or delete it. Empty for built-in default trackers, which
+/// are derived at display time and can't be edited or deleted.
+List<ContextMenuItem> _statTileMenuItems({
+  required BuildContext context,
+  required WidgetRef ref,
+  required StatisticTracker tracker,
+}) {
+  if (tracker.isDefault) return const [];
+  return [
+    ContextMenuItem(
+      label: 'Edit',
+      icon: PhosphorIconsRegular.pencilSimple,
+      onTap: () => unawaited(_editTracker(context, ref, tracker)),
+    ),
+    ContextMenuItem(
+      label: 'Statistics',
+      icon: PhosphorIconsRegular.chartBar,
+      onTap: () => _showTrackerStatistics(context, tracker),
+    ),
+    ContextMenuItem(
+      label: 'Delete',
+      icon: PhosphorIconsRegular.trash,
+      isDestructive: true,
+      onTap: () => unawaited(_deleteTracker(context, ref, tracker)),
+    ),
+  ];
+}
+
+Future<void> _editTracker(
+  BuildContext context,
+  WidgetRef ref,
+  StatisticTracker tracker,
+) async {
+  final updated = await showDialog<StatisticTracker>(
+    context: context,
+    builder: (_) => _TrackerDialog(tracker: tracker),
+  );
+  if (updated == null) return;
+  await ref.read(trackerRepositoryProvider).upsertTracker(updated);
+  ref.invalidate(trackersProvider);
+}
+
+Future<void> _deleteTracker(
+  BuildContext context,
+  WidgetRef ref,
+  StatisticTracker tracker,
+) async {
+  final confirmed = await showConfirmDialog(
+    context,
+    title: 'Delete statistic?',
+    message: '"${tracker.name}" and its logged values will be moved to trash.',
+  );
+  if (!confirmed) return;
+  await ref.read(trackerRepositoryProvider).softDeleteTracker(tracker.id);
+  ref.invalidate(trackersProvider);
+}
+
+void _showTrackerStatistics(BuildContext context, StatisticTracker tracker) {
+  showDialog<void>(
+    context: context,
+    builder: (_) => _TrackerStatisticsDialog(tracker: tracker),
+  );
+}
+
 Future<void> _showStatisticDetail({
   required BuildContext context,
   required StatisticTracker tracker,
@@ -3412,6 +3508,187 @@ Future<void> _showStatisticDetail({
     builder: (_) =>
         _StatisticDetailPopup(tracker: tracker, analytics: analytics),
   );
+}
+
+/// Advances [date] by one [cadence] period (used for streak detection).
+DateTime _nextTrackerPeriod(DateTime date, TrackerCadence cadence) {
+  return switch (cadence) {
+    TrackerCadence.daily => DateTime(date.year, date.month, date.day + 1),
+    TrackerCadence.weekly => DateTime(date.year, date.month, date.day + 7),
+    TrackerCadence.monthly => DateTime(date.year, date.month + 1, date.day),
+    TrackerCadence.yearly => DateTime(date.year + 1, date.month, date.day),
+  };
+}
+
+/// Singular unit noun for a cadence, e.g. "day"/"week"/"month"/"year".
+String _cadenceUnit(TrackerCadence cadence) {
+  return switch (cadence) {
+    TrackerCadence.daily => 'day',
+    TrackerCadence.weekly => 'week',
+    TrackerCadence.monthly => 'month',
+    TrackerCadence.yearly => 'year',
+  };
+}
+
+/// Summary "common statistics" for a tracker — entries logged, streaks and
+/// value aggregates — computed from its recorded values.
+class _TrackerStatisticsDialog extends ConsumerWidget {
+  const _TrackerStatisticsDialog({required this.tracker});
+
+  final StatisticTracker tracker;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final color = Color(tracker.colorValue);
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          CircleAvatar(radius: 6, backgroundColor: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              tracker.name.isEmpty ? 'Statistic' : tracker.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 340,
+        child: valuesAsync.when(
+          data: (values) => _buildStats(context, values),
+          loading: () => const SizedBox(
+            height: 60,
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          error: (e, _) => Text('$e', style: theme.textTheme.bodySmall),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStats(BuildContext context, List<TrackerValue> values) {
+    final theme = Theme.of(context);
+    if (values.isEmpty) {
+      return Text(
+        'No values logged yet.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    // Unique recorded periods (date-only), oldest first — the basis for both
+    // the "entries logged" count and streak detection.
+    final periods = (values
+            .map((v) => DateTime(
+                  v.periodStart.year,
+                  v.periodStart.month,
+                  v.periodStart.day,
+                ))
+            .toSet()
+            .toList())
+      ..sort();
+
+    var longestStreak = 1;
+    var run = 1;
+    for (var i = 1; i < periods.length; i++) {
+      final expected = _nextTrackerPeriod(periods[i - 1], tracker.cadence);
+      if (periods[i] == expected) {
+        run++;
+      } else {
+        run = 1;
+      }
+      if (run > longestStreak) longestStreak = run;
+    }
+    // Current streak: the unbroken run ending at the most recent recorded
+    // period (however long ago that period was).
+    final currentStreak = run;
+
+    final unit = _cadenceUnit(tracker.cadence);
+    String streakLabel(int n) => '$n ${n == 1 ? unit : '${unit}s'}';
+
+    final firstDate = DateFormat.yMMMd().format(periods.first);
+    final lastDate = DateFormat.yMMMd().format(periods.last);
+
+    final rows = <Widget>[
+      _row(context, 'Entries logged', compactNumberLabel(values.length)),
+      _row(context, 'Current streak', streakLabel(currentStreak)),
+      _row(context, 'Longest streak', streakLabel(longestStreak)),
+    ];
+
+    switch (tracker.type) {
+      case TrackerType.integer:
+        final ints = values
+            .map((v) => v.intValue)
+            .whereType<int>()
+            .toList();
+        if (ints.isNotEmpty) {
+          final total = ints.reduce((a, b) => a + b);
+          final highest = ints.reduce((a, b) => a > b ? a : b);
+          final average = total / ints.length;
+          rows.addAll([
+            _row(context, 'Total', compactNumberLabel(total)),
+            _row(context, 'Average', average.toStringAsFixed(1)),
+            _row(context, 'Highest', compactNumberLabel(highest)),
+          ]);
+        }
+      case TrackerType.boolean:
+        final completed =
+            values.where((v) => v.boolValue == true).length;
+        rows.add(_row(context, 'Times completed',
+            compactNumberLabel(completed)));
+      case TrackerType.enumType:
+        break;
+    }
+
+    rows.addAll([
+      _row(context, 'First logged', firstDate),
+      _row(context, 'Last logged', lastDate),
+    ]);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
+  }
+
+  Widget _row(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: theme.textTheme.bodyMedium),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StatisticDetailPopup extends ConsumerWidget {

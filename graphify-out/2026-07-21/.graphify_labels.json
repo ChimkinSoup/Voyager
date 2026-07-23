@@ -413,11 +413,5 @@
   "411": "weatherLocationUpdatedAt",
   "412": "weatherLon",
   "413": "weatherTempC",
-  "414": "weekStartsOnMonday",
-  "415": "pending_flush_registry.dart",
-  "416": "Intent",
-  "417": "package:voyager/core/sync/text_delta_injector.dart",
-  "418": "stat_number_format_test.dart",
-  "419": "Iterable",
-  "420": "_PalettePickDialog"
+  "414": "weekStartsOnMonday"
 }

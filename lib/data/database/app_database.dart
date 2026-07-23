@@ -1105,8 +1105,16 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
+    // Resolve the path on this isolate — path_provider needs the platform
+    // channel, which only exists here.
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'voyager.sqlite'));
-    return NativeDatabase(file);
+    // Run sqlite on its own isolate. NativeDatabase's FFI calls are
+    // synchronous under their Futures, so on the UI isolate every read and
+    // write blocks whatever frame it lands in — a task completion, for
+    // instance, fires several writes plus a re-read of every list right while
+    // the row is animating. In the background the UI isolate only pays for the
+    // message hop.
+    return NativeDatabase.createInBackground(file);
   });
 }
