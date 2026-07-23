@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' show max;
 import 'dart:ui' show lerpDouble;
 
@@ -9,6 +10,9 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
@@ -545,6 +549,111 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     await ref.read(calendarRepositoryProvider).upsertEvent(saved);
     ref.invalidate(calendarEventsProvider);
     if (mounted) _resetSidebar();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Right-click context menu for calendar entries (events + todos)
+  // ---------------------------------------------------------------------------
+
+  /// Builds the right-click menu shown on an event or todo in the week/month
+  /// views. Events can change/reset colour and delete; todos (which take their
+  /// colour from their parent list and have no per-task colour) only delete.
+  List<ContextMenuItem> _buildEntryMenu(CalendarDayEntry entry) {
+    if (entry.isTodo) {
+      final marker = entry.todo!;
+      return [
+        ContextMenuItem(
+          label: 'Delete',
+          icon: PhosphorIconsRegular.trash,
+          isDestructive: true,
+          onTap: () => unawaited(_deleteTodoTask(marker)),
+        ),
+      ];
+    }
+    final event = entry.event!;
+    return [
+      ContextMenuItem(
+        label: 'Change color',
+        icon: PhosphorIconsRegular.palette,
+        onTap: () => unawaited(_changeEventColor(event)),
+      ),
+      ContextMenuItem(
+        label: 'Default color',
+        icon: PhosphorIconsRegular.arrowCounterClockwise,
+        onTap: () => unawaited(_resetEventColorToDefault(event)),
+      ),
+      ContextMenuItem(
+        label: 'Delete',
+        icon: PhosphorIconsRegular.trash,
+        isDestructive: true,
+        onTap: () => unawaited(_deleteEvent(event)),
+      ),
+    ];
+  }
+
+  /// The colour an event reverts to on "Default color": its calendar's colour,
+  /// falling back to the accent colour when that calendar has none.
+  int _defaultColorForCalendar(String calendarId) {
+    final calendars = ref.read(calendarsProvider).valueOrNull ?? const [];
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final calendar = calendars.where((c) => c.id == calendarId).firstOrNull;
+    return calendar?.colorValue ?? settings?.accentColor ?? 0xFF7C9EFF;
+  }
+
+  Future<void> _persistEventColor(CalendarEvent event, int colorValue) async {
+    if (event.colorValue == colorValue) return;
+    final updated = event.copyWith(colorValue: colorValue);
+    await ref.read(calendarRepositoryProvider).upsertEvent(updated);
+    ref.invalidate(calendarEventsProvider);
+  }
+
+  Future<void> _changeEventColor(CalendarEvent event) async {
+    final palette = ref.read(colorPaletteProvider);
+    final picked = await pickColorFromPalette(
+      context,
+      palette: palette,
+      current: event.colorValue,
+      title: 'Change color',
+    );
+    if (picked == null || !mounted) return;
+    await _persistEventColor(event, picked);
+  }
+
+  Future<void> _resetEventColorToDefault(CalendarEvent event) async {
+    await _persistEventColor(event, _defaultColorForCalendar(event.calendarId));
+  }
+
+  Future<void> _deleteEvent(CalendarEvent event) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete event?',
+      message: event.title.trim().isEmpty
+          ? 'This event will be moved to trash.'
+          : '"${event.title}" will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+    await ref.read(calendarRepositoryProvider).softDeleteEvent(event.id);
+    ref.invalidate(calendarEventsProvider);
+  }
+
+  Future<void> _deleteTodoTask(CalendarTodoMarker marker) async {
+    final title = marker.title?.trim();
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete task?',
+      message: (title == null || title.isEmpty)
+          ? 'This task will be moved to trash.'
+          : '"$title" will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+    final tasks = await ref.read(allTodoTasksProvider.future);
+    final match = tasks.where((t) => t.id == marker.taskId).firstOrNull;
+    if (match == null || !mounted) return;
+    final deleted = match.copyWith(deletedAt: utcNow());
+    await ref.read(todoRepositoryProvider).upsertTask(deleted);
+    await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    ref.invalidate(calendarTodoMarkersProvider);
+    ref.invalidate(allTodoTasksProvider);
   }
 
   Future<void> _openEditor({
@@ -1720,6 +1829,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       onTodoTap: _openTodoSidebar,
       onWeekSlotTap: _openWeekSlotSidebar,
       onEntryTap: _handleEntryTap,
+      entryMenuBuilder: mode == CalendarViewMode.year ? null : _buildEntryMenu,
       editingEventId: editingEventId,
       hiddenMonth: hiddenMonth,
       hiddenWeekRow: hiddenWeekRow,

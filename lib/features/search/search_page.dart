@@ -4,8 +4,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
+import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -47,11 +52,65 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   final Map<String, JournalEntry> _localUpdates = {};
 
+  /// Entries deleted from the search results this session, hidden immediately
+  /// so the list doesn't wait for the provider to refresh.
+  final Set<String> _deletedIds = {};
+
   @override
   void dispose() {
     _queryController.dispose();
     _queryFocusNode.dispose();
     super.dispose();
+  }
+
+  void _invalidateEntryCaches() {
+    ref.invalidate(journalEntriesProvider);
+    ref.invalidate(journalListEntriesProvider);
+    ref.invalidate(journalEntryCountsProvider);
+  }
+
+  Future<void> _deleteEntry(JournalEntry entry) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete entry?',
+      message: 'This entry will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+    await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
+    ref
+        .read(remoteSyncServiceProvider)
+        .pushJournalEntryNow(entry.copyWith(deletedAt: utcNow()));
+    if (!mounted) return;
+    setState(() {
+      _deletedIds.add(entry.id);
+      _localUpdates.remove(entry.id);
+    });
+    _invalidateEntryCaches();
+  }
+
+  Future<void> _changeEntryJournal(
+    JournalEntry entry,
+    List<Journal> journals,
+  ) async {
+    final targetJournalId = await showMoveToJournalDialog(
+      context,
+      journals: journals,
+      currentJournalId: entry.journalId,
+    );
+    if (targetJournalId == null ||
+        targetJournalId == entry.journalId ||
+        !mounted) {
+      return;
+    }
+    final repo = ref.read(journalRepositoryProvider);
+    final existing = await repo.getEntry(entry.id);
+    if (existing == null || !mounted) return;
+    final updated = existing.copyWith(journalId: targetJournalId);
+    await repo.upsertEntry(updated);
+    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
+    if (!mounted) return;
+    setState(() => _localUpdates[updated.id] = updated);
+    _invalidateEntryCaches();
   }
 
   @override
@@ -90,7 +149,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               data: (entries) => journalsAsync.when(
                 skipLoadingOnReload: true,
                 data: (journals) {
-                  final mergedEntries = entries.map((e) {
+                  final mergedEntries = entries
+                      .where((e) => !_deletedIds.contains(e.id))
+                      .map((e) {
                     final local = _localUpdates[e.id];
                     if (local != null) {
                       if (local.version > e.version) return local;
@@ -116,7 +177,30 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     itemBuilder: (_, i) {
                       final entry = results[i];
                       final bodyStyle = theme.textTheme.bodyMedium!;
-                      return ListTile(
+                      return ContextMenuRegion(
+                        items: [
+                          ContextMenuItem(
+                            label: 'Statistics',
+                            icon: PhosphorIconsRegular.chartBar,
+                            onTap: () => showJournalEntryStatisticsDialog(
+                              context,
+                              ref,
+                              entry,
+                            ),
+                          ),
+                          ContextMenuItem(
+                            label: 'Change Journal',
+                            icon: PhosphorIconsRegular.folder,
+                            onTap: () => _changeEntryJournal(entry, journals),
+                          ),
+                          ContextMenuItem(
+                            label: 'Delete',
+                            icon: PhosphorIconsRegular.trash,
+                            isDestructive: true,
+                            onTap: () => _deleteEntry(entry),
+                          ),
+                        ],
+                        child: ListTile(
                         title: searchHighlightedText(
                           entry.title.isEmpty ? 'Untitled' : entry.title,
                           style: bodyStyle.copyWith(
@@ -152,6 +236,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             ),
                           );
                         },
+                        ),
                       );
                     },
                   );

@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
+import 'package:voyager/core/effects/confetti.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -31,6 +34,16 @@ import 'package:voyager/features/todo/todo_manage_sheet.dart';
 
 const _todoEditPanelWidth = 420.0;
 const _todoEditPanelDuration = Duration(milliseconds: 270);
+
+/// How long a completion toggle's writes wait before running.
+///
+/// Measured from the moment the toggle commits, which is already 360ms into the
+/// animation (the checkbox pop, then [_TaskRowState._exitDuration] collapsing
+/// the row out). What's left to clear is the confetti: [ConfettiEffect.duration]
+/// runs 1100ms from the click, so ~740ms remains, and the burst is at its most
+/// fragile at the end where every particle is still being painted and faded.
+/// This waits that out with slack to spare.
+const _todoCompletionSaveDelay = Duration(milliseconds: 900);
 
 class TodoPage extends ConsumerStatefulWidget {
   const TodoPage({super.key});
@@ -65,10 +78,25 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // Stores the last resolved result so FutureBuilders can use it as
   // initialData — preventing a blank frame on widget remount after reorder.
   final _subtaskResultsCache = <String, ({int completed, int total})>{};
+  // The task whose completion was just toggled. Its row in the section it moved
+  // into grows itself in instead of appearing at full height. Live for exactly
+  // one build (see [_toggleTask]).
+  String? _enteringTaskId;
+  // Completion toggles whose writes are still waiting out the row's move
+  // animation (see [_schedulePersistTaskCompletion]). Keyed by task id, so a
+  // task toggled twice inside the window only writes the state it ended on.
+  final _pendingCompletionSaves = <String, TodoTask>{};
+  Timer? _completionSaveTimer;
+  // Captured up front so pending writes can still be flushed from dispose(),
+  // where `ref` is already off limits.
+  late final ProviderContainer _container;
 
   @override
   void initState() {
     super.initState();
+    _container = ProviderScope.containerOf(context, listen: false);
+    // Deferred toggles must reach disk before the window closes.
+    PendingFlushRegistry.instance.register(_flushPendingCompletionSaves);
     _panelController = AnimationController(
       vsync: this,
       duration: _todoEditPanelDuration,
@@ -157,6 +185,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   @override
   void dispose() {
+    // Don't strand a deferred toggle: it hasn't been written yet, and the
+    // providers it refreshes are kept alive app-wide (the calendar reads task
+    // markers off allTodoTasksProvider), so both would outlive this page.
+    PendingFlushRegistry.instance.unregister(_flushPendingCompletionSaves);
+    unawaited(_flushPendingCompletionSaves());
     _panelAnimation.dispose();
     _panelController.dispose();
     _taskController.dispose();
@@ -204,65 +237,219 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final siblings = await repo.listTasks(_selectedListId!);
     final active = activeTopLevelTasks(siblings);
     final batch = applyNewUndatedTask(task, active);
-    for (final updated in batch.tasks) {
-      await repo.upsertTask(updated);
-      remoteSync.pushTodoTaskNow(updated);
-    }
     final placed = batch.tasks.firstWhere((t) => t.id == task.id);
+
+    // Paint the optimistic result and clear the input immediately, before
+    // touching the database. A new undated task snaps to the top of the undated
+    // section, so applyNewUndatedTask reindexes every active task — the batch
+    // grows with the list. Persisting it up-front made every keystroke wait on
+    // all those writes, which is what made rapid adds lag. The exact same
+    // upserts + remote pushes still run below, one frame later.
     setState(() {
       _applySortBatchOptimistic(batch, [...active, task]);
     });
+    _taskController.clear();
+    _taskFocusNode.requestFocus();
+
     logTodoSortDebug(
       ref.read(todoSortDebugLoggerProvider),
       'NEW_TASK',
       task: placed,
       details: 'listId=${task.listId} sortOrder: 0 → ${placed.sortOrder}',
     );
-    _taskController.clear();
-    _taskFocusNode.requestFocus();
+
+    // Yield to the event loop so the optimistic frame renders before we hit the
+    // database (mirrors _reorderActiveTasks).
+    await Future<void>.delayed(Duration.zero);
+    for (final updated in batch.tasks) {
+      await repo.upsertTask(updated);
+      remoteSync.pushTodoTaskNow(updated);
+    }
+    if (!mounted) return;
+    // Targeted invalidation (mirrors _persistSortBatch / _persistTaskCompletion)
+    // instead of the broad _invalidateTodoListData(): adding a task only changes
+    // this list's ordering and the list counts. Do NOT invalidate
+    // todoListsProvider (list metadata is unchanged) and do NOT clear the
+    // subtask cache — a new task has no subtasks and existing tasks' subtask
+    // counts are untouched, so preserving it stops every visible row from
+    // restarting its FutureBuilder (and re-querying the DB) on each add.
     ref.invalidate(todoTasksProvider(task.listId));
-    _invalidateTodoListData();
+    ref.invalidate(allTodoTasksProvider);
+    ref.invalidate(todoListStatsProvider);
   }
 
-  Future<void> _toggleTask(TodoTask task, bool? completed) async {
+  Future<void> _toggleTask(
+    TodoTask task,
+    bool? completed,
+    List<TodoTask> activeInList,
+  ) async {
     final value = completed ?? false;
+    // Uncompleting snaps the task back to the top of its section, renumbering
+    // everything below it. With the write deferred, the row would otherwise
+    // re-enter at the stale sort order it carried into the completed section
+    // and only jump into place when the write lands — so place it optimistically
+    // now, the same way the star and due-date menus do.
+    final placement = value
+        ? null
+        : applyTaskUncomplete(task.copyWith(completed: false), activeInList);
     setState(() {
+      _enteringTaskId = task.id;
       _completionOverrides[task.id] = value;
       if (value) {
         _optimisticActiveTaskOrder?.remove(task.id);
         if (_optimisticActiveTaskOrder?.isEmpty ?? false) {
           _optimisticActiveTaskOrder = null;
         }
+      } else if (placement != null) {
+        _applySortBatchOptimistic(placement, activeInList);
       }
     });
-    unawaited(_persistTaskCompletion(task.copyWith(completed: value)));
+    // Consumed by the row built for this task in the section it just moved to,
+    // during the build this setState schedules. Cleared straight after so the
+    // row doesn't replay the animation every time it is rebuilt (scrolling it
+    // out of the cache extent and back would otherwise re-run it). No setState:
+    // nothing on screen reads this outside of row construction.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _enteringTaskId != task.id) return;
+      _enteringTaskId = null;
+    });
+    _schedulePersistTaskCompletion(task.copyWith(completed: value));
   }
 
-  Future<void> _persistTaskCompletion(TodoTask updated) async {
-    final repo = ref.read(todoRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
+  /// Holds a toggle's writes until the completion animation has settled.
+  ///
+  /// Everything this defers costs the UI isolate time it doesn't have while the
+  /// row is collapsing out of one section and growing into the other with the
+  /// confetti burst painting over the top: the local write and the Firestore
+  /// push both marshal the task off this isolate, and the provider refresh that
+  /// follows re-reads every list and rebuilds the page around it. Nothing on
+  /// screen is waiting for any of it — [_toggleTask]'s entry in
+  /// [_completionOverrides] already shows the task on the correct side until the
+  /// fresh data arrives and [_reconcileCompletionOverrides] drops it.
+  ///
+  /// Toggles landing during the wait extend it and flush together. The queue is
+  /// also drained on dispose and, through [PendingFlushRegistry], before the
+  /// window closes, so no more than [_todoCompletionSaveDelay] of toggles is
+  /// ever unwritten.
+  void _schedulePersistTaskCompletion(TodoTask updated) {
+    _pendingCompletionSaves[updated.id] = updated;
+    _completionSaveTimer?.cancel();
+    _completionSaveTimer = Timer(
+      _todoCompletionSaveDelay,
+      () => unawaited(_flushPendingCompletionSaves()),
+    );
+  }
 
-    if (!updated.completed) {
-      final siblings = await repo.listTasks(updated.listId);
-      final activeOthers = activeTopLevelTasks(
-        siblings.where((t) => t.id != updated.id),
-      );
-      final batch = applyTaskUncomplete(updated, activeOthers);
-      for (final task in batch.tasks) {
-        final toSave = task.id == updated.id
-            ? task.copyWith(completed: false)
-            : task;
-        await repo.upsertTask(toSave);
-        remoteSync.pushTodoTaskNow(toSave);
-      }
-    } else {
-      await repo.upsertTask(updated);
-      remoteSync.pushTodoTaskNow(updated);
+  Future<void> _flushPendingCompletionSaves() async {
+    _completionSaveTimer?.cancel();
+    _completionSaveTimer = null;
+    if (_pendingCompletionSaves.isEmpty) return;
+    final pending = _pendingCompletionSaves.values.toList();
+    _pendingCompletionSaves.clear();
+
+    final touchedLists = await _writeCompletionBatch(pending);
+    if (touchedLists.isEmpty) return;
+
+    // One refresh for the whole batch. Refreshing per task would re-read every
+    // list and rebuild the page once for each one — completing two tasks back
+    // to back paid for all of that twice.
+    //
+    // Completing/uncompleting a task only moves it between the active and
+    // completed sections and shifts list counts — it never changes any task's
+    // notes, due date, or subtask totals. Do a minimal, targeted invalidation
+    // (mirroring _persistSortBatch) instead of the broad _invalidateTodoListData():
+    // reloading todoListsProvider rebuilds the whole page, and clearing the
+    // subtask cache restarts the FutureBuilders — both make the surviving rows
+    // flash their subtext away for a frame. Keep allTodoTasksProvider fresh for
+    // the "All tasks" view and calendar markers; the current single-list view
+    // doesn't watch it, so that invalidation can't flicker it.
+    for (final listId in touchedLists) {
+      _container.invalidate(todoTasksProvider(listId));
+    }
+    _container.invalidate(allTodoTasksProvider);
+    _container.invalidate(todoListStatsProvider);
+  }
+
+  /// Writes a batch of queued toggles, returning the lists they touched.
+  ///
+  /// Resolves the whole batch to its final shape before writing anything, so
+  /// every row is written exactly once no matter how many toggles are in it.
+  /// That matters for uncompleting: each one snaps its task back to the top of
+  /// its section and renumbers everything below, so handling them one at a time
+  /// — re-reading the list and recomputing the placement per task — rewrites and
+  /// re-pushes every row in the list once per uncompleted task. Two of them back
+  /// to back was two full-list write storms, which is what stuttered.
+  Future<Set<String>> _writeCompletionBatch(List<TodoTask> pending) async {
+    // Read through the container, not `ref`: a flush from dispose() outlives
+    // the widget.
+    final repo = _container.read(todoRepositoryProvider);
+    final remoteSync = _container.read(remoteSyncServiceProvider);
+
+    // Anything else that wrote these tasks while the toggles were waiting (a
+    // rename or a star from the context menu) is already on disk, and the
+    // snapshots taken back at toggle time would undo it. Re-read and carry over
+    // only the completion. A missing row means the task was hard-deleted in the
+    // meantime — writing would resurrect it.
+    final resolved = <TodoTask>[];
+    for (final task in pending) {
+      final latest = await repo.getTask(task.id);
+      if (latest == null) continue;
+      resolved.add(latest.copyWith(completed: task.completed));
+    }
+    if (resolved.isEmpty) return const {};
+
+    final touchedLists = <String>{};
+    // Final state per row. Keyed by id so the placement passes below can revise
+    // a row without queueing a second write for it.
+    final writes = <String, TodoTask>{};
+
+    // Completions are flag-only — they don't disturb the active ordering.
+    final completedIds = <String>{};
+    for (final task in resolved.where((task) => task.completed)) {
+      writes[task.id] = task;
+      completedIds.add(task.id);
+      touchedLists.add(task.listId);
     }
 
-    if (!mounted) return;
-    ref.invalidate(todoTasksProvider(updated.listId));
-    _invalidateTodoListData();
+    // Uncompletions have to be composed against one evolving picture of each
+    // list rather than against disk, so a run of them lands as a single
+    // renumbering instead of one per task.
+    final activeByList = <String, Map<String, TodoTask>>{};
+    for (final task in resolved.where((task) => !task.completed)) {
+      var active = activeByList[task.listId];
+      if (active == null) {
+        final siblings = await repo.listTasks(task.listId);
+        active = {
+          for (final sibling in activeTopLevelTasks(siblings))
+            // Tasks this same batch is completing are on their way out of the
+            // active section; placing around them would renumber against a
+            // picture that is about to be wrong.
+            if (!completedIds.contains(sibling.id)) sibling.id: sibling,
+        };
+        activeByList[task.listId] = active;
+      }
+      final batch = applyTaskUncomplete(task, active.values.toList());
+      for (final row in batch.tasks) {
+        final toSave = row.id == task.id
+            ? row.copyWith(completed: false)
+            : row;
+        writes[toSave.id] = toSave;
+        active[toSave.id] = toSave;
+      }
+      touchedLists.add(task.listId);
+    }
+
+    for (final task in writes.values) {
+      await repo.upsertTask(task);
+      remoteSync.pushTodoTaskNow(task);
+      // Hand the isolate back between rows: a placement batch is routinely the
+      // whole list, and run as one chain it holds the isolate through N writes
+      // and 2N Firestore pushes — long enough to drop frames on its own,
+      // whatever else is on screen.
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    return touchedLists;
   }
 
   void _maybeNormalizeListSort(List<TodoTask> tasks, String listId) {
@@ -1035,6 +1222,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                               _TaskRow(
                                                 key: ValueKey(task.id),
                                                 task: task,
+                                                animateIn:
+                                                    task.id == _enteringTaskId,
                                                 isSelected:
                                                     task.id == _selectedTaskId,
                                                 listColor: _listColorFor(
@@ -1047,8 +1236,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                                 ),
                                                 subtaskStatsData:
                                                     _subtaskStatsData(task.id),
-                                                onToggle: (v) =>
-                                                    _toggleTask(task, v),
+                                                onToggle: (v) => _toggleTask(
+                                                  task,
+                                                  v,
+                                                  _activeInList(
+                                                    active,
+                                                    task.listId,
+                                                  ),
+                                                ),
                                                 onStar: () => _toggleStar(
                                                   task,
                                                   _activeInList(
@@ -1113,6 +1308,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                               index: i,
                                               child: _TaskRow(
                                                 task: active[i],
+                                                animateIn:
+                                                    active[i].id ==
+                                                    _enteringTaskId,
                                                 isSelected:
                                                     active[i].id ==
                                                     _selectedTaskId,
@@ -1126,8 +1324,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                                     _subtaskStatsData(
                                                       active[i].id,
                                                     ),
-                                                onToggle: (v) =>
-                                                    _toggleTask(active[i], v),
+                                                onToggle: (v) => _toggleTask(
+                                                  active[i],
+                                                  v,
+                                                  active,
+                                                ),
                                                 onStar: () => _toggleStar(
                                                   active[i],
                                                   active,
@@ -1223,6 +1424,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                             _TaskRow(
                                               key: ValueKey(task.id),
                                               task: task,
+                                              animateIn:
+                                                  task.id == _enteringTaskId,
                                               isSelected:
                                                   task.id == _selectedTaskId,
                                               listColor: _listColorFor(
@@ -1235,8 +1438,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                               ),
                                               subtaskStatsData:
                                                   _subtaskStatsData(task.id),
-                                              onToggle: (v) =>
-                                                  _toggleTask(task, v),
+                                              onToggle: (v) => _toggleTask(
+                                                task,
+                                                v,
+                                                _activeInList(
+                                                  active,
+                                                  task.listId,
+                                                ),
+                                              ),
                                               onStar: () => _toggleStar(
                                                 task,
                                                 _activeInList(
@@ -1477,10 +1686,16 @@ class _TaskRow extends StatefulWidget {
     required this.subtaskStats,
     this.subtaskStatsData,
     this.listColor,
+    this.animateIn = false,
   });
 
   final TodoTask task;
   final bool isSelected;
+
+  /// True only for the row rebuilt in the section a just-toggled task moved
+  /// into, so it can grow in instead of appearing at full height in one frame.
+  /// Read once, when the row's [State] is created.
+  final bool animateIn;
   final Future<void> Function(bool?) onToggle;
   final VoidCallback onStar;
   final VoidCallback onEdit;
@@ -1512,16 +1727,32 @@ class _TaskRow extends StatefulWidget {
   State<_TaskRow> createState() => _TaskRowState();
 }
 
-class _TaskRowState extends State<_TaskRow>
-    with SingleTickerProviderStateMixin {
+class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
+  static const _exitDuration = Duration(milliseconds: 160);
+
   late final AnimationController _animController;
   late final Animation<double> _checkScale;
+
+  // Drives the row between "collapsed to nothing" (1.0) and "full height" (0.0).
+  // Run forward it collapses the row out of its section before the toggle is
+  // committed; run in reverse it grows the row back in where the task landed,
+  // so neither side of the move happens in a single frame.
+  late final AnimationController _exitController;
+  late final Animation<double> _exitSize;
+  late final Animation<double> _exitFade;
+
+  // True while the row is collapsing out of its section. Only guards input — it
+  // is deliberately not read during build, so turning it on can't restyle the
+  // row mid-animation.
+  bool _isShifting = false;
 
   var _displayCompleted = false;
   int _toggleGeneration = 0;
   // True while the pointer is over the checkbox hitbox specifically — drives the
   // outline "preview" check without coloring in the box.
   bool _checkHovered = false;
+  // Anchors the confetti burst to the checkbox the user actually clicked.
+  final GlobalKey _checkboxKey = GlobalKey();
 
   ({int completed, int total})? _cachedStats;
 
@@ -1559,6 +1790,35 @@ class _TaskRowState extends State<_TaskRow>
     if (widget.task.completed) {
       _animController.value = 1.0;
     }
+
+    _exitController = AnimationController(vsync: this, duration: _exitDuration);
+    _exitSize = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
+    );
+    // Fade out ahead of the collapse so the row is already gone by the time it
+    // is squashed thin enough to look clipped.
+    //
+    // Entry needs its own curve rather than this one played backwards.
+    // CurvedAnimation transforms the controller's value whichever way it is
+    // running, so reversing a lead becomes a lag: the row would grow to ~90% of
+    // its height while still fully transparent, then flash its content into an
+    // already-open gap. This makes the fade lead the growth on the way in too —
+    // opaque by 70% through, when the row is ~95% open.
+    _exitFade = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _exitController,
+        curve: const Interval(0, 0.7, curve: Curves.easeOut),
+        reverseCurve: const Interval(0.3, 1, curve: Curves.easeIn),
+      ),
+    );
+
+    // This row is the far half of a toggle the user just made: it is being
+    // inserted where the task landed, so grow it in rather than letting the
+    // section below it jump down by a full row in one frame.
+    if (widget.animateIn) {
+      _exitController.value = 1.0;
+      _exitController.reverse();
+    }
   }
 
   @override
@@ -1579,10 +1839,12 @@ class _TaskRowState extends State<_TaskRow>
   @override
   void dispose() {
     _animController.dispose();
+    _exitController.dispose();
     super.dispose();
   }
 
   Future<void> _handleToggle(bool? value) async {
+    if (_isShifting) return;
     final target = value ?? false;
     setState(() {
       _displayCompleted = target;
@@ -1591,6 +1853,7 @@ class _TaskRowState extends State<_TaskRow>
     final currentGen = ++_toggleGeneration;
 
     if (target) {
+      _celebrate();
       await _animController.forward();
     } else {
       await _animController.reverse();
@@ -1598,7 +1861,35 @@ class _TaskRowState extends State<_TaskRow>
 
     if (!mounted || _toggleGeneration != currentGen) return;
 
+    // Shrink the row away first: committing the toggle moves the task to the
+    // other section on the very next build, so without this the surrounding
+    // rows jump into the gap in a single frame.
+    _isShifting = true;
+    await _exitController.forward();
+    if (!mounted || _toggleGeneration != currentGen) return;
+
     unawaited(widget.onToggle(target));
+
+    // The row is normally rebuilt into the other section (a fresh State that
+    // grows itself in) and this one is disposed. If it survives instead — the
+    // completed section is hidden and it stays put, or the toggle didn't take —
+    // don't leave it collapsed to nothing.
+    await SchedulerBinding.instance.endOfFrame;
+    if (!mounted || _toggleGeneration != currentGen) return;
+    _exitController.value = 0;
+    _isShifting = false;
+  }
+
+  /// Fires a confetti burst from the checkbox's center to celebrate completing
+  /// a task. Reuses the shared [ConfettiOverlay] engine so the effect floats
+  /// above the list and survives the row animating away.
+  void _celebrate() {
+    final box = _checkboxKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    ConfettiOverlay.burst(
+      context,
+      globalPosition: box.localToGlobal(box.size.center(Offset.zero)),
+    );
   }
 
   /// The task's checkbox. Uses a custom visual (not Material [Checkbox]) so it
@@ -1622,6 +1913,7 @@ class _TaskRowState extends State<_TaskRow>
         behavior: HitTestBehavior.opaque,
         onTap: () => unawaited(_handleToggle(!_displayCompleted)),
         child: Padding(
+          key: _checkboxKey,
           padding: const EdgeInsets.all(10),
           child: AnimatedBuilder(
             animation: _animController,
@@ -1836,183 +2128,224 @@ class _TaskRowState extends State<_TaskRow>
     final strikeColor = Theme.of(
       context,
     ).colorScheme.onSurface.withValues(alpha: 0.55);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: ContextMenuRegion(
-        items: _buildContextMenuItems(listColor),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          decoration: VoyagerListItemSurface.decoration(
-            context,
-            selected: widget.isSelected,
-            borderRadius: 14,
-          ),
-          child: InkWell(
-            onTap: widget.onEdit,
-            borderRadius: BorderRadius.circular(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 8.0),
-                  child: _buildCheckbox(listColor),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 10,
-                      horizontal: 12,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 180),
-                              curve: Curves.easeOut,
-                              style: Theme.of(context).textTheme.bodyLarge!
-                                  .copyWith(
-                                    color: _displayCompleted
-                                        ? strikeColor
-                                        : null,
-                                    decoration: _displayCompleted
-                                        ? TextDecoration.lineThrough
-                                        : null,
+    return SizeTransition(
+      sizeFactor: _exitSize,
+      alignment: AlignmentDirectional.topStart,
+      child: FadeTransition(
+        opacity: _exitFade,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: ContextMenuRegion(
+            items: _buildContextMenuItems(listColor),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              decoration: VoyagerListItemSurface.decoration(
+                context,
+                selected: widget.isSelected,
+                borderRadius: 14,
+              ),
+              // Own ink surface. Without it the InkWell's hover highlight is
+              // painted onto the page's Material, above this subtree — so it
+              // ignores the fade and stays fully grey until the row is removed,
+              // flashing at the end of the animation.
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  // Guarded rather than disabled/IgnorePointer'd while the row
+                  // shifts: an InkWell that stops being hoverable drops its
+                  // highlight in 50ms, blinking the grey off under a row that
+                  // is still most of the way visible. Staying hoverable lets
+                  // the highlight fade out with the rest of the row instead.
+                  onTap: () {
+                    if (_isShifting) return;
+                    widget.onEdit();
+                  },
+                  // Default hover fade is 50ms — next to the row's own motion
+                  // that reads as a flash rather than a transition, both on
+                  // the row leaving and on the row that slides up under the
+                  // cursor behind it.
+                  hoverDuration: _exitDuration,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: _buildCheckbox(listColor),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 12,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  AnimatedDefaultTextStyle(
+                                    duration: const Duration(milliseconds: 180),
+                                    curve: Curves.easeOut,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge!
+                                        .copyWith(
+                                          color: _displayCompleted
+                                              ? strikeColor
+                                              : null,
+                                          decoration: _displayCompleted
+                                              ? TextDecoration.lineThrough
+                                              : null,
+                                        ),
+                                    child: Text(
+                                      widget.task.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                              child: Text(
-                                widget.task.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
-                        Builder(
-                          builder: (context) {
-                            final metadataColor = Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.72);
-                            final overdueColor = Theme.of(
-                              context,
-                            ).colorScheme.error;
-                            final textStyle =
-                                Theme.of(
-                                  context,
-                                ).textTheme.labelSmall?.copyWith(
-                                  fontSize: 10,
-                                  color: metadataColor,
-                                ) ??
-                                TextStyle(fontSize: 10, color: metadataColor);
+                              Builder(
+                                builder: (context) {
+                                  final metadataColor = Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.72);
+                                  final overdueColor = Theme.of(
+                                    context,
+                                  ).colorScheme.error;
+                                  final textStyle =
+                                      Theme.of(
+                                        context,
+                                      ).textTheme.labelSmall?.copyWith(
+                                        fontSize: 10,
+                                        color: metadataColor,
+                                      ) ??
+                                      TextStyle(
+                                        fontSize: 10,
+                                        color: metadataColor,
+                                      );
 
-                            // Stable metadata: never depends on the Future.
-                            final stableWidgets = <Widget>[];
-                            if (dueLabel != null) {
-                              stableWidgets.add(
-                                Text(
-                                  dueLabel,
-                                  style: dueDatePast
-                                      ? TextStyle(color: overdueColor)
-                                      : null,
-                                ),
-                              );
-                            }
-                            final hasNotes =
-                                widget.task.notes?.trim().isNotEmpty == true;
-                            if (hasNotes) {
-                              if (stableWidgets.isNotEmpty) {
-                                stableWidgets.add(const Text(' · '));
-                              }
-                              stableWidgets.add(
-                                Icon(
-                                  PhosphorIconsRegular.note,
-                                  size: 10,
-                                  color: metadataColor,
-                                ),
-                              );
-                            }
-
-                            // Subtask count: depends on the Future; never hides
-                            // stable widgets when it's loading.
-                            final subtaskWidget = FutureBuilder(
-                              future: widget.subtaskStats,
-                              initialData: widget.subtaskStatsData,
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData) {
-                                  _cachedStats = snapshot.data;
-                                }
-                                final stats = snapshot.hasData
-                                    ? snapshot.data
-                                    : _cachedStats;
-                                if (stats == null || stats.total == 0) {
-                                  return const SizedBox.shrink();
-                                }
-                                final needsSep = stableWidgets.isNotEmpty;
-                                return Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (needsSep) const Text(' · '),
-                                    Text('${stats.completed} | ${stats.total}'),
-                                  ],
-                                );
-                              },
-                            );
-
-                            final hasStable = stableWidgets.isNotEmpty;
-                            // Always show the row if there's any stable content.
-                            // Subtask badge sits alongside it.
-                            if (!hasStable) {
-                              // Only subtask badge; still need to show it.
-                              return FutureBuilder(
-                                future: widget.subtaskStats,
-                                initialData: widget.subtaskStatsData,
-                                builder: (context, snapshot) {
-                                  if (snapshot.hasData) {
-                                    _cachedStats = snapshot.data;
+                                  // Stable metadata: never depends on the Future.
+                                  final stableWidgets = <Widget>[];
+                                  if (dueLabel != null) {
+                                    stableWidgets.add(
+                                      Text(
+                                        dueLabel,
+                                        style: dueDatePast
+                                            ? TextStyle(color: overdueColor)
+                                            : null,
+                                      ),
+                                    );
                                   }
-                                  final stats = snapshot.hasData
-                                      ? snapshot.data
-                                      : _cachedStats;
-                                  if (stats == null || stats.total == 0) {
-                                    return const SizedBox.shrink();
+                                  final hasNotes =
+                                      widget.task.notes?.trim().isNotEmpty ==
+                                      true;
+                                  if (hasNotes) {
+                                    if (stableWidgets.isNotEmpty) {
+                                      stableWidgets.add(const Text(' · '));
+                                    }
+                                    stableWidgets.add(
+                                      Icon(
+                                        PhosphorIconsRegular.note,
+                                        size: 10,
+                                        color: metadataColor,
+                                      ),
+                                    );
                                   }
+
+                                  // Subtask count: depends on the Future; never hides
+                                  // stable widgets when it's loading.
+                                  final subtaskWidget = FutureBuilder(
+                                    future: widget.subtaskStats,
+                                    initialData: widget.subtaskStatsData,
+                                    builder: (context, snapshot) {
+                                      if (snapshot.hasData) {
+                                        _cachedStats = snapshot.data;
+                                      }
+                                      final stats = snapshot.hasData
+                                          ? snapshot.data
+                                          : _cachedStats;
+                                      if (stats == null || stats.total == 0) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      final needsSep = stableWidgets.isNotEmpty;
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (needsSep) const Text(' · '),
+                                          Text(
+                                            '${stats.completed} | ${stats.total}',
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+
+                                  final hasStable = stableWidgets.isNotEmpty;
+                                  // Always show the row if there's any stable content.
+                                  // Subtask badge sits alongside it.
+                                  if (!hasStable) {
+                                    // Only subtask badge; still need to show it.
+                                    return FutureBuilder(
+                                      future: widget.subtaskStats,
+                                      initialData: widget.subtaskStatsData,
+                                      builder: (context, snapshot) {
+                                        if (snapshot.hasData) {
+                                          _cachedStats = snapshot.data;
+                                        }
+                                        final stats = snapshot.hasData
+                                            ? snapshot.data
+                                            : _cachedStats;
+                                        if (stats == null || stats.total == 0) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 2,
+                                          ),
+                                          child: DefaultTextStyle(
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: textStyle,
+                                            child: Text(
+                                              '${stats.completed} | ${stats.total}',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  }
+
                                   return Padding(
                                     padding: const EdgeInsets.only(top: 2),
                                     child: DefaultTextStyle(
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: textStyle,
-                                      child: Text(
-                                        '${stats.completed} | ${stats.total}',
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ...stableWidgets,
+                                          subtaskWidget,
+                                        ],
                                       ),
                                     ),
                                   );
                                 },
-                              );
-                            }
-
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: DefaultTextStyle(
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: textStyle,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [...stableWidgets, subtaskWidget],
-                                ),
                               ),
-                            );
-                          },
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                      _buildStar(listColor),
+                    ],
                   ),
                 ),
-                _buildStar(listColor),
-              ],
+              ),
             ),
           ),
         ),

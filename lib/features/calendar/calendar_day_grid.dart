@@ -2,11 +2,33 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
+
+/// Builds the right-click context-menu items for a calendar [CalendarDayEntry]
+/// (an event or a due todo). Returning an empty list suppresses the menu.
+typedef CalendarEntryMenuBuilder =
+    List<ContextMenuItem> Function(CalendarDayEntry entry);
+
+/// Wraps [child] in a [ContextMenuRegion] built from [builder] for [entry].
+///
+/// When [builder] is null or yields no items the [child] is returned unchanged,
+/// so callers can thread an optional builder through the widget tree without
+/// special-casing every site.
+Widget calendarEntryContextMenu({
+  required CalendarEntryMenuBuilder? builder,
+  required CalendarDayEntry entry,
+  required Widget child,
+}) {
+  if (builder == null) return child;
+  final items = builder(entry);
+  if (items.isEmpty) return child;
+  return ContextMenuRegion(items: items, child: child);
+}
 
 // =============================================================================
 // CalendarEventTapState — coordinates multi-day animation + popup anchor rect
@@ -305,6 +327,7 @@ class CalendarDayCell extends StatelessWidget {
     this.showTodoIcons = true,
     this.onTap,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.isSelected = false,
     this.adjacentTextT,
     this.adjacentBorderT,
@@ -327,6 +350,10 @@ class CalendarDayCell extends StatelessWidget {
   final MonthDayCellStyle style;
   final VoidCallback? onTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+
+  /// Builds the right-click menu for an event/todo entry in this cell. Null
+  /// disables the context menu.
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final bool isSelected;
   final bool isFirstColumn;
   final bool isLastColumn;
@@ -524,27 +551,28 @@ class CalendarDayCell extends StatelessWidget {
                                           style: style,
                                         );
                                         final event = events[i]!;
-                                        return CalendarDayEventBar(
-                                          event: event,
-                                          date: date,
-                                          fontSize: eventFontSize,
-                                          height: barHeight,
-                                          isStart: calendarEventBarStartsOnDay(event, date),
-                                          isEnd: calendarEventBarEndsOnDay(event, date),
-                                          isFirstColumn: isFirstColumn,
-                                          isLastColumn: isLastColumn,
-                                          cellMargin: style.cellMargin,
-                                          cellPadding: style.cellPadding,
-                                          highlighted: editingEventId == event.id,
-                                          onTap: onEntryTap == null
-                                              ? null
-                                              : () {
-                                                  onEntryTap!(
-                                                    event.isFullDay
-                                                        ? CalendarDayEntry.allDayEvent(event)
-                                                        : CalendarDayEntry.timedEvent(event),
-                                                  );
-                                                },
+                                        final eventEntry = event.isFullDay
+                                            ? CalendarDayEntry.allDayEvent(event)
+                                            : CalendarDayEntry.timedEvent(event);
+                                        return calendarEntryContextMenu(
+                                          builder: entryMenuBuilder,
+                                          entry: eventEntry,
+                                          child: CalendarDayEventBar(
+                                            event: event,
+                                            date: date,
+                                            fontSize: eventFontSize,
+                                            height: barHeight,
+                                            isStart: calendarEventBarStartsOnDay(event, date),
+                                            isEnd: calendarEventBarEndsOnDay(event, date),
+                                            isFirstColumn: isFirstColumn,
+                                            isLastColumn: isLastColumn,
+                                            cellMargin: style.cellMargin,
+                                            cellPadding: style.cellPadding,
+                                            highlighted: editingEventId == event.id,
+                                            onTap: onEntryTap == null
+                                                ? null
+                                                : () => onEntryTap!(eventEntry),
+                                          ),
                                         );
                                       },
                                     )
@@ -574,6 +602,7 @@ class CalendarDayCell extends StatelessWidget {
                             overflowEvents: overflowEvents,
                             editingEventId: editingEventId,
                             onEntryTap: onEntryTap!,
+                            entryMenuBuilder: entryMenuBuilder,
                           ),
                 ),
               ),
@@ -592,6 +621,7 @@ class CalendarDayCell extends StatelessWidget {
                           badgeContext: todoContext,
                           todos: todoMarkers,
                           onEntryTap: onEntryTap!,
+                          entryMenuBuilder: entryMenuBuilder,
                         );
                       },
                       behavior: HitTestBehavior.opaque,
@@ -1524,6 +1554,7 @@ Future<void> _showOverflowEventsPopover({
   required List<CalendarEvent> overflowEvents,
   required void Function(CalendarDayEntry entry) onEntryTap,
   String? editingEventId,
+  CalendarEntryMenuBuilder? entryMenuBuilder,
 }) {
   return showContextualPopover<void>(
     context: badgeContext,
@@ -1533,6 +1564,7 @@ Future<void> _showOverflowEventsPopover({
       return CalendarDayOverflowEventsPopover(
         events: overflowEvents,
         editingEventId: editingEventId,
+        entryMenuBuilder: entryMenuBuilder,
         onEventTap: (event) {
           Navigator.of(popoverContext).pop();
           onEntryTap(
@@ -1550,6 +1582,7 @@ Future<void> _showTodoPopover({
   required BuildContext badgeContext,
   required List<CalendarTodoMarker> todos,
   required void Function(CalendarDayEntry entry) onEntryTap,
+  CalendarEntryMenuBuilder? entryMenuBuilder,
 }) {
   return showContextualPopover<void>(
     context: badgeContext,
@@ -1558,6 +1591,7 @@ Future<void> _showTodoPopover({
     builder: (popoverContext) {
       return CalendarDayTodoPopover(
         todos: todos,
+        entryMenuBuilder: entryMenuBuilder,
         onTodoTap: (todo) {
           Navigator.of(popoverContext).pop();
           onEntryTap(CalendarDayEntry.todo(todo));
@@ -1572,10 +1606,12 @@ class CalendarDayTodoPopover extends StatelessWidget {
     super.key,
     required this.todos,
     required this.onTodoTap,
+    this.entryMenuBuilder,
   });
 
   final List<CalendarTodoMarker> todos;
   final ValueChanged<CalendarTodoMarker> onTodoTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1588,15 +1624,19 @@ class CalendarDayTodoPopover extends StatelessWidget {
           for (final todo in todos)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () => onTodoTap(todo),
-                  child: Container(
-                    height: 24,
-                    alignment: Alignment.centerLeft,
-                    child: CalendarDayTodoTile(marker: todo),
+              child: calendarEntryContextMenu(
+                builder: entryMenuBuilder,
+                entry: CalendarDayEntry.todo(todo),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => onTodoTap(todo),
+                    child: Container(
+                      height: 24,
+                      alignment: Alignment.centerLeft,
+                      child: CalendarDayTodoTile(marker: todo),
+                    ),
                   ),
                 ),
               ),
@@ -1613,11 +1653,13 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
     required this.events,
     required this.onEventTap,
     this.editingEventId,
+    this.entryMenuBuilder,
   });
 
   final List<CalendarEvent> events;
   final ValueChanged<CalendarEvent> onEventTap;
   final String? editingEventId;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1630,12 +1672,17 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
           for (final event in events)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: CalendarInteractiveEventTap(
-                eventColor: Color(event.colorValue),
-                borderRadius: BorderRadius.circular(6),
-                highlighted: editingEventId == event.id,
-                onTap: () => onEventTap(event),
-                child: Container(
+              child: calendarEntryContextMenu(
+                builder: entryMenuBuilder,
+                entry: event.isFullDay
+                    ? CalendarDayEntry.allDayEvent(event)
+                    : CalendarDayEntry.timedEvent(event),
+                child: CalendarInteractiveEventTap(
+                  eventColor: Color(event.colorValue),
+                  borderRadius: BorderRadius.circular(6),
+                  highlighted: editingEventId == event.id,
+                  onTap: () => onEventTap(event),
+                  child: Container(
                   height: 24,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: calendarEventFillDecoration(
@@ -1648,6 +1695,7 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppFonts.style(fontSize: 11, height: 1),
+                  ),
                   ),
                 ),
               ),
@@ -2229,6 +2277,7 @@ class MonthDayGrid extends StatelessWidget {
     this.showTodoIcons = true,
     this.onDayTap,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.editingEventId,
     this.showWeekdayHeader = false,
     this.weekdayHeaderOpacity = 1,
@@ -2248,6 +2297,7 @@ class MonthDayGrid extends StatelessWidget {
   final MonthDayCellStyle style;
   final void Function(DateTime day)? onDayTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
   final bool showWeekdayHeader;
   final double weekdayHeaderOpacity;
@@ -2367,6 +2417,7 @@ class MonthDayGrid extends StatelessWidget {
                         weekHighlightAlpha: weekHighlightAlpha,
                         onTap: onDayTap == null ? null : () => onDayTap!(date),
                         onEntryTap: onEntryTap,
+                        entryMenuBuilder: entryMenuBuilder,
                         editingEventId: editingEventId,
                         accentColor: accentColor,
                       ),

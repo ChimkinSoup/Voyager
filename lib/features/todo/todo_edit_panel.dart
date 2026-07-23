@@ -105,20 +105,27 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _remoteSync = ref.read(remoteSyncServiceProvider);
       _registerPendingNotesListener(widget.task.id);
       _setNotesEditingFlag(_notesFocusNode.hasFocus);
-      _remoteSync!.prepareEditingSession(
-        collection: FirestoreCollections.todoTasks,
-        documentId: widget.task.id,
-        initialText: _notesController.text,
-      ).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _isSessionReady = true;
-        });
-      });
+      _beginEditingSession(_remoteSync!);
     });
   }
 
-  bool _isSessionReady = false;
+  /// Preloads the remote character-op chain for this task's notes. Best effort:
+  /// if it never lands (offline, permission denied) the notes field still edits
+  /// against a locally seeded session, so this must never gate the UI.
+  void _beginEditingSession(RemoteSyncService remoteSync) {
+    unawaited(
+      remoteSync
+          .prepareEditingSession(
+            collection: FirestoreCollections.todoTasks,
+            documentId: widget.task.id,
+            initialText: _notesController.text,
+          )
+          .catchError((Object error) {
+        debugPrint('Todo notes editing session failed to prepare: $error');
+      }),
+    );
+  }
+
   bool _subtaskCreating = false;
   bool _isDatePickerOpen = false;
 
@@ -134,17 +141,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _dueDate = widget.task.dueDate;
       _loadSubtasks();
       _registerPendingNotesListener(widget.task.id);
-      final remoteSync = ref.read(remoteSyncServiceProvider);
-      remoteSync.prepareEditingSession(
-        collection: FirestoreCollections.todoTasks,
-        documentId: widget.task.id,
-        initialText: _notesController.text,
-      ).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _isSessionReady = true;
-        });
-      });
+      _beginEditingSession(ref.read(remoteSyncServiceProvider));
     } else if (oldWidget.task.dueDate != widget.task.dueDate) {
       // Same task, but its due date changed externally (e.g. via the row's
       // right-click menu while this panel is open). Sync the locally-held
@@ -959,7 +956,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 label: 'Notes',
                 controller: _notesController,
                 focusNode: _notesFocusNode,
-                enabled: _isSessionReady,
                 expands: true,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,

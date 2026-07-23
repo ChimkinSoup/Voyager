@@ -126,6 +126,7 @@ class CalendarGrid extends StatelessWidget {
     this.onTodoTap,
     this.onWeekSlotTap,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.editingEventId,
     this.weekTimelineScrollController,
     this.highlightedWeekStart,
@@ -168,6 +169,9 @@ class CalendarGrid extends StatelessWidget {
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onWeekSlotTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+
+  /// Builds the right-click menu for an event/todo entry (week + month views).
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
   final ScrollController? weekTimelineScrollController;
   final DateTime? highlightedWeekStart;
@@ -188,6 +192,7 @@ class CalendarGrid extends StatelessWidget {
         onEventTap: onEventTap,
         onTodoTap: onTodoTap,
         onSlotTap: onWeekSlotTap,
+        entryMenuBuilder: entryMenuBuilder,
         weekStartsMonday: weekStartsMonday,
         scrollController: weekTimelineScrollController,
         editingEventId: editingEventId,
@@ -202,6 +207,7 @@ class CalendarGrid extends StatelessWidget {
         showTodoIcons: showTodoIcons,
         onDayTap: onDayTap,
         onEntryTap: onEntryTap,
+        entryMenuBuilder: entryMenuBuilder,
         editingEventId: editingEventId,
         weekStartsMonday: weekStartsMonday,
         dayGridKey: monthDayGridKey,
@@ -696,6 +702,7 @@ class _MonthGrid extends StatelessWidget {
     required this.onDayTap,
     required this.weekStartsMonday,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.editingEventId,
     this.dayGridKey,
     this.hiddenWeekRow,
@@ -714,6 +721,7 @@ class _MonthGrid extends StatelessWidget {
   final bool showTodoIcons;
   final void Function(DateTime day) onDayTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
   final bool weekStartsMonday;
 
@@ -780,6 +788,7 @@ class _MonthGrid extends StatelessWidget {
                 style: MonthDayCellStyle.full,
                 onDayTap: onDayTap,
                 onEntryTap: onEntryTap,
+                entryMenuBuilder: entryMenuBuilder,
                 editingEventId: editingEventId,
                 hiddenWeekRow: hiddenWeekRow,
                 highlightedWeekStart: highlightedWeekStart,
@@ -803,6 +812,7 @@ class _WeekGrid extends StatelessWidget {
     required this.onTodoTap,
     required this.onSlotTap,
     required this.weekStartsMonday,
+    this.entryMenuBuilder,
     this.scrollController,
     this.editingEventId,
     this.entryFadeEnabled = true,
@@ -815,6 +825,7 @@ class _WeekGrid extends StatelessWidget {
   final void Function(CalendarEvent event)? onEventTap;
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onSlotTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final bool weekStartsMonday;
   final ScrollController? scrollController;
   final String? editingEventId;
@@ -839,6 +850,7 @@ class _WeekGrid extends StatelessWidget {
       onEventTap: onEventTap ?? (_) {},
       onTodoTap: onTodoTap ?? (_) {},
       onSlotTap: onSlotTap ?? (_, _) {},
+      entryMenuBuilder: entryMenuBuilder,
       editingEventId: editingEventId,
       entryFadeEnabled: entryFadeEnabled,
       weekdayAccentColor: accentColor,

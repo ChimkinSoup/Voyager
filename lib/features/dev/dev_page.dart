@@ -5,6 +5,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/dev/fps_monitor.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
@@ -23,6 +24,8 @@ final devVerboseSyncProvider = StateProvider<bool>((ref) => false);
 final devShowTimeSelectorHitboxesProvider = StateProvider<bool>((ref) => DevFlags.showTimeSelectorHitboxes);
 final devSlowHeatmapPopoverAnimationProvider =
     StateProvider<bool>((ref) => DevFlags.slowHeatmapPopoverAnimation);
+final devShowFpsCounterProvider =
+    StateProvider<bool>((ref) => DevFlags.showFpsCounter);
 
 class DevPage extends ConsumerWidget {
   const DevPage({super.key});
@@ -78,6 +81,18 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.slowHeatmapPopoverAnimation = v;
             ref.read(devSlowHeatmapPopoverAnimationProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Show FPS counter'),
+          subtitle: const Text(
+            'Overlay rendered FPS (frame cost, uncapped) plus a 5-minute history graph',
+          ),
+          value: ref.watch(devShowFpsCounterProvider),
+          onChanged: (v) {
+            DevFlags.showFpsCounter = v;
+            FpsMonitor.instance.setEnabled(v);
+            ref.read(devShowFpsCounterProvider.notifier).state = v;
           },
         ),
         SwitchListTile(
