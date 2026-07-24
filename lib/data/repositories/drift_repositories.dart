@@ -1414,6 +1414,12 @@ class DriftSettingsRepository implements SettingsRepository {
     }
     return AppSettings(
       accentColor: row.accentColor,
+      themeMode: AppThemeMode.values.byName(row.themeMode),
+      petalColor: row.petalColor,
+      petalMaxCount: row.petalMaxCount,
+      petalFallSpeed: row.petalFallSpeed,
+      petalWindFrequency: row.petalWindFrequency,
+      petalWindStrength: row.petalWindStrength,
       weekStartsOnMonday: row.weekStartsOnMonday,
       showQuotes: row.showQuotes,
       showDefaultTrackersInGrid: row.showDefaultTrackersInGrid,
@@ -1452,6 +1458,7 @@ class DriftSettingsRepository implements SettingsRepository {
       devForceConflictUi: row.devForceConflictUi,
       devShowConflictDocumentIds: row.devShowConflictDocumentIds,
       devShowJournalRemotePullButton: row.devShowJournalRemotePullButton,
+      devShowFpsCounter: row.devShowFpsCounter,
       geometricTextureScale: row.geometricTextureScale,
       geometricTextureIntensity: row.geometricTextureIntensity,
       geometricTextureFocalSpread: row.geometricTextureFocalSpread,
@@ -1509,6 +1516,12 @@ class DriftSettingsRepository implements SettingsRepository {
           SettingsTableCompanion(
             id: const Value(1),
             accentColor: Value(settings.accentColor),
+            themeMode: Value(settings.themeMode.name),
+            petalColor: Value(settings.petalColor),
+            petalMaxCount: Value(settings.petalMaxCount),
+            petalFallSpeed: Value(settings.petalFallSpeed),
+            petalWindFrequency: Value(settings.petalWindFrequency),
+            petalWindStrength: Value(settings.petalWindStrength),
             weekStartsOnMonday: Value(settings.weekStartsOnMonday),
             showQuotes: Value(settings.showQuotes),
             showDefaultTrackersInGrid:
@@ -1552,6 +1565,7 @@ class DriftSettingsRepository implements SettingsRepository {
                 Value(settings.devShowConflictDocumentIds),
             devShowJournalRemotePullButton:
                 Value(settings.devShowJournalRemotePullButton),
+            devShowFpsCounter: Value(settings.devShowFpsCounter),
             geometricTextureScale: Value(settings.geometricTextureScale),
             geometricTextureIntensity: Value(settings.geometricTextureIntensity),
             geometricTextureFocalSpread:

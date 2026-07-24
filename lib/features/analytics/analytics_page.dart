@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:intl/intl.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/gestures.dart';
@@ -974,11 +975,11 @@ class _SparklineRow extends ConsumerWidget {
                               show: true,
                               border: Border(
                                 bottom: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.15),
+                                  color: VoyagerColors.of(context).strongHairline,
                                   width: 1,
                                 ),
                                 left: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.15),
+                                  color: VoyagerColors.of(context).strongHairline,
                                   width: 1,
                                 ),
                               ),
@@ -1115,7 +1116,7 @@ class _HeatmapGroupDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final lineColor = Colors.white.withValues(alpha: 0.12);
+    final lineColor = VoyagerColors.of(context).chartGrid;
     if (label == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1842,7 +1843,7 @@ Widget _sparklineHoverBubble({
                           color: calendarPanelBackgroundColor(context),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
+                            color: VoyagerColors.of(context).hairline,
                           ),
                         ),
                         child: _tooltipDateValueColumn(
@@ -2521,7 +2522,7 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
                   color: calendarPanelBackgroundColor(context),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
+                    color: VoyagerColors.of(context).hairline,
                   ),
                 ),
                 child: _tooltipDateValueColumn(
@@ -2943,7 +2944,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                       t,
                     ),
                     border: Border.lerp(
-                      Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      Border.all(color: VoyagerColors.of(context).hairline),
                       Border.all(color: accent, width: 3),
                       t,
                     ),
@@ -2954,8 +2955,11 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                         spreadRadius: 2 * t,
                       ),
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.35 * t),
-                        blurRadius: 10 * t,
+                        color: VoyagerColors.of(context).shadow.withValues(
+                          alpha: VoyagerColors.of(context).strongShadowAlpha * t,
+                        ),
+                        blurRadius:
+                            10 * t * VoyagerColors.of(context).shadowBlurScale,
                         offset: Offset(0, 4 * t),
                       ),
                     ],
@@ -3132,11 +3136,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                     onPressed: _save,
                     style: FilledButton.styleFrom(
                       backgroundColor: accent,
-                      foregroundColor:
-                          ThemeData.estimateBrightnessForColor(accent) ==
-                              Brightness.dark
-                          ? Colors.white
-                          : Colors.black,
+                      foregroundColor: VoyagerColors.of(context).onAccent,
                     ),
                     child: const Text('Save'),
                   ),
@@ -3383,7 +3383,7 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
           color: bgColor,
           borderRadius: BorderRadius.circular(5),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.1),
+            color: VoyagerColors.of(context).hairline,
             width: 1,
           ),
           boxShadow: _heatmapGlow(color, intensity),
@@ -3408,7 +3408,7 @@ Future<void> _showStatisticDetail({
   return showDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
+    barrierColor: VoyagerColors.of(context).scrim,
     builder: (_) =>
         _StatisticDetailPopup(tracker: tracker, analytics: analytics),
   );
@@ -4451,7 +4451,7 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                border: Border.all(color: VoyagerColors.of(context).hairline),
                 boxShadow: value == null
                     ? const []
                     : _heatmapGlow(color, intensity),
@@ -4640,7 +4640,7 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                border: Border.all(color: VoyagerColors.of(context).hairline),
                 boxShadow: value == null
                     ? const []
                     : _heatmapGlow(color, intensity),
@@ -4819,7 +4819,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 SegmentedButton<TrackerStyle>(
                   showSelectedIcon: false,
                   style: SegmentedButton.styleFrom(
-                    selectedForegroundColor: Colors.white,
+                    selectedForegroundColor: VoyagerColors.of(context).onAccent,
                     selectedBackgroundColor: accent,
                   ),
                   segments: const [

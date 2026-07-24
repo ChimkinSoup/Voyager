@@ -44,6 +44,7 @@ flutter:
   uses-material-design: true
   shaders:
     - shaders/geometric_texture.frag
+    - shaders/paper_texture.frag
   assets:
     - assets/quotes.json
   fonts:

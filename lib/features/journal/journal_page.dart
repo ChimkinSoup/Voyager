@@ -20,6 +20,7 @@ import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -2008,7 +2009,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     icon: Icon(
                                       PhosphorIconsRegular.listMagnifyingGlass,
                                       color: _viewAllJournals
-                                          ? Colors.black
+                                          ? VoyagerColors.of(context).onAccent
                                           : null,
                                     ),
                                     style: IconButton.styleFrom(

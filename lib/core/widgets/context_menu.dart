@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -428,23 +429,24 @@ class _MenuPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final vc = VoyagerColors.of(context);
     return Material(
       key: panelKey,
       color: Colors.transparent,
       child: Container(
         constraints: BoxConstraints(minWidth: minWidth),
         decoration: BoxDecoration(
-          color: VoyagerMenuTheme.menuColor,
+          color: VoyagerMenuTheme.menuColorOf(context),
           borderRadius: BorderRadius.circular(radius),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.40),
-              blurRadius: 20,
+              color: vc.shadow.withValues(alpha: vc.strongShadowAlpha),
+              blurRadius: 20 * vc.shadowBlurScale,
               offset: const Offset(0, 8),
             ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 4,
+              color: vc.shadow.withValues(alpha: vc.subtleShadowAlpha),
+              blurRadius: 4 * vc.shadowBlurScale,
               offset: const Offset(0, 2),
             ),
           ],

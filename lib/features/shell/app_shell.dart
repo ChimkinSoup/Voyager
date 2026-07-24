@@ -7,12 +7,15 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
+// ignore: unused_import
+import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/journal/geometric_texture_warmup.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
@@ -74,6 +77,11 @@ class AppShell extends ConsumerWidget {
             ),
           ),
           const CacheStatusOverlay(),
+          // TEMP BISECT: FPS counter overlay disabled. It is the only thing that
+          // drives rendering with a continuous Ticker (native refresh); on
+          // Windows that can cause severe pointer-input latency. If input is
+          // snappy with this off, the Ticker is the culprit. Restore after.
+          // const FpsCounterOverlay(),
         ],
       ),
     );
@@ -358,7 +366,7 @@ class _RailGlowingIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconWidget = Icon(this.icon, size: size, color: color);
     final glowTint = intenseGlow
-        ? Color.lerp(glowColor, Colors.white, 0.4)!
+        ? Color.lerp(glowColor, VoyagerColors.of(context).highlightWash, 0.4)!
         : glowColor;
     final glowOpacity = glowAlpha.clamp(0.0, 1.0);
 
@@ -467,7 +475,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
               key: ValueKey(_time),
               style: Theme.of(
                 context,
-              ).textTheme.titleMedium?.copyWith(color: Colors.white),
+              ).textTheme.titleMedium?.copyWith(color: colorScheme.onSurface),
             ),
           ),
           const SizedBox(height: 8),
@@ -502,7 +510,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
                       children: [
                         _RailGlowingIcon(
                           icon: weatherIconData(icon),
-                          color: Colors.white,
+                          color: colorScheme.onSurface,
                           glowColor: widget.accent,
                           glow: true,
                           size: 22,
@@ -516,7 +524,7 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
                             '${weather!.tempC!.round()}°',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
-                                  color: Colors.white,
+                                  color: colorScheme.onSurface,
                                   fontSize: 10,
                                 ),
                           ),

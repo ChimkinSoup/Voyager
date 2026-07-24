@@ -8,6 +8,7 @@ import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
+import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/dev/dev_calendar_debug_tile.dart';
 import 'package:voyager/features/dev/dev_out_of_sync_purge_tile.dart';
 import 'package:voyager/features/dev/dev_remote_purge_tile.dart';
@@ -112,6 +113,8 @@ class DevPage extends ConsumerWidget {
         ),
         const Divider(height: 32),
         const DevCacheStatusSection(),
+        const Divider(height: 32),
+        const DevFpsCounterSection(),
         const Divider(height: 32),
         const DevCalendarDebugSection(),
         const Divider(height: 32),

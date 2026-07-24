@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 
@@ -52,7 +53,7 @@ class HeatmapCalendar extends StatelessWidget {
             ).withValues(alpha: 0.2 + (0.8 * intensity)),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.1),
+              color: VoyagerColors.of(context).hairline,
               width: 1,
             ),
           ),

@@ -2,6 +2,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
@@ -202,7 +203,7 @@ Color calendarTitleAccentColor(BuildContext context, {Color? accentColor}) =>
 Color calendarWeekdayAccentColor(BuildContext context, {Color? accentColor}) =>
     Color.lerp(
       accentColor ?? Theme.of(context).colorScheme.primary,
-      Colors.white,
+      VoyagerColors.of(context).highlightWash,
       0.5,
     )!;
 

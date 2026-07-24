@@ -5708,6 +5708,79 @@ class $SettingsTableTable extends SettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0xFF7C9EFF),
   );
+  static const VerificationMeta _themeModeMeta = const VerificationMeta(
+    'themeMode',
+  );
+  @override
+  late final GeneratedColumn<String> themeMode = GeneratedColumn<String>(
+    'theme_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('dark'),
+  );
+  static const VerificationMeta _petalColorMeta = const VerificationMeta(
+    'petalColor',
+  );
+  @override
+  late final GeneratedColumn<int> petalColor = GeneratedColumn<int>(
+    'petal_color',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(defaultPetalColor),
+  );
+  static const VerificationMeta _petalMaxCountMeta = const VerificationMeta(
+    'petalMaxCount',
+  );
+  @override
+  late final GeneratedColumn<int> petalMaxCount = GeneratedColumn<int>(
+    'petal_max_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(60),
+  );
+  static const VerificationMeta _petalFallSpeedMeta = const VerificationMeta(
+    'petalFallSpeed',
+  );
+  @override
+  late final GeneratedColumn<double> petalFallSpeed = GeneratedColumn<double>(
+    'petal_fall_speed',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(34.0),
+  );
+  static const VerificationMeta _petalWindFrequencyMeta =
+      const VerificationMeta('petalWindFrequency');
+  @override
+  late final GeneratedColumn<double> petalWindFrequency =
+      GeneratedColumn<double>(
+        'petal_wind_frequency',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.12),
+      );
+  static const VerificationMeta _petalWindStrengthMeta = const VerificationMeta(
+    'petalWindStrength',
+  );
+  @override
+  late final GeneratedColumn<double> petalWindStrength =
+      GeneratedColumn<double>(
+        'petal_wind_strength',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(46.0),
+      );
   static const VerificationMeta _weekStartsOnMondayMeta =
       const VerificationMeta('weekStartsOnMonday');
   @override
@@ -6202,6 +6275,21 @@ class $SettingsTableTable extends SettingsTable
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _devShowFpsCounterMeta = const VerificationMeta(
+    'devShowFpsCounter',
+  );
+  @override
+  late final GeneratedColumn<bool> devShowFpsCounter = GeneratedColumn<bool>(
+    'dev_show_fps_counter',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_show_fps_counter" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _weatherForecastJsonMeta =
       const VerificationMeta('weatherForecastJson');
   @override
@@ -6700,6 +6788,12 @@ class $SettingsTableTable extends SettingsTable
   List<GeneratedColumn> get $columns => [
     id,
     accentColor,
+    themeMode,
+    petalColor,
+    petalMaxCount,
+    petalFallSpeed,
+    petalWindFrequency,
+    petalWindStrength,
     weekStartsOnMonday,
     showQuotes,
     showDefaultTrackersInGrid,
@@ -6738,6 +6832,7 @@ class $SettingsTableTable extends SettingsTable
     devForceConflictUi,
     devShowConflictDocumentIds,
     devShowJournalRemotePullButton,
+    devShowFpsCounter,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -6801,6 +6896,54 @@ class $SettingsTableTable extends SettingsTable
         accentColor.isAcceptableOrUnknown(
           data['accent_color']!,
           _accentColorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('theme_mode')) {
+      context.handle(
+        _themeModeMeta,
+        themeMode.isAcceptableOrUnknown(data['theme_mode']!, _themeModeMeta),
+      );
+    }
+    if (data.containsKey('petal_color')) {
+      context.handle(
+        _petalColorMeta,
+        petalColor.isAcceptableOrUnknown(data['petal_color']!, _petalColorMeta),
+      );
+    }
+    if (data.containsKey('petal_max_count')) {
+      context.handle(
+        _petalMaxCountMeta,
+        petalMaxCount.isAcceptableOrUnknown(
+          data['petal_max_count']!,
+          _petalMaxCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('petal_fall_speed')) {
+      context.handle(
+        _petalFallSpeedMeta,
+        petalFallSpeed.isAcceptableOrUnknown(
+          data['petal_fall_speed']!,
+          _petalFallSpeedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('petal_wind_frequency')) {
+      context.handle(
+        _petalWindFrequencyMeta,
+        petalWindFrequency.isAcceptableOrUnknown(
+          data['petal_wind_frequency']!,
+          _petalWindFrequencyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('petal_wind_strength')) {
+      context.handle(
+        _petalWindStrengthMeta,
+        petalWindStrength.isAcceptableOrUnknown(
+          data['petal_wind_strength']!,
+          _petalWindStrengthMeta,
         ),
       );
     }
@@ -7125,6 +7268,15 @@ class $SettingsTableTable extends SettingsTable
         devShowJournalRemotePullButton.isAcceptableOrUnknown(
           data['dev_show_journal_remote_pull_button']!,
           _devShowJournalRemotePullButtonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_show_fps_counter')) {
+      context.handle(
+        _devShowFpsCounterMeta,
+        devShowFpsCounter.isAcceptableOrUnknown(
+          data['dev_show_fps_counter']!,
+          _devShowFpsCounterMeta,
         ),
       );
     }
@@ -7514,6 +7666,30 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.int,
         data['${effectivePrefix}accent_color'],
       )!,
+      themeMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}theme_mode'],
+      )!,
+      petalColor: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}petal_color'],
+      )!,
+      petalMaxCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}petal_max_count'],
+      )!,
+      petalFallSpeed: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}petal_fall_speed'],
+      )!,
+      petalWindFrequency: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}petal_wind_frequency'],
+      )!,
+      petalWindStrength: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}petal_wind_strength'],
+      )!,
       weekStartsOnMonday: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}week_starts_on_monday'],
@@ -7665,6 +7841,10 @@ class $SettingsTableTable extends SettingsTable
       devShowJournalRemotePullButton: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}dev_show_journal_remote_pull_button'],
+      )!,
+      devShowFpsCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_show_fps_counter'],
       )!,
       weatherForecastJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -7843,6 +8023,12 @@ class SettingsTableData extends DataClass
     implements Insertable<SettingsTableData> {
   final int id;
   final int accentColor;
+  final String themeMode;
+  final int petalColor;
+  final int petalMaxCount;
+  final double petalFallSpeed;
+  final double petalWindFrequency;
+  final double petalWindStrength;
   final bool weekStartsOnMonday;
   final bool showQuotes;
   final bool showDefaultTrackersInGrid;
@@ -7881,6 +8067,7 @@ class SettingsTableData extends DataClass
   final bool devForceConflictUi;
   final bool devShowConflictDocumentIds;
   final bool devShowJournalRemotePullButton;
+  final bool devShowFpsCounter;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -7925,6 +8112,12 @@ class SettingsTableData extends DataClass
   const SettingsTableData({
     required this.id,
     required this.accentColor,
+    required this.themeMode,
+    required this.petalColor,
+    required this.petalMaxCount,
+    required this.petalFallSpeed,
+    required this.petalWindFrequency,
+    required this.petalWindStrength,
     required this.weekStartsOnMonday,
     required this.showQuotes,
     required this.showDefaultTrackersInGrid,
@@ -7963,6 +8156,7 @@ class SettingsTableData extends DataClass
     required this.devForceConflictUi,
     required this.devShowConflictDocumentIds,
     required this.devShowJournalRemotePullButton,
+    required this.devShowFpsCounter,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -8010,6 +8204,12 @@ class SettingsTableData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['accent_color'] = Variable<int>(accentColor);
+    map['theme_mode'] = Variable<String>(themeMode);
+    map['petal_color'] = Variable<int>(petalColor);
+    map['petal_max_count'] = Variable<int>(petalMaxCount);
+    map['petal_fall_speed'] = Variable<double>(petalFallSpeed);
+    map['petal_wind_frequency'] = Variable<double>(petalWindFrequency);
+    map['petal_wind_strength'] = Variable<double>(petalWindStrength);
     map['week_starts_on_monday'] = Variable<bool>(weekStartsOnMonday);
     map['show_quotes'] = Variable<bool>(showQuotes);
     map['show_default_trackers_in_grid'] = Variable<bool>(
@@ -8096,6 +8296,7 @@ class SettingsTableData extends DataClass
     map['dev_show_journal_remote_pull_button'] = Variable<bool>(
       devShowJournalRemotePullButton,
     );
+    map['dev_show_fps_counter'] = Variable<bool>(devShowFpsCounter);
     if (!nullToAbsent || weatherForecastJson != null) {
       map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
     }
@@ -8210,6 +8411,12 @@ class SettingsTableData extends DataClass
     return SettingsTableCompanion(
       id: Value(id),
       accentColor: Value(accentColor),
+      themeMode: Value(themeMode),
+      petalColor: Value(petalColor),
+      petalMaxCount: Value(petalMaxCount),
+      petalFallSpeed: Value(petalFallSpeed),
+      petalWindFrequency: Value(petalWindFrequency),
+      petalWindStrength: Value(petalWindStrength),
       weekStartsOnMonday: Value(weekStartsOnMonday),
       showQuotes: Value(showQuotes),
       showDefaultTrackersInGrid: Value(showDefaultTrackersInGrid),
@@ -8274,6 +8481,7 @@ class SettingsTableData extends DataClass
       devForceConflictUi: Value(devForceConflictUi),
       devShowConflictDocumentIds: Value(devShowConflictDocumentIds),
       devShowJournalRemotePullButton: Value(devShowJournalRemotePullButton),
+      devShowFpsCounter: Value(devShowFpsCounter),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherForecastJson),
@@ -8344,6 +8552,14 @@ class SettingsTableData extends DataClass
     return SettingsTableData(
       id: serializer.fromJson<int>(json['id']),
       accentColor: serializer.fromJson<int>(json['accentColor']),
+      themeMode: serializer.fromJson<String>(json['themeMode']),
+      petalColor: serializer.fromJson<int>(json['petalColor']),
+      petalMaxCount: serializer.fromJson<int>(json['petalMaxCount']),
+      petalFallSpeed: serializer.fromJson<double>(json['petalFallSpeed']),
+      petalWindFrequency: serializer.fromJson<double>(
+        json['petalWindFrequency'],
+      ),
+      petalWindStrength: serializer.fromJson<double>(json['petalWindStrength']),
       weekStartsOnMonday: serializer.fromJson<bool>(json['weekStartsOnMonday']),
       showQuotes: serializer.fromJson<bool>(json['showQuotes']),
       showDefaultTrackersInGrid: serializer.fromJson<bool>(
@@ -8426,6 +8642,7 @@ class SettingsTableData extends DataClass
       devShowJournalRemotePullButton: serializer.fromJson<bool>(
         json['devShowJournalRemotePullButton'],
       ),
+      devShowFpsCounter: serializer.fromJson<bool>(json['devShowFpsCounter']),
       weatherForecastJson: serializer.fromJson<String?>(
         json['weatherForecastJson'],
       ),
@@ -8549,6 +8766,12 @@ class SettingsTableData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'accentColor': serializer.toJson<int>(accentColor),
+      'themeMode': serializer.toJson<String>(themeMode),
+      'petalColor': serializer.toJson<int>(petalColor),
+      'petalMaxCount': serializer.toJson<int>(petalMaxCount),
+      'petalFallSpeed': serializer.toJson<double>(petalFallSpeed),
+      'petalWindFrequency': serializer.toJson<double>(petalWindFrequency),
+      'petalWindStrength': serializer.toJson<double>(petalWindStrength),
       'weekStartsOnMonday': serializer.toJson<bool>(weekStartsOnMonday),
       'showQuotes': serializer.toJson<bool>(showQuotes),
       'showDefaultTrackersInGrid': serializer.toJson<bool>(
@@ -8609,6 +8832,7 @@ class SettingsTableData extends DataClass
       'devShowJournalRemotePullButton': serializer.toJson<bool>(
         devShowJournalRemotePullButton,
       ),
+      'devShowFpsCounter': serializer.toJson<bool>(devShowFpsCounter),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
@@ -8708,6 +8932,12 @@ class SettingsTableData extends DataClass
   SettingsTableData copyWith({
     int? id,
     int? accentColor,
+    String? themeMode,
+    int? petalColor,
+    int? petalMaxCount,
+    double? petalFallSpeed,
+    double? petalWindFrequency,
+    double? petalWindStrength,
     bool? weekStartsOnMonday,
     bool? showQuotes,
     bool? showDefaultTrackersInGrid,
@@ -8746,6 +8976,7 @@ class SettingsTableData extends DataClass
     bool? devForceConflictUi,
     bool? devShowConflictDocumentIds,
     bool? devShowJournalRemotePullButton,
+    bool? devShowFpsCounter,
     Value<String?> weatherForecastJson = const Value.absent(),
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
@@ -8790,6 +9021,12 @@ class SettingsTableData extends DataClass
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
+    themeMode: themeMode ?? this.themeMode,
+    petalColor: petalColor ?? this.petalColor,
+    petalMaxCount: petalMaxCount ?? this.petalMaxCount,
+    petalFallSpeed: petalFallSpeed ?? this.petalFallSpeed,
+    petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
+    petalWindStrength: petalWindStrength ?? this.petalWindStrength,
     weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
     showQuotes: showQuotes ?? this.showQuotes,
     showDefaultTrackersInGrid:
@@ -8854,6 +9091,7 @@ class SettingsTableData extends DataClass
         devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
     devShowJournalRemotePullButton:
         devShowJournalRemotePullButton ?? this.devShowJournalRemotePullButton,
+    devShowFpsCounter: devShowFpsCounter ?? this.devShowFpsCounter,
     weatherForecastJson: weatherForecastJson.present
         ? weatherForecastJson.value
         : this.weatherForecastJson,
@@ -8944,6 +9182,22 @@ class SettingsTableData extends DataClass
       accentColor: data.accentColor.present
           ? data.accentColor.value
           : this.accentColor,
+      themeMode: data.themeMode.present ? data.themeMode.value : this.themeMode,
+      petalColor: data.petalColor.present
+          ? data.petalColor.value
+          : this.petalColor,
+      petalMaxCount: data.petalMaxCount.present
+          ? data.petalMaxCount.value
+          : this.petalMaxCount,
+      petalFallSpeed: data.petalFallSpeed.present
+          ? data.petalFallSpeed.value
+          : this.petalFallSpeed,
+      petalWindFrequency: data.petalWindFrequency.present
+          ? data.petalWindFrequency.value
+          : this.petalWindFrequency,
+      petalWindStrength: data.petalWindStrength.present
+          ? data.petalWindStrength.value
+          : this.petalWindStrength,
       weekStartsOnMonday: data.weekStartsOnMonday.present
           ? data.weekStartsOnMonday.value
           : this.weekStartsOnMonday,
@@ -9056,6 +9310,9 @@ class SettingsTableData extends DataClass
           data.devShowJournalRemotePullButton.present
           ? data.devShowJournalRemotePullButton.value
           : this.devShowJournalRemotePullButton,
+      devShowFpsCounter: data.devShowFpsCounter.present
+          ? data.devShowFpsCounter.value
+          : this.devShowFpsCounter,
       weatherForecastJson: data.weatherForecastJson.present
           ? data.weatherForecastJson.value
           : this.weatherForecastJson,
@@ -9191,6 +9448,12 @@ class SettingsTableData extends DataClass
     return (StringBuffer('SettingsTableData(')
           ..write('id: $id, ')
           ..write('accentColor: $accentColor, ')
+          ..write('themeMode: $themeMode, ')
+          ..write('petalColor: $petalColor, ')
+          ..write('petalMaxCount: $petalMaxCount, ')
+          ..write('petalFallSpeed: $petalFallSpeed, ')
+          ..write('petalWindFrequency: $petalWindFrequency, ')
+          ..write('petalWindStrength: $petalWindStrength, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
           ..write('showQuotes: $showQuotes, ')
           ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
@@ -9235,6 +9498,7 @@ class SettingsTableData extends DataClass
           ..write(
             'devShowJournalRemotePullButton: $devShowJournalRemotePullButton, ',
           )
+          ..write('devShowFpsCounter: $devShowFpsCounter, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -9302,6 +9566,12 @@ class SettingsTableData extends DataClass
   int get hashCode => Object.hashAll([
     id,
     accentColor,
+    themeMode,
+    petalColor,
+    petalMaxCount,
+    petalFallSpeed,
+    petalWindFrequency,
+    petalWindStrength,
     weekStartsOnMonday,
     showQuotes,
     showDefaultTrackersInGrid,
@@ -9340,6 +9610,7 @@ class SettingsTableData extends DataClass
     devForceConflictUi,
     devShowConflictDocumentIds,
     devShowJournalRemotePullButton,
+    devShowFpsCounter,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -9388,6 +9659,12 @@ class SettingsTableData extends DataClass
       (other is SettingsTableData &&
           other.id == this.id &&
           other.accentColor == this.accentColor &&
+          other.themeMode == this.themeMode &&
+          other.petalColor == this.petalColor &&
+          other.petalMaxCount == this.petalMaxCount &&
+          other.petalFallSpeed == this.petalFallSpeed &&
+          other.petalWindFrequency == this.petalWindFrequency &&
+          other.petalWindStrength == this.petalWindStrength &&
           other.weekStartsOnMonday == this.weekStartsOnMonday &&
           other.showQuotes == this.showQuotes &&
           other.showDefaultTrackersInGrid == this.showDefaultTrackersInGrid &&
@@ -9429,6 +9706,7 @@ class SettingsTableData extends DataClass
           other.devShowConflictDocumentIds == this.devShowConflictDocumentIds &&
           other.devShowJournalRemotePullButton ==
               this.devShowJournalRemotePullButton &&
+          other.devShowFpsCounter == this.devShowFpsCounter &&
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
@@ -9491,6 +9769,12 @@ class SettingsTableData extends DataClass
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<int> id;
   final Value<int> accentColor;
+  final Value<String> themeMode;
+  final Value<int> petalColor;
+  final Value<int> petalMaxCount;
+  final Value<double> petalFallSpeed;
+  final Value<double> petalWindFrequency;
+  final Value<double> petalWindStrength;
   final Value<bool> weekStartsOnMonday;
   final Value<bool> showQuotes;
   final Value<bool> showDefaultTrackersInGrid;
@@ -9529,6 +9813,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> devForceConflictUi;
   final Value<bool> devShowConflictDocumentIds;
   final Value<bool> devShowJournalRemotePullButton;
+  final Value<bool> devShowFpsCounter;
   final Value<String?> weatherForecastJson;
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
@@ -9573,6 +9858,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
+    this.themeMode = const Value.absent(),
+    this.petalColor = const Value.absent(),
+    this.petalMaxCount = const Value.absent(),
+    this.petalFallSpeed = const Value.absent(),
+    this.petalWindFrequency = const Value.absent(),
+    this.petalWindStrength = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
     this.showQuotes = const Value.absent(),
     this.showDefaultTrackersInGrid = const Value.absent(),
@@ -9611,6 +9902,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devForceConflictUi = const Value.absent(),
     this.devShowConflictDocumentIds = const Value.absent(),
     this.devShowJournalRemotePullButton = const Value.absent(),
+    this.devShowFpsCounter = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -9656,6 +9948,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
+    this.themeMode = const Value.absent(),
+    this.petalColor = const Value.absent(),
+    this.petalMaxCount = const Value.absent(),
+    this.petalFallSpeed = const Value.absent(),
+    this.petalWindFrequency = const Value.absent(),
+    this.petalWindStrength = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
     this.showQuotes = const Value.absent(),
     this.showDefaultTrackersInGrid = const Value.absent(),
@@ -9694,6 +9992,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devForceConflictUi = const Value.absent(),
     this.devShowConflictDocumentIds = const Value.absent(),
     this.devShowJournalRemotePullButton = const Value.absent(),
+    this.devShowFpsCounter = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -9739,6 +10038,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
     Expression<int>? accentColor,
+    Expression<String>? themeMode,
+    Expression<int>? petalColor,
+    Expression<int>? petalMaxCount,
+    Expression<double>? petalFallSpeed,
+    Expression<double>? petalWindFrequency,
+    Expression<double>? petalWindStrength,
     Expression<bool>? weekStartsOnMonday,
     Expression<bool>? showQuotes,
     Expression<bool>? showDefaultTrackersInGrid,
@@ -9777,6 +10082,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? devForceConflictUi,
     Expression<bool>? devShowConflictDocumentIds,
     Expression<bool>? devShowJournalRemotePullButton,
+    Expression<bool>? devShowFpsCounter,
     Expression<String>? weatherForecastJson,
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
@@ -9822,6 +10128,13 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (accentColor != null) 'accent_color': accentColor,
+      if (themeMode != null) 'theme_mode': themeMode,
+      if (petalColor != null) 'petal_color': petalColor,
+      if (petalMaxCount != null) 'petal_max_count': petalMaxCount,
+      if (petalFallSpeed != null) 'petal_fall_speed': petalFallSpeed,
+      if (petalWindFrequency != null)
+        'petal_wind_frequency': petalWindFrequency,
+      if (petalWindStrength != null) 'petal_wind_strength': petalWindStrength,
       if (weekStartsOnMonday != null)
         'week_starts_on_monday': weekStartsOnMonday,
       if (showQuotes != null) 'show_quotes': showQuotes,
@@ -9888,6 +10201,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'dev_show_conflict_document_ids': devShowConflictDocumentIds,
       if (devShowJournalRemotePullButton != null)
         'dev_show_journal_remote_pull_button': devShowJournalRemotePullButton,
+      if (devShowFpsCounter != null) 'dev_show_fps_counter': devShowFpsCounter,
       if (weatherForecastJson != null)
         'weather_forecast_json': weatherForecastJson,
       if (weatherChartTempColor != null)
@@ -9972,6 +10286,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   SettingsTableCompanion copyWith({
     Value<int>? id,
     Value<int>? accentColor,
+    Value<String>? themeMode,
+    Value<int>? petalColor,
+    Value<int>? petalMaxCount,
+    Value<double>? petalFallSpeed,
+    Value<double>? petalWindFrequency,
+    Value<double>? petalWindStrength,
     Value<bool>? weekStartsOnMonday,
     Value<bool>? showQuotes,
     Value<bool>? showDefaultTrackersInGrid,
@@ -10010,6 +10330,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? devForceConflictUi,
     Value<bool>? devShowConflictDocumentIds,
     Value<bool>? devShowJournalRemotePullButton,
+    Value<bool>? devShowFpsCounter,
     Value<String?>? weatherForecastJson,
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
@@ -10055,6 +10376,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     return SettingsTableCompanion(
       id: id ?? this.id,
       accentColor: accentColor ?? this.accentColor,
+      themeMode: themeMode ?? this.themeMode,
+      petalColor: petalColor ?? this.petalColor,
+      petalMaxCount: petalMaxCount ?? this.petalMaxCount,
+      petalFallSpeed: petalFallSpeed ?? this.petalFallSpeed,
+      petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
+      petalWindStrength: petalWindStrength ?? this.petalWindStrength,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
       showQuotes: showQuotes ?? this.showQuotes,
       showDefaultTrackersInGrid:
@@ -10107,6 +10434,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
       devShowJournalRemotePullButton:
           devShowJournalRemotePullButton ?? this.devShowJournalRemotePullButton,
+      devShowFpsCounter: devShowFpsCounter ?? this.devShowFpsCounter,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
       weatherChartTempColor:
           weatherChartTempColor ?? this.weatherChartTempColor,
@@ -10191,6 +10519,24 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (accentColor.present) {
       map['accent_color'] = Variable<int>(accentColor.value);
+    }
+    if (themeMode.present) {
+      map['theme_mode'] = Variable<String>(themeMode.value);
+    }
+    if (petalColor.present) {
+      map['petal_color'] = Variable<int>(petalColor.value);
+    }
+    if (petalMaxCount.present) {
+      map['petal_max_count'] = Variable<int>(petalMaxCount.value);
+    }
+    if (petalFallSpeed.present) {
+      map['petal_fall_speed'] = Variable<double>(petalFallSpeed.value);
+    }
+    if (petalWindFrequency.present) {
+      map['petal_wind_frequency'] = Variable<double>(petalWindFrequency.value);
+    }
+    if (petalWindStrength.present) {
+      map['petal_wind_strength'] = Variable<double>(petalWindStrength.value);
     }
     if (weekStartsOnMonday.present) {
       map['week_starts_on_monday'] = Variable<bool>(weekStartsOnMonday.value);
@@ -10345,6 +10691,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       map['dev_show_journal_remote_pull_button'] = Variable<bool>(
         devShowJournalRemotePullButton.value,
       );
+    }
+    if (devShowFpsCounter.present) {
+      map['dev_show_fps_counter'] = Variable<bool>(devShowFpsCounter.value);
     }
     if (weatherForecastJson.present) {
       map['weather_forecast_json'] = Variable<String>(
@@ -10543,6 +10892,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     return (StringBuffer('SettingsTableCompanion(')
           ..write('id: $id, ')
           ..write('accentColor: $accentColor, ')
+          ..write('themeMode: $themeMode, ')
+          ..write('petalColor: $petalColor, ')
+          ..write('petalMaxCount: $petalMaxCount, ')
+          ..write('petalFallSpeed: $petalFallSpeed, ')
+          ..write('petalWindFrequency: $petalWindFrequency, ')
+          ..write('petalWindStrength: $petalWindStrength, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
           ..write('showQuotes: $showQuotes, ')
           ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
@@ -10587,6 +10942,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write(
             'devShowJournalRemotePullButton: $devShowJournalRemotePullButton, ',
           )
+          ..write('devShowFpsCounter: $devShowFpsCounter, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -19072,6 +19428,12 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
     SettingsTableCompanion Function({
       Value<int> id,
       Value<int> accentColor,
+      Value<String> themeMode,
+      Value<int> petalColor,
+      Value<int> petalMaxCount,
+      Value<double> petalFallSpeed,
+      Value<double> petalWindFrequency,
+      Value<double> petalWindStrength,
       Value<bool> weekStartsOnMonday,
       Value<bool> showQuotes,
       Value<bool> showDefaultTrackersInGrid,
@@ -19110,6 +19472,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> devForceConflictUi,
       Value<bool> devShowConflictDocumentIds,
       Value<bool> devShowJournalRemotePullButton,
+      Value<bool> devShowFpsCounter,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -19156,6 +19519,12 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
       Value<int> id,
       Value<int> accentColor,
+      Value<String> themeMode,
+      Value<int> petalColor,
+      Value<int> petalMaxCount,
+      Value<double> petalFallSpeed,
+      Value<double> petalWindFrequency,
+      Value<double> petalWindStrength,
       Value<bool> weekStartsOnMonday,
       Value<bool> showQuotes,
       Value<bool> showDefaultTrackersInGrid,
@@ -19194,6 +19563,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> devForceConflictUi,
       Value<bool> devShowConflictDocumentIds,
       Value<bool> devShowJournalRemotePullButton,
+      Value<bool> devShowFpsCounter,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -19253,6 +19623,36 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<int> get accentColor => $composableBuilder(
     column: $table.accentColor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get themeMode => $composableBuilder(
+    column: $table.themeMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get petalColor => $composableBuilder(
+    column: $table.petalColor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get petalMaxCount => $composableBuilder(
+    column: $table.petalMaxCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get petalFallSpeed => $composableBuilder(
+    column: $table.petalFallSpeed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get petalWindFrequency => $composableBuilder(
+    column: $table.petalWindFrequency,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get petalWindStrength => $composableBuilder(
+    column: $table.petalWindStrength,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19444,6 +19844,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get devShowJournalRemotePullButton => $composableBuilder(
     column: $table.devShowJournalRemotePullButton,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get devShowFpsCounter => $composableBuilder(
+    column: $table.devShowFpsCounter,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19675,6 +20080,36 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get themeMode => $composableBuilder(
+    column: $table.themeMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get petalColor => $composableBuilder(
+    column: $table.petalColor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get petalMaxCount => $composableBuilder(
+    column: $table.petalMaxCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get petalFallSpeed => $composableBuilder(
+    column: $table.petalFallSpeed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get petalWindFrequency => $composableBuilder(
+    column: $table.petalWindFrequency,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get petalWindStrength => $composableBuilder(
+    column: $table.petalWindStrength,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get weekStartsOnMonday => $composableBuilder(
     column: $table.weekStartsOnMonday,
     builder: (column) => ColumnOrderings(column),
@@ -19866,6 +20301,11 @@ class $$SettingsTableTableOrderingComposer
         column: $table.devShowJournalRemotePullButton,
         builder: (column) => ColumnOrderings(column),
       );
+
+  ColumnOrderings<bool> get devShowFpsCounter => $composableBuilder(
+    column: $table.devShowFpsCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
@@ -20098,6 +20538,34 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get themeMode =>
+      $composableBuilder(column: $table.themeMode, builder: (column) => column);
+
+  GeneratedColumn<int> get petalColor => $composableBuilder(
+    column: $table.petalColor,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get petalMaxCount => $composableBuilder(
+    column: $table.petalMaxCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get petalFallSpeed => $composableBuilder(
+    column: $table.petalFallSpeed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get petalWindFrequency => $composableBuilder(
+    column: $table.petalWindFrequency,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get petalWindStrength => $composableBuilder(
+    column: $table.petalWindStrength,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get weekStartsOnMonday => $composableBuilder(
     column: $table.weekStartsOnMonday,
     builder: (column) => column,
@@ -20285,6 +20753,11 @@ class $$SettingsTableTableAnnotationComposer
         column: $table.devShowJournalRemotePullButton,
         builder: (column) => column,
       );
+
+  GeneratedColumn<bool> get devShowFpsCounter => $composableBuilder(
+    column: $table.devShowFpsCounter,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
@@ -20537,6 +21010,12 @@ class $$SettingsTableTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> accentColor = const Value.absent(),
+                Value<String> themeMode = const Value.absent(),
+                Value<int> petalColor = const Value.absent(),
+                Value<int> petalMaxCount = const Value.absent(),
+                Value<double> petalFallSpeed = const Value.absent(),
+                Value<double> petalWindFrequency = const Value.absent(),
+                Value<double> petalWindStrength = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
                 Value<bool> showDefaultTrackersInGrid = const Value.absent(),
@@ -20579,6 +21058,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowConflictDocumentIds = const Value.absent(),
                 Value<bool> devShowJournalRemotePullButton =
                     const Value.absent(),
+                Value<bool> devShowFpsCounter = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -20638,6 +21118,12 @@ class $$SettingsTableTableTableManager
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
+                themeMode: themeMode,
+                petalColor: petalColor,
+                petalMaxCount: petalMaxCount,
+                petalFallSpeed: petalFallSpeed,
+                petalWindFrequency: petalWindFrequency,
+                petalWindStrength: petalWindStrength,
                 weekStartsOnMonday: weekStartsOnMonday,
                 showQuotes: showQuotes,
                 showDefaultTrackersInGrid: showDefaultTrackersInGrid,
@@ -20677,6 +21163,7 @@ class $$SettingsTableTableTableManager
                 devForceConflictUi: devForceConflictUi,
                 devShowConflictDocumentIds: devShowConflictDocumentIds,
                 devShowJournalRemotePullButton: devShowJournalRemotePullButton,
+                devShowFpsCounter: devShowFpsCounter,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -20725,6 +21212,12 @@ class $$SettingsTableTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> accentColor = const Value.absent(),
+                Value<String> themeMode = const Value.absent(),
+                Value<int> petalColor = const Value.absent(),
+                Value<int> petalMaxCount = const Value.absent(),
+                Value<double> petalFallSpeed = const Value.absent(),
+                Value<double> petalWindFrequency = const Value.absent(),
+                Value<double> petalWindStrength = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
                 Value<bool> showDefaultTrackersInGrid = const Value.absent(),
@@ -20767,6 +21260,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowConflictDocumentIds = const Value.absent(),
                 Value<bool> devShowJournalRemotePullButton =
                     const Value.absent(),
+                Value<bool> devShowFpsCounter = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -20826,6 +21320,12 @@ class $$SettingsTableTableTableManager
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
+                themeMode: themeMode,
+                petalColor: petalColor,
+                petalMaxCount: petalMaxCount,
+                petalFallSpeed: petalFallSpeed,
+                petalWindFrequency: petalWindFrequency,
+                petalWindStrength: petalWindStrength,
                 weekStartsOnMonday: weekStartsOnMonday,
                 showQuotes: showQuotes,
                 showDefaultTrackersInGrid: showDefaultTrackersInGrid,
@@ -20865,6 +21365,7 @@ class $$SettingsTableTableTableManager
                 devForceConflictUi: devForceConflictUi,
                 devShowConflictDocumentIds: devShowConflictDocumentIds,
                 devShowJournalRemotePullButton: devShowJournalRemotePullButton,
+                devShowFpsCounter: devShowFpsCounter,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,

@@ -9,6 +9,7 @@ import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/key_binding.dart';
+import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -56,6 +57,37 @@ class SettingsPage extends ConsumerWidget {
             settings: settings,
             onSave: (s) => _save(ref, s),
           ),
+          const SizedBox(height: 16),
+          Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Theme'),
+            subtitle: Text(
+              settings.themeMode == AppThemeMode.light
+                  ? 'Light — cream paper with drifting petals'
+                  : 'Dark — geometric night',
+            ),
+            trailing: SegmentedButton<AppThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: AppThemeMode.dark,
+                  icon: Icon(PhosphorIconsRegular.moon),
+                  label: Text('Dark'),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.light,
+                  icon: Icon(PhosphorIconsRegular.sun),
+                  label: Text('Light'),
+                ),
+              ],
+              selected: {settings.themeMode},
+              showSelectedIcon: false,
+              onSelectionChanged: (sel) =>
+                  _save(ref, settings.copyWith(themeMode: sel.first)),
+            ),
+          ),
+          if (settings.themeMode == AppThemeMode.light)
+            _PetalSettings(settings: settings, onSave: (s) => _save(ref, s)),
           const SizedBox(height: 16),
           Text('Statistics', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -554,6 +586,140 @@ class SettingsPage extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// Light-theme petal controls. Only mounted while the light theme is active.
+///
+/// Kept in the settings list (not a separate page) so tuning is immediate: the
+/// background is live behind the settings sheet, so every slider change is
+/// visible as it is dragged.
+class _PetalSettings extends ConsumerWidget {
+  const _PetalSettings({required this.settings, required this.onSave});
+
+  final AppSettings settings;
+  final Future<void> Function(AppSettings settings) onSave;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          title: const Text('Petal color'),
+          subtitle: Text(formatColorHex(settings.petalColor)),
+          leading: CircleAvatar(backgroundColor: Color(settings.petalColor)),
+          onTap: () => _pickPetalColor(context, ref),
+        ),
+        _PetalSlider(
+          label: 'Max petals',
+          value: settings.petalMaxCount.toDouble(),
+          min: 0,
+          max: 200,
+          divisions: 40,
+          valueLabel: settings.petalMaxCount.toString(),
+          onChanged: (v) =>
+              onSave(settings.copyWith(petalMaxCount: v.round())),
+        ),
+        _PetalSlider(
+          label: 'Fall speed',
+          value: settings.petalFallSpeed,
+          min: 8,
+          max: 120,
+          valueLabel: settings.petalFallSpeed.toStringAsFixed(0),
+          onChanged: (v) => onSave(settings.copyWith(petalFallSpeed: v)),
+        ),
+        _PetalSlider(
+          label: 'Wind frequency',
+          value: settings.petalWindFrequency,
+          min: 0.02,
+          max: 0.6,
+          valueLabel: '${settings.petalWindFrequency.toStringAsFixed(2)} Hz',
+          onChanged: (v) => onSave(settings.copyWith(petalWindFrequency: v)),
+        ),
+        _PetalSlider(
+          label: 'Wind burst strength',
+          value: settings.petalWindStrength,
+          min: 0,
+          max: 160,
+          valueLabel: settings.petalWindStrength.toStringAsFixed(0),
+          onChanged: (v) => onSave(settings.copyWith(petalWindStrength: v)),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickPetalColor(BuildContext context, WidgetRef ref) async {
+    // Ensure the current petal color is always selectable even when it isn't
+    // one of the palette swatches (the default rose usually isn't).
+    final palette = <int>[
+      settings.petalColor,
+      ...ref
+          .read(colorPaletteProvider)
+          .where((c) => c != settings.petalColor),
+    ];
+    final picked = await pickColorFromPalette(
+      context,
+      palette: palette,
+      current: settings.petalColor,
+      title: 'Petal color',
+    );
+    if (picked != null) {
+      await onSave(settings.copyWith(petalColor: picked));
+    }
+  }
+}
+
+class _PetalSlider extends StatelessWidget {
+  const _PetalSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.valueLabel,
+    required this.onChanged,
+    this.divisions,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final String valueLabel;
+  final int? divisions;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                valueLabel,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(
+                    alpha: 0.7,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
     );
   }
 }

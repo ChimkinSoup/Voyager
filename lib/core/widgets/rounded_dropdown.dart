@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
@@ -192,7 +193,9 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
       ), 
       child: Material(
         type: MaterialType.canvas,
-        color: flat ? VoyagerMenuTheme.menuColor : theme.inputDecorationTheme.fillColor,
+        color: flat
+            ? VoyagerMenuTheme.menuColorOf(context)
+            : theme.inputDecorationTheme.fillColor,
         borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -428,7 +431,9 @@ class _AddListMenuItemState extends State<_AddListMenuItem> {
             borderRadius: BorderRadius.circular(10),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
-              hoverColor: Colors.white.withValues(alpha: 0.25),
+              hoverColor: VoyagerColors.of(
+                context,
+              ).onAccent.withValues(alpha: 0.22),
               onTap: widget.onSelect,
               child: Padding(
                 padding: const EdgeInsets.symmetric(

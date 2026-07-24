@@ -252,8 +252,12 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         textTheme: baseTheme.textTheme,
         onSurface: baseTheme.colorScheme.onSurface,
         accentColor: accent,
+        color: baseTheme.popupMenuTheme.color,
       ),
-      menuTheme: VoyagerMenuTheme.menuTheme(accentColor: accent),
+      menuTheme: VoyagerMenuTheme.menuTheme(
+        accentColor: accent,
+        color: baseTheme.popupMenuTheme.color,
+      ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return accent;

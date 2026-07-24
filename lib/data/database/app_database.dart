@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/domain/models/settings_models.dart' show defaultPetalColor;
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 part 'app_database.g.dart';
@@ -287,6 +288,15 @@ class SettingsTable extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
   IntColumn get accentColor =>
       integer().withDefault(const Constant(0xFF7C9EFF))();
+  TextColumn get themeMode => text().withDefault(const Constant('dark'))();
+  IntColumn get petalColor =>
+      integer().withDefault(const Constant(defaultPetalColor))();
+  IntColumn get petalMaxCount => integer().withDefault(const Constant(60))();
+  RealColumn get petalFallSpeed => real().withDefault(const Constant(34.0))();
+  RealColumn get petalWindFrequency =>
+      real().withDefault(const Constant(0.12))();
+  RealColumn get petalWindStrength =>
+      real().withDefault(const Constant(46.0))();
   BoolColumn get weekStartsOnMonday =>
       boolean().withDefault(const Constant(true))();
   BoolColumn get showQuotes => boolean().withDefault(const Constant(true))();
@@ -347,6 +357,8 @@ class SettingsTable extends Table {
   BoolColumn get devShowConflictDocumentIds =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowJournalRemotePullButton =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get devShowFpsCounter =>
       boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
@@ -488,7 +500,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 51;
+  int get schemaVersion => 53;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -977,6 +989,32 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(savingsGoalsTable);
         await migrator.createTable(goalAllocationsTable);
       }
+      if (from < 52) {
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.themeMode);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.petalColor);
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.petalMaxCount,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.petalFallSpeed,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.petalWindFrequency,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.petalWindStrength,
+        );
+      }
+      if (from < 53) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.devShowFpsCounter,
+        );
+      }
     },
   );
 
@@ -1028,6 +1066,9 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'UPDATE settings_table SET dev_show_journal_remote_pull_button = 0 WHERE dev_show_journal_remote_pull_button IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET dev_show_fps_counter = 0 WHERE dev_show_fps_counter IS NULL',
     );
     await customStatement(
       'UPDATE settings_table SET dev_slow_calendar_animations = 0 WHERE dev_slow_calendar_animations IS NULL',

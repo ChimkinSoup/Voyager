@@ -1,6 +1,13 @@
 # Background Pipeline
 
-Voyager renders a single full-screen GPU shader behind all UI. The effect is an equilateral-triangle grid tinted with the user's accent color, concentrated near a configurable focal point and fading toward the edges.
+Voyager has **two** hand-built themes, each with its own full-screen background, selected by `AppThemeMode` in settings (`themeModeProvider`). `VoyagerApp`'s `_AppBackground` picks the pipeline:
+
+- **Dark** (default) — the equilateral-triangle grid shader documented below: a grid tinted with the user's accent color, concentrated near a focal point and fading toward the edges, with an optional animated wave.
+- **Light** — a static warm-cream **paper-grain** shader (`shaders/paper_texture.frag` → `PaperTexture`) with a **falling petal field** drawn over it (`PetalField`, a Dart-simulated particle system). See [Light theme](#light-theme-paper--petals) below.
+
+Both themes share the same widget-level `ThemeData`, built from a `VoyagerPalette` by `VoyagerTheme._build`. Semantic colors that used to be hardcoded `Colors.white`/`Colors.black` (hairlines, scrims, chart gridlines, shadows, on-accent text) now come from the `VoyagerColors` theme extension so every widget resolves the right value per theme.
+
+## The dark theme (triangle grid)
 
 ## Overview
 
@@ -166,3 +173,43 @@ Two mechanisms:
 | `lib/features/dev/dev_geometric_texture_tile.dart` | Live tuning UI |
 | `test/tool/geometric_shader_smoke_test.dart` | Shader load + uniform smoke test |
 | `test/tool/geometric_texture_widget_test.dart` | Widget paint smoke test |
+
+## Light theme (paper + petals)
+
+The light theme replaces the triangle grid entirely with two stacked layers in `_PaperBackground` (`lib/app/voyager_app.dart`):
+
+```
+Positioned.fill
+├── PaperTexture   (bottom — static cream grain)
+└── PetalField     (top — animated falling petals)
+```
+
+### Paper grain
+
+`shaders/paper_texture.frag` → `PaperTexture` (`lib/core/widgets/paper_texture.dart`). A **static** shader — no time uniform, no timer — so it paints once per size/color change and is then cached by the compositor. Three octaves of value noise (fine speckle over mid tooth over slow blotch) give a matte, non-repeating paper stock. Base = `scaffoldBackgroundColor` (cream), speck = a warm gray a few shades down. Loaded via `paperShaderProvider` (warmed alongside the geometric shader in `shellDataWarmupProvider`). Null program → flat cream fill.
+
+Uniforms (must match `PaperTexturePainter`): `u_resolution`(0-1), `u_base_color`(2-5), `u_speck_color`(6-9), `u_grain_scale`(10), `u_grain_strength`(11), `u_fiber_strength`(12). Pinned by `test/tool/paper_shader_smoke_test.dart`.
+
+### Petal field
+
+`PetalField` (`lib/core/widgets/petal_field.dart`) — a Dart particle system, not a shader, because the spec wants room for interaction (click bursts, cursor repulsion) that a stateless shader can't do cleanly. Petals are simulated in `_Petal` structs, recycled in place, and stamped from a single pre-rasterized sprite via a `CustomPainter`. Driven by a 30fps `Timer` (not a `Ticker`) for the same reason the wave is — to avoid pinning the whole app's frame pipeline at the display refresh rate.
+
+Behavior:
+
+- **Wind** — one global sine (`petalWindFrequency`/`petalWindStrength`) sampled once per frame so all petals lean together (the "grouped" look). On top of it, localized `PetalGust`s push only part of the screen (the spec's "radial velocity modifiers" / partial bursts). Heavier petals lag the wind via per-petal `drag`.
+- **Ending (stateless)** — no collision engine. A petal reaching the bottom 10% decelerates, stops rotating, and fades to zero over 2s, then recycles to the top. No petal-to-petal interaction, no accumulation.
+- **Interaction hook** — `PetalFieldController.burstAt` / `.gust` let future features (clicks, transitions) inject wind without touching the sim.
+
+Params come from `petalFieldParamsProvider` (settings-backed: `petalColor`, `petalMaxCount`, `petalFallSpeed`, `petalWindFrequency`, `petalWindStrength`), tuned live in Settings → Appearance.
+
+### Light-theme file map
+
+| File | Role |
+|------|------|
+| `shaders/paper_texture.frag` | GLSL cream paper grain (static) |
+| `lib/core/widgets/paper_texture.dart` | Paper params, widget, painter |
+| `lib/core/widgets/petal_field.dart` | Petal sim, gust model, controller, painter |
+| `lib/core/theme/voyager_theme.dart` | `VoyagerPalette`, `VoyagerColors`, `VoyagerShadows`, both `ThemeData`s |
+| `lib/features/settings/settings_page.dart` | Theme toggle + petal tuning UI |
+| `test/tool/paper_shader_smoke_test.dart` | Paper shader uniform smoke test |
+| `test/settings_theme_persistence_test.dart` | Theme + petal settings round-trip |
