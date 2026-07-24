@@ -8,6 +8,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
@@ -1008,7 +1009,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                     icon: Icon(
                                       PhosphorIconsRegular.listMagnifyingGlass,
                                       color: _showAllTasks
-                                          ? Colors.black
+                                          ? VoyagerColors.of(context).onAccent
                                           : null,
                                     ),
                                     style: IconButton.styleFrom(
@@ -1306,7 +1307,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                         foregroundColor:
                                             currentList?.colorValue == null
                                             ? null
-                                            : Colors.white,
+                                            : (ThemeData.estimateBrightnessForColor(
+                                                    Color(
+                                                      currentList!.colorValue!,
+                                                    ),
+                                                  ) ==
+                                                  Brightness.dark
+                                              ? Colors.white
+                                              : Colors.black),
                                       ),
                                       child: const Text('Add'),
                                     ),
@@ -1668,7 +1676,7 @@ class _TaskRowState extends State<_TaskRow>
         child: CustomPaint(
           size: const Size(14, 14),
           painter: _CheckMarkPainter(
-            color: Color.lerp(accent, Colors.white, p)!,
+            color: Color.lerp(accent, VoyagerColors.of(context).onAccent, p)!,
           ),
         ),
       ),

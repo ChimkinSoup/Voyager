@@ -969,6 +969,7 @@ void _paintWeatherPlot({
       curve: curve,
       spots: spots,
       currentTimeHour: currentTimeHour,
+      lineColor: tempLineColor,
     );
   }
 
@@ -1003,7 +1004,10 @@ void _paintWeatherFill({
       ? null
       : curve.pixelX(hoveredBucket.endHour).round();
 
-  const hoverLighten = 0.22;
+  // A hovered segment is emphasized by making its fill more opaque rather than
+  // by lightening it toward white — a white lift vanishes on the light theme's
+  // cream, whereas raising the alpha reads as "stronger" against any ground.
+  const hoverAlphaBoost = 0.28;
   var runStart = startPx.toDouble();
   Color? runColor;
 
@@ -1031,7 +1035,9 @@ void _paintWeatherFill({
         px >= hoverStartPx &&
         px < hoverEndPx;
     if (inHover) {
-      fillColor = Color.lerp(fillColor, Colors.white, hoverLighten)!;
+      fillColor = fillColor.withValues(
+        alpha: (fillColor.a + hoverAlphaBoost).clamp(0.0, 1.0),
+      );
     }
 
     if (runColor == null) {
@@ -1089,13 +1095,14 @@ void _paintCurrentTimeLine({
   required WeatherChartCurve curve,
   required List<FlSpot> spots,
   required double currentTimeHour,
+  required Color lineColor,
 }) {
   final curvePoint = curve.pointOnCurveAtX(spots, currentTimeHour);
   if (curvePoint == null) return;
 
   final bottom = curve.plotRect.bottom;
   final paint = Paint()
-    ..color = Colors.white
+    ..color = lineColor
     ..strokeWidth = 1.25
     ..strokeCap = StrokeCap.round;
 

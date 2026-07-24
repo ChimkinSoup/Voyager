@@ -2,10 +2,23 @@ import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/domain/models/enums.dart';
 
-export 'package:voyager/domain/models/enums.dart' show GeometricWaveShape;
+export 'package:voyager/domain/models/enums.dart'
+    show GeometricWaveShape, AppThemeMode;
+
+/// Default petal tint for the light theme — a dusty watercolor rose, kept
+/// separate from the accent color so the petals never fight the UI's own
+/// highlight color.
+const int defaultPetalColor = 0xFFE6A4B4;
+
 class AppSettings {
   const AppSettings({
     this.accentColor = 0xFF7C9EFF,
+    this.themeMode = AppThemeMode.dark,
+    this.petalColor = defaultPetalColor,
+    this.petalMaxCount = 60,
+    this.petalFallSpeed = 34.0,
+    this.petalWindFrequency = 0.12,
+    this.petalWindStrength = 46.0,
     this.weekStartsOnMonday = true,
     this.showQuotes = true,
     this.showDefaultTrackersInGrid = true,
@@ -44,6 +57,7 @@ class AppSettings {
     this.devForceConflictUi = false,
     this.devShowConflictDocumentIds = false,
     this.devShowJournalRemotePullButton = false,
+    this.devShowFpsCounter = false,
     this.geometricTextureScale = 10.0,
     this.geometricTextureIntensity = 0.85,
     this.geometricTextureFocalSpread = 1.0,
@@ -88,6 +102,28 @@ class AppSettings {
   }) : colorPalette = colorPalette ?? defaultColorPalette;
 
   final int accentColor;
+
+  /// Which hand-built theme is active. See [AppThemeMode].
+  final AppThemeMode themeMode;
+
+  /// Tint of the light theme's falling petals.
+  final int petalColor;
+
+  /// Ceiling on simultaneously live petals. The field spawns up to this many
+  /// and never allocates beyond it.
+  final int petalMaxCount;
+
+  /// Baseline downward drift speed, in logical pixels per second, before
+  /// per-petal size variation.
+  final double petalFallSpeed;
+
+  /// How often the shared wind field reverses, in Hz. Lower = long, lazy
+  /// swells; higher = fluttery gusts.
+  final double petalWindFrequency;
+
+  /// Peak horizontal wind velocity, in logical pixels per second.
+  final double petalWindStrength;
+
   final bool weekStartsOnMonday;
   final bool showQuotes;
 
@@ -132,6 +168,9 @@ class AppSettings {
   final bool devForceConflictUi;
   final bool devShowConflictDocumentIds;
   final bool devShowJournalRemotePullButton;
+
+  /// Dev-only: overlay a live FPS counter and a last-minute FPS graph, top-right.
+  final bool devShowFpsCounter;
   final double geometricTextureScale;
   final double geometricTextureIntensity;
   final double geometricTextureFocalSpread;
@@ -185,6 +224,12 @@ class AppSettings {
 
   AppSettings copyWith({
     int? accentColor,
+    AppThemeMode? themeMode,
+    int? petalColor,
+    int? petalMaxCount,
+    double? petalFallSpeed,
+    double? petalWindFrequency,
+    double? petalWindStrength,
     bool? weekStartsOnMonday,
     bool? showQuotes,
     bool? showDefaultTrackersInGrid,
@@ -219,6 +264,7 @@ class AppSettings {
     bool? devForceConflictUi,
     bool? devShowConflictDocumentIds,
     bool? devShowJournalRemotePullButton,
+    bool? devShowFpsCounter,
     double? geometricTextureScale,
     double? geometricTextureIntensity,
     double? geometricTextureFocalSpread,
@@ -278,6 +324,12 @@ class AppSettings {
   }) {
     return AppSettings(
       accentColor: accentColor ?? this.accentColor,
+      themeMode: themeMode ?? this.themeMode,
+      petalColor: petalColor ?? this.petalColor,
+      petalMaxCount: petalMaxCount ?? this.petalMaxCount,
+      petalFallSpeed: petalFallSpeed ?? this.petalFallSpeed,
+      petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
+      petalWindStrength: petalWindStrength ?? this.petalWindStrength,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
       showQuotes: showQuotes ?? this.showQuotes,
       showDefaultTrackersInGrid:
@@ -343,6 +395,7 @@ class AppSettings {
           devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
       devShowJournalRemotePullButton: devShowJournalRemotePullButton ??
           this.devShowJournalRemotePullButton,
+      devShowFpsCounter: devShowFpsCounter ?? this.devShowFpsCounter,
       geometricTextureScale:
           geometricTextureScale ?? this.geometricTextureScale,
       geometricTextureIntensity:

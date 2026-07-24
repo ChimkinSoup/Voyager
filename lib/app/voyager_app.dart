@@ -11,6 +11,9 @@ import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
+import 'package:voyager/core/widgets/paper_texture.dart';
+import 'package:voyager/core/widgets/petal_field.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/routing/app_router.dart';
 
 class VoyagerApp extends ConsumerStatefulWidget {
@@ -87,7 +90,8 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       ),
     );
     final router = ref.watch(routerProvider);
-    final theme = VoyagerTheme.dark(accent: accent);
+    final themeMode = ref.watch(themeModeProvider);
+    final theme = VoyagerTheme.forMode(themeMode, accent: accent);
 
     return MaterialApp.router(
       title: 'Voyager',
@@ -96,7 +100,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       builder: (context, child) {
         return Stack(
           children: [
-            const _GeometricBackground(),
+            const _AppBackground(),
             RepaintBoundary(
               child: DefaultTextStyle(
                 style: AppFonts.style(color: theme.colorScheme.onSurface),
@@ -111,8 +115,25 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   }
 }
 
-/// Watches shader/params providers independently so texture updates do not
-/// rebuild [MaterialApp.router] or the navigation shell.
+/// Selects and renders the theme's background pipeline. Watches shader/params
+/// providers independently so texture updates do not rebuild
+/// [MaterialApp.router] or the navigation shell.
+///
+/// Dark = the triangle grid shader with its wave animation. Light = a static
+/// paper-grain shader with a falling petal field drawn over it.
+class _AppBackground extends ConsumerWidget {
+  const _AppBackground();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+    if (themeMode == AppThemeMode.light) {
+      return const _PaperBackground();
+    }
+    return const _GeometricBackground();
+  }
+}
+
 class _GeometricBackground extends ConsumerWidget {
   const _GeometricBackground();
 
@@ -137,6 +158,37 @@ class _GeometricBackground extends ConsumerWidget {
         params: params,
         waveParams: waveParams,
         debugRowFade: debugRowFade,
+      ),
+    );
+  }
+}
+
+/// Light-theme background: cream paper grain with rose petals fluttering over
+/// it. The petal field owns its own animation timer; the paper below is static.
+class _PaperBackground extends ConsumerWidget {
+  const _PaperBackground();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final program = ref.watch(paperShaderProvider).valueOrNull;
+    final petalParams = ref.watch(petalFieldParamsProvider);
+    final baseColor = Theme.of(context).scaffoldBackgroundColor;
+    // A warm gray a few shades down from the ground: dark enough for the specks
+    // to register, light enough that the surface still reads as clean paper.
+    final speckColor = Color.lerp(baseColor, const Color(0xFF8C8578), 0.5)!;
+
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: PaperTexture(
+              program: program,
+              baseColor: baseColor,
+              speckColor: speckColor,
+            ),
+          ),
+          Positioned.fill(child: PetalField(params: petalParams)),
+        ],
       ),
     );
   }

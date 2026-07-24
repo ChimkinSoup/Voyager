@@ -4,7 +4,15 @@ enum VoyagerMenuItemPosition { only, first, middle, last }
 
 /// Shared styling for popup menus, dropdown overlays, and [showMenu] routes.
 abstract final class VoyagerMenuTheme {
+  /// Fallback menu surface, used only when no themed color was threaded in.
+  /// The live value comes from the active palette's card tone — read it from
+  /// `Theme.of(context).popupMenuTheme.color` rather than using this directly,
+  /// or menus will stay dark under the light theme.
   static const Color menuColor = Color(0xFF2A2A33);
+
+  /// The menu surface for [context]'s theme, falling back to [menuColor].
+  static Color menuColorOf(BuildContext context) =>
+      Theme.of(context).popupMenuTheme.color ?? menuColor;
   static const double radius = 18;
   static const BorderRadius menuBorderRadius = BorderRadius.all(
     Radius.circular(radius),
@@ -55,8 +63,9 @@ abstract final class VoyagerMenuTheme {
     required TextTheme textTheme,
     required Color onSurface,
     Color? accentColor,
+    Color? color,
   }) => PopupMenuThemeData(
-    color: menuColor,
+    color: color ?? menuColor,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     shadowColor: Colors.transparent,
@@ -67,13 +76,17 @@ abstract final class VoyagerMenuTheme {
     iconColor: onSurface,
   );
 
-  static DropdownMenuThemeData dropdownMenuTheme(TextTheme textTheme, {Color? accentColor}) =>
-      DropdownMenuThemeData(
-        textStyle: textTheme.bodyLarge,
-        menuStyle: menuStyle(accentColor: accentColor),
-      );
+  static DropdownMenuThemeData dropdownMenuTheme(
+    TextTheme textTheme, {
+    Color? accentColor,
+    Color? color,
+  }) => DropdownMenuThemeData(
+    textStyle: textTheme.bodyLarge,
+    menuStyle: menuStyle(accentColor: accentColor, color: color),
+  );
 
-  static MenuThemeData menuTheme({Color? accentColor}) => MenuThemeData(style: menuStyle(accentColor: accentColor));
+  static MenuThemeData menuTheme({Color? accentColor, Color? color}) =>
+      MenuThemeData(style: menuStyle(accentColor: accentColor, color: color));
 
   static ({
     Color color,

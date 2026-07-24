@@ -23,6 +23,7 @@ class DevSettingsController extends ChangeNotifier {
   bool devForceConflictUi = false;
   bool showConflictDocumentIds = false;
   bool showJournalRemotePullButton = false;
+  bool showFpsCounter = false;
 
   Future<void> loadFromSettings() async {
     final repo = _settingsRepository;
@@ -64,6 +65,11 @@ class DevSettingsController extends ChangeNotifier {
 
     if (showJournalRemotePullButton != settings.devShowJournalRemotePullButton) {
       showJournalRemotePullButton = settings.devShowJournalRemotePullButton;
+      changed = true;
+    }
+
+    if (showFpsCounter != settings.devShowFpsCounter) {
+      showFpsCounter = settings.devShowFpsCounter;
       changed = true;
     }
 
@@ -119,6 +125,13 @@ class DevSettingsController extends ChangeNotifier {
     await _persist();
   }
 
+  Future<void> setShowFpsCounter(bool value) async {
+    if (showFpsCounter == value) return;
+    showFpsCounter = value;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> _persist() async {
     final repo = _settingsRepository;
     if (repo == null) return;
@@ -132,6 +145,7 @@ class DevSettingsController extends ChangeNotifier {
         devForceConflictUi: devForceConflictUi,
         devShowConflictDocumentIds: showConflictDocumentIds,
         devShowJournalRemotePullButton: showJournalRemotePullButton,
+        devShowFpsCounter: showFpsCounter,
       ),
     );
   }

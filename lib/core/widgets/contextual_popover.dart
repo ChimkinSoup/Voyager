@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/constants/app_constants.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 class ContextualPopover extends StatelessWidget {
   const ContextualPopover({
@@ -22,13 +23,14 @@ class ContextualPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = accentColor ?? theme.colorScheme.primary;
+    final vc = VoyagerColors.of(context);
     final innerRadius = _radius - _borderWidth;
 
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFF1B1B22),
+        color: theme.scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(_radius),
         boxShadow: [
           BoxShadow(
@@ -42,8 +44,8 @@ class ContextualPopover extends StatelessWidget {
             spreadRadius: 1,
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 8,
+            color: vc.shadow.withValues(alpha: vc.strongShadowAlpha),
+            blurRadius: 8 * vc.shadowBlurScale,
             offset: const Offset(0, 4),
           ),
         ],

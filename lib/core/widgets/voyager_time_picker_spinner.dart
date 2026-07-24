@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 class VoyagerTimePickerSpinner extends StatefulWidget {
   const VoyagerTimePickerSpinner({
@@ -330,8 +331,9 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
                         int m = (index % _minuteItemsCount) * widget.minutesInterval;
                         TextStyle? style = isSelected ? highlightStyle : normalStyle;
                         if (widget.isActive && m % 30 == 0 && highlightStyle != null) {
-                          Color base = highlightStyle.color ?? Colors.white;
-                          Color lighter = Color.lerp(base, Colors.white, 0.4) ?? Colors.white;
+                          final wash = VoyagerColors.of(ctx).highlightWash;
+                          Color base = highlightStyle.color ?? wash;
+                          Color lighter = Color.lerp(base, wash, 0.4) ?? wash;
                           style = highlightStyle.copyWith(
                             color: isSelected ? lighter : lighter.withValues(alpha: 0.7),
                           );

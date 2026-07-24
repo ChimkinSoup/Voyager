@@ -10,6 +10,7 @@ import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/dev/cache_status.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
+import 'package:voyager/core/dev/fps_monitor_controller.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
@@ -24,6 +25,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/geometric_texture_settings.dart';
+import 'package:voyager/core/widgets/petal_field.dart';
 import 'package:voyager/data/remote/cloud_function_weather_client.dart';
 import 'package:voyager/data/remote/dev_openweather_client.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
@@ -338,6 +340,29 @@ final colorPaletteProvider = Provider<List<int>>((ref) {
       defaultColorPalette;
 });
 
+/// The active theme mode. Watched narrowly so a theme flip rebuilds
+/// [MaterialApp] but nothing else re-derives from it.
+final themeModeProvider = Provider<AppThemeMode>((ref) {
+  return ref.watch(
+    settingsProvider.select((s) => s.value?.themeMode ?? AppThemeMode.dark),
+  );
+});
+
+/// Live petal-field parameters, sourced from settings. Unlike the geometric
+/// params there is no debounced write-back notifier here — the petal settings
+/// are only ever changed from the settings page, which saves directly.
+final petalFieldParamsProvider = Provider<PetalFieldParams>((ref) {
+  final s = ref.watch(settingsProvider).valueOrNull;
+  if (s == null) return PetalFieldParams.defaults;
+  return PetalFieldParams(
+    color: Color(s.petalColor),
+    maxPetals: s.petalMaxCount,
+    fallSpeed: s.petalFallSpeed,
+    windFrequency: s.petalWindFrequency,
+    windStrength: s.petalWindStrength,
+  );
+});
+
 final journalsProvider = FutureProvider((ref) {
   ref.keepAlive();
   return ref.watch(journalRepositoryProvider).listJournals();
@@ -596,6 +621,25 @@ final geometricShaderProvider = FutureProvider<FragmentProgram?>((ref) async {
   }
 });
 
+/// Compiled paper-grain shader for the light theme. Same graceful-degradation
+/// contract as [geometricShaderProvider]: null on failure, flat fill downstream.
+final paperShaderProvider = FutureProvider<FragmentProgram?>((ref) async {
+  ref.keepAlive();
+  try {
+    return await FragmentProgram.fromAsset('shaders/paper_texture.frag');
+  } catch (e, st) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: e,
+        stack: st,
+        library: 'paper_texture',
+        context: ErrorDescription('loading paper texture shader'),
+      ),
+    );
+    return null;
+  }
+});
+
 /// Live-tunable geometric texture parameters (persisted in local settings).
 class GeometricTextureParamsNotifier
     extends StateNotifier<GeometricTextureParams> {
@@ -732,6 +776,7 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
 
   await Future.wait<void>([
     ref.read(geometricShaderProvider.future).then((_) {}),
+    ref.read(paperShaderProvider.future).then((_) {}),
     ref.read(quotesLoadedProvider.future),
     ref.read(settingsProvider.future).then((_) {}),
     ref.read(journalsProvider.future).then((_) {}),
@@ -807,6 +852,25 @@ final syncCompareLoggerProvider = ChangeNotifierProvider<SyncCompareLogger>((
   ref,
 ) {
   return SyncCompareLogger();
+});
+
+/// Starts/stops with the dev "Show FPS counter" toggle — its ticker only runs
+/// while the overlay is actually visible.
+final fpsMonitorProvider = ChangeNotifierProvider<FpsMonitorController>((ref) {
+  final controller = FpsMonitorController();
+  ref.onDispose(controller.dispose);
+  ref.listen<bool>(
+    devSettingsProvider.select((s) => s.showFpsCounter),
+    (previous, showFpsCounter) {
+      if (showFpsCounter) {
+        controller.start();
+      } else {
+        controller.stop();
+      }
+    },
+    fireImmediately: true,
+  );
+  return controller;
 });
 
 final remoteSyncCompareServiceProvider = Provider<RemoteSyncCompareService>((

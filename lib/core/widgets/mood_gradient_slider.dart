@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 class MoodGradientSlider extends StatelessWidget {
   const MoodGradientSlider({
@@ -23,7 +24,15 @@ class MoodGradientSlider extends StatelessWidget {
         thumbColor: accent,
         valueIndicatorColor: accent,
         trackShape: GradientSliderTrackShape(
-          gradient: LinearGradient(colors: [Colors.white, accent]),
+          // Pale end shifts with the theme: toward white on dark, toward slate
+          // on cream, so the low-mood end stays visible against the track
+          // rather than melting into a light surface.
+          gradient: LinearGradient(
+            colors: [
+              Color.lerp(accent, VoyagerColors.of(context).highlightWash, 0.8)!,
+              accent,
+            ],
+          ),
           inactiveColor: Theme.of(context).colorScheme.surface,
         ),
       ),

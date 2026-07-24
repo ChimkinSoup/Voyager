@@ -22,6 +22,13 @@ enum HeatmapMode { defaultAll, mood, studying, writing, custom }
 
 enum StartupPageMode { first, custom, lastSeen }
 
+/// Which of the two hand-built app themes is active.
+///
+/// Deliberately not tied to the platform brightness: each theme carries its own
+/// background pipeline (dark = triangle grid shader, light = paper grain +
+/// falling petals), so switching is a real choice rather than an ambient one.
+enum AppThemeMode { dark, light }
+
 /// Shape of the geometric-texture background's animated wave SDF.
 enum GeometricWaveShape {
   /// A straight line sweeping across the grid.

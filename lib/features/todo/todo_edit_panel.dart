@@ -1064,7 +1064,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               onPressed: _close,
               style: FilledButton.styleFrom(
                 backgroundColor: listColor,
-                foregroundColor: Colors.white,
+                foregroundColor:
+                    ThemeData.estimateBrightnessForColor(listColor) ==
+                        Brightness.dark
+                    ? Colors.white
+                    : Colors.black,
               ),
               child: const Text('Save'),
             ),

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
@@ -657,7 +658,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       }),
       icon: Icon(
         PhosphorIconsRegular.calendarDots,
-        color: active ? Colors.black : null,
+        color: active ? VoyagerColors.of(context).onAccent : null,
       ),
       style: IconButton.styleFrom(
         backgroundColor:
