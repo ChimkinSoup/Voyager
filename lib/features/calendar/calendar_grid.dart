@@ -95,12 +95,18 @@ export 'calendar_day_grid.dart'
 final _mmmmFormat = DateFormat.MMMM();
 
 /// Shared calendar panel fill — month, week, and year tiles use the same tint.
-const calendarPanelBackgroundOpacity = 0.6;
+const calendarPanelBackgroundOpacity = 0.08;
 
-Color calendarPanelBackgroundColor(BuildContext context) =>
-    Theme.of(context).colorScheme.surface.withValues(
-      alpha: calendarPanelBackgroundOpacity,
-    );
+Color calendarPanelBackgroundColor(BuildContext context) {
+  final theme = Theme.of(context);
+  // The palette's field tone — the lightest/most-forward surface tier
+  // (lighter than both the app bar and card tones), so the panel fill
+  // reads as clearly lifted rather than a faint tint.
+  final base = theme.inputDecorationTheme.fillColor ??
+      theme.cardTheme.color ??
+      theme.colorScheme.surface;
+  return base.withValues(alpha: calendarPanelBackgroundOpacity);
+}
 
 class CalendarGrid extends StatelessWidget {
   const CalendarGrid({
@@ -126,6 +132,7 @@ class CalendarGrid extends StatelessWidget {
     this.onTodoTap,
     this.onWeekSlotTap,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.editingEventId,
     this.weekTimelineScrollController,
     this.highlightedWeekStart,
@@ -168,6 +175,9 @@ class CalendarGrid extends StatelessWidget {
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onWeekSlotTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+
+  /// Builds the right-click menu for an event/todo entry (week + month views).
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
   final ScrollController? weekTimelineScrollController;
   final DateTime? highlightedWeekStart;
@@ -188,6 +198,7 @@ class CalendarGrid extends StatelessWidget {
         onEventTap: onEventTap,
         onTodoTap: onTodoTap,
         onSlotTap: onWeekSlotTap,
+        entryMenuBuilder: entryMenuBuilder,
         weekStartsMonday: weekStartsMonday,
         scrollController: weekTimelineScrollController,
         editingEventId: editingEventId,
@@ -202,6 +213,7 @@ class CalendarGrid extends StatelessWidget {
         showTodoIcons: showTodoIcons,
         onDayTap: onDayTap,
         onEntryTap: onEntryTap,
+        entryMenuBuilder: entryMenuBuilder,
         editingEventId: editingEventId,
         weekStartsMonday: weekStartsMonday,
         dayGridKey: monthDayGridKey,
@@ -263,7 +275,6 @@ class DayHourGrid extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                visualDensity: VisualDensity.compact,
                 onPressed: onDayChanged == null
                     ? null
                     : () =>
@@ -278,7 +289,6 @@ class DayHourGrid extends StatelessWidget {
                 ),
               ),
               IconButton(
-                visualDensity: VisualDensity.compact,
                 onPressed: onDayChanged == null
                     ? null
                     : () => onDayChanged!(day.add(const Duration(days: 1))),
@@ -608,12 +618,8 @@ class MonthTitleHeader extends StatelessWidget {
         child: IconButton(
           onPressed: onPressed,
           icon: iconChild,
-          visualDensity: VisualDensity.compact,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(
-            width: navTapSize,
-            height: navTapSize,
-          ),
+          constraints: const BoxConstraints(),
         ),
       );
     }
@@ -696,6 +702,7 @@ class _MonthGrid extends StatelessWidget {
     required this.onDayTap,
     required this.weekStartsMonday,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.editingEventId,
     this.dayGridKey,
     this.hiddenWeekRow,
@@ -714,6 +721,7 @@ class _MonthGrid extends StatelessWidget {
   final bool showTodoIcons;
   final void Function(DateTime day) onDayTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
   final bool weekStartsMonday;
 
@@ -744,7 +752,10 @@ class _MonthGrid extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
-      color: calendarPanelBackgroundColor(context),
+      color: Colors.transparent,
+      shadowColor: Colors.transparent,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(side: BorderSide.none),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
@@ -780,6 +791,7 @@ class _MonthGrid extends StatelessWidget {
                 style: MonthDayCellStyle.full,
                 onDayTap: onDayTap,
                 onEntryTap: onEntryTap,
+                entryMenuBuilder: entryMenuBuilder,
                 editingEventId: editingEventId,
                 hiddenWeekRow: hiddenWeekRow,
                 highlightedWeekStart: highlightedWeekStart,
@@ -803,6 +815,7 @@ class _WeekGrid extends StatelessWidget {
     required this.onTodoTap,
     required this.onSlotTap,
     required this.weekStartsMonday,
+    this.entryMenuBuilder,
     this.scrollController,
     this.editingEventId,
     this.entryFadeEnabled = true,
@@ -815,6 +828,7 @@ class _WeekGrid extends StatelessWidget {
   final void Function(CalendarEvent event)? onEventTap;
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onSlotTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final bool weekStartsMonday;
   final ScrollController? scrollController;
   final String? editingEventId;
@@ -829,7 +843,10 @@ class _WeekGrid extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
-      color: calendarPanelBackgroundColor(context),
+      color: Colors.transparent,
+      shadowColor: Colors.transparent,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(side: BorderSide.none),
       child: CalendarWeekTimeline(
       weekStart: start,
       events: events,
@@ -839,6 +856,7 @@ class _WeekGrid extends StatelessWidget {
       onEventTap: onEventTap ?? (_) {},
       onTodoTap: onTodoTap ?? (_) {},
       onSlotTap: onSlotTap ?? (_, _) {},
+      entryMenuBuilder: entryMenuBuilder,
       editingEventId: editingEventId,
       entryFadeEnabled: entryFadeEnabled,
       weekdayAccentColor: accentColor,
@@ -933,9 +951,12 @@ class _YearGrid extends StatelessWidget {
         child: Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
-          color: calendarPanelBackgroundColor(context),
+          color: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: Theme.of(context).dividerColor),
           ),
           child: InkWell(
             onTap: () => onMonthTap(monthDate),

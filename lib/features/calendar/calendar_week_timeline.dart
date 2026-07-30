@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_overlap_engine.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
@@ -265,6 +266,7 @@ class CalendarWeekTimeline extends StatefulWidget {
     required this.onEventTap,
     required this.onTodoTap,
     required this.onSlotTap,
+    this.entryMenuBuilder,
     this.interactive = true,
     this.initialScrollOffset,
     this.scrollController,
@@ -282,6 +284,9 @@ class CalendarWeekTimeline extends StatefulWidget {
   final CalendarWeekEventTap onEventTap;
   final CalendarWeekTodoTap onTodoTap;
   final CalendarWeekSlotTap onSlotTap;
+
+  /// Builds the right-click menu for an event/todo entry. Null disables it.
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final bool interactive;
   final double? initialScrollOffset;
   final ScrollController? scrollController;
@@ -556,6 +561,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                     isFirstColumn: i == 0,
                                     isLastColumn: i == 6,
                                     onEventTap: widget.onEventTap,
+                                    entryMenuBuilder: widget.entryMenuBuilder,
                                     editingEventId: widget.editingEventId,
                                   ),
                                 ),
@@ -599,6 +605,8 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                               todoMarkers: widget.todoMarkers,
                                               onEventTap: widget.onEventTap,
                                               onTodoTap: widget.onTodoTap,
+                                              entryMenuBuilder:
+                                                  widget.entryMenuBuilder,
                                               interactive: widget.interactive,
                                               editingEventId: widget.editingEventId,
                                             ),
@@ -684,6 +692,7 @@ class _AllDayShelfColumn extends StatelessWidget {
     required this.isFirstColumn,
     required this.isLastColumn,
     required this.onEventTap,
+    this.entryMenuBuilder,
     this.editingEventId,
   });
 
@@ -694,6 +703,7 @@ class _AllDayShelfColumn extends StatelessWidget {
   final bool isFirstColumn;
   final bool isLastColumn;
   final CalendarWeekEventTap onEventTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
 
   @override
@@ -705,15 +715,21 @@ class _AllDayShelfColumn extends StatelessWidget {
           SizedBox(
             height: calendarWeekAllDayEventRowHeight,
             child: i < columnEvents.length && columnEvents[i] != null
-                ? CalendarWeekEventBlock(
-                    key: ValueKey('allday-${columnEvents[i]!.id}-$i'),
-                    event: columnEvents[i]!,
-                    day: day,
-                    margin: margin,
-                    isFirstColumn: isFirstColumn,
-                    isLastColumn: isLastColumn,
-                    highlighted: editingEventId == columnEvents[i]!.id,
-                    onTap: () => onEventTap(columnEvents[i]!),
+                ? calendarEntryContextMenu(
+                    builder: entryMenuBuilder,
+                    entry: columnEvents[i]!.isFullDay
+                        ? CalendarDayEntry.allDayEvent(columnEvents[i]!)
+                        : CalendarDayEntry.timedEvent(columnEvents[i]!),
+                    child: CalendarWeekEventBlock(
+                      key: ValueKey('allday-${columnEvents[i]!.id}-$i'),
+                      event: columnEvents[i]!,
+                      day: day,
+                      margin: margin,
+                      isFirstColumn: isFirstColumn,
+                      isLastColumn: isLastColumn,
+                      highlighted: editingEventId == columnEvents[i]!.id,
+                      onTap: () => onEventTap(columnEvents[i]!),
+                    ),
                   )
                 : const SizedBox.shrink(),
           ),
@@ -731,6 +747,7 @@ class _DayTimedColumn extends StatelessWidget {
     required this.onEventTap,
     required this.onTodoTap,
     required this.interactive,
+    this.entryMenuBuilder,
     this.editingEventId,
   });
 
@@ -742,6 +759,7 @@ class _DayTimedColumn extends StatelessWidget {
   final CalendarWeekEventTap onEventTap;
   final CalendarWeekTodoTap onTodoTap;
   final bool interactive;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
 
   @override
@@ -770,18 +788,22 @@ class _DayTimedColumn extends StatelessWidget {
               height: slot.height,
               child: IgnorePointer(
                 ignoring: !interactive,
-                child: slot.entry.isTodo
-                    ? CalendarWeekTaskBar(
-                        key: ValueKey('todo-${slot.entry.todo!.taskId}'),
-                        marker: slot.entry.todo!,
-                        onTap: () => onTodoTap(slot.entry.todo!),
-                      )
-                    : CalendarWeekEventBlock(
-                        key: ValueKey('event-${slot.entry.event!.id}'),
-                        event: slot.entry.event!,
-                        highlighted: editingEventId == slot.entry.event!.id,
-                        onTap: () => onEventTap(slot.entry.event!),
-                      ),
+                child: calendarEntryContextMenu(
+                  builder: entryMenuBuilder,
+                  entry: slot.entry,
+                  child: slot.entry.isTodo
+                      ? CalendarWeekTaskBar(
+                          key: ValueKey('todo-${slot.entry.todo!.taskId}'),
+                          marker: slot.entry.todo!,
+                          onTap: () => onTodoTap(slot.entry.todo!),
+                        )
+                      : CalendarWeekEventBlock(
+                          key: ValueKey('event-${slot.entry.event!.id}'),
+                          event: slot.entry.event!,
+                          highlighted: editingEventId == slot.entry.event!.id,
+                          onTap: () => onEventTap(slot.entry.event!),
+                        ),
+                ),
               ),
             ),
         ],

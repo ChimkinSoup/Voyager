@@ -28,6 +28,20 @@ class _KeepAliveScrollViewState extends State<KeepAliveScrollView>
     return ListView(
       key: widget.storageKey,
       padding: widget.padding,
+      // Without this, children scrolled far enough off-screen get their
+      // RenderObject disposed and rebuilt from scratch once scrolled back
+      // into view (SliverChildListDelegate's default keep-alive only
+      // applies to descendants that opt in via
+      // AutomaticKeepAliveClientMixin, which most of these sections don't).
+      // A section whose height depends on async data (a FutureBuilder that
+      // re-fetches on rebuild, briefly showing a loading placeholder of a
+      // different height than the loaded content) then relayouts with a
+      // different height than before, and the scroll offset gets corrected
+      // to compensate — which reads as a sudden jump. This list is short
+      // (a fixed handful of dev/settings/analytics sections), so keeping
+      // every child laid out is cheap and avoids the dispose/recreate cycle
+      // entirely.
+      cacheExtent: double.infinity,
       children: widget.children,
     );
   }
@@ -41,12 +55,19 @@ class KeepAliveScrollList extends StatefulWidget {
     required this.itemCount,
     required this.itemBuilder,
     this.controller,
+    this.findChildIndexCallback,
   });
 
   final PageStorageKey<String> storageKey;
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
   final ScrollController? controller;
+  // Lets a caller whose items are individually keyed (e.g. ValueKey(item.id))
+  // tell the framework where a shifted key moved to, so it can reuse that
+  // item's existing Element instead of destroying and recreating it — which
+  // otherwise happens for every item after an insertion/removal point, even
+  // when the item's own widget instance is memoized by the caller.
+  final ChildIndexGetter? findChildIndexCallback;
 
   @override
   State<KeepAliveScrollList> createState() => _KeepAliveScrollListState();
@@ -60,11 +81,14 @@ class _KeepAliveScrollListState extends State<KeepAliveScrollList>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return ListView.builder(
+    return ListView.custom(
       key: widget.storageKey,
       controller: widget.controller,
-      itemCount: widget.itemCount,
-      itemBuilder: widget.itemBuilder,
+      childrenDelegate: SliverChildBuilderDelegate(
+        widget.itemBuilder,
+        childCount: widget.itemCount,
+        findChildIndexCallback: widget.findChildIndexCallback,
+      ),
     );
   }
 }

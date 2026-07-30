@@ -6,10 +6,12 @@ import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -18,9 +20,10 @@ import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -45,10 +48,21 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
+import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/features/journal/journal_list_actions.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
-import 'package:voyager/features/analytics/statistics_action_fab.dart';
+
+/// Everything that affects what a `_JournalEntryListTile` renders (outside
+/// of the live title/body preview, which is driven separately by
+/// `titlePreview`/`bodyPreview`). Used to decide whether a cached row widget
+/// instance (see `_JournalPageState._rowFor`) can be reused as-is.
+typedef _JournalRowSignature = ({
+  String title,
+  String body,
+  DateTime entryDate,
+  bool isSelected,
+});
 
 class JournalPage extends ConsumerStatefulWidget {
   const JournalPage({super.key});
@@ -83,6 +97,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   final _listTitlePreview = ValueNotifier<String>('');
   final _listBodyPreview = ValueNotifier<String>('');
   final _entryBodyDrafts = <String, String>{};
+  // Reuses the same _JournalEntryListTile widget instance across rebuilds
+  // for entries whose _JournalRowSignature hasn't changed, so Flutter's
+  // element reconciliation skips rebuilding them entirely — _persistEntryEdits
+  // invalidates journalListEntriesProvider unconditionally on every
+  // ~400ms-debounced autosave while typing, which would otherwise
+  // reconstruct, and thus rebuild, every mounted+cached row, not just the
+  // entry being edited (which already has its own live-preview mechanism
+  // via titlePreview/bodyPreview). Keyed by entry id; pruned to the ids
+  // actually displayed at the end of every build.
+  final _rowWidgetCache = <String, _JournalEntryListTile>{};
+  final _rowSignatureCache = <String, _JournalRowSignature>{};
   Timer? _metadataSaveTimer;
   Timer? _bodySaveTimer;
   Future<void>? _flushInProgress;
@@ -111,7 +136,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _titleFocusNode.addListener(_handleTitleFocusChanged);
     _bodyFocusNode.addListener(_handleBodyFocusChanged);
     _restoreFromSettings(ref.read(settingsProvider).valueOrNull);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _prefetchInitialJournalEntries());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _prefetchInitialJournalEntries(),
+    );
   }
 
   Future<void> _lifecycleFlush() async {
@@ -134,7 +161,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   void _prefetchInitialJournalEntries() {
     if (!mounted) return;
     if (_viewAllJournals) {
-      unawaited(ref.read(journalListEntriesProvider(allJournalEntriesScope).future));
+      unawaited(
+        ref.read(journalListEntriesProvider(allJournalEntriesScope).future),
+      );
       return;
     }
     unawaited(ref.read(journalListEntriesProvider(_journalFilter).future));
@@ -142,7 +171,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   Future<void> _selectJournal(String journalId) async {
     _logJournal('SELECT_JOURNAL', details: 'journalId=$journalId');
-    final entries = await ref.read(journalListEntriesProvider(journalId).future);
+    final entries = await ref.read(
+      journalListEntriesProvider(journalId).future,
+    );
     if (!mounted) return;
 
     // Keep the current selection only if it already belongs to the target
@@ -168,9 +199,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
     JournalEntry? displayTarget;
     if (!keepCurrent) {
-      final scoped = _buildDisplayEntries(entries)
-          .where((entry) => entry.journalId == journalId)
-          .toList();
+      final scoped = _buildDisplayEntries(
+        entries,
+      ).where((entry) => entry.journalId == journalId).toList();
       if (scoped.isNotEmpty) {
         displayTarget = _prepareSelectedEntry(scoped.first);
       }
@@ -205,8 +236,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
     if (_viewAllJournals) {
       final journalId = _selectedEntry?.journalId;
-      if (journalId != null &&
-          displayJournals.any((j) => j.id == journalId)) {
+      if (journalId != null && displayJournals.any((j) => j.id == journalId)) {
         await ref.read(journalListEntriesProvider(journalId).future);
         if (!mounted) return;
       }
@@ -218,8 +248,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         }
         _viewAllJournals = false;
       });
-      if (journalId != null &&
-          displayJournals.any((j) => j.id == journalId)) {
+      if (journalId != null && displayJournals.any((j) => j.id == journalId)) {
         unawaited(_persistLastViewedJournal(journalId));
       }
       return;
@@ -259,12 +288,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
     final savedId = settings.lastViewedJournalId;
     final isAll = savedId == "ALL_JOURNALS";
-    final restoredJournalId = !isAll && savedId != null &&
+    final restoredJournalId =
+        !isAll &&
+            savedId != null &&
             journals.any((journal) => journal.id == savedId)
         ? savedId
         : null;
-    
-    if (!isAll && restoredJournalId == null &&
+
+    if (!isAll &&
+        restoredJournalId == null &&
         settings.journalEntryListWidth == null) {
       return;
     }
@@ -293,7 +325,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _bodyFocusNode.removeListener(_handleBodyFocusChanged);
     _listTitlePreview.dispose();
     _listBodyPreview.dispose();
-    _logJournal('PAGE_DISPOSE', details: 'Flushing active edits before dispose.');
+    _logJournal(
+      'PAGE_DISPOSE',
+      details: 'Flushing active edits before dispose.',
+    );
     unawaited(_flushActiveEntryEdits(refreshList: false));
     _titleController.dispose();
     _titleFocusNode.dispose();
@@ -307,8 +342,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return JournalPageDebugSnapshot(
       selectedEntryId: entryId,
       titleText: _titleController.text,
-      bodyText: _editorKey.currentState?.currentBodyText ??
-          (entryId == null ? '' : (_entryBodyDrafts[entryId] ?? _selectedEntry?.body ?? '')),
+      bodyText:
+          _editorKey.currentState?.currentBodyText ??
+          (entryId == null
+              ? ''
+              : (_entryBodyDrafts[entryId] ?? _selectedEntry?.body ?? '')),
       metadataDirty: _metadataDirty,
       bodyFocused: _bodyFocusNode.hasFocus,
       titleFocused: _titleFocusNode.hasFocus,
@@ -318,11 +356,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
   }
 
-  void _logJournal(
-    String event, {
-    JournalEntry? entry,
-    String? details,
-  }) {
+  void _logJournal(String event, {JournalEntry? entry, String? details}) {
     logJournalDebug(
       _journalDebugLogger,
       event,
@@ -415,7 +449,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
   }
 
-
   Future<void> _persistEntryListWidth(double? width) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final settings = await settingsRepo.getSettings();
@@ -467,7 +500,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final remaining = allJournals.where((j) => j.id != journalId).toList();
     _viewAllJournals = true;
     unawaited(_persistLastViewedJournal("ALL_JOURNALS"));
-    _journalFilter = remaining
+    _journalFilter =
+        remaining
             .cast<Journal?>()
             .firstWhere(
               (j) => j!.id == legacyJournalId,
@@ -539,9 +573,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final journals = await ref.read(journalsProvider.future);
     if (!mounted) return;
     final updated = journals.cast<Journal?>().firstWhere(
-          (j) => j!.id == journalId,
-          orElse: () => null,
-        );
+      (j) => j!.id == journalId,
+      orElse: () => null,
+    );
     if (updated == null) return;
     setState(() => _pendingJournal = updated);
   }
@@ -626,17 +660,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   void _writeEntryListScrollStorage(double offset) {
     if (!mounted) return;
-    PageStorage.of(context).writeState(
+    PageStorage.of(
       context,
-      offset,
-      identifier: _entryListStorageKey(),
-    );
+    ).writeState(context, offset, identifier: _entryListStorageKey());
   }
+
   List<JournalEntry> _buildDisplayEntries(List<JournalEntry> entries) {
-    final persisted = entries.where((entry) => 
-        !_pendingEntries.containsKey(entry.id) &&
-        !_optimisticallyHiddenEntryIds.contains(entry.id) &&
-        !_optimisticallyHiddenJournalIds.contains(entry.journalId));
+    final persisted = entries.where(
+      (entry) =>
+          !_pendingEntries.containsKey(entry.id) &&
+          !_optimisticallyHiddenEntryIds.contains(entry.id) &&
+          !_optimisticallyHiddenJournalIds.contains(entry.journalId),
+    );
     final pending = [
       for (final id in _pendingEntryIds)
         if (_pendingEntries.containsKey(id)) _pendingEntries[id]!,
@@ -672,10 +707,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return entriesAsync.isLoading && raw == null;
   }
 
-  int _scopedEntryCount(
-    List<JournalEntry> displayEntries,
-    String journalId,
-  ) {
+  int _scopedEntryCount(List<JournalEntry> displayEntries, String journalId) {
     return displayEntries.where((entry) => entry.journalId == journalId).length;
   }
 
@@ -695,9 +727,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       // _reconcilePendingEntries) are excluded here so counts are accurate
       // immediately after deletion, without waiting for the next frame.
       final pendingCount = _pendingEntryIds
-          .where((id) =>
-              _pendingEntries[id]?.journalId == journalId &&
-              !dbEntryIds.contains(id))
+          .where(
+            (id) =>
+                _pendingEntries[id]?.journalId == journalId &&
+                !dbEntryIds.contains(id),
+          )
           .length;
       return dbCount + pendingCount;
     }
@@ -707,7 +741,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       return _scopedEntryCount(displayEntries, journalId);
     }
     if (entryListScope == allJournalEntriesScope) {
-      return displayEntries.where((entry) => entry.journalId == journalId).length;
+      return displayEntries
+          .where((entry) => entry.journalId == journalId)
+          .length;
     }
     return 0;
   }
@@ -739,8 +775,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   void _createEntryOptimistic(List<Journal> journals) {
     if (!mounted) return;
 
-    final settings =
-        ref.read(settingsProvider).value ?? const AppSettings();
+    final settings = ref.read(settingsProvider).value ?? const AppSettings();
     final weatherService = ref.read(weatherServiceProvider);
     final weather = weatherService.readCachedSnapshot(settings);
     final journalId = journals.isEmpty
@@ -824,9 +859,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (_editorKey.currentState?.hasFocus ?? false) return;
 
     final fresh = entries.cast<JournalEntry?>().firstWhere(
-          (entry) => entry!.id == id,
-          orElse: () => null,
-        );
+      (entry) => entry!.id == id,
+      orElse: () => null,
+    );
     if (fresh == null) return;
 
     final current = _selectedEntry;
@@ -915,10 +950,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _flushActiveEntryEditsImpl({required bool refreshList}) async {
-    _logJournal(
-      'FLUSH_ACTIVE_EDITS',
-      details: 'refreshList=$refreshList',
-    );
+    _logJournal('FLUSH_ACTIVE_EDITS', details: 'refreshList=$refreshList');
     final entryId = _selectedEntryId;
     final entry = _selectedEntry;
     if (entryId == null || entry == null) return;
@@ -930,7 +962,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final mood = _mood;
     final weatherIcon = _weatherIcon;
 
-    var body = _editorKey.currentState?.currentBodyText ??
+    var body =
+        _editorKey.currentState?.currentBodyText ??
         _entryBodyDrafts[entryId] ??
         entry.body;
 
@@ -982,7 +1015,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final entry = _selectedEntry;
     if (entryId == null || entry == null) return;
 
-    final body = _editorKey.currentState?.currentBodyText ??
+    final body =
+        _editorKey.currentState?.currentBodyText ??
         _entryBodyDrafts[entryId] ??
         entry.body;
 
@@ -995,6 +1029,50 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       refreshList: false,
       bumpVersion: bumpVersion,
     );
+  }
+
+  /// Loads the entry with [id] fresh from disk before selecting it, rather
+  /// than trusting a caller's possibly-stale snapshot. A cached list row
+  /// (see `_rowFor`) can outlive the entry data it was built from — if a
+  /// field the row's own signature doesn't render (mood, weatherIcon, tags)
+  /// changed remotely in the meantime, tapping through the cached row's
+  /// `entry` object would load stale metadata into the editor, and a later
+  /// autosave could silently revert that field.
+  Future<void> _loadEntryById(String id) async {
+    final repo = ref.read(journalRepositoryProvider);
+    final current = await repo.getEntry(id);
+    if (current == null || !mounted) return;
+    await _loadEntry(current);
+  }
+
+  /// Returns a `_JournalEntryListTile` for [entry], reusing the previous
+  /// frame's widget instance when nothing that affects its rendering has
+  /// changed. See `_rowWidgetCache` for why that matters.
+  _JournalEntryListTile _rowFor(
+    JournalEntry entry, {
+    required bool isSelected,
+  }) {
+    final signature = (
+      title: entry.title,
+      body: entry.body,
+      entryDate: entry.entryDate,
+      isSelected: isSelected,
+    );
+    final cached = _rowWidgetCache[entry.id];
+    if (cached != null && _rowSignatureCache[entry.id] == signature) {
+      return cached;
+    }
+    final tile = _JournalEntryListTile(
+      key: ValueKey(entry.id),
+      entry: entry,
+      isSelected: isSelected,
+      titlePreview: _listTitlePreview,
+      bodyPreview: _listBodyPreview,
+      onTap: () => unawaited(_loadEntryById(entry.id)),
+    );
+    _rowWidgetCache[entry.id] = tile;
+    _rowSignatureCache[entry.id] = signature;
+    return tile;
   }
 
   Future<void> _loadEntry(JournalEntry entry) async {
@@ -1264,9 +1342,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
     final repo = ref.read(journalRepositoryProvider);
     final journal = await repo.getJournal(entry.journalId);
-    final accentColor = Color(journal != null
-        ? _journalFlagColor(journal)
-        : Theme.of(context).colorScheme.primary.toARGB32());
+    final accentColor = Color(
+      journal != null
+          ? _journalFlagColor(journal)
+          : Theme.of(context).colorScheme.primary.toARGB32(),
+    );
 
     setState(() => _isDatePickerOpen = true);
     final pickedDt = await showContextualPopover<DateTime>(
@@ -1282,7 +1362,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     );
     if (mounted) setState(() => _isDatePickerOpen = false);
     if (pickedDt == null) return;
-    
+
     if (!mounted) return;
 
     final existing = await repo.getEntry(entry.id);
@@ -1407,7 +1487,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _invalidateJournalEntryCaches();
   }
 
-  Future<void> _moveEntryItemToJournal(JournalEntry entry, String journalId) async {
+  Future<void> _moveEntryItemToJournal(
+    JournalEntry entry,
+    String journalId,
+  ) async {
     if (entry.journalId == journalId) return;
     final repo = ref.read(journalRepositoryProvider);
     final existing = await repo.getEntry(entry.id);
@@ -1431,13 +1514,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       final scope = entry.journalId;
       final scopedEntries =
           ref.read(journalListEntriesProvider(scope)).valueOrNull ??
-              const <JournalEntry>[];
-      final remaining = _buildDisplayEntries(scopedEntries)
-          .where((e) => e.journalId == scope && e.id != entry.id)
-          .toList();
+          const <JournalEntry>[];
+      final remaining = _buildDisplayEntries(
+        scopedEntries,
+      ).where((e) => e.journalId == scope && e.id != entry.id).toList();
 
-      final displayTarget =
-          remaining.isEmpty ? null : _prepareSelectedEntry(remaining.first);
+      final displayTarget = remaining.isEmpty
+          ? null
+          : _prepareSelectedEntry(remaining.first);
       setState(() {
         if (displayTarget != null) {
           _selectEntryFields(displayTarget);
@@ -1452,123 +1536,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   void _showEntryStatistics(JournalEntry entry) {
-    final words = ref.read(analyticsServiceProvider).countWords(entry.body);
-    final chars = entry.body.length;
-    final readingTimeMin = (words / 200).ceil();
-    final sentences = entry.body.trim().isEmpty
-        ? 0
-        : entry.body.split(RegExp(r'[.!?]+(?:\s+|$)')).where((s) => s.trim().isNotEmpty).length;
-    final paragraphs = entry.body.trim().isEmpty
-        ? 0
-        : entry.body.split(RegExp(r'\n\s*\n')).where((p) => p.trim().isNotEmpty).length;
-
-    final formattedDate = DateFormat.yMMMMd().format(entry.entryDate.toLocal());
-    final formattedTime = formatTime12Hour(entry.entryDate.toLocal());
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(PhosphorIconsRegular.chartBar, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              const Text('Entry Statistics'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.title.isEmpty ? 'Untitled Entry' : entry.title,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$formattedDate at $formattedTime',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildStatRow(ctx, 'Word count', '$words'),
-              _buildStatRow(ctx, 'Character count', '$chars'),
-              _buildStatRow(ctx, 'Sentences', '$sentences'),
-              _buildStatRow(ctx, 'Paragraphs', '$paragraphs'),
-              _buildStatRow(ctx, 'Reading time', '$readingTimeMin min'),
-              if (entry.mood != null)
-                _buildStatRow(ctx, 'Mood value', '${entry.mood}/10'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
+    showJournalEntryStatisticsDialog(context, ref, entry);
   }
 
   Future<void> _showChangeJournalDialog(
     JournalEntry entry,
     List<Journal> journals,
   ) async {
-    final targetJournalId = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Move to Journal'),
-          content: SizedBox(
-            width: 300,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: journals.length,
-              itemBuilder: (context, index) {
-                final journal = journals[index];
-                return ListTile(
-                  leading: JournalBookmarkFlag(
-                    colorValue: _journalFlagColor(journal),
-                    size: 16,
-                  ),
-                  title: Text(journal.name),
-                  trailing: journal.id == entry.journalId
-                      ? const Icon(Icons.check)
-                      : null,
-                  onTap: () => Navigator.of(context).pop(journal.id),
-                );
-              },
-            ),
-          ),
-        );
-      },
+    final targetJournalId = await showMoveToJournalDialog(
+      context,
+      journals: journals,
+      currentJournalId: entry.journalId,
     );
     if (targetJournalId != null && mounted) {
       await _moveEntryItemToJournal(entry, targetJournalId);
     }
-  }
-
-  Widget _buildStatRow(BuildContext context, String label, String value) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: theme.textTheme.bodyMedium),
-          Text(
-            value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _editQuote() async {
@@ -1615,13 +1597,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final scope = entry.journalId;
     final scopedEntries =
         ref.read(journalListEntriesProvider(scope)).valueOrNull ??
-            const <JournalEntry>[];
-    final remaining = _buildDisplayEntries(scopedEntries)
-        .where((e) => e.journalId == scope && e.id != entry.id)
-        .toList();
+        const <JournalEntry>[];
+    final remaining = _buildDisplayEntries(
+      scopedEntries,
+    ).where((e) => e.journalId == scope && e.id != entry.id).toList();
 
-    final displayTarget =
-        remaining.isEmpty ? null : _prepareSelectedEntry(remaining.first);
+    final displayTarget = remaining.isEmpty
+        ? null
+        : _prepareSelectedEntry(remaining.first);
     setState(() {
       if (displayTarget != null) {
         _selectEntryFields(displayTarget);
@@ -1690,17 +1673,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final journalsAsync = ref.watch(journalsProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
     final entryListScope = _entryListScope(journalsAsync.valueOrNull);
-    final entriesScope =
-        _viewAllJournals ? allJournalEntriesScope : entryListScope;
-    final entriesAsync =
-        ref.watch(journalListEntriesProvider(entriesScope));
+    final entriesScope = _viewAllJournals
+        ? allJournalEntriesScope
+        : entryListScope;
+    final entriesAsync = ref.watch(journalListEntriesProvider(entriesScope));
 
     ref.listen(journalListEntriesProvider(entriesScope), (previous, next) {
       final entries = next.valueOrNull;
       if (entries != null && _selectedEntryId != null) {
-        final updated = entries.where((e) => e.id == _selectedEntryId).firstOrNull;
+        final updated = entries
+            .where((e) => e.id == _selectedEntryId)
+            .firstOrNull;
         if (updated != null && _selectedEntry != null) {
-          if (updated.updatedAt.isAfter(_selectedEntry!.updatedAt) || updated.version > _selectedEntry!.version) {
+          if (updated.updatedAt.isAfter(_selectedEntry!.updatedAt) ||
+              updated.version > _selectedEntry!.version) {
             if (mounted) {
               setState(() {
                 _selectedEntry = updated;
@@ -1720,27 +1706,29 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     });
 
     return journalsAsync.when(
-        skipLoadingOnReload: true,
-        data: (journals) {
-          _applySavedPreferencesIfReady(settings, journals);
-          if (entriesAsync.hasError && entriesAsync.valueOrNull == null) {
-            return Center(child: Text('${entriesAsync.error}'));
-          }
-          final entries = _resolveScopedEntries(entriesAsync, entriesScope);
-          final entriesLoading =
-              _resolveEntriesLoading(entriesAsync, entriesScope);
-          return _buildJournalContent(
-            journals: journals,
-            entries: entries,
-            entriesLoading: entriesLoading,
-            settings: settings,
-            entryListScope: entryListScope,
-            entriesScope: entriesScope,
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-      );
+      skipLoadingOnReload: true,
+      data: (journals) {
+        _applySavedPreferencesIfReady(settings, journals);
+        if (entriesAsync.hasError && entriesAsync.valueOrNull == null) {
+          return Center(child: Text('${entriesAsync.error}'));
+        }
+        final entries = _resolveScopedEntries(entriesAsync, entriesScope);
+        final entriesLoading = _resolveEntriesLoading(
+          entriesAsync,
+          entriesScope,
+        );
+        return _buildJournalContent(
+          journals: journals,
+          entries: entries,
+          entriesLoading: entriesLoading,
+          settings: settings,
+          entryListScope: entryListScope,
+          entriesScope: entriesScope,
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('$e')),
+    );
   }
 
   Widget _buildJournalContent({
@@ -1751,105 +1739,113 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     required String entryListScope,
     required String entriesScope,
   }) {
-          final entryCountsAsync = ref.watch(journalEntryCountsProvider);
-          final allEntryIdsAsync = ref.watch(journalAllEntryIdsProvider);
-          _reconcilePendingJournal(journals);
-          _reconcilePendingEntries(allEntryIdsAsync.valueOrNull ?? const {});
-          final displayEntries = _buildDisplayEntries(entries);
-          _reconcileSelectedEntryFromProvider(entries);
-          final displayJournals = _displayJournals(journals);
-          final journalFilter = displayJournals.any((j) => j.id == _journalFilter)
-              ? _journalFilter
-              : displayJournals.isNotEmpty
-                  ? displayJournals.first.id
-                  : legacyJournalId;
-          if (journalFilter != _journalFilter) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              setState(() => _journalFilter = journalFilter);
-            });
-          }
-          var filtered = _viewAllJournals
-              ? List<JournalEntry>.from(displayEntries)
-              : displayEntries
-                  .where((e) => e.journalId == entryListScope)
-                  .toList();
-                  
-          if (_shouldScrollToSelected) {
-            final index = filtered.indexWhere((e) => e.id == _selectedEntryId);
-            if (index != -1) {
-              final dbSeconds = filtered[index].entryDate.millisecondsSinceEpoch ~/ 1000;
-              final selectedSeconds = (_selectedEntry?.entryDate.millisecondsSinceEpoch ?? 0) ~/ 1000;
-              if (dbSeconds == selectedSeconds) {
-                _shouldScrollToSelected = false;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _scrollToSelectedEntry(filtered);
-                });
-              }
-            }
-          }
-          final accentJournal = _selectedEntry == null
-              ? null
-              : displayJournals.cast<Journal?>().firstWhere(
-                  (j) => j!.id == _selectedEntry!.journalId,
-                  orElse: () => null,
-                );
-          final accentColor = Color(
-            accentJournal != null
-                ? _journalFlagColor(accentJournal)
-                : Theme.of(context).colorScheme.primary.toARGB32(),
-          );
-          final selectedVisible = filtered.any(
-            (entry) => entry.id == _selectedEntryId,
-          );
-          final shouldSelectLatest = filtered.isNotEmpty &&
-              !_suppressAutoSelect &&
-              (_selectedEntryId == null ||
-                  (!_viewAllJournals &&
-                      (_selectedEntry?.journalId != entryListScope ||
-                          !selectedVisible)));
-          if (shouldSelectLatest) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted || filtered.isEmpty) return;
-              final latest = filtered.first;
-              if (_selectedEntryId != latest.id) {
-              unawaited(_loadEntry(latest));
-              }
-            });
-          }
-          if (selectedVisible &&
-              (_selectedEntryId == null ||
-                  !_pendingEntries.containsKey(_selectedEntryId))) {
-            _suppressAutoSelect = false;
-          }
+    final entryCountsAsync = ref.watch(journalEntryCountsProvider);
+    final allEntryIdsAsync = ref.watch(journalAllEntryIdsProvider);
+    _reconcilePendingJournal(journals);
+    _reconcilePendingEntries(allEntryIdsAsync.valueOrNull ?? const {});
+    final displayEntries = _buildDisplayEntries(entries);
+    _reconcileSelectedEntryFromProvider(entries);
+    final displayJournals = _displayJournals(journals);
+    final journalFilter = displayJournals.any((j) => j.id == _journalFilter)
+        ? _journalFilter
+        : displayJournals.isNotEmpty
+        ? displayJournals.first.id
+        : legacyJournalId;
+    if (journalFilter != _journalFilter) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _journalFilter = journalFilter);
+      });
+    }
+    var filtered = _viewAllJournals
+        ? List<JournalEntry>.from(displayEntries)
+        : displayEntries.where((e) => e.journalId == entryListScope).toList();
 
-          final countsByJournal = entryCountsAsync.valueOrNull;
-          // Use all DB IDs (including deleted) to filter pending entries:
-          // a pending entry is only "extra" if it's genuinely not yet in the DB
-          // at all — not if it's already there but soft-deleted.
-          final dbEntryIds = allEntryIdsAsync.valueOrNull ?? {for (final e in entries) e.id};
-          final entryCounts = {
-            for (final journal in displayJournals)
-              journal.id: _entryCountForJournal(
-                journal.id,
-                persistedCounts: countsByJournal,
-                entryListScope: entriesScope,
-                displayEntries: displayEntries,
-                entriesLoading: entriesLoading,
-                dbEntryIds: dbEntryIds,
-              ),
-          };
-          final selectedJournal = displayJournals.cast<Journal?>().firstWhere(
-                (j) => j!.id == journalFilter,
-                orElse: () => null,
-              );
+    if (_shouldScrollToSelected) {
+      final index = filtered.indexWhere((e) => e.id == _selectedEntryId);
+      if (index != -1) {
+        final dbSeconds =
+            filtered[index].entryDate.millisecondsSinceEpoch ~/ 1000;
+        final selectedSeconds =
+            (_selectedEntry?.entryDate.millisecondsSinceEpoch ?? 0) ~/ 1000;
+        if (dbSeconds == selectedSeconds) {
+          _shouldScrollToSelected = false;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _scrollToSelectedEntry(filtered);
+          });
+        }
+      }
+    }
+    final accentJournal = _selectedEntry == null
+        ? null
+        : displayJournals.cast<Journal?>().firstWhere(
+            (j) => j!.id == _selectedEntry!.journalId,
+            orElse: () => null,
+          );
+    final accentColor = Color(
+      accentJournal != null
+          ? _journalFlagColor(accentJournal)
+          : Theme.of(context).colorScheme.primary.toARGB32(),
+    );
+    final selectedVisible = filtered.any(
+      (entry) => entry.id == _selectedEntryId,
+    );
+    final shouldSelectLatest =
+        filtered.isNotEmpty &&
+        !_suppressAutoSelect &&
+        (_selectedEntryId == null ||
+            (!_viewAllJournals &&
+                (_selectedEntry?.journalId != entryListScope ||
+                    !selectedVisible)));
+    if (shouldSelectLatest) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || filtered.isEmpty) return;
+        final latest = filtered.first;
+        if (_selectedEntryId != latest.id) {
+          unawaited(_loadEntry(latest));
+        }
+      });
+    }
+    if (selectedVisible &&
+        (_selectedEntryId == null ||
+            !_pendingEntries.containsKey(_selectedEntryId))) {
+      _suppressAutoSelect = false;
+    }
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SyncConflictBanner(),
-                  Expanded(
-                    child: LayoutBuilder(
+    final countsByJournal = entryCountsAsync.valueOrNull;
+    // Use all DB IDs (including deleted) to filter pending entries:
+    // a pending entry is only "extra" if it's genuinely not yet in the DB
+    // at all — not if it's already there but soft-deleted.
+    final dbEntryIds =
+        allEntryIdsAsync.valueOrNull ?? {for (final e in entries) e.id};
+    final entryCounts = {
+      for (final journal in displayJournals)
+        journal.id: _entryCountForJournal(
+          journal.id,
+          persistedCounts: countsByJournal,
+          entryListScope: entriesScope,
+          displayEntries: displayEntries,
+          entriesLoading: entriesLoading,
+          dbEntryIds: dbEntryIds,
+        ),
+    };
+    final selectedJournal = displayJournals.cast<Journal?>().firstWhere(
+      (j) => j!.id == journalFilter,
+      orElse: () => null,
+    );
+
+    // Drop cached row widgets for entries no longer displayed, so
+    // deleted/filtered-out entries don't leak entries indefinitely.
+    final liveRowIds = {for (final e in filtered) e.id};
+    _rowWidgetCache.removeWhere((id, _) => !liveRowIds.contains(id));
+    _rowSignatureCache.removeWhere((id, _) => !liveRowIds.contains(id));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SyncConflictBanner(),
+        Expanded(
+          child: LayoutBuilder(
             builder: (context, constraints) {
               final totalWidth = constraints.maxWidth;
               final storedListWidth =
@@ -1873,55 +1869,81 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                           right: 0,
                           bottom: _entryListFooterHeight,
                           child: entriesLoading
-                              ? const Center(
-                                  child: CircularProgressIndicator(),
-                                )
+                              ? const Center(child: CircularProgressIndicator())
                               : Material(
                                   type: MaterialType.transparency,
                                   color: Colors.transparent,
                                   child: KeepAliveScrollList(
-                                  storageKey: _entryListStorageKey(),
-                                  controller: _entryListScrollController,
-                                  itemCount: filtered.length,
-                                  itemBuilder: (_, i) {
-                                    final entry = filtered[i];
-                                    final isSelected =
-                                        entry.id == _selectedEntryId;
-                                    return KeyedSubtree(
-                                      key: ValueKey(entry.id),
-                                      child: Builder(
-                                        key: isSelected ? _selectedEntryKey : null,
-                                        builder: (context) => ContextMenuRegion(
-                                          items: [
-                                            ContextMenuItem(
-                                              label: 'Statistics',
-                                              icon: PhosphorIconsRegular.chartBar,
-                                              onTap: () => _showEntryStatistics(entry),
-                                            ),
-                                            ContextMenuItem(
-                                              label: 'Change Journal',
-                                              icon: PhosphorIconsRegular.folder,
-                                              onTap: () => _showChangeJournalDialog(entry, displayJournals),
-                                            ),
-                                            ContextMenuItem(
-                                              label: 'Delete',
-                                              icon: PhosphorIconsRegular.trash,
-                                              isDestructive: true,
-                                              onTap: () => _deleteEntryItem(entry),
-                                            ),
-                                          ],
-                                          child: _JournalEntryListTile(
-                                            entry: entry,
-                                            isSelected: isSelected,
-                                            titlePreview: _listTitlePreview,
-                                            bodyPreview: _listBodyPreview,
-                                            onTap: () => unawaited(_loadEntry(entry)),
-                                          ),
+                                    storageKey: _entryListStorageKey(),
+                                    controller: _entryListScrollController,
+                                    itemCount: filtered.length,
+                                    // An entry created/deleted anywhere shifts
+                                    // every entry after it to a new index;
+                                    // without this, the framework can't match
+                                    // a row's ValueKey back to its old
+                                    // Element when that happens, so it
+                                    // destroys and recreates every shifted
+                                    // row instead of reusing `_rowFor`'s
+                                    // cached widget.
+                                    findChildIndexCallback: (key) {
+                                      if (key is! ValueKey<String>) {
+                                        return null;
+                                      }
+                                      final index = filtered.indexWhere(
+                                        (e) => e.id == key.value,
+                                      );
+                                      return index == -1 ? null : index;
+                                    },
+                                    itemBuilder: (_, i) {
+                                      final entry = filtered[i];
+                                      final isSelected =
+                                          entry.id == _selectedEntryId;
+                                      return KeyedSubtree(
+                                        key: ValueKey(entry.id),
+                                        child: Builder(
+                                          key: isSelected
+                                              ? _selectedEntryKey
+                                              : null,
+                                          builder: (context) =>
+                                              ContextMenuRegion(
+                                                items: [
+                                                  ContextMenuItem(
+                                                    label: 'Statistics',
+                                                    icon: PhosphorIconsRegular
+                                                        .chartBar,
+                                                    onTap: () =>
+                                                        _showEntryStatistics(
+                                                          entry,
+                                                        ),
+                                                  ),
+                                                  ContextMenuItem(
+                                                    label: 'Change Journal',
+                                                    icon: PhosphorIconsRegular
+                                                        .folder,
+                                                    onTap: () =>
+                                                        _showChangeJournalDialog(
+                                                          entry,
+                                                          displayJournals,
+                                                        ),
+                                                  ),
+                                                  ContextMenuItem(
+                                                    label: 'Delete',
+                                                    icon: PhosphorIconsRegular
+                                                        .trash,
+                                                    isDestructive: true,
+                                                    onTap: () =>
+                                                        _deleteEntryItem(entry),
+                                                  ),
+                                                ],
+                                                child: _rowFor(
+                                                  entry,
+                                                  isSelected: isSelected,
+                                                ),
+                                              ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                ),
+                                      );
+                                    },
+                                  ),
                                 ),
                         ),
                         Positioned(
@@ -1937,24 +1959,24 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 children: [
                                   Expanded(
                                     child: RoundedDropdown<String?>(
-                                      value: _viewAllJournals ? null : journalFilter,
+                                      value: _viewAllJournals
+                                          ? null
+                                          : journalFilter,
                                       displayLabel: _viewAllJournals
                                           ? 'All journals'
                                           : null,
                                       labelColor: Color(
                                         _viewAllJournals
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .toARGB32()
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.primary.toARGB32()
                                             : selectedJournal == null
-                                                ? Theme.of(context)
-                                                    .colorScheme
-                                                    .primary
-                                                    .toARGB32()
-                                                : _journalFlagColor(
-                                                    selectedJournal,
-                                                  ),
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.primary.toARGB32()
+                                            : _journalFlagColor(
+                                                selectedJournal,
+                                              ),
                                       ),
                                       closedTrailing: _viewAllJournals
                                           ? '${filtered.length}'
@@ -1965,8 +1987,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       addListLabel: 'Add journal',
                                       manageMenuEntriesFor: (journalId) =>
                                           journalId == legacyJournalId
-                                              ? defaultEntityManageMenuEntries
-                                              : entityManageMenuEntries,
+                                          ? defaultEntityManageMenuEntries
+                                          : entityManageMenuEntries,
                                       onManage: (journalId, action) =>
                                           _handleJournalManage(
                                             journalId!,
@@ -1990,7 +2012,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       onChanged: displayJournals.isEmpty
                                           ? null
                                           : (v) {
-                                              if (v != null) unawaited(_selectJournal(v));
+                                              if (v != null)
+                                                unawaited(_selectJournal(v));
                                             },
                                     ),
                                   ),
@@ -2002,21 +2025,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     onPressed: displayJournals.isEmpty
                                         ? null
                                         : () => unawaited(
-                                              _toggleViewAllJournals(
-                                                displayJournals,
-                                              ),
+                                            _toggleViewAllJournals(
+                                              displayJournals,
                                             ),
+                                          ),
                                     icon: Icon(
                                       PhosphorIconsRegular.listMagnifyingGlass,
                                       color: _viewAllJournals
-                                          ? VoyagerColors.of(context).onAccent
-                                          : null,
-                                    ),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: _viewAllJournals
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primary
+                                          ? Theme.of(context).colorScheme.primary
                                           : null,
                                     ),
                                   ),
@@ -2032,21 +2048,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                           child: _JournalBarBackdrop(
                             child: Padding(
                               padding: const EdgeInsets.all(12),
-                              child: MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: FilledButton(
-                                  onPressed: _createEntry,
-                                  child: const Text('New entry'),
-                                ),
+                              child: GlassButton(
+                                onPressed: _createEntry,
+                                label: 'New entry',
                               ),
                             ),
                           ),
-                        ),
-                        // Statistics FAB — glows when daily stats are pending
-                        Positioned(
-                          bottom: _entryListFooterHeight + 8,
-                          right: 12,
-                          child: const StatisticsActionFab(),
                         ),
                       ],
                     ),
@@ -2141,6 +2148,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 ),
                                 const SizedBox(width: 12),
                                 PopupMenuButton<VoyagerMenuCatalogEntry>(
+                                  tooltip: 'Weather',
                                   icon: Icon(
                                     _weatherData(_weatherIcon),
                                     color: accentColor,
@@ -2163,32 +2171,42 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Builder(builder: (ctx) {
-                                  final label = '${DateFormat.yMMMd().format(_selectedEntry!.entryDate.toLocal())} at ${formatTime12Hour(_selectedEntry!.entryDate.toLocal())}';
-                                  return SelectorPill(
-                                    dense: false,
-                                    ellipsize: false,
-                                    isActive: _isDatePickerOpen,
-                                    label: label,
-                                    accentColor: accentColor,
-                                    onTap: () => _changeEntryDateAndTime(ctx),
-                                  );
-                                }),
+                                Builder(
+                                  builder: (ctx) {
+                                    final label =
+                                        '${DateFormat.yMMMd().format(_selectedEntry!.entryDate.toLocal())} at ${formatTime12Hour(_selectedEntry!.entryDate.toLocal())}';
+                                    return SelectorPill(
+                                      dense: false,
+                                      ellipsize: false,
+                                      isActive: _isDatePickerOpen,
+                                      label: label,
+                                      accentColor: accentColor,
+                                      onTap: () => _changeEntryDateAndTime(ctx),
+                                    );
+                                  },
+                                ),
                                 const SizedBox(width: 8),
-                                if (ref.watch(devSettingsProvider).showJournalRemotePullButton) ...[
+                                if (ref
+                                    .watch(devSettingsProvider)
+                                    .showJournalRemotePullButton) ...[
                                   IconButton(
                                     tooltip: 'Compare remote DB value',
-                                    onPressed: () => _pullAndCompareRemoteValue(_selectedEntry!),
-                                    icon: const Icon(PhosphorIconsRegular.cloudArrowDown),
-                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => _pullAndCompareRemoteValue(
+                                      _selectedEntry!,
+                                    ),
+                                    icon: const Icon(
+                                      PhosphorIconsRegular.cloudArrowDown,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                 ],
                                 IconButton(
                                   tooltip: 'Delete entry',
                                   onPressed: _deleteEntry,
-                                  icon: const Icon(PhosphorIconsRegular.trash),
-                                  visualDensity: VisualDensity.compact,
+                                  icon: Icon(
+                                    PhosphorIconsRegular.trash,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
                                 ),
                               ],
                             ),
@@ -2220,10 +2238,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                 ],
               );
             },
-                    ),
-                  ),
-                ],
-              );
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -2318,14 +2336,8 @@ class _EditQuoteDialogState extends State<_EditQuoteDialog> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: _cancel,
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: _save,
-              child: const Text('Save'),
-            ),
+            GlassButton(onPressed: _cancel, label: 'Cancel', dense: true),
+            GlassButton(onPressed: _save, label: 'Save', dense: true),
           ],
         ),
       ),
@@ -2378,7 +2390,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   var _tags = const <String>[];
   var _lastText = '';
   var _dirty = false;
-  var _applyingListShortcut = false;
   RemoteSyncService? _remoteSync;
   SettingsRepository? _settingsRepo;
   PendingTextMergeListener? _pendingTextMergeListener;
@@ -2396,6 +2407,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     super.initState();
     _controller = TextEditingController(text: widget.entry?.body ?? '');
     widget.focusNode.addListener(_handleFocusChanged);
+    widget.focusNode.onKeyEvent = _handleBodyKey;
     _lastText = _controller.text;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
     final entry = widget.entry;
@@ -2451,7 +2463,9 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       ),
     );
     _lastText = merged;
-    _tags = event.remoteTags.isNotEmpty ? event.remoteTags : extractTags(merged);
+    _tags = event.remoteTags.isNotEmpty
+        ? event.remoteTags
+        : extractTags(merged);
     _dirty = true;
     widget.onDraftChanged.call(event.documentId, merged);
     if (mounted) setState(() {});
@@ -2529,6 +2543,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
       );
     }
     widget.focusNode.removeListener(_handleFocusChanged);
+    widget.focusNode.onKeyEvent = null;
     _controller.dispose();
     super.dispose();
   }
@@ -2576,9 +2591,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   }
 
   void _handleChanged(String value) {
-    if (!_applyingListShortcut) {
-      _applyListContinuation();
-    }
+    applyListEditing(controller: _controller, previousText: _lastText);
 
     final before = _lastText;
     _lastText = _controller.text;
@@ -2604,52 +2617,28 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     });
   }
 
-  void _applyListContinuation() {
-    final text = _controller.text;
-    final selection = _controller.selection;
-    if (!selection.isCollapsed || selection.baseOffset <= 0) return;
-    if (text.length != _lastText.length + 1) return;
-
-    final newlineOffset = selection.baseOffset - 1;
-    if (newlineOffset < 0 ||
-        newlineOffset >= text.length ||
-        text[newlineOffset] != '\n') {
-      return;
+  KeyEventResult _handleBodyKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      final outdent = HardwareKeyboard.instance.isShiftPressed;
+      if (handleListTab(controller: _controller, outdent: outdent)) {
+        // Tab/Backspace mutate the controller directly, bypassing
+        // TextField.onChanged — route through the same handler typing uses
+        // so the edit gets saved and the CRDT character-op session stays in
+        // sync (recordJournalTextChange assumes `before` always matches the
+        // session's actual current text; skipping it here would silently
+        // desync the session and corrupt the next real edit's diff).
+        _handleChanged(_controller.text);
+        return KeyEventResult.handled;
+      }
     }
-
-    final previousLineStart = text.lastIndexOf('\n', newlineOffset - 1) + 1;
-    final previousLine = text.substring(previousLineStart, newlineOffset);
-    final bulletMatch = RegExp(r'^(\s*)-\s+(.*)$').firstMatch(previousLine);
-    final numberMatch = RegExp(
-      r'^(\s*)(\d+)\.\s+(.*)$',
-    ).firstMatch(previousLine);
-    if (bulletMatch == null && numberMatch == null) return;
-
-    final indent = bulletMatch?.group(1) ?? numberMatch?.group(1) ?? '';
-    final content = bulletMatch?.group(2) ?? numberMatch?.group(3) ?? '';
-    final nextNumber = (int.tryParse(numberMatch?.group(2) ?? '') ?? 0) + 1;
-    final insert = content.isEmpty
-        ? ''
-        : bulletMatch != null
-        ? '$indent- '
-        : '$indent$nextNumber. ';
-    final replacementStart = content.isEmpty
-        ? previousLineStart
-        : selection.baseOffset;
-    final replacementEnd = selection.baseOffset;
-    final nextText = text.replaceRange(
-      replacementStart,
-      replacementEnd,
-      insert,
-    );
-    final nextOffset = replacementStart + insert.length;
-
-    _applyingListShortcut = true;
-    _controller.value = TextEditingValue(
-      text: nextText,
-      selection: TextSelection.collapsed(offset: nextOffset),
-    );
-    _applyingListShortcut = false;
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (handleListBackspace(controller: _controller)) {
+        _handleChanged(_controller.text);
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -2693,7 +2682,9 @@ extension on _JournalPageState {
     try {
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId == null) {
-        scaffoldMsg.showSnackBar(const SnackBar(content: Text('Not signed in')));
+        scaffoldMsg.showSnackBar(
+          const SnackBar(content: Text('Not signed in')),
+        );
         return;
       }
       final doc = await FirebaseFirestore.instance
@@ -2701,12 +2692,13 @@ extension on _JournalPageState {
           .doc(entry.id)
           .get();
       if (!mounted) return;
-      
+
       final remoteData = doc.data();
       final remoteText = remoteData?['body'] as String? ?? '';
-      
-      final currentLocalText = _editorKey.currentState?.currentBodyText ?? entry.body;
-      
+
+      final currentLocalText =
+          _editorKey.currentState?.currentBodyText ?? entry.body;
+
       await showDialog<void>(
         context: this.context,
         builder: (dialogContext) => AlertDialog(
@@ -2716,34 +2708,57 @@ extension on _JournalPageState {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Local (Current UI):', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Local (Current UI):',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   child: Text(currentLocalText),
                 ),
                 const SizedBox(height: 16),
-                const Text('Remote (Firestore):', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Remote (Firestore):',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   child: Text(remoteText),
                 ),
                 const SizedBox(height: 16),
-                Text('Matches: ${currentLocalText == remoteText}', style: TextStyle(fontWeight: FontWeight.bold, color: currentLocalText == remoteText ? Colors.green : Colors.red)),
+                Text(
+                  'Matches: ${currentLocalText == remoteText}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: currentLocalText == remoteText
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                ),
               ],
             ),
           ),
           actions: [
-            TextButton(
+            GlassButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Close'),
+              label: 'Close',
+              dense: true,
             ),
           ],
         ),
       );
     } catch (e) {
-      scaffoldMsg.showSnackBar(SnackBar(content: Text('Failed to pull remote value: $e')));
+      scaffoldMsg.showSnackBar(
+        SnackBar(content: Text('Failed to pull remote value: $e')),
+      );
     }
   }
 }
@@ -2764,8 +2779,29 @@ class _JournalEntryListTile extends StatelessWidget {
   final ValueNotifier<String> bodyPreview;
   final VoidCallback onTap;
 
+  // Counts how many _JournalEntryListTile builds land in the same frame, to
+  // check whether the row cache (see _JournalPageState._rowFor) is actually
+  // holding — mirrors _TaskRowState's counter in todo_page.dart.
+  static var _rowBuildsThisFrame = 0;
+  static var _rowBuildFlushScheduled = false;
+
+  static void _noteRowBuild() {
+    if (!DevFlags.verboseSync) return;
+    _rowBuildsThisFrame++;
+    if (_rowBuildFlushScheduled) return;
+    _rowBuildFlushScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      debugPrint(
+        '[jank] _JournalEntryListTile builds this frame: $_rowBuildsThisFrame',
+      );
+      _rowBuildsThisFrame = 0;
+      _rowBuildFlushScheduled = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _noteRowBuild();
     final local = entry.entryDate.toLocal();
     final dateLabel = MaterialLocalizations.of(context).formatShortDate(local);
     final timeLabel = formatTime12Hour(local);
@@ -2783,71 +2819,71 @@ class _JournalEntryListTile extends StatelessWidget {
         vertical: VoyagerSpacing.xxs,
       ),
       child: ListTile(
-          dense: true,
-          visualDensity: const VisualDensity(
-            vertical: VoyagerSpacing.compactListVerticalDensity,
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: VoyagerSpacing.md,
-            vertical: VoyagerSpacing.xs,
-          ),
-          tileColor: VoyagerListItemSurface.restingColor(context),
-          selectedTileColor: VoyagerListItemSurface.selectedColor(context),
-          selected: isSelected,
-          title: isSelected
-              ? ValueListenableBuilder<String>(
-                  valueListenable: titlePreview,
-                  builder: (context, title, _) {
-                    return Text(
-                      title.isEmpty ? 'Untitled' : title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: titleStyle,
-                    );
-                  },
-                )
-              : Text(
-                  entry.title.isEmpty ? 'Untitled' : entry.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: titleStyle,
-                ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isSelected)
-                ValueListenableBuilder<String>(
-                  valueListenable: bodyPreview,
-                  builder: (context, body, _) {
-                    final preview = firstSentencePreview(body);
-                    if (preview.isEmpty) return const SizedBox.shrink();
-                    return Text(
-                      preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: previewStyle,
-                    );
-                  },
-                )
-              else ...[
-                Builder(
-                  builder: (context) {
-                    final preview = firstSentencePreview(entry.body);
-                    if (preview.isEmpty) return const SizedBox.shrink();
-                    return Text(
-                      preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: previewStyle,
-                    );
-                  },
-                ),
-              ],
-              Text('$dateLabel · $timeLabel', style: dateStyle),
-            ],
-          ),
-          onTap: onTap,
+        dense: true,
+        visualDensity: const VisualDensity(
+          vertical: VoyagerSpacing.compactListVerticalDensity,
         ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: VoyagerSpacing.md,
+          vertical: VoyagerSpacing.xs,
+        ),
+        tileColor: VoyagerListItemSurface.restingColor(context),
+        selectedTileColor: VoyagerListItemSurface.selectedColor(context),
+        selected: isSelected,
+        title: isSelected
+            ? ValueListenableBuilder<String>(
+                valueListenable: titlePreview,
+                builder: (context, title, _) {
+                  return Text(
+                    title.isEmpty ? 'Untitled' : title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  );
+                },
+              )
+            : Text(
+                entry.title.isEmpty ? 'Untitled' : entry.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isSelected)
+              ValueListenableBuilder<String>(
+                valueListenable: bodyPreview,
+                builder: (context, body, _) {
+                  final preview = firstSentencePreview(body);
+                  if (preview.isEmpty) return const SizedBox.shrink();
+                  return Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: previewStyle,
+                  );
+                },
+              )
+            else ...[
+              Builder(
+                builder: (context) {
+                  final preview = firstSentencePreview(entry.body);
+                  if (preview.isEmpty) return const SizedBox.shrink();
+                  return Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: previewStyle,
+                  );
+                },
+              ),
+            ],
+            Text('$dateLabel · $timeLabel', style: dateStyle),
+          ],
+        ),
+        onTap: onTap,
+      ),
     );
   }
 }
@@ -2859,10 +2895,6 @@ class _JournalBarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: child,
-    );
+    return Material(type: MaterialType.transparency, child: child);
   }
 }
-

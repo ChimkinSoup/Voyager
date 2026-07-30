@@ -439,19 +439,45 @@ class _GeometricTextureState extends State<GeometricTexture> {
   // UI thread and pushes input handling and state updates seconds behind.
   //
   // A Timer only wakes us when we actually intend to redraw, so the app
-  // produces ~30 frames/sec instead of ~119 and stays idle in between. The
+  // produces ~60 frames/sec instead of ~119 and stays idle in between. The
   // wave is a slow ambient effect; it gains nothing from native refresh rate.
-  static const _frameInterval = Duration(milliseconds: 33); // ~30fps
+  static const _frameInterval = Duration(milliseconds: 16); // ~60fps
 
   // The wave animates on its own; the debug visualiser also needs the clock
   // running so its rows can fade.
-  bool get _animating => widget.waveParams.animates || widget.debugRowFade;
+  //
+  // _tickerModeEnabled gates this too: a real Ticker automatically pauses
+  // when its route/tab goes inactive (TickerMode(enabled: false) — e.g. a
+  // go_router shell branch kept mounted offstage for state preservation
+  // when the user switches tabs). This widget deliberately uses a plain
+  // Timer instead of a Ticker (see _syncAnimation) to cap the redraw rate,
+  // which means it never got that automatic pause — an animation left
+  // running on one tab (e.g. a dev preview) kept ticking at ~60fps in the
+  // background on every other tab, competing for UI-thread time with
+  // whatever that tab was actually doing. Checking TickerMode explicitly
+  // restores the pause-when-inactive behavior a Ticker would have given for
+  // free.
+  bool get _animating =>
+      (widget.waveParams.animates || widget.debugRowFade) &&
+      _tickerModeEnabled;
+
+  var _tickerModeEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _shader = widget.program?.fragmentShader();
     _syncAnimation();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final enabled = TickerMode.valuesOf(context).enabled;
+    if (enabled != _tickerModeEnabled) {
+      _tickerModeEnabled = enabled;
+      _syncAnimation();
+    }
   }
 
   @override
@@ -462,11 +488,7 @@ class _GeometricTextureState extends State<GeometricTexture> {
       _shader = widget.program?.fragmentShader();
       setState(() {});
     }
-    final wasAnimating =
-        oldWidget.waveParams.animates || oldWidget.debugRowFade;
-    if (wasAnimating != _animating) {
-      _syncAnimation();
-    }
+    _syncAnimation();
   }
 
   void _syncAnimation() {

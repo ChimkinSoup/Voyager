@@ -14,6 +14,7 @@ import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -30,6 +31,7 @@ import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 class TodoEditPanel extends ConsumerStatefulWidget {
@@ -105,20 +107,27 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _remoteSync = ref.read(remoteSyncServiceProvider);
       _registerPendingNotesListener(widget.task.id);
       _setNotesEditingFlag(_notesFocusNode.hasFocus);
-      _remoteSync!.prepareEditingSession(
-        collection: FirestoreCollections.todoTasks,
-        documentId: widget.task.id,
-        initialText: _notesController.text,
-      ).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _isSessionReady = true;
-        });
-      });
+      _beginEditingSession(_remoteSync!);
     });
   }
 
-  bool _isSessionReady = false;
+  /// Preloads the remote character-op chain for this task's notes. Best effort:
+  /// if it never lands (offline, permission denied) the notes field still edits
+  /// against a locally seeded session, so this must never gate the UI.
+  void _beginEditingSession(RemoteSyncService remoteSync) {
+    unawaited(
+      remoteSync
+          .prepareEditingSession(
+            collection: FirestoreCollections.todoTasks,
+            documentId: widget.task.id,
+            initialText: _notesController.text,
+          )
+          .catchError((Object error) {
+        debugPrint('Todo notes editing session failed to prepare: $error');
+      }),
+    );
+  }
+
   bool _subtaskCreating = false;
   bool _isDatePickerOpen = false;
 
@@ -134,17 +143,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _dueDate = widget.task.dueDate;
       _loadSubtasks();
       _registerPendingNotesListener(widget.task.id);
-      final remoteSync = ref.read(remoteSyncServiceProvider);
-      remoteSync.prepareEditingSession(
-        collection: FirestoreCollections.todoTasks,
-        documentId: widget.task.id,
-        initialText: _notesController.text,
-      ).then((_) {
-        if (!mounted) return;
-        setState(() {
-          _isSessionReady = true;
-        });
-      });
+      _beginEditingSession(ref.read(remoteSyncServiceProvider));
     } else if (oldWidget.task.dueDate != widget.task.dueDate) {
       // Same task, but its due date changed externally (e.g. via the row's
       // right-click menu while this panel is open). Sync the locally-held
@@ -283,17 +282,62 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     return KeyEventResult.ignored;
   }
 
+  void _handleNotesChanged(String value) {
+    applyListEditing(
+      controller: _notesController,
+      previousText: _lastNotesText,
+    );
+    final updated = _notesController.text;
+    final notes = updated.trim();
+    widget.onTaskOptimistic?.call(
+      notes.isEmpty
+          ? widget.task.copyWith(clearNotes: true)
+          : widget.task.copyWith(notes: notes),
+    );
+    ref.read(remoteSyncServiceProvider).recordTodoNotesChange(
+          taskId: widget.task.id,
+          before: _lastNotesText,
+          after: updated,
+        );
+    _lastNotesText = updated;
+    _scheduleNotesSave(updated);
+  }
+
   KeyEventResult _handleNotesKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.tab &&
-        !HardwareKeyboard.instance.isShiftPressed) {
-      _subtaskFocusNode.requestFocus();
-      return KeyEventResult.handled;
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      final outdent = HardwareKeyboard.instance.isShiftPressed;
+      if (handleListTab(controller: _notesController, outdent: outdent)) {
+        // Tab/Backspace mutate the controller directly, bypassing
+        // TextField.onChanged — route through the same handler typing uses
+        // so the edit gets saved and the CRDT character-op session (which
+        // assumes `before` always matches its actual current text) doesn't
+        // silently desync.
+        _handleNotesChanged(_notesController.text);
+        return KeyEventResult.handled;
+      }
+      if (!outdent) {
+        _subtaskFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (handleListBackspace(controller: _notesController)) {
+        _handleNotesChanged(_notesController.text);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
     }
     if (event.logicalKey != LogicalKeyboardKey.enter) {
       return KeyEventResult.ignored;
     }
     if (HardwareKeyboard.instance.isShiftPressed) {
+      return KeyEventResult.ignored;
+    }
+    if (isOnListLine(_notesController)) {
+      // Let the newline through so list-continuation/clean-exit (wired via
+      // onChanged) handles it, instead of closing the panel.
       return KeyEventResult.ignored;
     }
     unawaited(_close());
@@ -321,6 +365,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     bool clearDueDate = false,
     String? listId,
     bool reorderDueDate = false,
+    // _close() passes false: the parent already re-invalidates the task
+    // list itself once the close animation's dismissed status fires (see
+    // TodoPage's _panelController status listener), so onChanged here would
+    // just be a second, redundant full-list invalidation — one that, unlike
+    // the deferred one, lands while the close animation is still playing
+    // and competes with it for frame budget.
+    bool notifyChanged = true,
   }) async {
     await _applyPendingNotesMerge();
     final repo = ref.read(todoRepositoryProvider);
@@ -424,19 +475,31 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         ),
       );
     } else {
-      await repo.upsertTask(baseUpdate);
-      await remoteSync.flushDocument(
-        FirestoreCollections.todoTasks,
-        widget.task.id,
-      );
-      await remoteSync.pushTodoTaskNow(baseUpdate);
+      // _close() calls _save() with no arguments on every close, including
+      // ones where nothing was actually edited (just opening a task to look
+      // at it) — without this check that unconditionally cost a local DB
+      // write plus a Firestore push, right as the close animation started
+      // playing, on every single close.
+      final unchanged = titleText == widget.task.title &&
+          (notesText.isEmpty
+              ? widget.task.notes == null
+              : notesText == widget.task.notes) &&
+          effectiveDue == widget.task.dueDate;
+      if (!unchanged) {
+        await repo.upsertTask(baseUpdate);
+        await remoteSync.flushDocument(
+          FirestoreCollections.todoTasks,
+          widget.task.id,
+        );
+        await remoteSync.pushTodoTaskNow(baseUpdate);
+      }
     }
-    widget.onChanged();
+    if (notifyChanged) widget.onChanged();
   }
 
   Future<void> _close() async {
     if (mounted) widget.onClose();
-    unawaited(_save());
+    unawaited(_save(notifyChanged: false));
   }
 
   void _scheduleTitleSave(String value) {
@@ -716,36 +779,28 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   int _listFlagColor(TodoListModel list) =>
       list.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32();
 
-  static const _compactIconButtonStyle = ButtonStyle(
-    visualDensity: VisualDensity.compact,
-    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    padding: WidgetStatePropertyAll(EdgeInsets.zero),
-    minimumSize: WidgetStatePropertyAll(Size(32, 32)),
-    fixedSize: WidgetStatePropertyAll(Size(32, 32)),
-  );
-
   Widget _buildHeader(BuildContext context, ThemeData theme, Color listColor) {
     Widget starButton() => IconButton(
-      style: _compactIconButtonStyle,
       onPressed: widget.onToggleStar,
       icon: Icon(
         widget.task.starred
             ? PhosphorIconsFill.star
             : PhosphorIconsRegular.star,
+        color: widget.task.starred ? listColor : null,
       ),
-      color: widget.task.starred ? listColor : null,
       tooltip: widget.task.starred ? 'Unstar task' : 'Star task',
     );
 
     Widget deleteButton() => IconButton(
-      style: _compactIconButtonStyle,
       onPressed: _deleteTask,
-      icon: const Icon(PhosphorIconsRegular.trash),
+      icon: Icon(
+        PhosphorIconsRegular.trash,
+        color: theme.colorScheme.error,
+      ),
       tooltip: 'Delete task',
     );
 
     Widget closeButton() => IconButton(
-      style: _compactIconButtonStyle,
       onPressed: _close,
       icon: const Icon(PhosphorIconsRegular.x),
       tooltip: 'Close',
@@ -942,10 +997,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   );
                 }),
                 if (_dueDate != null) ...[
-                  TextButton(
+                  GlassButton(
+                    dense: true,
                     onPressed: _clearDueDate,
-                    style: TextButton.styleFrom(foregroundColor: listColor),
-                    child: const Text('Reset due date'),
+                    label: 'Reset due date',
+                    textColor: listColor,
                   ),
                 ],
               ],
@@ -959,7 +1015,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 label: 'Notes',
                 controller: _notesController,
                 focusNode: _notesFocusNode,
-                enabled: _isSessionReady,
                 expands: true,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
@@ -967,21 +1022,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 dense: true,
                 borderRadius: 12,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
-                onChanged: (value) {
-                  final notes = value.trim();
-                  widget.onTaskOptimistic?.call(
-                    notes.isEmpty
-                        ? widget.task.copyWith(clearNotes: true)
-                        : widget.task.copyWith(notes: notes),
-                  );
-                  ref.read(remoteSyncServiceProvider).recordTodoNotesChange(
-                        taskId: widget.task.id,
-                        before: _lastNotesText,
-                        after: value,
-                      );
-                  _lastNotesText = value;
-                  _scheduleNotesSave(value);
-                },
+                onChanged: _handleNotesChanged,
               ),
               ),
             ),
@@ -1007,9 +1048,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                     onSubmitted: (_) => _addSubtask(),
                   ),
                 ),
-                IconButton(
+                GlassButton(
+                  dense: true,
                   onPressed: _addSubtask,
                   icon: const Icon(PhosphorIconsRegular.plus),
+                  tooltip: 'Add subtask',
                 ),
               ],
             ),
@@ -1060,17 +1103,15 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
               ),
             ),
             const SizedBox(height: 8),
-            FilledButton(
+            GlassButton(
               onPressed: _close,
-              style: FilledButton.styleFrom(
-                backgroundColor: listColor,
-                foregroundColor:
-                    ThemeData.estimateBrightnessForColor(listColor) ==
-                        Brightness.dark
-                    ? Colors.white
-                    : Colors.black,
-              ),
-              child: const Text('Save'),
+              label: 'Save',
+              color: listColor,
+              textColor:
+                  ThemeData.estimateBrightnessForColor(listColor) ==
+                      Brightness.dark
+                  ? Colors.white
+                  : Colors.black,
             ),
           ],
         ),

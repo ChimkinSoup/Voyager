@@ -21,6 +21,7 @@ import 'fakes/fake_weather_api_client.dart';
 void main() {
   late AppDatabase db;
   late DriftJournalRepository journalRepo;
+  late DriftDreamRepository dreamRepo;
   late DriftTodoRepository todoRepo;
   late InMemorySyncRepository syncRepo;
   late RemoteSyncService deviceA;
@@ -30,6 +31,7 @@ void main() {
   setUp(() {
     db = AppDatabase.inMemory();
     journalRepo = DriftJournalRepository(db);
+    dreamRepo = DriftDreamRepository(db);
     todoRepo = DriftTodoRepository(db);
     syncRepo = InMemorySyncRepository();
 
@@ -49,6 +51,7 @@ void main() {
     deviceA = RemoteSyncService(
       syncRepository: syncRepo,
       journalRepository: journalRepo,
+      dreamRepository: dreamRepo,
       todoRepository: todoRepo,
       weatherService: weatherService,
       syncEngine: engineA,
@@ -57,6 +60,7 @@ void main() {
     deviceB = RemoteSyncService(
       syncRepository: syncRepo,
       journalRepository: journalRepo,
+      dreamRepository: dreamRepo,
       todoRepository: todoRepo,
       weatherService: weatherService,
       syncEngine: SyncEngine(
@@ -273,6 +277,7 @@ void main() {
     final debouncedSync = RemoteSyncService(
       syncRepository: syncRepo,
       journalRepository: journalRepo,
+      dreamRepository: dreamRepo,
       todoRepository: todoRepo,
       weatherService: WeatherService(
         settingsRepository: DriftSettingsRepository(db),

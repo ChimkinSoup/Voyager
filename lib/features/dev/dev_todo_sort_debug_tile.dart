@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 
 class DevTodoSortDebugSection extends ConsumerWidget {
   const DevTodoSortDebugSection({super.key});
@@ -77,13 +78,16 @@ class DevTodoSortDebugSection extends ConsumerWidget {
                     'This permanently deletes the log file contents.',
                   ),
                   actions: [
-                    TextButton(
+                    GlassButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
+                      label: 'Cancel',
+                      dense: true,
                     ),
-                    FilledButton(
+                    GlassButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Clear'),
+                      label: 'Clear',
+                      color: Theme.of(context).colorScheme.error,
+                      dense: true,
                     ),
                   ],
                 ),
@@ -120,9 +124,10 @@ class DevTodoSortDebugSection extends ConsumerWidget {
           ),
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            label: 'Close',
+            dense: true,
           ),
         ],
       ),

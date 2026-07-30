@@ -7,6 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 
 class DevRemotePurgeSection extends ConsumerStatefulWidget {
@@ -97,7 +98,7 @@ class _DevRemotePurgeSectionState extends ConsumerState<DevRemotePurgeSection> {
             ),
             trailing: IconButton(
               tooltip: 'Copy Auth UID',
-              icon: const Icon(PhosphorIconsRegular.copy, size: 18),
+              icon: const Icon(PhosphorIconsRegular.copy),
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: authUid));
                 if (context.mounted) {
@@ -121,20 +122,17 @@ class _DevRemotePurgeSectionState extends ConsumerState<DevRemotePurgeSection> {
           enabled: authUid != null && !_purging,
         ),
         const SizedBox(height: 12),
-        FilledButton.icon(
+        GlassButton(
           onPressed: authUid != null && !_purging ? _purgeEntry : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error,
-            foregroundColor: Theme.of(context).colorScheme.onError,
-          ),
+          color: Theme.of(context).colorScheme.error,
           icon: _purging
               ? const SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(PhosphorIconsRegular.cloudSlash, size: 18),
-          label: const Text('Delete from Firestore permanently'),
+              : const Icon(PhosphorIconsRegular.cloudSlash),
+          label: 'Delete from Firestore permanently',
         ),
       ],
     );

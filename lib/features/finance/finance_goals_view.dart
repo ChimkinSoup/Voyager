@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_allocate_modal.dart';
 import 'package:voyager/features/finance/finance_goal_modal.dart';
@@ -82,9 +83,9 @@ class FinanceGoalsView extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  IconButton(
+                  GlassButton(
                     icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-                    visualDensity: VisualDensity.compact,
+                    dense: true,
                     tooltip: 'New goal',
                     onPressed: () => showGoalModal(context, ref),
                   ),
@@ -156,7 +157,6 @@ class _GoalCard extends ConsumerWidget {
                 ),
                 IconButton(
                   icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 14),
-                  visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   tooltip: 'Edit goal',
@@ -222,15 +222,12 @@ class _GoalCard extends ConsumerWidget {
               ),
             ],
             const SizedBox(height: 12),
-            FilledButton.tonalIcon(
+            GlassButton(
               onPressed: () => showAllocateModal(context, ref, goal: goal),
               icon: const Icon(PhosphorIconsRegular.plus, size: 14),
-              label: const Text('Add funds'),
-              style: FilledButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                backgroundColor: color.withValues(alpha: 0.14),
-                foregroundColor: color,
-              ),
+              label: 'Add funds',
+              dense: true,
+              color: color,
             ),
           ],
         ),
@@ -287,10 +284,10 @@ class _EmptyGoals extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(
+          GlassButton(
             onPressed: onCreate,
             icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-            label: const Text('New goal'),
+            label: 'New goal',
           ),
         ],
       ),

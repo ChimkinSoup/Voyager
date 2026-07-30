@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 
 /// Shows a combined calendar + clock picker dialog.
 Future<DateTime?> showDateTimePickerDialog(
@@ -104,19 +105,21 @@ class _DateTimePickerDialogState extends State<DateTimePickerDialog> {
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
               child: Row(
                 children: [
-                  TextButton(
+                  GlassButton(
                     onPressed: () => Navigator.of(context).pop(
                       DateTime(_date.year, _date.month, _date.day),
                     ),
-                    child: const Text('Add date'),
+                    label: 'Add date',
+                    dense: true,
                   ),
                   const Spacer(),
-                  TextButton(
+                  GlassButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    label: 'Cancel',
+                    dense: true,
                   ),
                   const SizedBox(width: 8),
-                  FilledButton(
+                  GlassButton(
                     onPressed: () => Navigator.of(context).pop(
                       DateTime(
                         _date.year,
@@ -126,7 +129,8 @@ class _DateTimePickerDialogState extends State<DateTimePickerDialog> {
                         _minute,
                       ),
                     ),
-                    child: const Text('OK'),
+                    label: 'OK',
+                    dense: true,
                   ),
                 ],
               ),
@@ -223,14 +227,16 @@ class _TimeRangePickerDialogState extends State<TimeRangePickerDialog> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
+                    GlassButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      label: 'Cancel',
+                      dense: true,
                     ),
                     const SizedBox(width: 8),
-                    FilledButton(
+                    GlassButton(
                       onPressed: () => Navigator.of(context).pop((start: _start, end: _end)),
-                      child: const Text('OK'),
+                      label: 'OK',
+                      dense: true,
                     ),
                   ],
                 ),

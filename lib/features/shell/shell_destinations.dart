@@ -4,6 +4,7 @@ import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/features/analytics/analytics_page.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_page.dart';
+import 'package:voyager/features/dream_journal/dream_journal_page.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/journal/journal_page.dart';
 import 'package:voyager/features/search/search_page.dart';
@@ -32,6 +33,12 @@ const shellDestinations = <ShellDestination>[
     icon: VoyagerIcons.journal,
     label: 'Journal',
     page: JournalPage(),
+  ),
+  ShellDestination(
+    path: '/dream-journal',
+    icon: PhosphorIconsRegular.moonStars,
+    label: 'Dreams',
+    page: DreamJournalPage(),
   ),
   ShellDestination(
     path: '/todo',

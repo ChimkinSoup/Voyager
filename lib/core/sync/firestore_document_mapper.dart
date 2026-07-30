@@ -2,6 +2,7 @@ import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
@@ -108,6 +109,10 @@ class CrdtTextFields {
       body: '',
       notes: data.containsKey('notes') ? data['notes'] as String? : null,
     );
+  }
+
+  factory CrdtTextFields.fromDreamPayload(Map<String, dynamic> data) {
+    return CrdtTextFields(body: data['body'] as String? ?? '');
   }
 }
 
@@ -411,6 +416,83 @@ TodoTask mergeTodoTaskFromRemote(
             ? data['parentTaskId'] as String?
             : local?.parentTaskId)
         : local!.parentTaskId,
+    createdAt: parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: resolvedUpdated,
+    version: resolvedVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt, remoteWins: metadataRemoteWins),
+  );
+}
+
+Map<String, dynamic> dreamEntryToFirestore(DreamEntry entry) => {
+  'id': entry.id,
+  'title': entry.title,
+  'body': entry.body,
+  'notes': entry.notes,
+  'entryDate': _dateToFirestoreRequired(entry.entryDate),
+  'tags': entry.tags,
+  'createdAt': _dateToFirestoreRequired(entry.createdAt),
+  'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
+  'version': entry.version,
+  'deletedAt': _dateToFirestore(entry.deletedAt),
+};
+
+DreamEntry mergeDreamEntryFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  DreamEntry? local,
+  CrdtTextFields? crdtText,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  final metadataRemoteWins = local == null ||
+      remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      );
+
+  final String body;
+  final List<String> tags;
+  if (crdtText != null) {
+    body = crdtText.body;
+    tags = data['tags'] != null
+        ? List<String>.from(data['tags'] as List)
+        : local?.tags ?? const [];
+  } else if (metadataRemoteWins) {
+    body = data['body'] as String? ?? local?.body ?? '';
+    tags = data['tags'] != null
+        ? List<String>.from(data['tags'] as List)
+        : local?.tags ?? const [];
+  } else {
+    body = local!.body;
+    tags = local.tags;
+  }
+
+  final resolvedVersion = metadataRemoteWins
+      ? remoteVersion
+      : local?.version ?? remoteVersion;
+  final resolvedUpdated = metadataRemoteWins
+      ? remoteUpdated
+      : local?.updatedAt ?? remoteUpdated;
+
+  return DreamEntry(
+    id: id,
+    title: metadataRemoteWins
+        ? (data['title'] as String? ?? local?.title ?? '')
+        : local!.title,
+    body: body,
+    notes: metadataRemoteWins
+        ? (data.containsKey('notes') ? data['notes'] as String? : local?.notes)
+        : local!.notes,
+    entryDate: metadataRemoteWins
+        ? (parseFirestoreDate(data['entryDate']) ??
+            local?.entryDate ??
+            remoteUpdated)
+        : local!.entryDate,
+    tags: tags,
     createdAt: parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,

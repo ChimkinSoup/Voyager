@@ -10,6 +10,7 @@ import 'package:voyager/app/voyager_app.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/features/hotkeys/quick_popups.dart';
 import 'package:voyager/firebase_options.dart';
@@ -60,6 +61,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
 
     final settings = await settingsRepo.getSettings();
     if (!mounted) return;
+    DevFlags.disableCache = settings.devDisableCache;
     try {
       await _hotkeys.register(
         journalHotkey: settings.journalHotkey,
@@ -85,6 +87,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
 
   void _schedulePostAuthWarmup() {
     if (_postAuthWarmupStarted) return;
+    if (DevFlags.disableCache) return;
     _postAuthWarmupStarted = true;
     _postAuthWarmupTimer?.cancel();
     _postAuthWarmupTimer = Timer(const Duration(milliseconds: 900), () {
@@ -95,6 +98,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
 
   Future<void> _warmUpAfterFirstShellFrame() async {
     if (!mounted) return;
+    if (DevFlags.disableCache) return;
 
     final sync = ref.read(syncEngineProvider);
     final lazy = ref.read(lazyLoadProvider);

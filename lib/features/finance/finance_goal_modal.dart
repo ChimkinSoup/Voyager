@@ -8,6 +8,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -189,13 +190,21 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                   if (widget.existing != null)
                     IconButton(
                       onPressed: _saving ? null : _delete,
-                      icon: const Icon(PhosphorIconsRegular.trash, size: 18),
+                      icon: Icon(
+                        PhosphorIconsRegular.trash,
+                        size: 18,
+                        color: theme.colorScheme.error,
+                      ),
                       tooltip: 'Delete',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
                   IconButton(
                     onPressed: Navigator.of(context).pop,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
@@ -271,13 +280,11 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                 swatchRadius: 16,
               ),
               const SizedBox(height: 24),
-              FilledButton(
+              GlassButton(
                 onPressed: _canSave ? _save : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: accent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: Text(widget.existing == null ? 'Add' : 'Save'),
+                label: widget.existing == null ? 'Add' : 'Save',
+                color: accent,
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ],
           ),

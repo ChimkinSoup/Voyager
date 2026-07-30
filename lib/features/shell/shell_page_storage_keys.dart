@@ -14,4 +14,10 @@ abstract final class ShellPageStorageKeys {
   static const settingsList = PageStorageKey<String>('shell.settings.list');
   static const analyticsList = PageStorageKey<String>('shell.analytics.list');
   static const devList = PageStorageKey<String>('shell.dev.list');
+  static const financeLedgerWide = PageStorageKey<String>(
+    'shell.finance.ledger.wide',
+  );
+  static const financeLedgerNarrow = PageStorageKey<String>(
+    'shell.finance.ledger.narrow',
+  );
 }

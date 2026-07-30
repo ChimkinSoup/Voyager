@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 
 class DevGeometricWaveSection extends ConsumerWidget {
   const DevGeometricWaveSection({super.key});
@@ -279,9 +280,10 @@ class DevGeometricWaveSection extends ConsumerWidget {
             ),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
+            child: GlassButton(
               onPressed: () => unawaited(notifier.resetToDefaults()),
-              child: const Text('Reset to defaults'),
+              label: 'Reset to defaults',
+              dense: true,
             ),
           ),
         ],

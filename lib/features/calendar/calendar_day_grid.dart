@@ -3,11 +3,33 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
+
+/// Builds the right-click context-menu items for a calendar [CalendarDayEntry]
+/// (an event or a due todo). Returning an empty list suppresses the menu.
+typedef CalendarEntryMenuBuilder =
+    List<ContextMenuItem> Function(CalendarDayEntry entry);
+
+/// Wraps [child] in a [ContextMenuRegion] built from [builder] for [entry].
+///
+/// When [builder] is null or yields no items the [child] is returned unchanged,
+/// so callers can thread an optional builder through the widget tree without
+/// special-casing every site.
+Widget calendarEntryContextMenu({
+  required CalendarEntryMenuBuilder? builder,
+  required CalendarDayEntry entry,
+  required Widget child,
+}) {
+  if (builder == null) return child;
+  final items = builder(entry);
+  if (items.isEmpty) return child;
+  return ContextMenuRegion(items: items, child: child);
+}
 
 // =============================================================================
 // CalendarEventTapState — coordinates multi-day animation + popup anchor rect
@@ -186,6 +208,13 @@ const calendarEventBarFillAlpha = 1.0;
 /// Fill alpha for day-view event tiles.
 const calendarDayEventTileFillAlpha = 0.48;
 
+/// Corner radius for calendar event pills in month and week views.
+const calendarEventCornerRadius = 9.0;
+
+/// [CalendarDayCell]'s own border stroke width — explicit so its content
+/// clip can be deflated by the exact same amount the border paints inward.
+const _cellBorderWidth = 1.0;
+
 BoxDecoration calendarEventFillDecoration(
   Color base, {
   double alpha = calendarEventBarFillAlpha,
@@ -306,6 +335,7 @@ class CalendarDayCell extends StatelessWidget {
     this.showTodoIcons = true,
     this.onTap,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.isSelected = false,
     this.adjacentTextT,
     this.adjacentBorderT,
@@ -328,6 +358,10 @@ class CalendarDayCell extends StatelessWidget {
   final MonthDayCellStyle style;
   final VoidCallback? onTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+
+  /// Builds the right-click menu for an event/todo entry in this cell. Null
+  /// disables the context menu.
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final bool isSelected;
   final bool isFirstColumn;
   final bool isLastColumn;
@@ -397,26 +431,60 @@ class CalendarDayCell extends StatelessWidget {
       width: double.infinity,
       height: double.infinity,
       margin: style.cellMargin,
-      padding: style.cellPadding,
-      decoration: BoxDecoration(
-        color: weekHighlightAlpha > 0
-            ? highlightColor.withValues(alpha: weekHighlightAlpha.clamp(0.0, 1.0))
-            : null,
-        border: Border.all(
-          color: borderColor.withValues(
-            alpha: borderAlpha.clamp(0.0, 1.0),
+      // Border and clip must trace the same curve. A single
+      // Container(decoration: ..., child: ClipRRect(...)) doesn't do that —
+      // Container derives its child's padding from BoxDecoration.padding
+      // (== border.dimensions), so the ClipRRect ends up inset by the border's
+      // full width from the *outer* edge (where Border.all paints its stroke
+      // deflated inward, so the stroke's inner face sits one more width in
+      // again) — content fell a whole border-width short of the stroke's
+      // inner edge, leaving a gap. Painting the border via a sibling
+      // DecoratedBox avoids that auto-inset, but content then reaches the
+      // *outer* edge and paints over the stroke instead. Explicitly deflating
+      // the clip by exactly [_cellBorderWidth] — matching the same deflate
+      // Border.all applies internally — lines content up with the stroke's
+      // inner face: no gap, no painting over the border.
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: weekHighlightAlpha > 0
+                  ? highlightColor.withValues(alpha: weekHighlightAlpha.clamp(0.0, 1.0))
+                  : null,
+              border: Border.all(
+                width: _cellBorderWidth,
+                color: borderColor.withValues(
+                  alpha: borderAlpha.clamp(0.0, 1.0),
+                ),
+              ),
+              borderRadius: BorderRadius.circular(style.borderRadius),
+            ),
           ),
-        ),
-        borderRadius: BorderRadius.circular(style.borderRadius),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final useCompact =
-              style.isCompactLayout || constraints.maxHeight < 28;
-          return useCompact
-              ? _buildCompactCellContent(inMonth)
-              : _buildFullCellContent(inMonth, constraints.maxHeight);
-        },
+          Padding(
+            padding: const EdgeInsets.all(_cellBorderWidth),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(
+                (style.borderRadius - _cellBorderWidth).clamp(
+                  0.0,
+                  style.borderRadius,
+                ),
+              ),
+              child: Padding(
+                padding: style.cellPadding,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final useCompact =
+                        style.isCompactLayout || constraints.maxHeight < 28;
+                    return useCompact
+                        ? _buildCompactCellContent(inMonth)
+                        : _buildFullCellContent(inMonth, constraints.maxHeight);
+                  },
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
 
@@ -455,8 +523,11 @@ class CalendarDayCell extends StatelessWidget {
         : 0.0;
     final availableHeight =
         (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
+    final maxEventAreaHeight = visibleEvents >= 4
+        ? availableHeight + style.cellPadding.bottom
+        : availableHeight;
     final clampedEventAreaHeight =
-        eventAreaHeight.clamp(0.0, availableHeight);
+        eventAreaHeight.clamp(0.0, maxEventAreaHeight);
 
     final showTodos =
         inMonth && showTodoIcons && todoMarkers.isNotEmpty;
@@ -525,27 +596,29 @@ class CalendarDayCell extends StatelessWidget {
                                           style: style,
                                         );
                                         final event = events[i]!;
-                                        return CalendarDayEventBar(
-                                          event: event,
-                                          date: date,
-                                          fontSize: eventFontSize,
-                                          height: barHeight,
-                                          isStart: calendarEventBarStartsOnDay(event, date),
-                                          isEnd: calendarEventBarEndsOnDay(event, date),
-                                          isFirstColumn: isFirstColumn,
-                                          isLastColumn: isLastColumn,
-                                          cellMargin: style.cellMargin,
-                                          cellPadding: style.cellPadding,
-                                          highlighted: editingEventId == event.id,
-                                          onTap: onEntryTap == null
-                                              ? null
-                                              : () {
-                                                  onEntryTap!(
-                                                    event.isFullDay
-                                                        ? CalendarDayEntry.allDayEvent(event)
-                                                        : CalendarDayEntry.timedEvent(event),
-                                                  );
-                                                },
+                                        final eventEntry = event.isFullDay
+                                            ? CalendarDayEntry.allDayEvent(event)
+                                            : CalendarDayEntry.timedEvent(event);
+                                        return calendarEntryContextMenu(
+                                          builder: entryMenuBuilder,
+                                          entry: eventEntry,
+                                          child: CalendarDayEventBar(
+                                            event: event,
+                                            date: date,
+                                            fontSize: eventFontSize,
+                                            height: barHeight,
+                                            isStart: calendarEventBarStartsOnDay(event, date),
+                                            isEnd: calendarEventBarEndsOnDay(event, date),
+                                            isFirstColumn: isFirstColumn,
+                                            isLastColumn: isLastColumn,
+                                            isBottom: displayedEventCount >= 4 && i == displayedEventCount - 1,
+                                            cellMargin: style.cellMargin,
+                                            cellPadding: style.cellPadding,
+                                            highlighted: editingEventId == event.id,
+                                            onTap: onEntryTap == null
+                                                ? null
+                                                : () => onEntryTap!(eventEntry),
+                                          ),
                                         );
                                       },
                                     )
@@ -575,6 +648,7 @@ class CalendarDayCell extends StatelessWidget {
                             overflowEvents: overflowEvents,
                             editingEventId: editingEventId,
                             onEntryTap: onEntryTap!,
+                            entryMenuBuilder: entryMenuBuilder,
                           ),
                 ),
               ),
@@ -593,6 +667,7 @@ class CalendarDayCell extends StatelessWidget {
                           badgeContext: todoContext,
                           todos: todoMarkers,
                           onEntryTap: onEntryTap!,
+                          entryMenuBuilder: entryMenuBuilder,
                         );
                       },
                       behavior: HitTestBehavior.opaque,
@@ -801,8 +876,11 @@ double calendarMonthEventBarHeight({
   const eventGap = 2.0;
   const betweenEventGap = 1.0;
   final slotCount = style.maxEventLines.clamp(1, style.maxEventLines);
-  final eventAreaHeight =
+  var eventAreaHeight =
       (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
+  if (visibleEventCount >= 4) {
+    eventAreaHeight += style.cellPadding.bottom;
+  }
   final slotGaps = (slotCount - 1) * betweenEventGap;
   return ((eventAreaHeight - slotGaps) / slotCount)
       .clamp(0.0, double.infinity);
@@ -1168,17 +1246,21 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       if (shrinkT >= 1.0) return const SizedBox.shrink();
       if (shrinkT <= 0.0) {
         final ownY = frozenMonthEventsTop + index * frozenBarStride;
+        final maxTop = widget.cellHeight +
+            (index >= 3 ? MonthDayCellStyle.full.cellPadding.bottom : 0.0) -
+            frozenBarHeight;
         return _eventPill(
           event: event,
           date: widget.date,
           left: -bridgeLeft,
           top: ownY.clamp(
             0.0,
-            (widget.cellHeight - frozenBarHeight)
-                .clamp(0.0, widget.cellHeight),
+            maxTop.clamp(0.0, double.infinity),
           ),
           width: widget.maxWidth + bridgeLeft + bridgeRight,
-          height: frozenBarHeight,
+          height: index >= 3
+              ? frozenBarHeight + MonthDayCellStyle.full.cellPadding.bottom
+              : frozenBarHeight,
           eventFontSize: frozenEventFontSize,
           expandT: 1.0,
           currentBridgeLeft: bridgeLeft,
@@ -1195,20 +1277,29 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       final ownY = frozenMonthEventsTop + index * frozenBarStride;
       if (height < 0.25) return const SizedBox.shrink();
 
+      final maxTop = widget.cellHeight +
+          (index >= 3 ? MonthDayCellStyle.full.cellPadding.bottom : 0.0) -
+          height;
+
+      final textOpacity = shrinkT > 0.85
+          ? 0.0
+          : ((1.0 - shrinkT - 0.15) / 0.7).clamp(0.0, 1.0);
+
       return _eventPill(
         event: event,
         date: widget.date,
         left: -currentBridgeLeft,
         top: (ownY + (frozenBarHeight - height) / 2).clamp(
           0.0,
-          (widget.cellHeight - height).clamp(0.0, widget.cellHeight),
+          maxTop.clamp(0.0, double.infinity),
         ),
         width: widget.maxWidth + currentBridgeLeft + currentBridgeRight,
         height: height,
+        textOpacity: textOpacity,
         eventFontSize: frozenEventFontSize,
         expandT: 1.0 - shrinkT,
         opacity: 1.0 - shrinkT,
-        showText: false,
+        showText: isStart && textOpacity > 0,
         currentBridgeLeft: currentBridgeLeft,
         currentBridgeRight: currentBridgeRight,
         roundLeft: isStart,
@@ -1310,8 +1401,8 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
   }) {
     final color = Color(event.colorValue);
 
-    final leftRadius = roundLeft ? height / 2 : 0.0;
-    final rightRadius = roundRight ? height / 2 : 0.0;
+    final leftRadius = roundLeft ? calendarEventCornerRadius : 0.0;
+    final rightRadius = roundRight ? calendarEventCornerRadius : 0.0;
 
     Widget content = DecoratedBox(
       decoration: calendarEventFillDecoration(
@@ -1373,8 +1464,8 @@ class CalendarInteractiveEventTap extends StatefulWidget {
     required this.eventColor,
     required this.borderRadius,
     this.onTap,
-    // [highlighted] kept for API compatibility but no longer applies a glow —
-    // the popup container glows instead.
+    // [highlighted] kept for API compatibility but no longer applies its own
+    // highlight — the popup container's accent border does that instead.
     this.highlighted = false,
     this.eventId,
     this.isSegmentStart = true,
@@ -1525,6 +1616,7 @@ Future<void> _showOverflowEventsPopover({
   required List<CalendarEvent> overflowEvents,
   required void Function(CalendarDayEntry entry) onEntryTap,
   String? editingEventId,
+  CalendarEntryMenuBuilder? entryMenuBuilder,
 }) {
   return showContextualPopover<void>(
     context: badgeContext,
@@ -1534,6 +1626,7 @@ Future<void> _showOverflowEventsPopover({
       return CalendarDayOverflowEventsPopover(
         events: overflowEvents,
         editingEventId: editingEventId,
+        entryMenuBuilder: entryMenuBuilder,
         onEventTap: (event) {
           Navigator.of(popoverContext).pop();
           onEntryTap(
@@ -1551,6 +1644,7 @@ Future<void> _showTodoPopover({
   required BuildContext badgeContext,
   required List<CalendarTodoMarker> todos,
   required void Function(CalendarDayEntry entry) onEntryTap,
+  CalendarEntryMenuBuilder? entryMenuBuilder,
 }) {
   return showContextualPopover<void>(
     context: badgeContext,
@@ -1559,6 +1653,7 @@ Future<void> _showTodoPopover({
     builder: (popoverContext) {
       return CalendarDayTodoPopover(
         todos: todos,
+        entryMenuBuilder: entryMenuBuilder,
         onTodoTap: (todo) {
           Navigator.of(popoverContext).pop();
           onEntryTap(CalendarDayEntry.todo(todo));
@@ -1573,10 +1668,12 @@ class CalendarDayTodoPopover extends StatelessWidget {
     super.key,
     required this.todos,
     required this.onTodoTap,
+    this.entryMenuBuilder,
   });
 
   final List<CalendarTodoMarker> todos;
   final ValueChanged<CalendarTodoMarker> onTodoTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1589,15 +1686,19 @@ class CalendarDayTodoPopover extends StatelessWidget {
           for (final todo in todos)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () => onTodoTap(todo),
-                  child: Container(
-                    height: 24,
-                    alignment: Alignment.centerLeft,
-                    child: CalendarDayTodoTile(marker: todo),
+              child: calendarEntryContextMenu(
+                builder: entryMenuBuilder,
+                entry: CalendarDayEntry.todo(todo),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => onTodoTap(todo),
+                    child: Container(
+                      height: 24,
+                      alignment: Alignment.centerLeft,
+                      child: CalendarDayTodoTile(marker: todo),
+                    ),
                   ),
                 ),
               ),
@@ -1614,11 +1715,13 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
     required this.events,
     required this.onEventTap,
     this.editingEventId,
+    this.entryMenuBuilder,
   });
 
   final List<CalendarEvent> events;
   final ValueChanged<CalendarEvent> onEventTap;
   final String? editingEventId;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1631,12 +1734,17 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
           for (final event in events)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: CalendarInteractiveEventTap(
-                eventColor: Color(event.colorValue),
-                borderRadius: BorderRadius.circular(6),
-                highlighted: editingEventId == event.id,
-                onTap: () => onEventTap(event),
-                child: Container(
+              child: calendarEntryContextMenu(
+                builder: entryMenuBuilder,
+                entry: event.isFullDay
+                    ? CalendarDayEntry.allDayEvent(event)
+                    : CalendarDayEntry.timedEvent(event),
+                child: CalendarInteractiveEventTap(
+                  eventColor: Color(event.colorValue),
+                  borderRadius: BorderRadius.circular(6),
+                  highlighted: editingEventId == event.id,
+                  onTap: () => onEventTap(event),
+                  child: Container(
                   height: 24,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: calendarEventFillDecoration(
@@ -1649,6 +1757,7 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppFonts.style(fontSize: 11, height: 1),
+                  ),
                   ),
                 ),
               ),
@@ -1709,6 +1818,7 @@ class CalendarDayEventBar extends StatelessWidget {
     this.isEnd = true,
     this.isFirstColumn = false,
     this.isLastColumn = false,
+    this.isBottom = false,
     this.cellMargin = EdgeInsets.zero,
     this.cellPadding = EdgeInsets.zero,
     this.onTap,
@@ -1723,6 +1833,7 @@ class CalendarDayEventBar extends StatelessWidget {
   final bool isEnd;
   final bool isFirstColumn;
   final bool isLastColumn;
+  final bool isBottom;
   final EdgeInsets cellMargin;
   final EdgeInsets cellPadding;
   final VoidCallback? onTap;
@@ -1733,11 +1844,15 @@ class CalendarDayEventBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final barHeight = height ?? heightFor(fontSize);
-    final leftRadius = isStart ? barHeight / 2 : 0.0;
-    final rightRadius = isEnd ? barHeight / 2 : 0.0;
-    final borderRadius = BorderRadius.horizontal(
-      left: Radius.circular(leftRadius),
-      right: Radius.circular(rightRadius),
+    // isBottom bars sit flush against the cell's own clipped edge, so leaving
+    // these corners square lets the enclosing ClipRRect impose the curve —
+    // any attempt to match a radius here is one sub-pixel drift away from a gap.
+    final bottomRadius = isBottom ? 0.0 : calendarEventCornerRadius;
+    final borderRadius = BorderRadius.only(
+      topLeft: Radius.circular(isStart ? calendarEventCornerRadius : 0.0),
+      topRight: Radius.circular(isEnd ? calendarEventCornerRadius : 0.0),
+      bottomLeft: Radius.circular(isStart ? bottomRadius : 0.0),
+      bottomRight: Radius.circular(isEnd ? bottomRadius : 0.0),
     );
     final eventColor = Color(event.colorValue);
 
@@ -2230,6 +2345,7 @@ class MonthDayGrid extends StatelessWidget {
     this.showTodoIcons = true,
     this.onDayTap,
     this.onEntryTap,
+    this.entryMenuBuilder,
     this.editingEventId,
     this.showWeekdayHeader = false,
     this.weekdayHeaderOpacity = 1,
@@ -2249,6 +2365,7 @@ class MonthDayGrid extends StatelessWidget {
   final MonthDayCellStyle style;
   final void Function(DateTime day)? onDayTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
   final bool showWeekdayHeader;
   final double weekdayHeaderOpacity;
@@ -2368,6 +2485,7 @@ class MonthDayGrid extends StatelessWidget {
                         weekHighlightAlpha: weekHighlightAlpha,
                         onTap: onDayTap == null ? null : () => onDayTap!(date),
                         onEntryTap: onEntryTap,
+                        entryMenuBuilder: entryMenuBuilder,
                         editingEventId: editingEventId,
                         accentColor: accentColor,
                       ),

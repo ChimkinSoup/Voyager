@@ -51,6 +51,22 @@ class JournalEntriesTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+class DreamEntriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  TextColumn get body => text()();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get entryDate => dateTime()();
+  TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class TodoListsTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -284,6 +300,24 @@ class GoalAllocationsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+class PinnedNotesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get body => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class DismissedNotificationsTable extends Table {
+  /// `'$itemId|$urgencyTierName'` — see [NotificationFeedItem.dismissalKey].
+  TextColumn get id => text()();
+  DateTimeColumn get dismissedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class SettingsTable extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
   IntColumn get accentColor =>
@@ -291,6 +325,7 @@ class SettingsTable extends Table {
   TextColumn get themeMode => text().withDefault(const Constant('dark'))();
   IntColumn get petalColor =>
       integer().withDefault(const Constant(defaultPetalColor))();
+  TextColumn get minorPetalColorsJson => text().nullable()();
   IntColumn get petalMaxCount => integer().withDefault(const Constant(60))();
   RealColumn get petalFallSpeed => real().withDefault(const Constant(34.0))();
   RealColumn get petalWindFrequency =>
@@ -359,6 +394,8 @@ class SettingsTable extends Table {
   BoolColumn get devShowJournalRemotePullButton =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get devShowFpsCounter =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get devDisableCache =>
       boolean().withDefault(const Constant(false))();
   TextColumn get weatherForecastJson => text().nullable()();
   IntColumn get weatherChartTempColor => integer().nullable()();
@@ -433,6 +470,11 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(true))();
   BoolColumn get showAnnualizedSubscriptionCost =>
       boolean().withDefault(const Constant(false))();
+  RealColumn get dreamSplitWidth => real().nullable()();
+  BoolColumn get showDreamStatistics =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get dreamNotesPinned =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -476,6 +518,7 @@ class PendingUploadsTable extends Table {
   tables: [
     JournalsTable,
     JournalEntriesTable,
+    DreamEntriesTable,
     TodoListsTable,
     TodoTasksTable,
     CalendarsTable,
@@ -494,13 +537,15 @@ class PendingUploadsTable extends Table {
     AssetValuationsTable,
     SavingsGoalsTable,
     GoalAllocationsTable,
+    PinnedNotesTable,
+    DismissedNotificationsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 53;
+  int get schemaVersion => 58;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1015,6 +1060,51 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.devShowFpsCounter,
         );
       }
+      if (from < 54) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.minorPetalColorsJson,
+        );
+      }
+      if (from < 55) {
+        await migrator.createTable(dreamEntriesTable);
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.dreamSplitWidth,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.showDreamStatistics,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.dreamNotesPinned,
+        );
+      }
+      if (from < 56) {
+        await migrator.createTable(pinnedNotesTable);
+        await migrator.createTable(dismissedNotificationsTable);
+      }
+      if (from < 57) {
+        // Drift has always serialised DateTime as unix seconds (integer) by
+        // default.  Switch to ISO-8601 text storage so that sub-second
+        // precision is preserved end-to-end.  This migration rewrites every
+        // existing integer timestamp in place; new writes go through the text
+        // path once build_runner regenerates app_database.g.dart with the
+        // store_date_time_values_as_text: true option from build.yaml.
+        //
+        // The WHERE typeof(col) = 'integer' guard makes the update idempotent:
+        // if the column already holds a text value (e.g. the migration was
+        // partially applied on a dev build), the row is skipped rather than
+        // double-converted.
+        await _migrateUnixSecondsToIsoText();
+      }
+      if (from < 58) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.devDisableCache,
+        );
+      }
     },
   );
 
@@ -1135,6 +1225,98 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Converts every unix-second INTEGER timestamp in all tables to ISO-8601
+  /// text. Called once during the schema-v57 migration.  The format string
+  /// produces e.g. "2026-07-28T02:36:57Z" which [DateTime.parse] accepts.
+  Future<void> _migrateUnixSecondsToIsoText() async {
+    // Helper: all non-nullable datetime columns across all tables.
+    const nonNullable = <(String, String)>[
+      ('journals_table', 'created_at'),
+      ('journals_table', 'updated_at'),
+      ('journal_entries_table', 'entry_date'),
+      ('journal_entries_table', 'created_at'),
+      ('journal_entries_table', 'updated_at'),
+      ('dream_entries_table', 'entry_date'),
+      ('dream_entries_table', 'created_at'),
+      ('dream_entries_table', 'updated_at'),
+      ('todo_lists_table', 'created_at'),
+      ('todo_lists_table', 'updated_at'),
+      ('todo_tasks_table', 'created_at'),
+      ('todo_tasks_table', 'updated_at'),
+      ('calendars_table', 'created_at'),
+      ('calendars_table', 'updated_at'),
+      ('calendar_events_table', 'start'),
+      ('calendar_events_table', 'end'),
+      ('calendar_events_table', 'created_at'),
+      ('calendar_events_table', 'updated_at'),
+      ('trackers_table', 'created_at'),
+      ('trackers_table', 'updated_at'),
+      ('tracker_values_table', 'period_start'),
+      ('tracker_values_table', 'created_at'),
+      ('tracker_values_table', 'updated_at'),
+      ('transactions_table', 'occurred_at'),
+      ('transactions_table', 'created_at'),
+      ('transactions_table', 'updated_at'),
+      ('subscriptions_table', 'anchor_due_date'),
+      ('subscriptions_table', 'created_at'),
+      ('subscriptions_table', 'updated_at'),
+      ('budgets_table', 'created_at'),
+      ('budgets_table', 'updated_at'),
+      ('finance_categories_table', 'created_at'),
+      ('finance_categories_table', 'updated_at'),
+      ('assets_table', 'created_at'),
+      ('assets_table', 'updated_at'),
+      ('asset_valuations_table', 'as_of'),
+      ('asset_valuations_table', 'created_at'),
+      ('asset_valuations_table', 'updated_at'),
+      ('savings_goals_table', 'created_at'),
+      ('savings_goals_table', 'updated_at'),
+      ('goal_allocations_table', 'allocated_at'),
+      ('goal_allocations_table', 'created_at'),
+      ('goal_allocations_table', 'updated_at'),
+      ('pinned_notes_table', 'created_at'),
+      ('dismissed_notifications_table', 'dismissed_at'),
+      ('sync_conflicts_table', 'detected_at'),
+      ('pending_uploads_table', 'added_at'),
+    ];
+
+    // Nullable datetime columns — same conversion, NULL rows are
+    // implicitly skipped by the WHERE typeof(...) = 'integer' guard.
+    const nullable = <(String, String)>[
+      ('journals_table', 'deleted_at'),
+      ('journal_entries_table', 'timestamp'),
+      ('journal_entries_table', 'deleted_at'),
+      ('dream_entries_table', 'deleted_at'),
+      ('todo_lists_table', 'deleted_at'),
+      ('todo_tasks_table', 'due_date'),
+      ('todo_tasks_table', 'due_date_set_at'),
+      ('todo_tasks_table', 'deleted_at'),
+      ('calendars_table', 'deleted_at'),
+      ('calendar_events_table', 'deleted_at'),
+      ('trackers_table', 'deleted_at'),
+      ('tracker_values_table', 'deleted_at'),
+      ('transactions_table', 'deleted_at'),
+      ('subscriptions_table', 'deleted_at'),
+      ('budgets_table', 'deleted_at'),
+      ('finance_categories_table', 'deleted_at'),
+      ('assets_table', 'deleted_at'),
+      ('asset_valuations_table', 'deleted_at'),
+      ('savings_goals_table', 'target_date'),
+      ('savings_goals_table', 'deleted_at'),
+      ('goal_allocations_table', 'deleted_at'),
+      ('settings_table', 'weather_fetched_at'),
+      ('settings_table', 'weather_location_updated_at'),
+    ];
+
+    for (final (table, col) in [...nonNullable, ...nullable]) {
+      await customStatement(
+        "UPDATE $table "
+        "SET $col = strftime('%Y-%m-%dT%H:%M:%SZ', CAST($col AS INTEGER), 'unixepoch') "
+        "WHERE typeof($col) = 'integer'",
+      );
+    }
+  }
+
   static AppDatabase create() {
     return AppDatabase(_openConnection());
   }
@@ -1146,8 +1328,16 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
+    // Resolve the path on this isolate — path_provider needs the platform
+    // channel, which only exists here.
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(dir.path, 'voyager.sqlite'));
-    return NativeDatabase(file);
+    // Run sqlite on its own isolate. NativeDatabase's FFI calls are
+    // synchronous under their Futures, so on the UI isolate every read and
+    // write blocks whatever frame it lands in — a task completion, for
+    // instance, fires several writes plus a re-read of every list right while
+    // the row is animating. In the background the UI isolate only pays for the
+    // message hop.
+    return NativeDatabase.createInBackground(file);
   });
 }

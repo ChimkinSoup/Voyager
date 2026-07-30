@@ -10,6 +10,8 @@ import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/petal_field.dart' show petalColorWeights;
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -188,6 +190,21 @@ class SettingsPage extends ConsumerWidget {
             onChanged: (v) => _save(
               ref,
               settings.copyWith(showAnnualizedSubscriptionCost: v),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Dream Journal', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          SwitchListTile(
+            title: const Text('Show dream statistics in analytics'),
+            subtitle: const Text(
+              'Adds a stat to the analytics page showing whether you logged '
+              'a dream each day',
+            ),
+            value: settings.showDreamStatistics,
+            onChanged: (v) => _save(
+              ref,
+              settings.copyWith(showDreamStatistics: v),
             ),
           ),
           const SizedBox(height: 16),
@@ -478,17 +495,19 @@ class SettingsPage extends ConsumerWidget {
                 ),
               ),
               actions: [
-                TextButton(
+                GlassButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  label: 'Cancel',
+                  dense: true,
                 ),
-                TextButton(
+                GlassButton(
                   onPressed: () {
                     final newOrder = items.map((e) => e.dest.path).toList();
                     _save(ref, settings.copyWith(navPageOrder: newOrder));
                     Navigator.of(context).pop();
                   },
-                  child: const Text('Save'),
+                  label: 'Save',
+                  dense: true,
                 ),
               ],
             );
@@ -564,11 +583,12 @@ class SettingsPage extends ConsumerWidget {
                 ],
               ),
               actions: [
-                TextButton(
+                GlassButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  label: 'Cancel',
+                  dense: true,
                 ),
-                TextButton(
+                GlassButton(
                   onPressed: () {
                     _save(
                       ref,
@@ -579,7 +599,8 @@ class SettingsPage extends ConsumerWidget {
                     );
                     Navigator.of(context).pop();
                   },
-                  child: const Text('Save'),
+                  label: 'Save',
+                  dense: true,
                 ),
               ],
             );
@@ -608,10 +629,14 @@ class _PetalSettings extends ConsumerWidget {
       children: [
         ListTile(
           title: const Text('Petal color'),
-          subtitle: Text(formatColorHex(settings.petalColor)),
+          subtitle: Text(
+            '${formatColorHex(settings.petalColor)} · '
+            '${(petalColorWeights[settings.minorPetalColors.length][0] * 100).round()}% of petals',
+          ),
           leading: CircleAvatar(backgroundColor: Color(settings.petalColor)),
           onTap: () => _pickPetalColor(context, ref),
         ),
+        ..._minorColorTiles(context, ref),
         _PetalSlider(
           label: 'Max petals',
           value: settings.petalMaxCount.toDouble(),
@@ -668,6 +693,81 @@ class _PetalSettings extends ConsumerWidget {
     if (picked != null) {
       await onSave(settings.copyWith(petalColor: picked));
     }
+  }
+
+  /// One tile per configured minor color plus a trailing "add" tile, capped
+  /// at 3 minor colors total. See [petalColorWeights] for the ratio each
+  /// count maps to.
+  List<Widget> _minorColorTiles(BuildContext context, WidgetRef ref) {
+    final minors = settings.minorPetalColors;
+    final weights = petalColorWeights[minors.length];
+    return [
+      for (var i = 0; i < minors.length; i++)
+        ListTile(
+          title: Text('Minor color ${i + 1}'),
+          subtitle: Text(
+            '${formatColorHex(minors[i])} · '
+            '${(weights[i + 1] * 100).round()}% of petals',
+          ),
+          leading: CircleAvatar(backgroundColor: Color(minors[i])),
+          onTap: () => _pickMinorPetalColor(context, ref, i),
+          trailing: IconButton(
+            icon: const Icon(PhosphorIconsRegular.trash),
+            tooltip: 'Remove minor color',
+            onPressed: () => _removeMinorPetalColor(i),
+          ),
+        ),
+      if (minors.length < 3)
+        ListTile(
+          title: const Text('Add minor color'),
+          leading: const Icon(PhosphorIconsRegular.plus),
+          onTap: () => _addMinorPetalColor(context, ref),
+        ),
+    ];
+  }
+
+  Future<void> _pickMinorPetalColor(
+    BuildContext context,
+    WidgetRef ref,
+    int index,
+  ) async {
+    final current = settings.minorPetalColors[index];
+    final palette = <int>[
+      current,
+      ...ref.read(colorPaletteProvider).where((c) => c != current),
+    ];
+    final picked = await pickColorFromPalette(
+      context,
+      palette: palette,
+      current: current,
+      title: 'Minor color ${index + 1}',
+    );
+    if (picked != null) {
+      final updated = List<int>.from(settings.minorPetalColors);
+      updated[index] = picked;
+      await onSave(settings.copyWith(minorPetalColors: updated));
+    }
+  }
+
+  Future<void> _addMinorPetalColor(BuildContext context, WidgetRef ref) async {
+    if (settings.minorPetalColors.length >= 3) return;
+    final palette = ref.read(colorPaletteProvider);
+    final picked = await pickColorFromPalette(
+      context,
+      palette: palette,
+      current: palette.isNotEmpty ? palette.first : null,
+      title: 'Add minor color',
+    );
+    if (picked != null) {
+      final updated = List<int>.from(settings.minorPetalColors)..add(picked);
+      await onSave(settings.copyWith(minorPetalColors: updated));
+    }
+  }
+
+  Future<void> _removeMinorPetalColor(int index) async {
+    final updated = List<int>.from(settings.minorPetalColors)
+      ..removeAt(index);
+    await onSave(settings.copyWith(minorPetalColors: updated));
   }
 }
 

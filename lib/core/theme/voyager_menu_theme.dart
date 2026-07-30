@@ -20,10 +20,11 @@ abstract final class VoyagerMenuTheme {
 
   static const Radius _itemHighlightRadius = Radius.circular(radius);
 
-  static OutlinedBorder shape([Color? accentColor]) => _GlowBorder(
+  static OutlinedBorder shape([Color? accentColor]) => RoundedRectangleBorder(
     borderRadius: menuBorderRadius,
-    side: accentColor != null ? BorderSide(color: accentColor, width: 2.0) : BorderSide.none,
-    glowColor: accentColor?.withValues(alpha: 0.6),
+    side: accentColor != null
+        ? BorderSide(color: accentColor, width: 1.0)
+        : BorderSide.none,
   );
 
   static VoyagerMenuItemPosition positionFor(int index, int count) {
@@ -106,28 +107,5 @@ abstract final class VoyagerMenuTheme {
       surfaceTintColor: popup.surfaceTintColor ?? Colors.transparent,
       menuPadding: popup.menuPadding ?? EdgeInsets.zero,
     );
-  }
-}
-
-class _GlowBorder extends RoundedRectangleBorder {
-  const _GlowBorder({
-    super.borderRadius,
-    super.side,
-    this.glowColor,
-  });
-
-  final Color? glowColor;
-
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    if (glowColor != null) {
-      final Paint paint = Paint()
-        ..color = glowColor!
-        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 16.0);
-
-      final RRect rrect = borderRadius.resolve(textDirection).toRRect(rect);
-      canvas.drawRRect(rrect, paint);
-    }
-    super.paint(canvas, rect, textDirection: textDirection);
   }
 }

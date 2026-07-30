@@ -40,6 +40,20 @@ dev_dependencies:
   drift_dev: ^2.26.0
   fake_cloud_firestore: any
 
+# firebase_auth's stock Windows plugin sends IdTokenListener/AuthStateListener
+# callbacks to the Flutter engine from whatever thread the Firebase Auth SDK
+# fires them on, violating platform-channel threading rules — a known,
+# currently unfixed upstream bug (firebase/flutterfire#17800, #11933,
+# #16888). This locally patches windows/firebase_auth_plugin.cpp to marshal
+# those callbacks onto the platform thread, matching the pattern
+# cloud_firestore's own Windows plugin already uses. Re-apply the patch (see
+# third_party/firebase_auth-6.5.3/windows/firebase_auth_plugin.cpp) if
+# upgrading firebase_auth past 6.5.3, and drop this override once upstream
+# fixes it.
+dependency_overrides:
+  firebase_auth:
+    path: third_party/firebase_auth-6.5.3
+
 flutter:
   uses-material-design: true
   shaders:

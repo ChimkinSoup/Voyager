@@ -22,7 +22,7 @@ class TagHighlightedTextField extends StatefulWidget {
     this.tagColorFor,
     this.decoration = const InputDecoration(),
     this.cursorColor,
-    this.useFocusGlow = true,
+    this.useNotchedBorder = true,
     this.highlightDebounce = const Duration(milliseconds: 200),
     this.readOnly = false,
   });
@@ -47,7 +47,7 @@ class TagHighlightedTextField extends StatefulWidget {
   final int Function(String tag)? tagColorFor;
   final InputDecoration decoration;
   final Color? cursorColor;
-  final bool useFocusGlow;
+  final bool useNotchedBorder;
   final Duration highlightDebounce;
   final bool readOnly;
 
@@ -142,12 +142,12 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       // double-printed placeholder text.
       hintText: hasLabel ? null : widget.hintText,
       contentPadding: widget.contentPadding,
-      filled: widget.useFocusGlow ? false : widget.decoration.filled,
-      border: widget.useFocusGlow ? InputBorder.none : widget.decoration.border,
-      enabledBorder: widget.useFocusGlow
+      filled: widget.useNotchedBorder ? false : widget.decoration.filled,
+      border: widget.useNotchedBorder ? InputBorder.none : widget.decoration.border,
+      enabledBorder: widget.useNotchedBorder
           ? InputBorder.none
           : widget.decoration.enabledBorder,
-      focusedBorder: widget.useFocusGlow
+      focusedBorder: widget.useNotchedBorder
           ? InputBorder.none
           : widget.decoration.focusedBorder,
     );
@@ -218,7 +218,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       ],
     );
 
-    if (!widget.useFocusGlow) return field;
+    if (!widget.useNotchedBorder) return field;
 
     return NotchedFieldBorder(
       focusNode: widget.focusNode,

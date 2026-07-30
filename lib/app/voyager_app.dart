@@ -98,16 +98,19 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       theme: theme,
       scrollBehavior: const _NoScrollbarScrollBehavior(),
       builder: (context, child) {
-        return Stack(
-          children: [
-            const _AppBackground(),
-            RepaintBoundary(
-              child: DefaultTextStyle(
-                style: AppFonts.style(color: theme.colorScheme.onSurface),
-                child: child ?? const SizedBox.shrink(),
+        return TooltipVisibility(
+          visible: false,
+          child: Stack(
+            children: [
+              const _AppBackground(),
+              RepaintBoundary(
+                child: DefaultTextStyle(
+                  style: AppFonts.style(color: theme.colorScheme.onSurface),
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
       routerConfig: router,

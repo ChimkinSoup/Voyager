@@ -9,10 +9,15 @@
 // that collide with ones already used, producing a "Duplicate fractional
 // position" conflict (see CharacterSequenceCrdtMerger.validateOpChain).
 //
-// RemoteSyncService.prepareEditingSession now guards against this: after
-// loading a persisted op-chain, it checks whether the chain's reconstructed
-// text actually matches the current text, and reseeds from the current text
-// if not.
+// RemoteSyncService.prepareEditingSession guards against this: after loading
+// a persisted op-chain, it checks whether the chain's reconstructed text
+// actually matches the current text, and if not, diffs from the stale
+// reconstruction to the current text *on the loaded session* — reusing the
+// existing op ids for anything unchanged and tombstoning what's gone —
+// rather than discarding the session and reseeding brand-new ops for the
+// whole document. Reseeding used to leave the old, never-tombstoned ops
+// live on the remote, so the next merge combined them with the fresh
+// reseeded ops and doubled every character.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -57,6 +62,7 @@ void main() {
     remoteSync = RemoteSyncService(
       syncRepository: syncRepo,
       journalRepository: DriftJournalRepository(db),
+      dreamRepository: DriftDreamRepository(db),
       todoRepository: DriftTodoRepository(db),
       weatherService: WeatherService(
         settingsRepository: DriftSettingsRepository(db),
@@ -98,7 +104,8 @@ void main() {
   );
 
   test(
-    'prepareEditingSession reseeds instead of trusting a stale op-chain',
+    'prepareEditingSession diffs a stale op-chain in place instead of '
+    'reseeding',
     () async {
       const entryId = 'entry-1';
       const trueCurrentText = 'Hello world';
@@ -123,11 +130,22 @@ void main() {
       );
       expect(session, isNotNull);
       // The guard should have detected the mismatch against the stale
-      // 5-character reconstruction and reseeded from the real text.
+      // 5-character reconstruction and caught the session up to the real
+      // text by diffing, not reseeding.
       expect(session!.text, trueCurrentText);
 
-      // Further edits on the reseeded session must merge and validate
-      // cleanly (no colliding fractional positions).
+      // The reconciling diff (" world") is pending, same as any other edit —
+      // it hasn't reached the remote yet, unlike the original 5 "Hello" ops
+      // which are already there (seeded above) and must NOT be resent.
+      final reconcileOps = remoteSync.charOpRegistry.takePendingOps(
+        FirestoreCollections.journalEntries,
+        entryId,
+      );
+      expect(reconcileOps, hasLength('Hello world'.length - 'Hello'.length));
+
+      // Further edits on the reconciled session must merge and validate
+      // cleanly (no colliding fractional positions) against what's actually
+      // on the remote.
       remoteSync.recordJournalTextChange(
         entryId: entryId,
         before: trueCurrentText,
@@ -140,11 +158,81 @@ void main() {
 
       final merger = CharacterSequenceCrdtMerger();
       final merged = merger.mergeOperations(
-        [_charOpsSyncOperation(newOps)],
-        [],
+        [_charOpsSyncOperation(reconcileOps + newOps)],
+        [_charOpsSyncOperation(partialOps)],
       );
       expect(() => merger.validateOpChain(merged), returnsNormally);
       expect(merger.applyMergedText(merged), '$trueCurrentText!');
+    },
+  );
+
+  test(
+    'race path does not upload seed ops — only the edit delta is pending',
+    () async {
+      // Simulates the race condition where a second device (or an app restart)
+      // starts typing before prepareEditingSession has finished loading the
+      // remote op chain.  The session is created via ensureSession (the race
+      // path, markSeedsAsPending = false), so the full document text seeded as
+      // initial state must NOT appear in takePendingOps.  Only the actual edit
+      // should be pending.
+      const text = 'Hello World';
+      final session = CharacterOpSession(
+        clientId: 'device-b',
+        initialText: text,
+        seedAsPending: false,  // race path — seeds must not be uploaded
+      );
+
+      // No pending ops yet: the seed is internal state only.
+      expect(session.takePendingOps(), isEmpty);
+
+      // Now record a real edit (append '!').
+      session.recordTextChange(text, '$text!');
+      final pending = session.takePendingOps();
+
+      // Only the single inserted character is pending — not the 11 seed ops.
+      expect(pending, hasLength(1));
+      expect(pending.first.character, '!');
+    },
+  );
+
+  test(
+    'race-path ops merged with existing remote chain have no duplicate positions',
+    () {
+      // Device A uploaded a full op chain for "Hello World" previously.
+      // Device B opens the same entry, races before the fetch completes, and
+      // creates a seed session (seeds NOT pending) then appends '!'.  Only
+      // the '!' op should reach Firestore.  Merging it with Device A's chain
+      // must produce no duplicate fractional positions.
+      const text = 'Hello World';
+
+      // Simulate Device A's original chain (full seed, all pending).
+      final deviceASession = CharacterOpSession(
+        clientId: 'device-a',
+        initialText: text,
+        seedAsPending: true,
+      );
+      final deviceAOps = deviceASession.takePendingOps();
+      expect(deviceAOps, hasLength(text.length));
+
+      // Device B races: seeds from same text (NOT pending) then edits.
+      final deviceBSession = CharacterOpSession(
+        clientId: 'device-b',
+        initialText: text,
+        seedAsPending: false,
+      );
+      deviceBSession.recordTextChange(text, '$text!');
+      final deviceBOps = deviceBSession.takePendingOps();
+      expect(deviceBOps, hasLength(1));
+
+      // Merge Device A's full chain with Device B's single-char delta.
+      final merger = CharacterSequenceCrdtMerger();
+      final merged = merger.mergeOperations(
+        [_charOpsSyncOperation(deviceAOps)],
+        [_charOpsSyncOperation(deviceBOps)],
+      );
+
+      expect(() => merger.validateOpChain(merged), returnsNormally);
+      expect(merger.applyMergedText(merged), '$text!');
     },
   );
 }

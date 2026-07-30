@@ -1,5 +1,6 @@
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -34,6 +35,41 @@ class JournalWriteCoordinator {
         }
         final updated = applyDelta(baseline).copyWith(bumpVersion: bumpVersion);
         await _journalRepository.upsertEntry(updated);
+        onEntrySaved?.call();
+        onSuccess?.call(updated);
+      },
+    );
+  }
+}
+
+/// Same baseline-then-delta pattern for dream entry saves.
+class DreamWriteCoordinator {
+  DreamWriteCoordinator({
+    required DreamRepository dreamRepository,
+    required RemoteSyncService remoteSync,
+    this.onEntrySaved,
+  }) : _dreamRepository = dreamRepository,
+       _remoteSync = remoteSync;
+
+  final DreamRepository _dreamRepository;
+  final RemoteSyncService _remoteSync;
+  final void Function()? onEntrySaved;
+
+  Future<void> saveEntry({
+    required String entryId,
+    required DreamEntry Function(DreamEntry baseline) applyDelta,
+    bool bumpVersion = false,
+    void Function(DreamEntry saved)? onSuccess,
+  }) {
+    return _remoteSync.saveDreamEntryThenScheduleUpload(
+      entryId: entryId,
+      saveLocal: () async {
+        final baseline = await _dreamRepository.getEntry(entryId);
+        if (baseline == null) {
+          throw StateError('Dream entry $entryId not found in SQLite');
+        }
+        final updated = applyDelta(baseline).copyWith(bumpVersion: bumpVersion);
+        await _dreamRepository.upsertEntry(updated);
         onEntrySaved?.call();
         onSuccess?.call(updated);
       },

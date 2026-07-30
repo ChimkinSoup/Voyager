@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 
 class DevSyncCompareSection extends ConsumerStatefulWidget {
   const DevSyncCompareSection({super.key});
@@ -229,13 +230,16 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
                   'This permanently deletes sync_compare.log contents.',
                 ),
                 actions: [
-                  TextButton(
+                  GlassButton(
                     onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
+                    label: 'Cancel',
+                    dense: true,
                   ),
-                  FilledButton(
+                  GlassButton(
                     onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Clear'),
+                    label: 'Clear',
+                    color: Theme.of(context).colorScheme.error,
+                    dense: true,
                   ),
                 ],
               ),
@@ -271,9 +275,10 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
           ),
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            label: 'Close',
+            dense: true,
           ),
         ],
       ),
@@ -342,9 +347,10 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
           ),
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            label: 'Close',
+            dense: true,
           ),
         ],
       ),
@@ -420,9 +426,10 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
           ),
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            label: 'Close',
+            dense: true,
           ),
         ],
       ),
@@ -479,9 +486,10 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
           ),
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            label: 'Close',
+            dense: true,
           ),
         ],
       ),

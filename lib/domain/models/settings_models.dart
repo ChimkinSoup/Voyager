@@ -15,6 +15,7 @@ class AppSettings {
     this.accentColor = 0xFF7C9EFF,
     this.themeMode = AppThemeMode.dark,
     this.petalColor = defaultPetalColor,
+    this.minorPetalColors = const [],
     this.petalMaxCount = 60,
     this.petalFallSpeed = 34.0,
     this.petalWindFrequency = 0.12,
@@ -58,6 +59,7 @@ class AppSettings {
     this.devShowConflictDocumentIds = false,
     this.devShowJournalRemotePullButton = false,
     this.devShowFpsCounter = false,
+    this.devDisableCache = false,
     this.geometricTextureScale = 10.0,
     this.geometricTextureIntensity = 0.85,
     this.geometricTextureFocalSpread = 1.0,
@@ -98,6 +100,9 @@ class AppSettings {
     this.lastSeenNavPage,
     this.todoCompletedSectionExpanded = true,
     this.showAnnualizedSubscriptionCost = false,
+    this.dreamSplitWidth,
+    this.showDreamStatistics = false,
+    this.dreamNotesPinned = false,
     List<int>? colorPalette,
   }) : colorPalette = colorPalette ?? defaultColorPalette;
 
@@ -108,6 +113,12 @@ class AppSettings {
 
   /// Tint of the light theme's falling petals.
   final int petalColor;
+
+  /// Secondary petal tints, ordered top to bottom by rank (first entry is the
+  /// most common minor color). Each falling petal randomly picks one of these
+  /// or [petalColor] according to a fixed weighting keyed by how many minor
+  /// colors are configured. Capped at 3 entries.
+  final List<int> minorPetalColors;
 
   /// Ceiling on simultaneously live petals. The field spawns up to this many
   /// and never allocates beyond it.
@@ -171,6 +182,7 @@ class AppSettings {
 
   /// Dev-only: overlay a live FPS counter and a last-minute FPS graph, top-right.
   final bool devShowFpsCounter;
+  final bool devDisableCache;
   final double geometricTextureScale;
   final double geometricTextureIntensity;
   final double geometricTextureFocalSpread;
@@ -220,12 +232,24 @@ class AppSettings {
   final bool showAnnualizedSubscriptionCost;
   final List<int> colorPalette;
 
+  /// Adjustable width of the Dream Journal's entry-list pane, mirroring
+  /// [journalEntryListWidth].
+  final double? dreamSplitWidth;
+
+  /// Whether the analytics page shows the "logged a dream today" stat.
+  final bool showDreamStatistics;
+
+  /// Whether the Dream Journal's sticky-note scratchpad is currently pinned
+  /// open as a bottom panel rather than collapsed to its corner peek.
+  final bool dreamNotesPinned;
+
   bool get hasWeatherLocation => weatherLat != null && weatherLon != null;
 
   AppSettings copyWith({
     int? accentColor,
     AppThemeMode? themeMode,
     int? petalColor,
+    List<int>? minorPetalColors,
     int? petalMaxCount,
     double? petalFallSpeed,
     double? petalWindFrequency,
@@ -265,6 +289,7 @@ class AppSettings {
     bool? devShowConflictDocumentIds,
     bool? devShowJournalRemotePullButton,
     bool? devShowFpsCounter,
+    bool? devDisableCache,
     double? geometricTextureScale,
     double? geometricTextureIntensity,
     double? geometricTextureFocalSpread,
@@ -305,6 +330,9 @@ class AppSettings {
     String? lastSeenNavPage,
     bool? todoCompletedSectionExpanded,
     bool? showAnnualizedSubscriptionCost,
+    double? dreamSplitWidth,
+    bool? showDreamStatistics,
+    bool? dreamNotesPinned,
     List<int>? colorPalette,
     bool clearWeatherLocationLabel = false,
     bool clearWeatherLat = false,
@@ -321,11 +349,13 @@ class AppSettings {
     bool clearJournalEntryListWidth = false,
     bool clearCustomStartupPage = false,
     bool clearLastSeenNavPage = false,
+    bool clearDreamSplitWidth = false,
   }) {
     return AppSettings(
       accentColor: accentColor ?? this.accentColor,
       themeMode: themeMode ?? this.themeMode,
       petalColor: petalColor ?? this.petalColor,
+      minorPetalColors: minorPetalColors ?? this.minorPetalColors,
       petalMaxCount: petalMaxCount ?? this.petalMaxCount,
       petalFallSpeed: petalFallSpeed ?? this.petalFallSpeed,
       petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
@@ -396,6 +426,7 @@ class AppSettings {
       devShowJournalRemotePullButton: devShowJournalRemotePullButton ??
           this.devShowJournalRemotePullButton,
       devShowFpsCounter: devShowFpsCounter ?? this.devShowFpsCounter,
+      devDisableCache: devDisableCache ?? this.devDisableCache,
       geometricTextureScale:
           geometricTextureScale ?? this.geometricTextureScale,
       geometricTextureIntensity:
@@ -473,6 +504,11 @@ class AppSettings {
       showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost ??
           this.showAnnualizedSubscriptionCost,
       colorPalette: colorPalette ?? this.colorPalette,
+      dreamSplitWidth: clearDreamSplitWidth
+          ? null
+          : (dreamSplitWidth ?? this.dreamSplitWidth),
+      showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
+      dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
     );
   }
 }
