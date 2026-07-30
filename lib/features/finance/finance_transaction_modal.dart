@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -52,6 +54,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
   late final TextEditingController _tagsController;
+  late final FocusNode _noteFocusNode;
+  var _lastNoteText = '';
   late DateTime _date;
   bool _datePopoverOpen = false;
   bool _saving = false;
@@ -65,6 +69,26 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       text: existing == null ? '' : (existing.amountCents / 100).toStringAsFixed(2),
     );
     _noteController = TextEditingController(text: existing?.note ?? '');
+    _lastNoteText = _noteController.text;
+    _noteFocusNode = FocusNode();
+    _noteFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.tab) {
+        final outdent = HardwareKeyboard.instance.isShiftPressed;
+        if (handleListTab(controller: _noteController, outdent: outdent)) {
+          // Keep _lastNoteText in sync for the next keystroke's diff.
+          _handleNoteChanged(_noteController.text);
+          return KeyEventResult.handled;
+        }
+      }
+      if (event.logicalKey == LogicalKeyboardKey.backspace) {
+        if (handleListBackspace(controller: _noteController)) {
+          _handleNoteChanged(_noteController.text);
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    };
     _tagsController = TextEditingController(
       text: existing == null
           ? ''
@@ -79,11 +103,17 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
+    _noteFocusNode.dispose();
     _tagsController.dispose();
     super.dispose();
   }
 
   void _onAmountChanged() => setState(() {});
+
+  void _handleNoteChanged(String value) {
+    applyListEditing(controller: _noteController, previousText: _lastNoteText);
+    _lastNoteText = _noteController.text;
+  }
 
   int? get _parsedCents {
     final cleaned = _amountController.text.replaceAll(RegExp(r'[^0-9.]'), '');
@@ -228,6 +258,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                     onPressed: Navigator.of(context).pop,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
@@ -293,8 +325,10 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
               // Note
               VoyagerTextField(
                 controller: _noteController,
+                focusNode: _noteFocusNode,
                 accentColor: accent,
                 maxLines: 2,
+                onChanged: _handleNoteChanged,
                 decoration: const InputDecoration(
                   labelText: 'Note',
                   hintText: 'Dinner with friends',
@@ -323,13 +357,11 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                 ],
               ),
               const SizedBox(height: 24),
-              FilledButton(
+              GlassButton(
                 onPressed: canSave ? _save : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: amountColor,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: Text(widget.existing == null ? 'Add' : 'Save'),
+                label: widget.existing == null ? 'Add' : 'Save',
+                color: amountColor,
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ],
           ),

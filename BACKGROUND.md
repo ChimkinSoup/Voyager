@@ -192,15 +192,16 @@ Uniforms (must match `PaperTexturePainter`): `u_resolution`(0-1), `u_base_color`
 
 ### Petal field
 
-`PetalField` (`lib/core/widgets/petal_field.dart`) — a Dart particle system, not a shader, because the spec wants room for interaction (click bursts, cursor repulsion) that a stateless shader can't do cleanly. Petals are simulated in `_Petal` structs, recycled in place, and stamped from a single pre-rasterized sprite via a `CustomPainter`. Driven by a 30fps `Timer` (not a `Ticker`) for the same reason the wave is — to avoid pinning the whole app's frame pipeline at the display refresh rate.
+`PetalField` (`lib/core/widgets/petal_field.dart`) — a Dart particle system, not a shader, because the spec wants room for interaction (click bursts, cursor repulsion) that a stateless shader can't do cleanly. Petals are simulated in `_Petal` structs, recycled in place, and stamped from a pre-rasterized sprite (one per configured color) via a `CustomPainter`. Driven by a 30fps `Timer` (not a `Ticker`) for the same reason the wave is — to avoid pinning the whole app's frame pipeline at the display refresh rate.
 
 Behavior:
 
 - **Wind** — one global sine (`petalWindFrequency`/`petalWindStrength`) sampled once per frame so all petals lean together (the "grouped" look). On top of it, localized `PetalGust`s push only part of the screen (the spec's "radial velocity modifiers" / partial bursts). Heavier petals lag the wind via per-petal `drag`.
 - **Ending (stateless)** — no collision engine. A petal reaching the bottom 10% decelerates, stops rotating, and fades to zero over 2s, then recycles to the top. No petal-to-petal interaction, no accumulation.
 - **Interaction hook** — `PetalFieldController.burstAt` / `.gust` let future features (clicks, transitions) inject wind without touching the sim.
+- **Minor colors** — up to 3 secondary tints (`minorPetalColors`, ranked top to bottom) can ride alongside the primary `petalColor`. Each petal rolls its color once per fall/recycle (`_Petal.colorIndex`), weighted by `petalColorWeights` — 70:30 with one minor color, 60:25:15 with two, 50:25:15:10 with three.
 
-Params come from `petalFieldParamsProvider` (settings-backed: `petalColor`, `petalMaxCount`, `petalFallSpeed`, `petalWindFrequency`, `petalWindStrength`), tuned live in Settings → Appearance.
+Params come from `petalFieldParamsProvider` (settings-backed: `petalColor`, `minorPetalColors`, `petalMaxCount`, `petalFallSpeed`, `petalWindFrequency`, `petalWindStrength`), tuned live in Settings → Appearance.
 
 ### Light-theme file map
 

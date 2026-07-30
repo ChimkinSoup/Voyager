@@ -2,12 +2,11 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
-import 'package:voyager/core/constants/app_constants.dart';
 
 /// A self-contained "chrome" wrapper that draws a rounded border, a fill,
-/// an accent focus glow, and (optionally) a Material-style floating label
-/// that rises onto the border and cuts a notch into it — without relying on
-/// Flutter's [InputDecorator]/[InputDecoration] border-notching machinery.
+/// and (optionally) a Material-style floating label that rises onto the
+/// border and cuts a notch into it — without relying on Flutter's
+/// [InputDecorator]/[InputDecoration] border-notching machinery.
 ///
 /// This widget is purely decorative: it paints around [child] and never
 /// touches [child]'s own layout, padding, or content position. That
@@ -34,7 +33,6 @@ class NotchedFieldBorder extends StatefulWidget {
       vertical: 18,
     ),
     this.labelStyle,
-    this.showGlow = true,
     this.showFill = true,
     this.alignLabelToTop = false,
   });
@@ -44,8 +42,8 @@ class NotchedFieldBorder extends StatefulWidget {
   /// with the border this widget paints.
   final Widget child;
 
-  /// Focus node of the wrapped input; drives the focused border color, glow,
-  /// and (together with [hasContent]) the floating label position.
+  /// Focus node of the wrapped input; drives the focused border color and
+  /// (together with [hasContent]) the floating label position.
   final FocusNode focusNode;
 
   /// Floating label text. When null or empty, no label/notch is drawn — just
@@ -59,8 +57,8 @@ class NotchedFieldBorder extends StatefulWidget {
 
   final bool enabled;
 
-  /// Accent color used for the focused border, glow, and floated+focused
-  /// label. Defaults to the theme's primary color.
+  /// Accent color used for the focused border and floated+focused label.
+  /// Defaults to the theme's primary color.
   final Color? accentColor;
 
   final double borderRadius;
@@ -75,9 +73,6 @@ class NotchedFieldBorder extends StatefulWidget {
   /// floated label reuses this style scaled down (matching Material's
   /// standard 0.75x floating scale) and recolored based on focus.
   final TextStyle? labelStyle;
-
-  /// Whether to draw the accent glow (drop shadow) when focused.
-  final bool showGlow;
 
   /// Whether to paint a background fill behind [child].
   final bool showFill;
@@ -247,15 +242,6 @@ class _NotchedFieldBorderState extends State<NotchedFieldBorder>
                   decoration: BoxDecoration(
                     color: fillColor,
                     borderRadius: BorderRadius.circular(widget.borderRadius),
-                    boxShadow: widget.showGlow && focusT > 0
-                        ? [
-                            BoxShadow(
-                              color: accent.withValues(alpha: popupGlowAlpha * focusT),
-                              blurRadius: 14,
-                              spreadRadius: 1,
-                            ),
-                          ]
-                        : null,
                   ),
                 ),
               ),

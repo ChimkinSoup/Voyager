@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 
 class DevGeometricTextureSection extends ConsumerWidget {
   const DevGeometricTextureSection({super.key});
@@ -174,9 +175,10 @@ class DevGeometricTextureSection extends ConsumerWidget {
           ),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
+            child: GlassButton(
               onPressed: () => unawaited(notifier.resetToDefaults()),
-              child: const Text('Reset to defaults'),
+              label: 'Reset to defaults',
+              dense: true,
             ),
           ),
         ],
@@ -193,15 +195,10 @@ class _PresetButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextButton(
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: Theme.of(context).textTheme.labelSmall,
-      ),
+    return GlassButton(
       onPressed: onTap,
-      child: Text(label),
+      label: label,
+      dense: true,
     );
   }
 }

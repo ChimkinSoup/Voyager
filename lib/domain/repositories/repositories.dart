@@ -1,7 +1,9 @@
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
@@ -34,6 +36,21 @@ abstract class JournalRepository {
   Future<List<JournalEntry>> getAllEntries({bool includeDeleted = true});
 }
 
+abstract class DreamRepository {
+  Future<List<DreamEntry>> listEntries({
+    DateTime? from,
+    DateTime? to,
+    int? limit,
+    bool includeDeleted = false,
+  });
+  Future<DreamEntry?> getEntry(String id);
+  Future<void> upsertEntry(DreamEntry entry, {bool recordLocalActivity = true});
+  Future<void> softDeleteEntry(String id);
+  Future<void> hardDeleteEntry(String id);
+  Future<void> purgeExpiredDeleted(DateTime now);
+  Future<List<DreamEntry>> getAllEntries({bool includeDeleted = true});
+}
+
 abstract class TodoRepository {
   Future<List<TodoListModel>> listLists({bool includeDeleted = false});
   Future<void> upsertList(TodoListModel list, {bool recordLocalActivity = true});
@@ -49,6 +66,10 @@ abstract class TodoRepository {
   Future<List<TodoTask>> listSubtasks(String parentTaskId);
   Future<int> nextSortOrder(String listId);
   Future<void> upsertTask(TodoTask task, {bool recordLocalActivity = true});
+  Future<void> upsertTasksBatch(
+    List<TodoTask> tasks, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteTask(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
   Future<List<TodoTask>> getAllTasks({bool includeDeleted = true});
@@ -85,6 +106,20 @@ abstract class TrackerRepository {
   Future<void> softDeleteValue(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
+}
+
+/// Local-only storage for the notification popover's pinned reminders and
+/// dismissed-feed-item tracking. Unlike the other repositories this has no
+/// sync/conflict story — nothing here leaves the device.
+abstract class NotificationRepository {
+  Future<List<PinnedNote>> listPinnedNotes();
+  Future<void> upsertPinnedNote(PinnedNote note);
+  Future<void> deletePinnedNote(String id);
+
+  /// Dismissal keys currently recorded (see [NotificationFeedItem.dismissalKey]).
+  Future<Set<String>> listDismissals();
+  Future<void> dismiss(String dismissalKey);
+  Future<void> undismiss(String dismissalKey);
 }
 
 abstract class FinanceRepository {
@@ -163,7 +198,14 @@ abstract class SyncRepository {
     Map<String, dynamic> data,
   );
   Stream<Map<String, dynamic>> watchDocument(String collection, String id);
-  Stream<void> watchCollection(String collection);
+
+  /// Emits the set of document ids that changed (added or modified) in
+  /// [collection] each time Firestore's snapshot listener fires. This
+  /// includes echoes of this device's own writes — callers that already
+  /// know they just wrote a given id should treat that as a no-op rather
+  /// than re-fetching and re-merging it.
+  Stream<Set<String>> watchCollection(String collection);
+  Future<Map<String, dynamic>?> getDocument(String collection, String id);
   Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
     String collection,
   );
@@ -179,7 +221,21 @@ abstract class SyncRepository {
   Future<void> upsertCurrentWeather(WeatherSnapshot weather);
   Future<WeatherForecast?> getStoredForecast();
   Future<void> appendOperation(SyncOperation operation);
+
+  /// Same effect as calling [appendOperation] once per entry, committed as
+  /// one or few network round-trips instead of one per operation. Used for
+  /// sort-order-only cascades (uncompleting a task in a large list can shift
+  /// every row below it) where firing dozens of concurrent single-document
+  /// writes was enough to starve the UI isolate and stall other Timer-driven
+  /// work, like the background animation.
+  Future<void> appendOperationsBatch(List<SyncOperation> operations);
   Future<List<SyncOperation>> listOperations(String documentId);
+
+  /// Batched counterpart to [upsertDocument] — see [appendOperationsBatch].
+  Future<void> upsertDocumentsBatch(
+    String collection,
+    Map<String, Map<String, dynamic>> documentsById,
+  );
   Future<void> deleteDocument(String collection, String id);
   Future<int> deleteOperationsForDocument(String documentId);
 }

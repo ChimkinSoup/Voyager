@@ -5,6 +5,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
@@ -17,13 +18,23 @@ import 'package:voyager/features/dev/dev_todo_sort_debug_tile.dart';
 import 'package:voyager/features/dev/dev_journal_debug_tile.dart';
 import 'package:voyager/features/dev/dev_geometric_texture_tile.dart';
 import 'package:voyager/features/dev/dev_geometric_wave_tile.dart';
+import 'package:voyager/features/dev/dev_leaf_gallery_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 final devVerboseSyncProvider = StateProvider<bool>((ref) => false);
-final devShowTimeSelectorHitboxesProvider = StateProvider<bool>((ref) => DevFlags.showTimeSelectorHitboxes);
-final devSlowHeatmapPopoverAnimationProvider =
-    StateProvider<bool>((ref) => DevFlags.slowHeatmapPopoverAnimation);
+final devShowTimeSelectorHitboxesProvider = StateProvider<bool>(
+  (ref) => DevFlags.showTimeSelectorHitboxes,
+);
+final devSlowHeatmapPopoverAnimationProvider = StateProvider<bool>(
+  (ref) => DevFlags.slowHeatmapPopoverAnimation,
+);
+final devDisablePetalFieldProvider = StateProvider<bool>(
+  (ref) => DevFlags.disablePetalField,
+);
+final devSlowTodoEditPanelAnimationProvider = StateProvider<bool>(
+  (ref) => DevFlags.slowTodoEditPanelAnimation,
+);
 
 class DevPage extends ConsumerWidget {
   const DevPage({super.key});
@@ -62,8 +73,22 @@ class DevPage extends ConsumerWidget {
           },
         ),
         SwitchListTile(
+          title: const Text('Disable petal field'),
+          subtitle: const Text(
+            'Stop the light-theme background petal animation, to check '
+            'whether it contributes to jank elsewhere',
+          ),
+          value: ref.watch(devDisablePetalFieldProvider),
+          onChanged: (v) {
+            DevFlags.disablePetalField = v;
+            ref.read(devDisablePetalFieldProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
           title: const Text('Show time selector hitboxes'),
-          subtitle: const Text('Show 50% red boxes over the invisible scroll hitboxes in the time picker.'),
+          subtitle: const Text(
+            'Show 50% red boxes over the invisible scroll hitboxes in the time picker.',
+          ),
           value: ref.watch(devShowTimeSelectorHitboxesProvider),
           onChanged: (v) {
             DevFlags.showTimeSelectorHitboxes = v;
@@ -79,6 +104,17 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.slowHeatmapPopoverAnimation = v;
             ref.read(devSlowHeatmapPopoverAnimationProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Slow todo editor panel animation'),
+          subtitle: const Text(
+            'Play the todo editor panel\'s open/close slide at 10× duration for debugging',
+          ),
+          value: ref.watch(devSlowTodoEditPanelAnimationProvider),
+          onChanged: (v) {
+            DevFlags.slowTodoEditPanelAnimation = v;
+            ref.read(devSlowTodoEditPanelAnimationProvider.notifier).state = v;
           },
         ),
         SwitchListTile(
@@ -128,6 +164,8 @@ class DevPage extends ConsumerWidget {
         const Divider(height: 32),
         const DevGeometricWaveSection(),
         const Divider(height: 32),
+        const DevLeafGallerySection(),
+        const Divider(height: 32),
         const DevSyncCompareSection(),
         const Divider(height: 32),
         const DevRemotePurgeSection(),
@@ -147,7 +185,9 @@ class DevPage extends ConsumerWidget {
                   value: devSettings.devForceConflictUi,
                   onChanged: (value) {
                     unawaited(
-                      ref.read(devSettingsProvider).setDevForceConflictUi(value),
+                      ref
+                          .read(devSettingsProvider)
+                          .setDevForceConflictUi(value),
                     );
                   },
                 ),
@@ -267,13 +307,16 @@ class DevPage extends ConsumerWidget {
           'This permanently deletes every journal entry on this device.',
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            dense: true,
           ),
-          FilledButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete entries'),
+            label: 'Delete entries',
+            color: Theme.of(context).colorScheme.error,
+            dense: true,
           ),
         ],
       ),
@@ -301,13 +344,16 @@ class DevPage extends ConsumerWidget {
           'This permanently deletes every calendar event on this device.',
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            dense: true,
           ),
-          FilledButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete events'),
+            label: 'Delete events',
+            color: Theme.of(context).colorScheme.error,
+            dense: true,
           ),
         ],
       ),
@@ -335,13 +381,16 @@ class DevPage extends ConsumerWidget {
           'This permanently deletes all journal containers. Journal entries will remain in the database but may become orphaned.',
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            dense: true,
           ),
-          FilledButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Reset journals'),
+            label: 'Reset journals',
+            color: Theme.of(context).colorScheme.error,
+            dense: true,
           ),
         ],
       ),

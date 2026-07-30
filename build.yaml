@@ -1,0 +1,20 @@
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          # Store DateTime values as ISO-8601 text in SQLite instead of unix
+          # seconds (the legacy default).  Text storage preserves sub-second
+          # precision, which is required for correct sync conflict detection:
+          #
+          #   - isAtSameMomentAs comparisons in _isHardMetadataCollision need
+          #     full precision to recognise that two writes at e.g. .517 Z and
+          #     .000 Z are genuinely different moments, not the same edit.
+          #   - remoteVersionWins uses updatedAt as an LWW tiebreaker; a
+          #     seconds-truncated local timestamp always loses to any remote
+          #     write that happened in the same wall-clock second, silently
+          #     discarding local metadata edits (mood, title, weatherIcon).
+          #
+          # Migration (schema version 57) converts all existing INTEGER second
+          # timestamps to ISO-8601 text before the first read under this mode.
+          store_date_time_values_as_text: true

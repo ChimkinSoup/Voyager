@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
 
-/// Text field with accent-colored caret, animated focus glow, and a
+/// Text field with accent-colored caret, an animated focus border, and a
 /// Material-style floating/notched label — all drawn by [NotchedFieldBorder].
 class VoyagerTextField extends StatefulWidget {
   const VoyagerTextField({
@@ -26,6 +26,7 @@ class VoyagerTextField extends StatefulWidget {
     this.buildCounter,
     this.inputFormatters,
     this.cursorColor,
+    this.borderRadius,
   });
 
   final TextEditingController? controller;
@@ -47,6 +48,7 @@ class VoyagerTextField extends StatefulWidget {
   final InputCounterWidgetBuilder? buildCounter;
   final List<TextInputFormatter>? inputFormatters;
   final Color? cursorColor;
+  final double? borderRadius;
 
   @override
   State<VoyagerTextField> createState() => _VoyagerTextFieldState();
@@ -101,8 +103,18 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     final contentPadding = decoration.contentPadding ??
         const EdgeInsets.symmetric(horizontal: 16, vertical: 18);
 
+    final double radius = widget.borderRadius ??
+        (decoration.border is OutlineInputBorder
+            ? (decoration.border as OutlineInputBorder)
+                .borderRadius
+                .resolve(Directionality.maybeOf(context) ?? TextDirection.ltr)
+                .topLeft
+                .x
+            : 18.0);
+
+    final hasLabel = (decoration.labelText ?? '').isNotEmpty;
     final innerDecoration = decoration.copyWith(
-      labelText: '\u200B',
+      labelText: hasLabel ? '\u200B' : null,
       floatingLabelBehavior: FloatingLabelBehavior.never,
       filled: false,
       border: InputBorder.none,
@@ -120,6 +132,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       label: decoration.labelText,
       hasContent: _hasText,
       enabled: widget.enabled,
+      borderRadius: radius,
       contentPadding: contentPadding,
       alignLabelToTop: widget.expands || (widget.maxLines ?? 1) > 1,
       child: TextField(

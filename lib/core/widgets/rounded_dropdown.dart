@@ -176,21 +176,17 @@ class _RoundedDropdownState<T> extends State<RoundedDropdown<T>> {
     final closedTrailing = widget.closedTrailing ??
         (widget.displayLabel == null ? selected?.trailing : null);
 
-    final glowColor = flat ? widget.labelColor?.withValues(alpha: popupGlowAlpha) : null;
+    final borderColor = flat
+        ? widget.labelColor?.withValues(alpha: accentBorderAlpha)
+        : null;
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        boxShadow: glowColor != null
-            ? [
-                BoxShadow(
-                  color: glowColor,
-                  blurRadius: 16,
-                  blurStyle: BlurStyle.outer,
-                )
-              ]
+        border: borderColor != null
+            ? Border.all(color: borderColor, width: 1.0)
             : null,
-      ), 
+      ),
       child: Material(
         type: MaterialType.canvas,
         color: flat

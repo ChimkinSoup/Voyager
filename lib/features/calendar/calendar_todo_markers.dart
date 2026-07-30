@@ -286,7 +286,7 @@ class CalendarDayTodoBar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: marker.completed ? 0.25 : 0.55),
-        borderRadius: BorderRadius.circular(barHeight / 2),
+        borderRadius: BorderRadius.circular(calendarEventCornerRadius),
         border: Border.all(
           color: color.withValues(alpha: marker.completed ? 0.5 : 0.85),
         ),
@@ -514,7 +514,7 @@ class CalendarWeekEventBlock extends StatelessWidget {
       }
     }
 
-    final radius = weekViewDayCellStyle.borderRadius;
+    const radius = calendarEventCornerRadius;
     final leftRadius = bridgeLeft ? 0.0 : radius;
     final rightRadius = bridgeRight ? 0.0 : radius;
 

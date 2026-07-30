@@ -1,3 +1,4 @@
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
@@ -15,6 +16,11 @@ const String kStreakTrackerId = '__default_streak__';
 /// Reserved id for the built-in "Word Count" default tracker. Virtual like
 /// [kJournalEntriesTrackerId] — see [buildWordCountTracker].
 const String kWordCountTrackerId = '__default_word_count__';
+
+/// Reserved id for the built-in "Dream Logged" default tracker, shown only
+/// when [AppSettings.showDreamStatistics] is on. Virtual like
+/// [kJournalEntriesTrackerId] — see [buildDreamLoggedTracker].
+const String kDreamLoggedTrackerId = '__default_dream_logged__';
 
 class StatisticTracker extends SoftDeletable {
   const StatisticTracker({
@@ -157,6 +163,49 @@ StatisticTracker buildWordCountTracker({required int colorValue}) {
     trackingStyle: TrackerStyle.consecutive,
     isDefault: true,
   );
+}
+
+/// Builds the virtual "Dream Logged" default tracker: a daily boolean stat
+/// where each day is "true" iff the user has a dream entry on it. Not
+/// persisted — its values are derived from dream entries (see
+/// [dreamLoggedTrackerValues]).
+StatisticTracker buildDreamLoggedTracker({required int colorValue}) {
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  return StatisticTracker(
+    id: kDreamLoggedTrackerId,
+    createdAt: epoch,
+    updatedAt: epoch,
+    name: 'Dream Logged',
+    type: TrackerType.boolean,
+    cadence: TrackerCadence.daily,
+    colorValue: colorValue,
+    isDefault: true,
+  );
+}
+
+/// Derives the virtual "Dream Logged" tracker's values from [entries]: one
+/// boolean-`true` [TrackerValue] per local calendar day that has at least one
+/// dream entry. Days with no entry get no value (rendered as empty).
+List<TrackerValue> dreamLoggedTrackerValues(List<DreamEntry> entries) {
+  final days = <DateTime>{};
+  for (final entry in entries) {
+    final d = entry.entryDate;
+    days.add(DateTime(d.year, d.month, d.day));
+  }
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  return [
+    for (final day in days)
+      TrackerValue(
+        id:
+            '$kDreamLoggedTrackerId:'
+            '${day.year}-${day.month}-${day.day}',
+        trackerId: kDreamLoggedTrackerId,
+        periodStart: day,
+        boolValue: true,
+        createdAt: epoch,
+        updatedAt: epoch,
+      ),
+  ];
 }
 
 class TrackerValue extends SoftDeletable {

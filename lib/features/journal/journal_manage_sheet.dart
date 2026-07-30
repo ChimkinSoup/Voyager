@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
@@ -213,20 +214,22 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
       builder: (context) => AlertDialog(
         title: Text(title),
         content: LabeledTextField(
-          label: title,
+          label: 'Name',
           controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            dense: true,
           ),
-          FilledButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('OK'),
+            label: 'OK',
+            dense: true,
           ),
         ],
       ),
@@ -309,14 +312,16 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
               ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+          label: 'Close',
+          dense: true,
         ),
-        FilledButton.icon(
+        GlassButton(
           onPressed: _createJournal,
           icon: const Icon(PhosphorIconsRegular.plus),
-          label: const Text('New journal'),
+          label: 'New journal',
+          dense: true,
         ),
       ],
     );

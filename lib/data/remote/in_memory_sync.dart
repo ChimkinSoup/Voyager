@@ -7,7 +7,7 @@ import 'package:voyager/domain/repositories/repositories.dart';
 class InMemorySyncRepository implements SyncRepository {
   final _documents = <String, Map<String, dynamic>>{};
   final _watchers = <String, StreamController<Map<String, dynamic>>>{};
-  final _collectionWatchers = <String, StreamController<void>>{};
+  final _collectionWatchers = <String, StreamController<Set<String>>>{};
   final _operations = <String, List<SyncOperation>>{};
   GoogleCalendarSyncLock? _calendarLock;
   WeatherFetchLock? _weatherLock;
@@ -16,10 +16,10 @@ class InMemorySyncRepository implements SyncRepository {
 
   String _key(String collection, String id) => '$collection/$id';
 
-  void _notifyCollection(String collection) {
+  void _notifyCollection(String collection, String documentId) {
     final controller = _collectionWatchers[collection];
     if (controller != null && !controller.isClosed) {
-      controller.add(null);
+      controller.add({documentId});
     }
   }
 
@@ -32,7 +32,13 @@ class InMemorySyncRepository implements SyncRepository {
     final key = _key(collection, id);
     _documents[key] = data;
     _watchers[key]?.add(data);
-    _notifyCollection(collection);
+    _notifyCollection(collection, id);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getDocument(String collection, String id) async {
+    final data = _documents[_key(collection, id)];
+    return data == null ? null : Map<String, dynamic>.from(data);
   }
 
   @override
@@ -49,10 +55,10 @@ class InMemorySyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<void> watchCollection(String collection) {
+  Stream<Set<String>> watchCollection(String collection) {
     final controller = _collectionWatchers.putIfAbsent(
       collection,
-      StreamController<void>.broadcast,
+      StreamController<Set<String>>.broadcast,
     );
     return controller.stream;
   }
@@ -152,6 +158,23 @@ class InMemorySyncRepository implements SyncRepository {
   }
 
   @override
+  Future<void> appendOperationsBatch(List<SyncOperation> operations) async {
+    for (final operation in operations) {
+      await appendOperation(operation);
+    }
+  }
+
+  @override
+  Future<void> upsertDocumentsBatch(
+    String collection,
+    Map<String, Map<String, dynamic>> documentsById,
+  ) async {
+    for (final entry in documentsById.entries) {
+      await upsertDocument(collection, entry.key, entry.value);
+    }
+  }
+
+  @override
   Future<List<SyncOperation>> listOperations(String documentId) async {
     return List.unmodifiable(_operations[documentId] ?? const []);
   }
@@ -161,7 +184,7 @@ class InMemorySyncRepository implements SyncRepository {
     final key = _key(collection, id);
     _documents.remove(key);
     _watchers[key]?.add(<String, dynamic>{});
-    _notifyCollection(collection);
+    _notifyCollection(collection, id);
   }
 
   @override

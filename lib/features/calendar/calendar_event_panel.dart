@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
@@ -46,6 +48,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   late final TextEditingController _notesController;
   late final FocusNode _titleFocusNode;
   late final FocusNode _notesFocusNode;
+  var _lastNotesText = '';
   late bool _isFullDay;
   late DateTime _start;
   late DateTime _end;
@@ -65,6 +68,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     final e = widget.event;
     _titleController = TextEditingController(text: e?.title ?? '');
     _notesController = TextEditingController(text: e?.notes ?? '');
+    _lastNotesText = _notesController.text;
     _titleFocusNode = FocusNode();
     _titleFocusNode.onKeyEvent = (node, event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -85,8 +89,29 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     // Notes is the last text field: Enter saves, Shift+Enter inserts a newline.
     _notesFocusNode.onKeyEvent = (node, event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.tab) {
+        final outdent = HardwareKeyboard.instance.isShiftPressed;
+        if (handleListTab(controller: _notesController, outdent: outdent)) {
+          // Keep _lastNotesText in sync for the next keystroke's diff.
+          _handleNotesChanged(_notesController.text);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.backspace) {
+        if (handleListBackspace(controller: _notesController)) {
+          _handleNotesChanged(_notesController.text);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
       if (event.logicalKey == LogicalKeyboardKey.enter &&
           !HardwareKeyboard.instance.isShiftPressed) {
+        if (isOnListLine(_notesController)) {
+          // Let the newline through so list-continuation/clean-exit (wired
+          // via onChanged) handles it, instead of submitting.
+          return KeyEventResult.ignored;
+        }
         _submit();
         return KeyEventResult.handled;
       }
@@ -133,6 +158,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       final e = widget.event;
       _titleController.text = e?.title ?? '';
       _notesController.text = e?.notes ?? '';
+      _lastNotesText = _notesController.text;
       _isFullDay = e?.isFullDay ?? true;
       _start = e?.start ??
           DateTime(
@@ -160,6 +186,11 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _titleFocusNode.dispose();
     _notesFocusNode.dispose();
     super.dispose();
+  }
+
+  void _handleNotesChanged(String value) {
+    applyListEditing(controller: _notesController, previousText: _lastNotesText);
+    _lastNotesText = _notesController.text;
   }
 
   Map<String, dynamic> _buildPayload(String title) => {
@@ -387,12 +418,8 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                       onPressed: () =>
                           setState(() => _isFullDay = !_isFullDay),
                       tooltip: _isFullDay ? 'All day (on)' : 'All day (off)',
-                      visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 30,
-                        height: 30,
-                      ),
+                      constraints: const BoxConstraints(),
                       icon: Icon(
                         PhosphorIconsRegular.clockCountdown,
                         size: 18,
@@ -544,6 +571,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                   keyboardType: TextInputType.multiline,
                   textInputAction: TextInputAction.newline,
                   accentColor: accent,
+                  onChanged: _handleNotesChanged,
                 ),
                 // ── Row 4: color swatches (no label) ─────────────────────
                 ColorPickerField(
@@ -564,22 +592,16 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                 // ── Row 5: cancel / save ──────────────────────────────────
                 Row(
                   children: [
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                    GlassButton(
                       onPressed: _discard,
-                      child: const Text('Cancel'),
+                      label: 'Cancel',
+                      dense: true,
                     ),
                     const Spacer(),
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                    GlassButton(
                       onPressed: _submit,
-                      child: const Text('Save'),
+                      label: 'Save',
+                      dense: true,
                     ),
                   ],
                 ),
@@ -596,16 +618,12 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         Positioned(
           top: 5,
           right: 9,
-          child: SizedBox(
-            width: 28,
-            height: 28,
-            child: IconButton(
-              onPressed: _discard,
-              icon: const Icon(Icons.close, size: 16),
-              tooltip: 'Close',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-            ),
+          child: IconButton(
+            onPressed: _discard,
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: 'Close',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ),
       ],

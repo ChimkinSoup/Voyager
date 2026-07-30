@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -168,6 +169,8 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                     onPressed: Navigator.of(context).pop,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
@@ -255,13 +258,11 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                 ],
               ),
               const SizedBox(height: 24),
-              FilledButton(
+              GlassButton(
                 onPressed: _canSave ? _save : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: accent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: Text(_withdrawing ? 'Withdraw' : 'Add funds'),
+                label: _withdrawing ? 'Withdraw' : 'Add funds',
+                color: accent,
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ],
           ),

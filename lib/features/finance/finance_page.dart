@@ -1,10 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_analytics_view.dart';
@@ -12,6 +16,7 @@ import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_budget_panel.dart';
 import 'package:voyager/features/finance/finance_goals_view.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
+import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 /// Screen width at/above which the dashboard splits into ledger (left 60%) and
 /// insights sidebar (right 40%).
@@ -21,8 +26,9 @@ const double _kSplitBreakpoint = 880;
 /// dashboard, the macro analytics suite, or the savings goals.
 enum _FinanceViewMode { ledger, analytics, goals }
 
-final _financeViewModeProvider =
-    StateProvider<_FinanceViewMode>((_) => _FinanceViewMode.ledger);
+final _financeViewModeProvider = StateProvider<_FinanceViewMode>(
+  (_) => _FinanceViewMode.ledger,
+);
 
 class FinancePage extends ConsumerWidget {
   const FinancePage({super.key});
@@ -35,10 +41,14 @@ class FinancePage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: GlassButton(
         tooltip: 'Log transaction',
         onPressed: () => showFinanceTransactionModal(context, ref),
-        child: const Icon(PhosphorIconsRegular.plus),
+        icon: const Icon(PhosphorIconsRegular.plus),
+        width: 56,
+        height: 56,
+        borderRadius: BorderRadius.circular(28),
+        elevation: 3,
       ),
       body: transactionsAsync.when(
         data: (transactions) =>
@@ -50,14 +60,166 @@ class FinancePage extends ConsumerWidget {
   }
 }
 
-class _FinanceView extends ConsumerWidget {
+class _FinanceView extends ConsumerStatefulWidget {
   const _FinanceView({required this.transactions, required this.tagColors});
 
   final List<FinancialTransaction> transactions;
   final Map<String, int> tagColors;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FinanceView> createState() => _FinanceViewState();
+}
+
+/// Everything that affects what a `_TransactionRow` renders. Used to decide
+/// whether a cached row widget instance (see `_FinanceViewState._rowFor`)
+/// can be reused as-is.
+typedef _TxnRowSignature = ({
+  TransactionType type,
+  int amountCents,
+  String? note,
+  String tagsKey,
+  Map<String, int> tagColors,
+});
+
+/// A day-group header in the flattened ledger entry list (see
+/// `_FinanceViewState._ledgerEntries`).
+class _LedgerDayHeader {
+  const _LedgerDayHeader({required this.day, required this.netCents});
+  final DateTime day;
+  final int netCents;
+}
+
+/// Marks the gap after a day group in the flattened ledger entry list.
+class _LedgerSpacer {
+  const _LedgerSpacer();
+}
+
+const _ledgerSpacer = _LedgerSpacer();
+
+class _FinanceViewState extends ConsumerState<_FinanceView> {
+  // Reuses the same _TransactionRow widget instance across rebuilds for
+  // transactions whose _TxnRowSignature hasn't changed, so Flutter's element
+  // reconciliation skips rebuilding them entirely — a single delete/edit
+  // invalidates transactionsProvider wholesale (see _TransactionRow's
+  // onLongPress below), which would otherwise reconstruct, and thus rebuild,
+  // every mounted row, not just the one that changed. Keyed by transaction
+  // id; pruned to the ids actually present at the end of every build.
+  final _rowWidgetCache = <String, _TransactionRow>{};
+  final _rowSignatureCache = <String, _TxnRowSignature>{};
+
+  _TransactionRow _rowFor(
+    FinancialTransaction transaction,
+    Map<String, int> tagColors,
+  ) {
+    final signature = (
+      type: transaction.type,
+      amountCents: transaction.amountCents,
+      note: transaction.note,
+      // transaction.tags is a fresh List instance on every fetch even when
+      // unchanged, and a record's == on a List field is reference identity
+      // — comparing it directly would defeat the cache for every tagged
+      // row. The separator keeps ["ab"] and ["a", "b"] from colliding.
+      tagsKey: transaction.tags.join(String.fromCharCode(0)),
+      tagColors: tagColors,
+    );
+    final cached = _rowWidgetCache[transaction.id];
+    if (cached != null && _rowSignatureCache[transaction.id] == signature) {
+      return cached;
+    }
+    final row = _TransactionRow(
+      key: ValueKey(transaction.id),
+      transaction: transaction,
+      tagColors: tagColors,
+    );
+    _rowWidgetCache[transaction.id] = row;
+    _rowSignatureCache[transaction.id] = signature;
+    return row;
+  }
+
+  /// Flattens the day-grouped ledger into an index a sliver can build
+  /// lazily: a header, that day's transactions, then a spacer, newest day
+  /// first.
+  List<Object> _ledgerEntries(List<FinancialTransaction> transactions) {
+    if (transactions.isEmpty) return const [];
+    final groups = <DateTime, List<FinancialTransaction>>{};
+    for (final t in transactions) {
+      final day = DateTime(
+        t.occurredAt.year,
+        t.occurredAt.month,
+        t.occurredAt.day,
+      );
+      groups.putIfAbsent(day, () => []).add(t);
+    }
+    final days = groups.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    final entries = <Object>[];
+    for (final day in days) {
+      final dayTransactions = groups[day]!;
+      final dayNet = dayTransactions.fold<int>(
+        0,
+        (sum, t) => sum + t.signedCents,
+      );
+      entries.add(_LedgerDayHeader(day: day, netCents: dayNet));
+      entries.addAll(dayTransactions);
+      entries.add(_ledgerSpacer);
+    }
+    return entries;
+  }
+
+  Widget _ledgerEntryAt(
+    List<Object> entries,
+    Map<String, int> tagColors,
+    int index,
+  ) {
+    final entry = entries[index];
+    if (entry is _LedgerDayHeader) {
+      return _DayHeader(day: entry.day, netCents: entry.netCents);
+    }
+    if (entry is _LedgerSpacer) {
+      return const SizedBox(height: 12);
+    }
+    return _rowFor(entry as FinancialTransaction, tagColors);
+  }
+
+  /// The ledger as a lazily-built sliver, or the empty state as a single
+  /// sliver item when there are no transactions.
+  Widget _ledgerSliver(
+    List<FinancialTransaction> transactions,
+    Map<String, int> tagColors,
+  ) {
+    final entries = _ledgerEntries(transactions);
+    if (entries.isEmpty) {
+      return const SliverToBoxAdapter(child: _EmptyLedger());
+    }
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) => _ledgerEntryAt(entries, tagColors, index),
+        childCount: entries.length,
+        // A transaction added/removed anywhere shifts every entry after it
+        // to a new index. Without this, the framework can't match a
+        // `_TransactionRow`'s ValueKey back to its old Element when that
+        // happens, so it destroys and recreates every shifted row instead of
+        // reusing `_rowFor`'s cached widget — same issue as todo's row list.
+        findChildIndexCallback: (key) {
+          if (key is! ValueKey<String>) return null;
+          final id = key.value;
+          final index = entries.indexWhere(
+            (e) => e is FinancialTransaction && e.id == id,
+          );
+          return index == -1 ? null : index;
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final transactions = widget.transactions;
+    final tagColors = widget.tagColors;
+    final liveIds = {for (final t in transactions) t.id};
+    _rowWidgetCache.removeWhere((id, _) => !liveIds.contains(id));
+    _rowSignatureCache.removeWhere((id, _) => !liveIds.contains(id));
+
     final mode = ref.watch(_financeViewModeProvider);
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
@@ -76,11 +238,6 @@ class _FinanceView extends ConsumerWidget {
       monthNet: monthNet,
       monthLabel: DateFormat.MMMM().format(now),
       sparkline: spark,
-    );
-
-    final ledger = _LedgerFeed(
-      transactions: transactions,
-      tagColors: tagColors,
     );
 
     return LayoutBuilder(
@@ -144,25 +301,53 @@ class _FinanceView extends ConsumerWidget {
           body = Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(flex: 6, child: ledger),
+              Expanded(
+                flex: 6,
+                child: KeepAliveCustomScrollView(
+                  storageKey: ShellPageStorageKeys.financeLedgerWide,
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 12, 96),
+                      sliver: _ledgerSliver(transactions, tagColors),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(width: 8),
               const Expanded(flex: 4, child: _InsightsSidebar()),
             ],
           );
         } else {
-          body = ListView(
-            padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 96),
-            children: [
-              ..._LedgerFeed.buildDayGroups(context, transactions, tagColors),
-              const SizedBox(height: 24),
-              const _InsightsSidebar(),
+          body = KeepAliveCustomScrollView(
+            storageKey: ShellPageStorageKeys.financeLedgerNarrow,
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 0),
+                sliver: _ledgerSliver(transactions, tagColors),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 96),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    children: const [
+                      BillRadarPanel(),
+                      SizedBox(height: 12),
+                      BudgetPanel(),
+                    ],
+                  ),
+                ),
+              ),
             ],
           );
         }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [header, Expanded(child: body)],
+          children: [
+            header,
+            Expanded(child: body),
+          ],
         );
       },
     );
@@ -172,9 +357,9 @@ class _FinanceView extends ConsumerWidget {
 /// Cumulative net-flow (in cents) for each of the last [days] days, oldest
 /// first — the trajectory drawn by the hero sparkline.
 List<double> _sparklineSeries(
-  List<FinancialTransaction> transactions,
-  {required int days}
-) {
+  List<FinancialTransaction> transactions, {
+  required int days,
+}) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final start = today.subtract(Duration(days: days - 1));
@@ -221,7 +406,9 @@ class _HeroSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: accent.withValues(alpha: 0.12)),
       ),
@@ -261,10 +448,7 @@ class _HeroSection extends StatelessWidget {
             width: 120,
             height: 56,
             child: CustomPaint(
-              painter: _SparklinePainter(
-                values: sparkline,
-                color: accent,
-              ),
+              painter: _SparklinePainter(values: sparkline, color: accent),
             ),
           ),
         ],
@@ -321,10 +505,7 @@ class _SparklinePainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          color.withValues(alpha: 0.22),
-          color.withValues(alpha: 0.0),
-        ],
+        colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0.0)],
       ).createShader(Offset.zero & size);
     canvas.drawPath(fillPath, fillPaint);
 
@@ -344,56 +525,12 @@ class _SparklinePainter extends CustomPainter {
 
 // ---------------------------------------------------------------------------
 // Ledger feed — reverse-chronological transactions grouped by day
+//
+// Built lazily via _FinanceViewState._ledgerSliver/_ledgerEntries above,
+// which flattens the day-grouping this comment used to describe into an
+// indexable list a SliverList can build on demand instead of constructing a
+// row for every transaction ever logged on every rebuild.
 // ---------------------------------------------------------------------------
-
-class _LedgerFeed extends StatelessWidget {
-  const _LedgerFeed({required this.transactions, required this.tagColors});
-
-  final List<FinancialTransaction> transactions;
-  final Map<String, int> tagColors;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 4, 12, 96),
-      children: buildDayGroups(context, transactions, tagColors),
-    );
-  }
-
-  /// Builds the day-grouped ledger as a flat widget list, shared by the split
-  /// (sidebar) and stacked (single-column) layouts.
-  static List<Widget> buildDayGroups(
-    BuildContext context,
-    List<FinancialTransaction> transactions,
-    Map<String, int> tagColors,
-  ) {
-    if (transactions.isEmpty) {
-      return const [_EmptyLedger()];
-    }
-
-    // Group by local calendar day, preserving the newest-first order.
-    final groups = <DateTime, List<FinancialTransaction>>{};
-    for (final t in transactions) {
-      final day =
-          DateTime(t.occurredAt.year, t.occurredAt.month, t.occurredAt.day);
-      groups.putIfAbsent(day, () => []).add(t);
-    }
-    final days = groups.keys.toList()..sort((a, b) => b.compareTo(a));
-
-    final widgets = <Widget>[];
-    for (final day in days) {
-      final dayTransactions = groups[day]!;
-      final dayNet =
-          dayTransactions.fold<int>(0, (sum, t) => sum + t.signedCents);
-      widgets.add(_DayHeader(day: day, netCents: dayNet));
-      for (final t in dayTransactions) {
-        widgets.add(_TransactionRow(transaction: t, tagColors: tagColors));
-      }
-      widgets.add(const SizedBox(height: 12));
-    }
-    return widgets;
-  }
-}
 
 class _DayHeader extends StatelessWidget {
   const _DayHeader({required this.day, required this.netCents});
@@ -440,13 +577,38 @@ class _DayHeader extends StatelessWidget {
 }
 
 class _TransactionRow extends ConsumerWidget {
-  const _TransactionRow({required this.transaction, required this.tagColors});
+  const _TransactionRow({
+    super.key,
+    required this.transaction,
+    required this.tagColors,
+  });
 
   final FinancialTransaction transaction;
   final Map<String, int> tagColors;
 
+  // Counts how many _TransactionRow builds land in the same frame, to check
+  // whether the row cache (see _FinanceViewState._rowFor) is actually
+  // holding — mirrors _TaskRowState's counter in todo_page.dart.
+  static var _rowBuildsThisFrame = 0;
+  static var _rowBuildFlushScheduled = false;
+
+  static void _noteRowBuild() {
+    if (!DevFlags.verboseSync) return;
+    _rowBuildsThisFrame++;
+    if (_rowBuildFlushScheduled) return;
+    _rowBuildFlushScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      debugPrint(
+        '[jank] _TransactionRow builds this frame: $_rowBuildsThisFrame',
+      );
+      _rowBuildsThisFrame = 0;
+      _rowBuildFlushScheduled = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    _noteRowBuild();
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final isDeposit = transaction.type == TransactionType.deposit;
@@ -454,7 +616,8 @@ class _TransactionRow extends ConsumerWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => showFinanceTransactionModal(context, ref, existing: transaction),
+      onTap: () =>
+          showFinanceTransactionModal(context, ref, existing: transaction),
       onLongPress: () async {
         await ref
             .read(financeRepositoryProvider)
@@ -589,12 +752,7 @@ class _InsightsSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 4, 20, 96),
-      children: const [
-        BillRadarPanel(),
-        SizedBox(height: 12),
-        BudgetPanel(),
-      ],
+      children: const [BillRadarPanel(), SizedBox(height: 12), BudgetPanel()],
     );
   }
 }
-

@@ -10,6 +10,7 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 Future<String?> showTodoListManageSheet(
@@ -198,22 +199,24 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
       builder: (context) => EnterToSubmitScope(
         onSubmit: () => Navigator.pop(context, controller.text),
         child: AlertDialog(
-        title: Text(title),
-        content: LabeledTextField(
-          label: title,
-          controller: controller,
+          title: Text(title),
+          content: LabeledTextField(
+            label: 'Name',
+            controller: controller,
           autofocus: true,
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => Navigator.pop(context, controller.text),
         ),
         actions: [
-          TextButton(
+          GlassButton(
+            dense: true,
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            label: 'Cancel',
           ),
-          FilledButton(
+          GlassButton(
+            dense: true,
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('OK'),
+            label: 'OK',
           ),
         ],
       ),
@@ -279,14 +282,16 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
               ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
+          dense: true,
           onPressed: () => Navigator.pop(context, _createdListId),
-          child: const Text('Close'),
+          label: 'Close',
         ),
-        FilledButton.icon(
+        GlassButton(
+          dense: true,
           onPressed: _createList,
           icon: const Icon(PhosphorIconsRegular.plus),
-          label: const Text('New list'),
+          label: 'New list',
         ),
       ],
     );

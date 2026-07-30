@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/character_operation.dart';
@@ -97,6 +98,39 @@ class SyncConflictDetector {
     return const SyncConflictDetection(isConflict: false);
   }
 
+  SyncConflictDetection detectDreamEntryConflict({
+    required DreamEntry? local,
+    required Map<String, dynamic> remoteData,
+    required List<CharacterOperation> remoteCharOps,
+    bool forceConflict = false,
+  }) {
+    if (forceConflict) {
+      return SyncConflictDetection(
+        isConflict: true,
+        reason: SyncConflictReason.corruptedOpChain,
+        remotePayload: remoteData,
+      );
+    }
+
+    if (_isCorruptedOpChain(remoteCharOps)) {
+      return SyncConflictDetection(
+        isConflict: true,
+        reason: SyncConflictReason.corruptedOpChain,
+        remotePayload: remoteData,
+      );
+    }
+
+    if (local != null && _isHardDreamMetadataCollision(local, remoteData)) {
+      return SyncConflictDetection(
+        isConflict: true,
+        reason: SyncConflictReason.hardMetadataCollision,
+        remotePayload: remoteData,
+      );
+    }
+
+    return const SyncConflictDetection(isConflict: false);
+  }
+
   bool _isCorruptedOpChain(List<CharacterOperation> ops) {
     try {
       _merger.validateOpChain(ops);
@@ -121,6 +155,17 @@ class SyncConflictDetector {
         local.journalId != remoteJournalId ||
         local.mood != remote['mood'] ||
         local.weatherIcon != remote['weatherIcon'];
+  }
+
+  bool _isHardDreamMetadataCollision(DreamEntry local, Map<String, dynamic> remote) {
+    final remoteVersion = parseVersion(remote);
+    final remoteUpdated = parseFirestoreDate(remote['updatedAt']);
+    if (local.version != remoteVersion) return false;
+    if (remoteUpdated == null || !local.updatedAt.isAtSameMomentAs(remoteUpdated)) {
+      return false;
+    }
+    final remoteTitle = remote['title'] as String? ?? '';
+    return local.title != remoteTitle;
   }
 
   bool _isHardTodoMetadataCollision(TodoTask local, Map<String, dynamic> remote) {

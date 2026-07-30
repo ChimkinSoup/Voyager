@@ -4,6 +4,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/google_auth_config.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -131,9 +132,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     const SizedBox(height: 16),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: TextButton(
+                      child: GlassButton(
                         onPressed: _loading ? null : _resetPassword,
-                        child: const Text('Forgot password?'),
+                        label: 'Forgot password?',
                       ),
                     ),
                   ],
@@ -157,7 +158,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ),
                   ],
                   const SizedBox(height: 24),
-                  FilledButton(
+                  GlassButton(
                     onPressed: _loading ? null : _submit,
                     child: _loading
                         ? const SizedBox(
@@ -169,13 +170,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   if (showGoogleSignIn) ...[
-                    TextButton(
+                    GlassButton(
                       onPressed: _loading ? null : _googleSignIn,
-                      child: const Text('Continue with Google'),
+                      label: 'Continue with Google',
                     ),
                     const SizedBox(height: 8),
                   ],
-                  TextButton(
+                  GlassButton(
                     onPressed: _loading
                         ? null
                         : () => setState(() {
@@ -183,9 +184,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             _error = null;
                             _success = null;
                           }),
-                    child: Text(
-                      _isSignUp ? 'Have an account? Sign in' : 'Create account',
-                    ),
+                    label:
+                        _isSignUp ? 'Have an account? Sign in' : 'Create account',
                   ),
                 ],
               ),

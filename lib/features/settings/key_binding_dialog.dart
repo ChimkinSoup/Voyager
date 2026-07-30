@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/utils/key_binding.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 Future<String?> showKeyBindingDialog(
   BuildContext context, {
   required String title,
@@ -66,9 +67,10 @@ class _KeyBindingDialogState extends State<_KeyBindingDialog> {
                 'Press a new letter key, or Esc to cancel.',
       ),
       actions: [
-        TextButton(
+        GlassButton(
           onPressed: () => Navigator.of(context).pop<String?>(null),
-          child: const Text('Cancel'),
+          label: 'Cancel',
+          dense: true,
         ),
       ],
     );

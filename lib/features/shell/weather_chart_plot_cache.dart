@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
 import 'package:voyager/features/shell/weather_chart_curve.dart';
 
@@ -135,9 +136,13 @@ class WeatherChartPlotCache {
   final _entries = <WeatherChartPlotCacheKey, ui.Picture>{};
   final _order = <WeatherChartPlotCacheKey>[];
 
-  ui.Picture? lookup(WeatherChartPlotCacheKey key) => _entries[key];
+  ui.Picture? lookup(WeatherChartPlotCacheKey key) {
+    if (DevFlags.disableCache) return null;
+    return _entries[key];
+  }
 
   void store(WeatherChartPlotCacheKey key, ui.Picture picture) {
+    if (DevFlags.disableCache) return;
     final existing = _entries.remove(key);
     existing?.dispose();
     _order.remove(key);

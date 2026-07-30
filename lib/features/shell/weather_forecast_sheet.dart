@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
@@ -82,7 +83,7 @@ class _ForecastError extends StatelessWidget {
           Text(message, textAlign: TextAlign.center),
           if (onRetry != null) ...[
             const SizedBox(height: 12),
-            TextButton(onPressed: onRetry, child: const Text('Retry')),
+            GlassButton(onPressed: onRetry, label: 'Retry'),
           ],
         ],
       ),
@@ -256,6 +257,7 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
             IconButton(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(PhosphorIconsRegular.x),
+              tooltip: 'Close',
             ),
           ],
         ),

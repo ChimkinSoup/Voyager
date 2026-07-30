@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
 
 /// Renders the geometric texture for a few frames after login so GPU shaders
@@ -41,7 +42,7 @@ class _GeometricTextureWarmupState
 
   @override
   Widget build(BuildContext context) {
-    if (_done) return const SizedBox.shrink();
+    if (_done || DevFlags.disableCache) return const SizedBox.shrink();
 
     ref.listen(geometricShaderProvider, (previous, next) {
       if (_warmupStarted || _done) return;

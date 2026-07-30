@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 class ContextualPopover extends StatelessWidget {
@@ -13,6 +12,10 @@ class ContextualPopover extends StatelessWidget {
 
   static const _radius = 12.0;
   static const _borderWidth = 3.0;
+
+  /// Corner radius of the popover's clipped content area (inside the accent
+  /// border), for descendants that need to round a full-bleed edge to match.
+  static const contentRadius = _radius - _borderWidth;
 
   final Widget child;
   final double width;
@@ -33,16 +36,6 @@ class ContextualPopover extends StatelessWidget {
         color: theme.scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(_radius),
         boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: popupGlowAlpha),
-            blurRadius: 14,
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: accent.withValues(alpha: popupGlowAlpha / 2.0),
-            blurRadius: 22,
-            spreadRadius: 1,
-          ),
           BoxShadow(
             color: vc.shadow.withValues(alpha: vc.strongShadowAlpha),
             blurRadius: 8 * vc.shadowBlurScale,
@@ -130,7 +123,7 @@ Future<T?> showContextualPopoverAt<T>({
   );
 }
 
-/// Hosts a [ContextualPopover] whose accent border/glow can be updated by
+/// Hosts a [ContextualPopover] whose accent border can be updated by
 /// descendants via [ContextualPopoverAccent.update].
 class ContextualPopoverAccentHost extends StatefulWidget {
   const ContextualPopoverAccentHost({
@@ -214,7 +207,7 @@ class _ContextualPopoverAccentScope extends InheritedWidget {
   bool updateShouldNotify(_ContextualPopoverAccentScope oldWidget) => false;
 }
 
-/// Updates the accent border/glow of the enclosing [ContextualPopoverAccentHost].
+/// Updates the accent border of the enclosing [ContextualPopoverAccentHost].
 abstract final class ContextualPopoverAccent {
   static void update(BuildContext context, Color color) {
     final scope = _ContextualPopoverAccentScope.maybeOf(context);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_budget_modal.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
@@ -52,9 +53,9 @@ class BudgetPanel extends ConsumerWidget {
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
-              IconButton(
+              GlassButton(
                 icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-                visualDensity: VisualDensity.compact,
+                dense: true,
                 tooltip: 'Add budget',
                 onPressed: () => showBudgetModal(context, ref),
               ),

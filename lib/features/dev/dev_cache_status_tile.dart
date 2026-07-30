@@ -11,11 +11,23 @@ class DevCacheStatusSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devSettings = ref.watch(devSettingsProvider);
-    final snapshot = ref.watch(cacheStatusSnapshotProvider);
+    final snapshot = devSettings.showCacheStatus
+        ? ref.watch(cacheStatusSnapshotProvider)
+        : const CacheStatusSnapshot(items: []);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SwitchListTile(
+          title: const Text('Disable caching entirely'),
+          subtitle: const Text(
+            'Bypass background warmups and in-memory caches to speed up hot restarts',
+          ),
+          value: devSettings.disableCache,
+          onChanged: (value) {
+            unawaited(ref.read(devSettingsProvider).setDisableCache(value));
+          },
+        ),
         SwitchListTile(
           title: const Text('Show cache status'),
           subtitle: const Text(

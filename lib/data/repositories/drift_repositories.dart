@@ -8,9 +8,11 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -296,6 +298,132 @@ class DriftJournalRepository implements JournalRepository {
   );
 }
 
+class DriftDreamRepository implements DreamRepository {
+  DriftDreamRepository(this._db, {this._syncActivity});
+
+  final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<List<DreamEntry>> listEntries({
+    DateTime? from,
+    DateTime? to,
+    int? limit,
+    bool includeDeleted = false,
+  }) async {
+    var query = _db.select(_db.dreamEntriesTable);
+    if (from != null) {
+      query = query..where((t) => t.entryDate.isBiggerOrEqualValue(from));
+    }
+    if (to != null) {
+      query = query..where((t) => t.entryDate.isSmallerOrEqualValue(to));
+    }
+    query = query
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.entryDate),
+        (t) => OrderingTerm.desc(t.createdAt),
+        (t) => OrderingTerm.desc(t.id),
+      ]);
+    if (limit != null) {
+      query = query..limit(limit);
+    }
+    final rows = await query.get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapEntry)
+        .toList();
+  }
+
+  @override
+  Future<DreamEntry?> getEntry(String id) async {
+    final row = await (_db.select(
+      _db.dreamEntriesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapEntry(row);
+  }
+
+  @override
+  Future<void> upsertEntry(
+    DreamEntry entry, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.dreamEntriesTable)
+        .insertOnConflictUpdate(
+          DreamEntriesTableCompanion(
+            id: Value(entry.id),
+            title: Value(entry.title),
+            body: Value(entry.body),
+            notes: Value(entry.notes),
+            entryDate: Value(entry.entryDate),
+            tagsJson: Value(jsonEncode(entry.tags)),
+            createdAt: Value(entry.createdAt),
+            updatedAt: Value(entry.updatedAt),
+            version: Value(entry.version),
+            deletedAt: Value(entry.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.dreamEntries);
+    }
+  }
+
+  @override
+  Future<void> softDeleteEntry(String id) async {
+    await (_db.update(
+      _db.dreamEntriesTable,
+    )..where((t) => t.id.equals(id))).write(
+      DreamEntriesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.dreamEntries);
+  }
+
+  @override
+  Future<void> hardDeleteEntry(String id) async {
+    await (_db.delete(
+      _db.dreamEntriesTable,
+    )..where((t) => t.id.equals(id))).go();
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    final entries = await _db.select(_db.dreamEntriesTable).get();
+    for (final row in entries) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.dreamEntriesTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+  }
+
+  @override
+  Future<List<DreamEntry>> getAllEntries({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.dreamEntriesTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapEntry)
+        .toList();
+  }
+
+  DreamEntry _mapEntry(DreamEntriesTableData row) => DreamEntry(
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    notes: row.notes,
+    entryDate: row.entryDate,
+    tags: List<String>.from(jsonDecode(row.tagsJson) as List),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+}
+
 class DriftTodoRepository implements TodoRepository {
   DriftTodoRepository(this._db, {this._syncActivity});
 
@@ -458,6 +586,42 @@ class DriftTodoRepository implements TodoRepository {
             deletedAt: Value(task.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.todoTasks);
+    }
+  }
+
+  @override
+  Future<void> upsertTasksBatch(
+    List<TodoTask> tasks, {
+    bool recordLocalActivity = true,
+  }) async {
+    if (tasks.isEmpty) return;
+    await _db.batch((b) {
+      b.insertAllOnConflictUpdate(
+        _db.todoTasksTable,
+        [
+          for (final task in tasks)
+            TodoTasksTableCompanion(
+              id: Value(task.id),
+              listId: Value(task.listId),
+              parentTaskId: Value(task.parentTaskId),
+              title: Value(task.title),
+              notes: Value(task.notes),
+              dueDate: Value(task.dueDate),
+              completed: Value(task.completed),
+              starred: Value(task.starred),
+              sortOrder: Value(task.sortOrder),
+              preStarSortOrder: Value(task.preStarSortOrder),
+              dueDateSetAt: Value(task.dueDateSetAt),
+              createdAt: Value(task.createdAt),
+              updatedAt: Value(task.updatedAt),
+              version: Value(task.version),
+              deletedAt: Value(task.deletedAt),
+            ),
+        ],
+      );
+    });
     if (recordLocalActivity) {
       _syncActivity?.recordLocalSave(FirestoreCollections.todoTasks);
     }
@@ -855,6 +1019,68 @@ class DriftTrackerRepository implements TrackerRepository {
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
   );
+}
+
+class DriftNotificationRepository implements NotificationRepository {
+  DriftNotificationRepository(this._db);
+
+  final AppDatabase _db;
+
+  @override
+  Future<List<PinnedNote>> listPinnedNotes() async {
+    final rows =
+        await (_db.select(_db.pinnedNotesTable)
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get();
+    return rows
+        .map((r) => PinnedNote(id: r.id, text: r.body, createdAt: r.createdAt))
+        .toList();
+  }
+
+  @override
+  Future<void> upsertPinnedNote(PinnedNote note) async {
+    await _db
+        .into(_db.pinnedNotesTable)
+        .insertOnConflictUpdate(
+          PinnedNotesTableCompanion(
+            id: Value(note.id),
+            body: Value(note.text),
+            createdAt: Value(note.createdAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> deletePinnedNote(String id) async {
+    await (_db.delete(
+      _db.pinnedNotesTable,
+    )..where((t) => t.id.equals(id))).go();
+  }
+
+  @override
+  Future<Set<String>> listDismissals() async {
+    final rows = await _db.select(_db.dismissedNotificationsTable).get();
+    return rows.map((r) => r.id).toSet();
+  }
+
+  @override
+  Future<void> dismiss(String dismissalKey) async {
+    await _db
+        .into(_db.dismissedNotificationsTable)
+        .insertOnConflictUpdate(
+          DismissedNotificationsTableCompanion(
+            id: Value(dismissalKey),
+            dismissedAt: Value(utcNow()),
+          ),
+        );
+  }
+
+  @override
+  Future<void> undismiss(String dismissalKey) async {
+    await (_db.delete(
+      _db.dismissedNotificationsTable,
+    )..where((t) => t.id.equals(dismissalKey))).go();
+  }
 }
 
 class DriftFinanceRepository implements FinanceRepository {
@@ -1459,6 +1685,7 @@ class DriftSettingsRepository implements SettingsRepository {
       devShowConflictDocumentIds: row.devShowConflictDocumentIds,
       devShowJournalRemotePullButton: row.devShowJournalRemotePullButton,
       devShowFpsCounter: row.devShowFpsCounter,
+      devDisableCache: row.devDisableCache,
       geometricTextureScale: row.geometricTextureScale,
       geometricTextureIntensity: row.geometricTextureIntensity,
       geometricTextureFocalSpread: row.geometricTextureFocalSpread,
@@ -1499,12 +1726,18 @@ class DriftSettingsRepository implements SettingsRepository {
       navPageOrder: row.navPageOrderJson == null
           ? null
           : List<String>.from(jsonDecode(row.navPageOrderJson!) as List),
+      minorPetalColors: row.minorPetalColorsJson == null
+          ? const []
+          : List<int>.from(jsonDecode(row.minorPetalColorsJson!) as List),
       startupPageMode: StartupPageMode.values.byName(row.startupPageMode),
       customStartupPage: row.customStartupPage,
       lastSeenNavPage: row.lastSeenNavPage,
       todoCompletedSectionExpanded: row.todoCompletedSectionExpanded,
       showAnnualizedSubscriptionCost: row.showAnnualizedSubscriptionCost,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
+      dreamSplitWidth: row.dreamSplitWidth,
+      showDreamStatistics: row.showDreamStatistics,
+      dreamNotesPinned: row.dreamNotesPinned,
     );
   }
 
@@ -1518,6 +1751,11 @@ class DriftSettingsRepository implements SettingsRepository {
             accentColor: Value(settings.accentColor),
             themeMode: Value(settings.themeMode.name),
             petalColor: Value(settings.petalColor),
+            minorPetalColorsJson: Value(
+              settings.minorPetalColors.isEmpty
+                  ? null
+                  : jsonEncode(settings.minorPetalColors),
+            ),
             petalMaxCount: Value(settings.petalMaxCount),
             petalFallSpeed: Value(settings.petalFallSpeed),
             petalWindFrequency: Value(settings.petalWindFrequency),
@@ -1566,6 +1804,7 @@ class DriftSettingsRepository implements SettingsRepository {
             devShowJournalRemotePullButton:
                 Value(settings.devShowJournalRemotePullButton),
             devShowFpsCounter: Value(settings.devShowFpsCounter),
+            devDisableCache: Value(settings.devDisableCache),
             geometricTextureScale: Value(settings.geometricTextureScale),
             geometricTextureIntensity: Value(settings.geometricTextureIntensity),
             geometricTextureFocalSpread:
@@ -1632,6 +1871,9 @@ class DriftSettingsRepository implements SettingsRepository {
             colorPaletteJson: Value(
               encodeColorPaletteJson(settings.colorPalette),
             ),
+            dreamSplitWidth: Value(settings.dreamSplitWidth),
+            showDreamStatistics: Value(settings.showDreamStatistics),
+            dreamNotesPinned: Value(settings.dreamNotesPinned),
           ),
         );
   }

@@ -8,6 +8,7 @@ import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
@@ -24,22 +25,24 @@ Future<String?> promptJournalName(
     builder: (context) => EnterToSubmitScope(
       onSubmit: () => Navigator.pop(context, controller.text),
       child: AlertDialog(
-      title: Text(title),
-      content: LabeledTextField(
-        label: title,
-        controller: controller,
+        title: Text(title),
+        content: LabeledTextField(
+          label: 'Name',
+          controller: controller,
         autofocus: true,
         textInputAction: TextInputAction.done,
         onSubmitted: (_) => Navigator.pop(context, controller.text),
       ),
       actions: [
-        TextButton(
+        GlassButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          label: 'Cancel',
+          dense: true,
         ),
-        FilledButton(
+        GlassButton(
           onPressed: () => Navigator.pop(context, controller.text),
-          child: const Text('OK'),
+          label: 'OK',
+          dense: true,
         ),
       ],
     ),

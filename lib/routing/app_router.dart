@@ -8,6 +8,8 @@ import 'package:voyager/features/shell/app_shell.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
 
+const _preloadedShellPaths = {'/todo', '/calendar', '/analytics', '/settings'};
+
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authNotifierProvider);
   final settingsRepo = ref.read(settingsRepositoryProvider);
@@ -26,6 +28,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             branches: [
               for (final dest in shellDestinations)
                 StatefulShellBranch(
+                  // Eagerly build these branches' first-visit-heavy pages
+                  // (large widget trees, fl_chart) right when the shell
+                  // mounts, instead of on first nav switch, so switching to
+                  // them never has to pay that build cost mid-interaction.
+                  preload: _preloadedShellPaths.contains(dest.path),
                   routes: [
                     GoRoute(path: dest.path, builder: (_, _) => dest.page),
                   ],

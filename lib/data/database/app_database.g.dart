@@ -1538,6 +1538,608 @@ class JournalEntriesTableCompanion
   }
 }
 
+class $DreamEntriesTableTable extends DreamEntriesTable
+    with TableInfo<$DreamEntriesTableTable, DreamEntriesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DreamEntriesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _entryDateMeta = const VerificationMeta(
+    'entryDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> entryDate = GeneratedColumn<DateTime>(
+    'entry_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tagsJsonMeta = const VerificationMeta(
+    'tagsJson',
+  );
+  @override
+  late final GeneratedColumn<String> tagsJson = GeneratedColumn<String>(
+    'tags_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    body,
+    notes,
+    entryDate,
+    tagsJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dream_entries_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DreamEntriesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('entry_date')) {
+      context.handle(
+        _entryDateMeta,
+        entryDate.isAcceptableOrUnknown(data['entry_date']!, _entryDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entryDateMeta);
+    }
+    if (data.containsKey('tags_json')) {
+      context.handle(
+        _tagsJsonMeta,
+        tagsJson.isAcceptableOrUnknown(data['tags_json']!, _tagsJsonMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DreamEntriesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DreamEntriesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      entryDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}entry_date'],
+      )!,
+      tagsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags_json'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $DreamEntriesTableTable createAlias(String alias) {
+    return $DreamEntriesTableTable(attachedDatabase, alias);
+  }
+}
+
+class DreamEntriesTableData extends DataClass
+    implements Insertable<DreamEntriesTableData> {
+  final String id;
+  final String title;
+  final String body;
+  final String? notes;
+  final DateTime entryDate;
+  final String tagsJson;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const DreamEntriesTableData({
+    required this.id,
+    required this.title,
+    required this.body,
+    this.notes,
+    required this.entryDate,
+    required this.tagsJson,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['title'] = Variable<String>(title);
+    map['body'] = Variable<String>(body);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['entry_date'] = Variable<DateTime>(entryDate);
+    map['tags_json'] = Variable<String>(tagsJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  DreamEntriesTableCompanion toCompanion(bool nullToAbsent) {
+    return DreamEntriesTableCompanion(
+      id: Value(id),
+      title: Value(title),
+      body: Value(body),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      entryDate: Value(entryDate),
+      tagsJson: Value(tagsJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory DreamEntriesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DreamEntriesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      body: serializer.fromJson<String>(json['body']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      entryDate: serializer.fromJson<DateTime>(json['entryDate']),
+      tagsJson: serializer.fromJson<String>(json['tagsJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'title': serializer.toJson<String>(title),
+      'body': serializer.toJson<String>(body),
+      'notes': serializer.toJson<String?>(notes),
+      'entryDate': serializer.toJson<DateTime>(entryDate),
+      'tagsJson': serializer.toJson<String>(tagsJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  DreamEntriesTableData copyWith({
+    String? id,
+    String? title,
+    String? body,
+    Value<String?> notes = const Value.absent(),
+    DateTime? entryDate,
+    String? tagsJson,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => DreamEntriesTableData(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    body: body ?? this.body,
+    notes: notes.present ? notes.value : this.notes,
+    entryDate: entryDate ?? this.entryDate,
+    tagsJson: tagsJson ?? this.tagsJson,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  DreamEntriesTableData copyWithCompanion(DreamEntriesTableCompanion data) {
+    return DreamEntriesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      body: data.body.present ? data.body.value : this.body,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      entryDate: data.entryDate.present ? data.entryDate.value : this.entryDate,
+      tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DreamEntriesTableData(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('notes: $notes, ')
+          ..write('entryDate: $entryDate, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    body,
+    notes,
+    entryDate,
+    tagsJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DreamEntriesTableData &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.body == this.body &&
+          other.notes == this.notes &&
+          other.entryDate == this.entryDate &&
+          other.tagsJson == this.tagsJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class DreamEntriesTableCompanion
+    extends UpdateCompanion<DreamEntriesTableData> {
+  final Value<String> id;
+  final Value<String> title;
+  final Value<String> body;
+  final Value<String?> notes;
+  final Value<DateTime> entryDate;
+  final Value<String> tagsJson;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const DreamEntriesTableCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.body = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.entryDate = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DreamEntriesTableCompanion.insert({
+    required String id,
+    required String title,
+    required String body,
+    this.notes = const Value.absent(),
+    required DateTime entryDate,
+    this.tagsJson = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       title = Value(title),
+       body = Value(body),
+       entryDate = Value(entryDate),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<DreamEntriesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? title,
+    Expression<String>? body,
+    Expression<String>? notes,
+    Expression<DateTime>? entryDate,
+    Expression<String>? tagsJson,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
+      if (notes != null) 'notes': notes,
+      if (entryDate != null) 'entry_date': entryDate,
+      if (tagsJson != null) 'tags_json': tagsJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DreamEntriesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? title,
+    Value<String>? body,
+    Value<String?>? notes,
+    Value<DateTime>? entryDate,
+    Value<String>? tagsJson,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return DreamEntriesTableCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      notes: notes ?? this.notes,
+      entryDate: entryDate ?? this.entryDate,
+      tagsJson: tagsJson ?? this.tagsJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (entryDate.present) {
+      map['entry_date'] = Variable<DateTime>(entryDate.value);
+    }
+    if (tagsJson.present) {
+      map['tags_json'] = Variable<String>(tagsJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DreamEntriesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('notes: $notes, ')
+          ..write('entryDate: $entryDate, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TodoListsTableTable extends TodoListsTable
     with TableInfo<$TodoListsTableTable, TodoListsTableData> {
   @override
@@ -5732,6 +6334,17 @@ class $SettingsTableTable extends SettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(defaultPetalColor),
   );
+  static const VerificationMeta _minorPetalColorsJsonMeta =
+      const VerificationMeta('minorPetalColorsJson');
+  @override
+  late final GeneratedColumn<String> minorPetalColorsJson =
+      GeneratedColumn<String>(
+        'minor_petal_colors_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _petalMaxCountMeta = const VerificationMeta(
     'petalMaxCount',
   );
@@ -6290,6 +6903,21 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _devDisableCacheMeta = const VerificationMeta(
+    'devDisableCache',
+  );
+  @override
+  late final GeneratedColumn<bool> devDisableCache = GeneratedColumn<bool>(
+    'dev_disable_cache',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dev_disable_cache" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _weatherForecastJsonMeta =
       const VerificationMeta('weatherForecastJson');
   @override
@@ -6784,12 +7412,53 @@ class $SettingsTableTable extends SettingsTable
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _dreamSplitWidthMeta = const VerificationMeta(
+    'dreamSplitWidth',
+  );
+  @override
+  late final GeneratedColumn<double> dreamSplitWidth = GeneratedColumn<double>(
+    'dream_split_width',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _showDreamStatisticsMeta =
+      const VerificationMeta('showDreamStatistics');
+  @override
+  late final GeneratedColumn<bool> showDreamStatistics = GeneratedColumn<bool>(
+    'show_dream_statistics',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_dream_statistics" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _dreamNotesPinnedMeta = const VerificationMeta(
+    'dreamNotesPinned',
+  );
+  @override
+  late final GeneratedColumn<bool> dreamNotesPinned = GeneratedColumn<bool>(
+    'dream_notes_pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dream_notes_pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     accentColor,
     themeMode,
     petalColor,
+    minorPetalColorsJson,
     petalMaxCount,
     petalFallSpeed,
     petalWindFrequency,
@@ -6833,6 +7502,7 @@ class $SettingsTableTable extends SettingsTable
     devShowConflictDocumentIds,
     devShowJournalRemotePullButton,
     devShowFpsCounter,
+    devDisableCache,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -6874,6 +7544,9 @@ class $SettingsTableTable extends SettingsTable
     lastSeenNavPage,
     todoCompletedSectionExpanded,
     showAnnualizedSubscriptionCost,
+    dreamSplitWidth,
+    showDreamStatistics,
+    dreamNotesPinned,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6909,6 +7582,15 @@ class $SettingsTableTable extends SettingsTable
       context.handle(
         _petalColorMeta,
         petalColor.isAcceptableOrUnknown(data['petal_color']!, _petalColorMeta),
+      );
+    }
+    if (data.containsKey('minor_petal_colors_json')) {
+      context.handle(
+        _minorPetalColorsJsonMeta,
+        minorPetalColorsJson.isAcceptableOrUnknown(
+          data['minor_petal_colors_json']!,
+          _minorPetalColorsJsonMeta,
+        ),
       );
     }
     if (data.containsKey('petal_max_count')) {
@@ -7277,6 +7959,15 @@ class $SettingsTableTable extends SettingsTable
         devShowFpsCounter.isAcceptableOrUnknown(
           data['dev_show_fps_counter']!,
           _devShowFpsCounterMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dev_disable_cache')) {
+      context.handle(
+        _devDisableCacheMeta,
+        devDisableCache.isAcceptableOrUnknown(
+          data['dev_disable_cache']!,
+          _devDisableCacheMeta,
         ),
       );
     }
@@ -7649,6 +8340,33 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('dream_split_width')) {
+      context.handle(
+        _dreamSplitWidthMeta,
+        dreamSplitWidth.isAcceptableOrUnknown(
+          data['dream_split_width']!,
+          _dreamSplitWidthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('show_dream_statistics')) {
+      context.handle(
+        _showDreamStatisticsMeta,
+        showDreamStatistics.isAcceptableOrUnknown(
+          data['show_dream_statistics']!,
+          _showDreamStatisticsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dream_notes_pinned')) {
+      context.handle(
+        _dreamNotesPinnedMeta,
+        dreamNotesPinned.isAcceptableOrUnknown(
+          data['dream_notes_pinned']!,
+          _dreamNotesPinnedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7674,6 +8392,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.int,
         data['${effectivePrefix}petal_color'],
       )!,
+      minorPetalColorsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}minor_petal_colors_json'],
+      ),
       petalMaxCount: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}petal_max_count'],
@@ -7846,6 +8568,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}dev_show_fps_counter'],
       )!,
+      devDisableCache: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dev_disable_cache'],
+      )!,
       weatherForecastJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}weather_forecast_json'],
@@ -8010,6 +8736,18 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}show_annualized_subscription_cost'],
       )!,
+      dreamSplitWidth: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}dream_split_width'],
+      ),
+      showDreamStatistics: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_dream_statistics'],
+      )!,
+      dreamNotesPinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dream_notes_pinned'],
+      )!,
     );
   }
 
@@ -8025,6 +8763,7 @@ class SettingsTableData extends DataClass
   final int accentColor;
   final String themeMode;
   final int petalColor;
+  final String? minorPetalColorsJson;
   final int petalMaxCount;
   final double petalFallSpeed;
   final double petalWindFrequency;
@@ -8068,6 +8807,7 @@ class SettingsTableData extends DataClass
   final bool devShowConflictDocumentIds;
   final bool devShowJournalRemotePullButton;
   final bool devShowFpsCounter;
+  final bool devDisableCache;
   final String? weatherForecastJson;
   final int? weatherChartTempColor;
   final int? weatherChartRainColor;
@@ -8109,11 +8849,15 @@ class SettingsTableData extends DataClass
   final String? lastSeenNavPage;
   final bool todoCompletedSectionExpanded;
   final bool showAnnualizedSubscriptionCost;
+  final double? dreamSplitWidth;
+  final bool showDreamStatistics;
+  final bool dreamNotesPinned;
   const SettingsTableData({
     required this.id,
     required this.accentColor,
     required this.themeMode,
     required this.petalColor,
+    this.minorPetalColorsJson,
     required this.petalMaxCount,
     required this.petalFallSpeed,
     required this.petalWindFrequency,
@@ -8157,6 +8901,7 @@ class SettingsTableData extends DataClass
     required this.devShowConflictDocumentIds,
     required this.devShowJournalRemotePullButton,
     required this.devShowFpsCounter,
+    required this.devDisableCache,
     this.weatherForecastJson,
     this.weatherChartTempColor,
     this.weatherChartRainColor,
@@ -8198,6 +8943,9 @@ class SettingsTableData extends DataClass
     this.lastSeenNavPage,
     required this.todoCompletedSectionExpanded,
     required this.showAnnualizedSubscriptionCost,
+    this.dreamSplitWidth,
+    required this.showDreamStatistics,
+    required this.dreamNotesPinned,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -8206,6 +8954,9 @@ class SettingsTableData extends DataClass
     map['accent_color'] = Variable<int>(accentColor);
     map['theme_mode'] = Variable<String>(themeMode);
     map['petal_color'] = Variable<int>(petalColor);
+    if (!nullToAbsent || minorPetalColorsJson != null) {
+      map['minor_petal_colors_json'] = Variable<String>(minorPetalColorsJson);
+    }
     map['petal_max_count'] = Variable<int>(petalMaxCount);
     map['petal_fall_speed'] = Variable<double>(petalFallSpeed);
     map['petal_wind_frequency'] = Variable<double>(petalWindFrequency);
@@ -8297,6 +9048,7 @@ class SettingsTableData extends DataClass
       devShowJournalRemotePullButton,
     );
     map['dev_show_fps_counter'] = Variable<bool>(devShowFpsCounter);
+    map['dev_disable_cache'] = Variable<bool>(devDisableCache);
     if (!nullToAbsent || weatherForecastJson != null) {
       map['weather_forecast_json'] = Variable<String>(weatherForecastJson);
     }
@@ -8404,6 +9156,11 @@ class SettingsTableData extends DataClass
     map['show_annualized_subscription_cost'] = Variable<bool>(
       showAnnualizedSubscriptionCost,
     );
+    if (!nullToAbsent || dreamSplitWidth != null) {
+      map['dream_split_width'] = Variable<double>(dreamSplitWidth);
+    }
+    map['show_dream_statistics'] = Variable<bool>(showDreamStatistics);
+    map['dream_notes_pinned'] = Variable<bool>(dreamNotesPinned);
     return map;
   }
 
@@ -8413,6 +9170,9 @@ class SettingsTableData extends DataClass
       accentColor: Value(accentColor),
       themeMode: Value(themeMode),
       petalColor: Value(petalColor),
+      minorPetalColorsJson: minorPetalColorsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(minorPetalColorsJson),
       petalMaxCount: Value(petalMaxCount),
       petalFallSpeed: Value(petalFallSpeed),
       petalWindFrequency: Value(petalWindFrequency),
@@ -8482,6 +9242,7 @@ class SettingsTableData extends DataClass
       devShowConflictDocumentIds: Value(devShowConflictDocumentIds),
       devShowJournalRemotePullButton: Value(devShowJournalRemotePullButton),
       devShowFpsCounter: Value(devShowFpsCounter),
+      devDisableCache: Value(devDisableCache),
       weatherForecastJson: weatherForecastJson == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherForecastJson),
@@ -8541,6 +9302,11 @@ class SettingsTableData extends DataClass
           : Value(lastSeenNavPage),
       todoCompletedSectionExpanded: Value(todoCompletedSectionExpanded),
       showAnnualizedSubscriptionCost: Value(showAnnualizedSubscriptionCost),
+      dreamSplitWidth: dreamSplitWidth == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dreamSplitWidth),
+      showDreamStatistics: Value(showDreamStatistics),
+      dreamNotesPinned: Value(dreamNotesPinned),
     );
   }
 
@@ -8554,6 +9320,9 @@ class SettingsTableData extends DataClass
       accentColor: serializer.fromJson<int>(json['accentColor']),
       themeMode: serializer.fromJson<String>(json['themeMode']),
       petalColor: serializer.fromJson<int>(json['petalColor']),
+      minorPetalColorsJson: serializer.fromJson<String?>(
+        json['minorPetalColorsJson'],
+      ),
       petalMaxCount: serializer.fromJson<int>(json['petalMaxCount']),
       petalFallSpeed: serializer.fromJson<double>(json['petalFallSpeed']),
       petalWindFrequency: serializer.fromJson<double>(
@@ -8643,6 +9412,7 @@ class SettingsTableData extends DataClass
         json['devShowJournalRemotePullButton'],
       ),
       devShowFpsCounter: serializer.fromJson<bool>(json['devShowFpsCounter']),
+      devDisableCache: serializer.fromJson<bool>(json['devDisableCache']),
       weatherForecastJson: serializer.fromJson<String?>(
         json['weatherForecastJson'],
       ),
@@ -8758,6 +9528,11 @@ class SettingsTableData extends DataClass
       showAnnualizedSubscriptionCost: serializer.fromJson<bool>(
         json['showAnnualizedSubscriptionCost'],
       ),
+      dreamSplitWidth: serializer.fromJson<double?>(json['dreamSplitWidth']),
+      showDreamStatistics: serializer.fromJson<bool>(
+        json['showDreamStatistics'],
+      ),
+      dreamNotesPinned: serializer.fromJson<bool>(json['dreamNotesPinned']),
     );
   }
   @override
@@ -8768,6 +9543,7 @@ class SettingsTableData extends DataClass
       'accentColor': serializer.toJson<int>(accentColor),
       'themeMode': serializer.toJson<String>(themeMode),
       'petalColor': serializer.toJson<int>(petalColor),
+      'minorPetalColorsJson': serializer.toJson<String?>(minorPetalColorsJson),
       'petalMaxCount': serializer.toJson<int>(petalMaxCount),
       'petalFallSpeed': serializer.toJson<double>(petalFallSpeed),
       'petalWindFrequency': serializer.toJson<double>(petalWindFrequency),
@@ -8833,6 +9609,7 @@ class SettingsTableData extends DataClass
         devShowJournalRemotePullButton,
       ),
       'devShowFpsCounter': serializer.toJson<bool>(devShowFpsCounter),
+      'devDisableCache': serializer.toJson<bool>(devDisableCache),
       'weatherForecastJson': serializer.toJson<String?>(weatherForecastJson),
       'weatherChartTempColor': serializer.toJson<int?>(weatherChartTempColor),
       'weatherChartRainColor': serializer.toJson<int?>(weatherChartRainColor),
@@ -8926,6 +9703,9 @@ class SettingsTableData extends DataClass
       'showAnnualizedSubscriptionCost': serializer.toJson<bool>(
         showAnnualizedSubscriptionCost,
       ),
+      'dreamSplitWidth': serializer.toJson<double?>(dreamSplitWidth),
+      'showDreamStatistics': serializer.toJson<bool>(showDreamStatistics),
+      'dreamNotesPinned': serializer.toJson<bool>(dreamNotesPinned),
     };
   }
 
@@ -8934,6 +9714,7 @@ class SettingsTableData extends DataClass
     int? accentColor,
     String? themeMode,
     int? petalColor,
+    Value<String?> minorPetalColorsJson = const Value.absent(),
     int? petalMaxCount,
     double? petalFallSpeed,
     double? petalWindFrequency,
@@ -8977,6 +9758,7 @@ class SettingsTableData extends DataClass
     bool? devShowConflictDocumentIds,
     bool? devShowJournalRemotePullButton,
     bool? devShowFpsCounter,
+    bool? devDisableCache,
     Value<String?> weatherForecastJson = const Value.absent(),
     Value<int?> weatherChartTempColor = const Value.absent(),
     Value<int?> weatherChartRainColor = const Value.absent(),
@@ -9018,11 +9800,17 @@ class SettingsTableData extends DataClass
     Value<String?> lastSeenNavPage = const Value.absent(),
     bool? todoCompletedSectionExpanded,
     bool? showAnnualizedSubscriptionCost,
+    Value<double?> dreamSplitWidth = const Value.absent(),
+    bool? showDreamStatistics,
+    bool? dreamNotesPinned,
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
     themeMode: themeMode ?? this.themeMode,
     petalColor: petalColor ?? this.petalColor,
+    minorPetalColorsJson: minorPetalColorsJson.present
+        ? minorPetalColorsJson.value
+        : this.minorPetalColorsJson,
     petalMaxCount: petalMaxCount ?? this.petalMaxCount,
     petalFallSpeed: petalFallSpeed ?? this.petalFallSpeed,
     petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
@@ -9092,6 +9880,7 @@ class SettingsTableData extends DataClass
     devShowJournalRemotePullButton:
         devShowJournalRemotePullButton ?? this.devShowJournalRemotePullButton,
     devShowFpsCounter: devShowFpsCounter ?? this.devShowFpsCounter,
+    devDisableCache: devDisableCache ?? this.devDisableCache,
     weatherForecastJson: weatherForecastJson.present
         ? weatherForecastJson.value
         : this.weatherForecastJson,
@@ -9175,6 +9964,11 @@ class SettingsTableData extends DataClass
         todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
     showAnnualizedSubscriptionCost:
         showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
+    dreamSplitWidth: dreamSplitWidth.present
+        ? dreamSplitWidth.value
+        : this.dreamSplitWidth,
+    showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
+    dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
     return SettingsTableData(
@@ -9186,6 +9980,9 @@ class SettingsTableData extends DataClass
       petalColor: data.petalColor.present
           ? data.petalColor.value
           : this.petalColor,
+      minorPetalColorsJson: data.minorPetalColorsJson.present
+          ? data.minorPetalColorsJson.value
+          : this.minorPetalColorsJson,
       petalMaxCount: data.petalMaxCount.present
           ? data.petalMaxCount.value
           : this.petalMaxCount,
@@ -9313,6 +10110,9 @@ class SettingsTableData extends DataClass
       devShowFpsCounter: data.devShowFpsCounter.present
           ? data.devShowFpsCounter.value
           : this.devShowFpsCounter,
+      devDisableCache: data.devDisableCache.present
+          ? data.devDisableCache.value
+          : this.devDisableCache,
       weatherForecastJson: data.weatherForecastJson.present
           ? data.weatherForecastJson.value
           : this.weatherForecastJson,
@@ -9440,6 +10240,15 @@ class SettingsTableData extends DataClass
           data.showAnnualizedSubscriptionCost.present
           ? data.showAnnualizedSubscriptionCost.value
           : this.showAnnualizedSubscriptionCost,
+      dreamSplitWidth: data.dreamSplitWidth.present
+          ? data.dreamSplitWidth.value
+          : this.dreamSplitWidth,
+      showDreamStatistics: data.showDreamStatistics.present
+          ? data.showDreamStatistics.value
+          : this.showDreamStatistics,
+      dreamNotesPinned: data.dreamNotesPinned.present
+          ? data.dreamNotesPinned.value
+          : this.dreamNotesPinned,
     );
   }
 
@@ -9450,6 +10259,7 @@ class SettingsTableData extends DataClass
           ..write('accentColor: $accentColor, ')
           ..write('themeMode: $themeMode, ')
           ..write('petalColor: $petalColor, ')
+          ..write('minorPetalColorsJson: $minorPetalColorsJson, ')
           ..write('petalMaxCount: $petalMaxCount, ')
           ..write('petalFallSpeed: $petalFallSpeed, ')
           ..write('petalWindFrequency: $petalWindFrequency, ')
@@ -9499,6 +10309,7 @@ class SettingsTableData extends DataClass
             'devShowJournalRemotePullButton: $devShowJournalRemotePullButton, ',
           )
           ..write('devShowFpsCounter: $devShowFpsCounter, ')
+          ..write('devDisableCache: $devDisableCache, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -9556,8 +10367,11 @@ class SettingsTableData extends DataClass
             'todoCompletedSectionExpanded: $todoCompletedSectionExpanded, ',
           )
           ..write(
-            'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost',
+            'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost, ',
           )
+          ..write('dreamSplitWidth: $dreamSplitWidth, ')
+          ..write('showDreamStatistics: $showDreamStatistics, ')
+          ..write('dreamNotesPinned: $dreamNotesPinned')
           ..write(')'))
         .toString();
   }
@@ -9568,6 +10382,7 @@ class SettingsTableData extends DataClass
     accentColor,
     themeMode,
     petalColor,
+    minorPetalColorsJson,
     petalMaxCount,
     petalFallSpeed,
     petalWindFrequency,
@@ -9611,6 +10426,7 @@ class SettingsTableData extends DataClass
     devShowConflictDocumentIds,
     devShowJournalRemotePullButton,
     devShowFpsCounter,
+    devDisableCache,
     weatherForecastJson,
     weatherChartTempColor,
     weatherChartRainColor,
@@ -9652,6 +10468,9 @@ class SettingsTableData extends DataClass
     lastSeenNavPage,
     todoCompletedSectionExpanded,
     showAnnualizedSubscriptionCost,
+    dreamSplitWidth,
+    showDreamStatistics,
+    dreamNotesPinned,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -9661,6 +10480,7 @@ class SettingsTableData extends DataClass
           other.accentColor == this.accentColor &&
           other.themeMode == this.themeMode &&
           other.petalColor == this.petalColor &&
+          other.minorPetalColorsJson == this.minorPetalColorsJson &&
           other.petalMaxCount == this.petalMaxCount &&
           other.petalFallSpeed == this.petalFallSpeed &&
           other.petalWindFrequency == this.petalWindFrequency &&
@@ -9707,6 +10527,7 @@ class SettingsTableData extends DataClass
           other.devShowJournalRemotePullButton ==
               this.devShowJournalRemotePullButton &&
           other.devShowFpsCounter == this.devShowFpsCounter &&
+          other.devDisableCache == this.devDisableCache &&
           other.weatherForecastJson == this.weatherForecastJson &&
           other.weatherChartTempColor == this.weatherChartTempColor &&
           other.weatherChartRainColor == this.weatherChartRainColor &&
@@ -9763,7 +10584,10 @@ class SettingsTableData extends DataClass
           other.todoCompletedSectionExpanded ==
               this.todoCompletedSectionExpanded &&
           other.showAnnualizedSubscriptionCost ==
-              this.showAnnualizedSubscriptionCost);
+              this.showAnnualizedSubscriptionCost &&
+          other.dreamSplitWidth == this.dreamSplitWidth &&
+          other.showDreamStatistics == this.showDreamStatistics &&
+          other.dreamNotesPinned == this.dreamNotesPinned);
 }
 
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
@@ -9771,6 +10595,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<int> accentColor;
   final Value<String> themeMode;
   final Value<int> petalColor;
+  final Value<String?> minorPetalColorsJson;
   final Value<int> petalMaxCount;
   final Value<double> petalFallSpeed;
   final Value<double> petalWindFrequency;
@@ -9814,6 +10639,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> devShowConflictDocumentIds;
   final Value<bool> devShowJournalRemotePullButton;
   final Value<bool> devShowFpsCounter;
+  final Value<bool> devDisableCache;
   final Value<String?> weatherForecastJson;
   final Value<int?> weatherChartTempColor;
   final Value<int?> weatherChartRainColor;
@@ -9855,11 +10681,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> lastSeenNavPage;
   final Value<bool> todoCompletedSectionExpanded;
   final Value<bool> showAnnualizedSubscriptionCost;
+  final Value<double?> dreamSplitWidth;
+  final Value<bool> showDreamStatistics;
+  final Value<bool> dreamNotesPinned;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
     this.themeMode = const Value.absent(),
     this.petalColor = const Value.absent(),
+    this.minorPetalColorsJson = const Value.absent(),
     this.petalMaxCount = const Value.absent(),
     this.petalFallSpeed = const Value.absent(),
     this.petalWindFrequency = const Value.absent(),
@@ -9903,6 +10733,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowConflictDocumentIds = const Value.absent(),
     this.devShowJournalRemotePullButton = const Value.absent(),
     this.devShowFpsCounter = const Value.absent(),
+    this.devDisableCache = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -9944,12 +10775,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastSeenNavPage = const Value.absent(),
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.showAnnualizedSubscriptionCost = const Value.absent(),
+    this.dreamSplitWidth = const Value.absent(),
+    this.showDreamStatistics = const Value.absent(),
+    this.dreamNotesPinned = const Value.absent(),
   });
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
     this.themeMode = const Value.absent(),
     this.petalColor = const Value.absent(),
+    this.minorPetalColorsJson = const Value.absent(),
     this.petalMaxCount = const Value.absent(),
     this.petalFallSpeed = const Value.absent(),
     this.petalWindFrequency = const Value.absent(),
@@ -9993,6 +10828,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.devShowConflictDocumentIds = const Value.absent(),
     this.devShowJournalRemotePullButton = const Value.absent(),
     this.devShowFpsCounter = const Value.absent(),
+    this.devDisableCache = const Value.absent(),
     this.weatherForecastJson = const Value.absent(),
     this.weatherChartTempColor = const Value.absent(),
     this.weatherChartRainColor = const Value.absent(),
@@ -10034,12 +10870,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastSeenNavPage = const Value.absent(),
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.showAnnualizedSubscriptionCost = const Value.absent(),
+    this.dreamSplitWidth = const Value.absent(),
+    this.showDreamStatistics = const Value.absent(),
+    this.dreamNotesPinned = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
     Expression<int>? accentColor,
     Expression<String>? themeMode,
     Expression<int>? petalColor,
+    Expression<String>? minorPetalColorsJson,
     Expression<int>? petalMaxCount,
     Expression<double>? petalFallSpeed,
     Expression<double>? petalWindFrequency,
@@ -10083,6 +10923,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? devShowConflictDocumentIds,
     Expression<bool>? devShowJournalRemotePullButton,
     Expression<bool>? devShowFpsCounter,
+    Expression<bool>? devDisableCache,
     Expression<String>? weatherForecastJson,
     Expression<int>? weatherChartTempColor,
     Expression<int>? weatherChartRainColor,
@@ -10124,12 +10965,17 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? lastSeenNavPage,
     Expression<bool>? todoCompletedSectionExpanded,
     Expression<bool>? showAnnualizedSubscriptionCost,
+    Expression<double>? dreamSplitWidth,
+    Expression<bool>? showDreamStatistics,
+    Expression<bool>? dreamNotesPinned,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (accentColor != null) 'accent_color': accentColor,
       if (themeMode != null) 'theme_mode': themeMode,
       if (petalColor != null) 'petal_color': petalColor,
+      if (minorPetalColorsJson != null)
+        'minor_petal_colors_json': minorPetalColorsJson,
       if (petalMaxCount != null) 'petal_max_count': petalMaxCount,
       if (petalFallSpeed != null) 'petal_fall_speed': petalFallSpeed,
       if (petalWindFrequency != null)
@@ -10202,6 +11048,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (devShowJournalRemotePullButton != null)
         'dev_show_journal_remote_pull_button': devShowJournalRemotePullButton,
       if (devShowFpsCounter != null) 'dev_show_fps_counter': devShowFpsCounter,
+      if (devDisableCache != null) 'dev_disable_cache': devDisableCache,
       if (weatherForecastJson != null)
         'weather_forecast_json': weatherForecastJson,
       if (weatherChartTempColor != null)
@@ -10280,6 +11127,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'todo_completed_section_expanded': todoCompletedSectionExpanded,
       if (showAnnualizedSubscriptionCost != null)
         'show_annualized_subscription_cost': showAnnualizedSubscriptionCost,
+      if (dreamSplitWidth != null) 'dream_split_width': dreamSplitWidth,
+      if (showDreamStatistics != null)
+        'show_dream_statistics': showDreamStatistics,
+      if (dreamNotesPinned != null) 'dream_notes_pinned': dreamNotesPinned,
     });
   }
 
@@ -10288,6 +11139,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<int>? accentColor,
     Value<String>? themeMode,
     Value<int>? petalColor,
+    Value<String?>? minorPetalColorsJson,
     Value<int>? petalMaxCount,
     Value<double>? petalFallSpeed,
     Value<double>? petalWindFrequency,
@@ -10331,6 +11183,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? devShowConflictDocumentIds,
     Value<bool>? devShowJournalRemotePullButton,
     Value<bool>? devShowFpsCounter,
+    Value<bool>? devDisableCache,
     Value<String?>? weatherForecastJson,
     Value<int?>? weatherChartTempColor,
     Value<int?>? weatherChartRainColor,
@@ -10372,12 +11225,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? lastSeenNavPage,
     Value<bool>? todoCompletedSectionExpanded,
     Value<bool>? showAnnualizedSubscriptionCost,
+    Value<double?>? dreamSplitWidth,
+    Value<bool>? showDreamStatistics,
+    Value<bool>? dreamNotesPinned,
   }) {
     return SettingsTableCompanion(
       id: id ?? this.id,
       accentColor: accentColor ?? this.accentColor,
       themeMode: themeMode ?? this.themeMode,
       petalColor: petalColor ?? this.petalColor,
+      minorPetalColorsJson: minorPetalColorsJson ?? this.minorPetalColorsJson,
       petalMaxCount: petalMaxCount ?? this.petalMaxCount,
       petalFallSpeed: petalFallSpeed ?? this.petalFallSpeed,
       petalWindFrequency: petalWindFrequency ?? this.petalWindFrequency,
@@ -10435,6 +11292,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       devShowJournalRemotePullButton:
           devShowJournalRemotePullButton ?? this.devShowJournalRemotePullButton,
       devShowFpsCounter: devShowFpsCounter ?? this.devShowFpsCounter,
+      devDisableCache: devDisableCache ?? this.devDisableCache,
       weatherForecastJson: weatherForecastJson ?? this.weatherForecastJson,
       weatherChartTempColor:
           weatherChartTempColor ?? this.weatherChartTempColor,
@@ -10508,6 +11366,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
       showAnnualizedSubscriptionCost:
           showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
+      dreamSplitWidth: dreamSplitWidth ?? this.dreamSplitWidth,
+      showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
+      dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
     );
   }
 
@@ -10525,6 +11386,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (petalColor.present) {
       map['petal_color'] = Variable<int>(petalColor.value);
+    }
+    if (minorPetalColorsJson.present) {
+      map['minor_petal_colors_json'] = Variable<String>(
+        minorPetalColorsJson.value,
+      );
     }
     if (petalMaxCount.present) {
       map['petal_max_count'] = Variable<int>(petalMaxCount.value);
@@ -10694,6 +11560,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (devShowFpsCounter.present) {
       map['dev_show_fps_counter'] = Variable<bool>(devShowFpsCounter.value);
+    }
+    if (devDisableCache.present) {
+      map['dev_disable_cache'] = Variable<bool>(devDisableCache.value);
     }
     if (weatherForecastJson.present) {
       map['weather_forecast_json'] = Variable<String>(
@@ -10884,6 +11753,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         showAnnualizedSubscriptionCost.value,
       );
     }
+    if (dreamSplitWidth.present) {
+      map['dream_split_width'] = Variable<double>(dreamSplitWidth.value);
+    }
+    if (showDreamStatistics.present) {
+      map['show_dream_statistics'] = Variable<bool>(showDreamStatistics.value);
+    }
+    if (dreamNotesPinned.present) {
+      map['dream_notes_pinned'] = Variable<bool>(dreamNotesPinned.value);
+    }
     return map;
   }
 
@@ -10894,6 +11772,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('accentColor: $accentColor, ')
           ..write('themeMode: $themeMode, ')
           ..write('petalColor: $petalColor, ')
+          ..write('minorPetalColorsJson: $minorPetalColorsJson, ')
           ..write('petalMaxCount: $petalMaxCount, ')
           ..write('petalFallSpeed: $petalFallSpeed, ')
           ..write('petalWindFrequency: $petalWindFrequency, ')
@@ -10943,6 +11822,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
             'devShowJournalRemotePullButton: $devShowJournalRemotePullButton, ',
           )
           ..write('devShowFpsCounter: $devShowFpsCounter, ')
+          ..write('devDisableCache: $devDisableCache, ')
           ..write('weatherForecastJson: $weatherForecastJson, ')
           ..write('weatherChartTempColor: $weatherChartTempColor, ')
           ..write('weatherChartRainColor: $weatherChartRainColor, ')
@@ -11000,8 +11880,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
             'todoCompletedSectionExpanded: $todoCompletedSectionExpanded, ',
           )
           ..write(
-            'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost',
+            'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost, ',
           )
+          ..write('dreamSplitWidth: $dreamSplitWidth, ')
+          ..write('showDreamStatistics: $showDreamStatistics, ')
+          ..write('dreamNotesPinned: $dreamNotesPinned')
           ..write(')'))
         .toString();
   }
@@ -16596,12 +17479,512 @@ class GoalAllocationsTableCompanion
   }
 }
 
+class $PinnedNotesTableTable extends PinnedNotesTable
+    with TableInfo<$PinnedNotesTableTable, PinnedNotesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PinnedNotesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, body, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pinned_notes_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PinnedNotesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PinnedNotesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PinnedNotesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PinnedNotesTableTable createAlias(String alias) {
+    return $PinnedNotesTableTable(attachedDatabase, alias);
+  }
+}
+
+class PinnedNotesTableData extends DataClass
+    implements Insertable<PinnedNotesTableData> {
+  final String id;
+  final String body;
+  final DateTime createdAt;
+  const PinnedNotesTableData({
+    required this.id,
+    required this.body,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['body'] = Variable<String>(body);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PinnedNotesTableCompanion toCompanion(bool nullToAbsent) {
+    return PinnedNotesTableCompanion(
+      id: Value(id),
+      body: Value(body),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PinnedNotesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PinnedNotesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      body: serializer.fromJson<String>(json['body']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'body': serializer.toJson<String>(body),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PinnedNotesTableData copyWith({
+    String? id,
+    String? body,
+    DateTime? createdAt,
+  }) => PinnedNotesTableData(
+    id: id ?? this.id,
+    body: body ?? this.body,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PinnedNotesTableData copyWithCompanion(PinnedNotesTableCompanion data) {
+    return PinnedNotesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      body: data.body.present ? data.body.value : this.body,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PinnedNotesTableData(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, body, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PinnedNotesTableData &&
+          other.id == this.id &&
+          other.body == this.body &&
+          other.createdAt == this.createdAt);
+}
+
+class PinnedNotesTableCompanion extends UpdateCompanion<PinnedNotesTableData> {
+  final Value<String> id;
+  final Value<String> body;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PinnedNotesTableCompanion({
+    this.id = const Value.absent(),
+    this.body = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PinnedNotesTableCompanion.insert({
+    required String id,
+    required String body,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       body = Value(body),
+       createdAt = Value(createdAt);
+  static Insertable<PinnedNotesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? body,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (body != null) 'body': body,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PinnedNotesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? body,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PinnedNotesTableCompanion(
+      id: id ?? this.id,
+      body: body ?? this.body,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PinnedNotesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DismissedNotificationsTableTable extends DismissedNotificationsTable
+    with
+        TableInfo<
+          $DismissedNotificationsTableTable,
+          DismissedNotificationsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DismissedNotificationsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dismissedAtMeta = const VerificationMeta(
+    'dismissedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dismissedAt = GeneratedColumn<DateTime>(
+    'dismissed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, dismissedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dismissed_notifications_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DismissedNotificationsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('dismissed_at')) {
+      context.handle(
+        _dismissedAtMeta,
+        dismissedAt.isAcceptableOrUnknown(
+          data['dismissed_at']!,
+          _dismissedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dismissedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DismissedNotificationsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DismissedNotificationsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      dismissedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}dismissed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DismissedNotificationsTableTable createAlias(String alias) {
+    return $DismissedNotificationsTableTable(attachedDatabase, alias);
+  }
+}
+
+class DismissedNotificationsTableData extends DataClass
+    implements Insertable<DismissedNotificationsTableData> {
+  /// `'$itemId|$urgencyTierName'` — see [NotificationFeedItem.dismissalKey].
+  final String id;
+  final DateTime dismissedAt;
+  const DismissedNotificationsTableData({
+    required this.id,
+    required this.dismissedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['dismissed_at'] = Variable<DateTime>(dismissedAt);
+    return map;
+  }
+
+  DismissedNotificationsTableCompanion toCompanion(bool nullToAbsent) {
+    return DismissedNotificationsTableCompanion(
+      id: Value(id),
+      dismissedAt: Value(dismissedAt),
+    );
+  }
+
+  factory DismissedNotificationsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DismissedNotificationsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      dismissedAt: serializer.fromJson<DateTime>(json['dismissedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'dismissedAt': serializer.toJson<DateTime>(dismissedAt),
+    };
+  }
+
+  DismissedNotificationsTableData copyWith({
+    String? id,
+    DateTime? dismissedAt,
+  }) => DismissedNotificationsTableData(
+    id: id ?? this.id,
+    dismissedAt: dismissedAt ?? this.dismissedAt,
+  );
+  DismissedNotificationsTableData copyWithCompanion(
+    DismissedNotificationsTableCompanion data,
+  ) {
+    return DismissedNotificationsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      dismissedAt: data.dismissedAt.present
+          ? data.dismissedAt.value
+          : this.dismissedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DismissedNotificationsTableData(')
+          ..write('id: $id, ')
+          ..write('dismissedAt: $dismissedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, dismissedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DismissedNotificationsTableData &&
+          other.id == this.id &&
+          other.dismissedAt == this.dismissedAt);
+}
+
+class DismissedNotificationsTableCompanion
+    extends UpdateCompanion<DismissedNotificationsTableData> {
+  final Value<String> id;
+  final Value<DateTime> dismissedAt;
+  final Value<int> rowid;
+  const DismissedNotificationsTableCompanion({
+    this.id = const Value.absent(),
+    this.dismissedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DismissedNotificationsTableCompanion.insert({
+    required String id,
+    required DateTime dismissedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       dismissedAt = Value(dismissedAt);
+  static Insertable<DismissedNotificationsTableData> custom({
+    Expression<String>? id,
+    Expression<DateTime>? dismissedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (dismissedAt != null) 'dismissed_at': dismissedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DismissedNotificationsTableCompanion copyWith({
+    Value<String>? id,
+    Value<DateTime>? dismissedAt,
+    Value<int>? rowid,
+  }) {
+    return DismissedNotificationsTableCompanion(
+      id: id ?? this.id,
+      dismissedAt: dismissedAt ?? this.dismissedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (dismissedAt.present) {
+      map['dismissed_at'] = Variable<DateTime>(dismissedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DismissedNotificationsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('dismissedAt: $dismissedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $JournalsTableTable journalsTable = $JournalsTableTable(this);
   late final $JournalEntriesTableTable journalEntriesTable =
       $JournalEntriesTableTable(this);
+  late final $DreamEntriesTableTable dreamEntriesTable =
+      $DreamEntriesTableTable(this);
   late final $TodoListsTableTable todoListsTable = $TodoListsTableTable(this);
   late final $TodoTasksTableTable todoTasksTable = $TodoTasksTableTable(this);
   late final $CalendarsTableTable calendarsTable = $CalendarsTableTable(this);
@@ -16630,6 +18013,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SavingsGoalsTableTable(this);
   late final $GoalAllocationsTableTable goalAllocationsTable =
       $GoalAllocationsTableTable(this);
+  late final $PinnedNotesTableTable pinnedNotesTable = $PinnedNotesTableTable(
+    this,
+  );
+  late final $DismissedNotificationsTableTable dismissedNotificationsTable =
+      $DismissedNotificationsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -16637,6 +18025,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     journalsTable,
     journalEntriesTable,
+    dreamEntriesTable,
     todoListsTable,
     todoTasksTable,
     calendarsTable,
@@ -16655,7 +18044,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     assetValuationsTable,
     savingsGoalsTable,
     goalAllocationsTable,
+    pinnedNotesTable,
+    dismissedNotificationsTable,
   ];
+  @override
+  DriftDatabaseOptions get options =>
+      const DriftDatabaseOptions(storeDateTimeAsText: true);
 }
 
 typedef $$JournalsTableTableCreateCompanionBuilder =
@@ -17394,6 +18788,314 @@ typedef $$JournalEntriesTableTableProcessedTableManager =
         >,
       ),
       JournalEntriesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$DreamEntriesTableTableCreateCompanionBuilder =
+    DreamEntriesTableCompanion Function({
+      required String id,
+      required String title,
+      required String body,
+      Value<String?> notes,
+      required DateTime entryDate,
+      Value<String> tagsJson,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$DreamEntriesTableTableUpdateCompanionBuilder =
+    DreamEntriesTableCompanion Function({
+      Value<String> id,
+      Value<String> title,
+      Value<String> body,
+      Value<String?> notes,
+      Value<DateTime> entryDate,
+      Value<String> tagsJson,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$DreamEntriesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $DreamEntriesTableTable> {
+  $$DreamEntriesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get entryDate => $composableBuilder(
+    column: $table.entryDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DreamEntriesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $DreamEntriesTableTable> {
+  $$DreamEntriesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get entryDate => $composableBuilder(
+    column: $table.entryDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DreamEntriesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DreamEntriesTableTable> {
+  $$DreamEntriesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get entryDate =>
+      $composableBuilder(column: $table.entryDate, builder: (column) => column);
+
+  GeneratedColumn<String> get tagsJson =>
+      $composableBuilder(column: $table.tagsJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$DreamEntriesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DreamEntriesTableTable,
+          DreamEntriesTableData,
+          $$DreamEntriesTableTableFilterComposer,
+          $$DreamEntriesTableTableOrderingComposer,
+          $$DreamEntriesTableTableAnnotationComposer,
+          $$DreamEntriesTableTableCreateCompanionBuilder,
+          $$DreamEntriesTableTableUpdateCompanionBuilder,
+          (
+            DreamEntriesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $DreamEntriesTableTable,
+              DreamEntriesTableData
+            >,
+          ),
+          DreamEntriesTableData,
+          PrefetchHooks Function()
+        > {
+  $$DreamEntriesTableTableTableManager(
+    _$AppDatabase db,
+    $DreamEntriesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DreamEntriesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DreamEntriesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DreamEntriesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> entryDate = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DreamEntriesTableCompanion(
+                id: id,
+                title: title,
+                body: body,
+                notes: notes,
+                entryDate: entryDate,
+                tagsJson: tagsJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String title,
+                required String body,
+                Value<String?> notes = const Value.absent(),
+                required DateTime entryDate,
+                Value<String> tagsJson = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DreamEntriesTableCompanion.insert(
+                id: id,
+                title: title,
+                body: body,
+                notes: notes,
+                entryDate: entryDate,
+                tagsJson: tagsJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DreamEntriesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DreamEntriesTableTable,
+      DreamEntriesTableData,
+      $$DreamEntriesTableTableFilterComposer,
+      $$DreamEntriesTableTableOrderingComposer,
+      $$DreamEntriesTableTableAnnotationComposer,
+      $$DreamEntriesTableTableCreateCompanionBuilder,
+      $$DreamEntriesTableTableUpdateCompanionBuilder,
+      (
+        DreamEntriesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $DreamEntriesTableTable,
+          DreamEntriesTableData
+        >,
+      ),
+      DreamEntriesTableData,
       PrefetchHooks Function()
     >;
 typedef $$TodoListsTableTableCreateCompanionBuilder =
@@ -19430,6 +21132,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<int> accentColor,
       Value<String> themeMode,
       Value<int> petalColor,
+      Value<String?> minorPetalColorsJson,
       Value<int> petalMaxCount,
       Value<double> petalFallSpeed,
       Value<double> petalWindFrequency,
@@ -19473,6 +21176,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> devShowConflictDocumentIds,
       Value<bool> devShowJournalRemotePullButton,
       Value<bool> devShowFpsCounter,
+      Value<bool> devDisableCache,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -19514,6 +21218,9 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> lastSeenNavPage,
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> showAnnualizedSubscriptionCost,
+      Value<double?> dreamSplitWidth,
+      Value<bool> showDreamStatistics,
+      Value<bool> dreamNotesPinned,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
@@ -19521,6 +21228,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<int> accentColor,
       Value<String> themeMode,
       Value<int> petalColor,
+      Value<String?> minorPetalColorsJson,
       Value<int> petalMaxCount,
       Value<double> petalFallSpeed,
       Value<double> petalWindFrequency,
@@ -19564,6 +21272,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> devShowConflictDocumentIds,
       Value<bool> devShowJournalRemotePullButton,
       Value<bool> devShowFpsCounter,
+      Value<bool> devDisableCache,
       Value<String?> weatherForecastJson,
       Value<int?> weatherChartTempColor,
       Value<int?> weatherChartRainColor,
@@ -19605,6 +21314,9 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> lastSeenNavPage,
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> showAnnualizedSubscriptionCost,
+      Value<double?> dreamSplitWidth,
+      Value<bool> showDreamStatistics,
+      Value<bool> dreamNotesPinned,
     });
 
 class $$SettingsTableTableFilterComposer
@@ -19633,6 +21345,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<int> get petalColor => $composableBuilder(
     column: $table.petalColor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get minorPetalColorsJson => $composableBuilder(
+    column: $table.minorPetalColorsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -19852,6 +21569,11 @@ class $$SettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get devDisableCache => $composableBuilder(
+    column: $table.devDisableCache,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => ColumnFilters(column),
@@ -20059,6 +21781,21 @@ class $$SettingsTableTableFilterComposer
     column: $table.showAnnualizedSubscriptionCost,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<double> get dreamSplitWidth => $composableBuilder(
+    column: $table.dreamSplitWidth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showDreamStatistics => $composableBuilder(
+    column: $table.showDreamStatistics,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get dreamNotesPinned => $composableBuilder(
+    column: $table.dreamNotesPinned,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$SettingsTableTableOrderingComposer
@@ -20087,6 +21824,11 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<int> get petalColor => $composableBuilder(
     column: $table.petalColor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get minorPetalColorsJson => $composableBuilder(
+    column: $table.minorPetalColorsJson,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -20307,6 +22049,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get devDisableCache => $composableBuilder(
+    column: $table.devDisableCache,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => ColumnOrderings(column),
@@ -20519,6 +22266,21 @@ class $$SettingsTableTableOrderingComposer
         column: $table.showAnnualizedSubscriptionCost,
         builder: (column) => ColumnOrderings(column),
       );
+
+  ColumnOrderings<double> get dreamSplitWidth => $composableBuilder(
+    column: $table.dreamSplitWidth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get showDreamStatistics => $composableBuilder(
+    column: $table.showDreamStatistics,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get dreamNotesPinned => $composableBuilder(
+    column: $table.dreamNotesPinned,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SettingsTableTableAnnotationComposer
@@ -20543,6 +22305,11 @@ class $$SettingsTableTableAnnotationComposer
 
   GeneratedColumn<int> get petalColor => $composableBuilder(
     column: $table.petalColor,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get minorPetalColorsJson => $composableBuilder(
+    column: $table.minorPetalColorsJson,
     builder: (column) => column,
   );
 
@@ -20759,6 +22526,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get devDisableCache => $composableBuilder(
+    column: $table.devDisableCache,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get weatherForecastJson => $composableBuilder(
     column: $table.weatherForecastJson,
     builder: (column) => column,
@@ -20971,6 +22743,21 @@ class $$SettingsTableTableAnnotationComposer
         column: $table.showAnnualizedSubscriptionCost,
         builder: (column) => column,
       );
+
+  GeneratedColumn<double> get dreamSplitWidth => $composableBuilder(
+    column: $table.dreamSplitWidth,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get showDreamStatistics => $composableBuilder(
+    column: $table.showDreamStatistics,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get dreamNotesPinned => $composableBuilder(
+    column: $table.dreamNotesPinned,
+    builder: (column) => column,
+  );
 }
 
 class $$SettingsTableTableTableManager
@@ -21012,6 +22799,7 @@ class $$SettingsTableTableTableManager
                 Value<int> accentColor = const Value.absent(),
                 Value<String> themeMode = const Value.absent(),
                 Value<int> petalColor = const Value.absent(),
+                Value<String?> minorPetalColorsJson = const Value.absent(),
                 Value<int> petalMaxCount = const Value.absent(),
                 Value<double> petalFallSpeed = const Value.absent(),
                 Value<double> petalWindFrequency = const Value.absent(),
@@ -21059,6 +22847,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowJournalRemotePullButton =
                     const Value.absent(),
                 Value<bool> devShowFpsCounter = const Value.absent(),
+                Value<bool> devDisableCache = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -21115,11 +22904,15 @@ class $$SettingsTableTableTableManager
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> showAnnualizedSubscriptionCost =
                     const Value.absent(),
+                Value<double?> dreamSplitWidth = const Value.absent(),
+                Value<bool> showDreamStatistics = const Value.absent(),
+                Value<bool> dreamNotesPinned = const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
                 themeMode: themeMode,
                 petalColor: petalColor,
+                minorPetalColorsJson: minorPetalColorsJson,
                 petalMaxCount: petalMaxCount,
                 petalFallSpeed: petalFallSpeed,
                 petalWindFrequency: petalWindFrequency,
@@ -21164,6 +22957,7 @@ class $$SettingsTableTableTableManager
                 devShowConflictDocumentIds: devShowConflictDocumentIds,
                 devShowJournalRemotePullButton: devShowJournalRemotePullButton,
                 devShowFpsCounter: devShowFpsCounter,
+                devDisableCache: devDisableCache,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -21207,6 +23001,9 @@ class $$SettingsTableTableTableManager
                 lastSeenNavPage: lastSeenNavPage,
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
+                dreamSplitWidth: dreamSplitWidth,
+                showDreamStatistics: showDreamStatistics,
+                dreamNotesPinned: dreamNotesPinned,
               ),
           createCompanionCallback:
               ({
@@ -21214,6 +23011,7 @@ class $$SettingsTableTableTableManager
                 Value<int> accentColor = const Value.absent(),
                 Value<String> themeMode = const Value.absent(),
                 Value<int> petalColor = const Value.absent(),
+                Value<String?> minorPetalColorsJson = const Value.absent(),
                 Value<int> petalMaxCount = const Value.absent(),
                 Value<double> petalFallSpeed = const Value.absent(),
                 Value<double> petalWindFrequency = const Value.absent(),
@@ -21261,6 +23059,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> devShowJournalRemotePullButton =
                     const Value.absent(),
                 Value<bool> devShowFpsCounter = const Value.absent(),
+                Value<bool> devDisableCache = const Value.absent(),
                 Value<String?> weatherForecastJson = const Value.absent(),
                 Value<int?> weatherChartTempColor = const Value.absent(),
                 Value<int?> weatherChartRainColor = const Value.absent(),
@@ -21317,11 +23116,15 @@ class $$SettingsTableTableTableManager
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> showAnnualizedSubscriptionCost =
                     const Value.absent(),
+                Value<double?> dreamSplitWidth = const Value.absent(),
+                Value<bool> showDreamStatistics = const Value.absent(),
+                Value<bool> dreamNotesPinned = const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
                 themeMode: themeMode,
                 petalColor: petalColor,
+                minorPetalColorsJson: minorPetalColorsJson,
                 petalMaxCount: petalMaxCount,
                 petalFallSpeed: petalFallSpeed,
                 petalWindFrequency: petalWindFrequency,
@@ -21366,6 +23169,7 @@ class $$SettingsTableTableTableManager
                 devShowConflictDocumentIds: devShowConflictDocumentIds,
                 devShowJournalRemotePullButton: devShowJournalRemotePullButton,
                 devShowFpsCounter: devShowFpsCounter,
+                devDisableCache: devDisableCache,
                 weatherForecastJson: weatherForecastJson,
                 weatherChartTempColor: weatherChartTempColor,
                 weatherChartRainColor: weatherChartRainColor,
@@ -21409,6 +23213,9 @@ class $$SettingsTableTableTableManager
                 lastSeenNavPage: lastSeenNavPage,
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
+                dreamSplitWidth: dreamSplitWidth,
+                showDreamStatistics: showDreamStatistics,
+                dreamNotesPinned: dreamNotesPinned,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -24399,6 +26206,342 @@ typedef $$GoalAllocationsTableTableProcessedTableManager =
       GoalAllocationsTableData,
       PrefetchHooks Function()
     >;
+typedef $$PinnedNotesTableTableCreateCompanionBuilder =
+    PinnedNotesTableCompanion Function({
+      required String id,
+      required String body,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$PinnedNotesTableTableUpdateCompanionBuilder =
+    PinnedNotesTableCompanion Function({
+      Value<String> id,
+      Value<String> body,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$PinnedNotesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $PinnedNotesTableTable> {
+  $$PinnedNotesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PinnedNotesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $PinnedNotesTableTable> {
+  $$PinnedNotesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PinnedNotesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PinnedNotesTableTable> {
+  $$PinnedNotesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PinnedNotesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PinnedNotesTableTable,
+          PinnedNotesTableData,
+          $$PinnedNotesTableTableFilterComposer,
+          $$PinnedNotesTableTableOrderingComposer,
+          $$PinnedNotesTableTableAnnotationComposer,
+          $$PinnedNotesTableTableCreateCompanionBuilder,
+          $$PinnedNotesTableTableUpdateCompanionBuilder,
+          (
+            PinnedNotesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $PinnedNotesTableTable,
+              PinnedNotesTableData
+            >,
+          ),
+          PinnedNotesTableData,
+          PrefetchHooks Function()
+        > {
+  $$PinnedNotesTableTableTableManager(
+    _$AppDatabase db,
+    $PinnedNotesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PinnedNotesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PinnedNotesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PinnedNotesTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PinnedNotesTableCompanion(
+                id: id,
+                body: body,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String body,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PinnedNotesTableCompanion.insert(
+                id: id,
+                body: body,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PinnedNotesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PinnedNotesTableTable,
+      PinnedNotesTableData,
+      $$PinnedNotesTableTableFilterComposer,
+      $$PinnedNotesTableTableOrderingComposer,
+      $$PinnedNotesTableTableAnnotationComposer,
+      $$PinnedNotesTableTableCreateCompanionBuilder,
+      $$PinnedNotesTableTableUpdateCompanionBuilder,
+      (
+        PinnedNotesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $PinnedNotesTableTable,
+          PinnedNotesTableData
+        >,
+      ),
+      PinnedNotesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$DismissedNotificationsTableTableCreateCompanionBuilder =
+    DismissedNotificationsTableCompanion Function({
+      required String id,
+      required DateTime dismissedAt,
+      Value<int> rowid,
+    });
+typedef $$DismissedNotificationsTableTableUpdateCompanionBuilder =
+    DismissedNotificationsTableCompanion Function({
+      Value<String> id,
+      Value<DateTime> dismissedAt,
+      Value<int> rowid,
+    });
+
+class $$DismissedNotificationsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $DismissedNotificationsTableTable> {
+  $$DismissedNotificationsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dismissedAt => $composableBuilder(
+    column: $table.dismissedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DismissedNotificationsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $DismissedNotificationsTableTable> {
+  $$DismissedNotificationsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dismissedAt => $composableBuilder(
+    column: $table.dismissedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DismissedNotificationsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DismissedNotificationsTableTable> {
+  $$DismissedNotificationsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get dismissedAt => $composableBuilder(
+    column: $table.dismissedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$DismissedNotificationsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DismissedNotificationsTableTable,
+          DismissedNotificationsTableData,
+          $$DismissedNotificationsTableTableFilterComposer,
+          $$DismissedNotificationsTableTableOrderingComposer,
+          $$DismissedNotificationsTableTableAnnotationComposer,
+          $$DismissedNotificationsTableTableCreateCompanionBuilder,
+          $$DismissedNotificationsTableTableUpdateCompanionBuilder,
+          (
+            DismissedNotificationsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $DismissedNotificationsTableTable,
+              DismissedNotificationsTableData
+            >,
+          ),
+          DismissedNotificationsTableData,
+          PrefetchHooks Function()
+        > {
+  $$DismissedNotificationsTableTableTableManager(
+    _$AppDatabase db,
+    $DismissedNotificationsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DismissedNotificationsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$DismissedNotificationsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$DismissedNotificationsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<DateTime> dismissedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DismissedNotificationsTableCompanion(
+                id: id,
+                dismissedAt: dismissedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required DateTime dismissedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => DismissedNotificationsTableCompanion.insert(
+                id: id,
+                dismissedAt: dismissedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DismissedNotificationsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DismissedNotificationsTableTable,
+      DismissedNotificationsTableData,
+      $$DismissedNotificationsTableTableFilterComposer,
+      $$DismissedNotificationsTableTableOrderingComposer,
+      $$DismissedNotificationsTableTableAnnotationComposer,
+      $$DismissedNotificationsTableTableCreateCompanionBuilder,
+      $$DismissedNotificationsTableTableUpdateCompanionBuilder,
+      (
+        DismissedNotificationsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $DismissedNotificationsTableTable,
+          DismissedNotificationsTableData
+        >,
+      ),
+      DismissedNotificationsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -24407,6 +26550,8 @@ class $AppDatabaseManager {
       $$JournalsTableTableTableManager(_db, _db.journalsTable);
   $$JournalEntriesTableTableTableManager get journalEntriesTable =>
       $$JournalEntriesTableTableTableManager(_db, _db.journalEntriesTable);
+  $$DreamEntriesTableTableTableManager get dreamEntriesTable =>
+      $$DreamEntriesTableTableTableManager(_db, _db.dreamEntriesTable);
   $$TodoListsTableTableTableManager get todoListsTable =>
       $$TodoListsTableTableTableManager(_db, _db.todoListsTable);
   $$TodoTasksTableTableTableManager get todoTasksTable =>
@@ -24446,4 +26591,12 @@ class $AppDatabaseManager {
       $$SavingsGoalsTableTableTableManager(_db, _db.savingsGoalsTable);
   $$GoalAllocationsTableTableTableManager get goalAllocationsTable =>
       $$GoalAllocationsTableTableTableManager(_db, _db.goalAllocationsTable);
+  $$PinnedNotesTableTableTableManager get pinnedNotesTable =>
+      $$PinnedNotesTableTableTableManager(_db, _db.pinnedNotesTable);
+  $$DismissedNotificationsTableTableTableManager
+  get dismissedNotificationsTable =>
+      $$DismissedNotificationsTableTableTableManager(
+        _db,
+        _db.dismissedNotificationsTable,
+      );
 }

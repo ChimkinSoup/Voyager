@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/sync/debouncer.dart';
+import 'package:voyager/core/sync/scroll_activity_gate.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -90,6 +91,54 @@ class SyncEngine {
       payload: payload,
       charOps: charOps,
     );
+  }
+
+  /// Batched counterpart to [syncDocumentImmediately] for a set of documents
+  /// in the same collection that don't carry pending char-ops (a plain
+  /// snapshot upload is enough — e.g. sort-order-only changes). Commits all
+  /// operation-log entries in one Firestore batch, then all document mirrors
+  /// in another, instead of one round-trip pair per document. See
+  /// [SyncRepository.appendOperationsBatch] for why this exists.
+  Future<void> syncDocumentsImmediately({
+    required String collection,
+    required Map<String, Map<String, dynamic>> payloadsByDocumentId,
+  }) async {
+    if (payloadsByDocumentId.isEmpty) return;
+    if (DevFlags.verboseSync) {
+      debugPrint(
+        '[sync] batch upsert $collection ${payloadsByDocumentId.keys.toList()}',
+      );
+    }
+
+    final now = DateTime.now().toUtc();
+    final operations = [
+      for (final entry in payloadsByDocumentId.entries)
+        SyncOperation(
+          id: '${_deviceId}_${entry.key}_${++_sequence}',
+          documentId: entry.key,
+          sequence: _sequence,
+          payload: jsonEncode(entry.value),
+          deviceId: _deviceId,
+          timestamp: now,
+        ),
+    ];
+
+    await ScrollActivityGate.instance.waitUntilIdle();
+    final callStart = DevFlags.verboseSync ? DateTime.now() : null;
+    await _retryPolicy.run(
+      () => _syncRepository.appendOperationsBatch(operations),
+    );
+    await _retryPolicy.run(
+      () => _syncRepository.upsertDocumentsBatch(
+        collection,
+        payloadsByDocumentId,
+      ),
+    );
+    if (callStart != null) {
+      final elapsed = DateTime.now().difference(callStart).inMilliseconds;
+      debugPrint('[sync] firestore batch calls for $collection took ${elapsed}ms');
+    }
+    _syncActivity?.recordUpload(collection);
   }
 
   Future<Map<String, dynamic>?> resolveDocumentPayload(String documentId) {
@@ -178,10 +227,16 @@ class SyncEngine {
     // sync. Retrying each write independently (rather than retrying both
     // together) keeps a retry of the document write from re-appending an
     // already-succeeded operation entry.
+    await ScrollActivityGate.instance.waitUntilIdle();
+    final callStart = DevFlags.verboseSync ? DateTime.now() : null;
     await _retryPolicy.run(() => _syncRepository.appendOperation(operation));
     await _retryPolicy.run(
       () => _syncRepository.upsertDocument(collection, documentId, payload),
     );
+    if (callStart != null) {
+      final elapsed = DateTime.now().difference(callStart).inMilliseconds;
+      debugPrint('[sync] firestore calls for $collection/$documentId took ${elapsed}ms');
+    }
     _syncActivity?.recordUpload(collection);
   }
 }
@@ -228,17 +283,20 @@ class SyncRetryPolicy {
 class BackgroundSyncOrchestrator {
   const BackgroundSyncOrchestrator({
     required JournalRepository journalRepository,
+    required DreamRepository dreamRepository,
     required TodoRepository todoRepository,
     required CalendarRepository calendarRepository,
     required TrackerRepository trackerRepository,
     required FinanceRepository financeRepository,
   }) : _journalRepository = journalRepository,
+       _dreamRepository = dreamRepository,
        _todoRepository = todoRepository,
        _calendarRepository = calendarRepository,
        _trackerRepository = trackerRepository,
        _financeRepository = financeRepository;
 
   final JournalRepository _journalRepository;
+  final DreamRepository _dreamRepository;
   final TodoRepository _todoRepository;
   final CalendarRepository _calendarRepository;
   final TrackerRepository _trackerRepository;
@@ -248,6 +306,7 @@ class BackgroundSyncOrchestrator {
     final cutoff = now ?? DateTime.now().toUtc();
     await Future.wait<void>([
       _journalRepository.purgeExpiredDeleted(cutoff),
+      _dreamRepository.purgeExpiredDeleted(cutoff),
       _todoRepository.purgeExpiredDeleted(cutoff),
       _calendarRepository.purgeExpiredDeleted(cutoff),
       _trackerRepository.purgeExpiredDeleted(cutoff),

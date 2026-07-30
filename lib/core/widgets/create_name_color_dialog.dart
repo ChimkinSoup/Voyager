@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 
@@ -125,11 +126,16 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          label: 'Cancel',
+          dense: true,
         ),
-        FilledButton(onPressed: _submit, child: Text(widget.submitLabel)),
+        GlassButton(
+          onPressed: _submit,
+          label: widget.submitLabel,
+          dense: true,
+        ),
       ],
       ),
     );

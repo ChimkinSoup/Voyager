@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
@@ -24,6 +25,7 @@ class DevSettingsController extends ChangeNotifier {
   bool showConflictDocumentIds = false;
   bool showJournalRemotePullButton = false;
   bool showFpsCounter = false;
+  bool disableCache = false;
 
   Future<void> loadFromSettings() async {
     final repo = _settingsRepository;
@@ -70,6 +72,11 @@ class DevSettingsController extends ChangeNotifier {
 
     if (showFpsCounter != settings.devShowFpsCounter) {
       showFpsCounter = settings.devShowFpsCounter;
+      changed = true;
+    }
+    if (disableCache != settings.devDisableCache) {
+      disableCache = settings.devDisableCache;
+      DevFlags.disableCache = disableCache;
       changed = true;
     }
 
@@ -132,6 +139,14 @@ class DevSettingsController extends ChangeNotifier {
     await _persist();
   }
 
+  Future<void> setDisableCache(bool value) async {
+    if (disableCache == value) return;
+    disableCache = value;
+    DevFlags.disableCache = value;
+    notifyListeners();
+    await _persist();
+  }
+
   Future<void> _persist() async {
     final repo = _settingsRepository;
     if (repo == null) return;
@@ -146,6 +161,7 @@ class DevSettingsController extends ChangeNotifier {
         devShowConflictDocumentIds: showConflictDocumentIds,
         devShowJournalRemotePullButton: showJournalRemotePullButton,
         devShowFpsCounter: showFpsCounter,
+        devDisableCache: disableCache,
       ),
     );
   }

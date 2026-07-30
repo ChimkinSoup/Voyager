@@ -1,21 +1,21 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
-// ignore: unused_import
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
+import 'package:voyager/features/notifications/notification_bell.dart';
+import 'package:voyager/features/notifications/notification_inbox_popover.dart';
 import 'package:voyager/features/journal/geometric_texture_warmup.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
@@ -53,6 +53,7 @@ class AppShell extends ConsumerWidget {
           const CalendarMorphWarmup(),
           const GeometricTextureWarmup(),
           const WeatherChartTransitionWarmup(),
+          const NotificationPopoverWarmup(),
           Scaffold(
             backgroundColor: Colors.transparent,
             body: Row(
@@ -77,11 +78,7 @@ class AppShell extends ConsumerWidget {
             ),
           ),
           const CacheStatusOverlay(),
-          // TEMP BISECT: FPS counter overlay disabled. It is the only thing that
-          // drives rendering with a continuous Ticker (native refresh); on
-          // Windows that can cause severe pointer-input latency. If input is
-          // snappy with this off, the Ticker is the culprit. Restore after.
-          // const FpsCounterOverlay(),
+          const FpsCounterOverlay(),
         ],
       ),
     );
@@ -140,26 +137,40 @@ class _VoyagerNavigationRail extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 72,
-      child: Column(
-        children: [
-          _RailClockWeather(accent: accent),
-          const SizedBox(height: 8),
-          for (final item in orderedDestinations)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: ExcludeFocus(
-                child: _RailDestinationButton(
-                  icon: item.dest.icon,
-                  label: item.dest.label,
-                  selected: item.originalIndex == selectedIndex,
-                  accent: accent,
-                  onTap: () => onDestinationSelected(item.originalIndex),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            primary: false,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Column(
+                  children: [
+                    _RailClockWeather(accent: accent),
+                    const SizedBox(height: 8),
+                    for (final item in orderedDestinations)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: ExcludeFocus(
+                          child: _RailDestinationButton(
+                            icon: item.dest.icon,
+                            label: item.dest.label,
+                            selected: item.originalIndex == selectedIndex,
+                            accent: accent,
+                            onTap: () => onDestinationSelected(item.originalIndex),
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
+                    const _SyncActivityIndicator(),
+                    const SizedBox(height: 4),
+                    NotificationBell(accent: accent),
+                  ],
                 ),
               ),
             ),
-          const Spacer(),
-          const _SyncActivityIndicator(),
-        ],
+          );
+        },
       ),
     );
   }
@@ -280,145 +291,65 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
         ? colorScheme.onSurface.withValues(alpha: 0.10)
         : Colors.transparent;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: Semantics(
-        button: true,
-        selected: widget.selected,
-        label: widget.label,
-        child: Material(
-          color: Colors.transparent,
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.label,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: widget.onTap,
+          onHover: (hovered) {
+            if (_hovered != hovered) {
+              setState(() => _hovered = hovered);
+            }
+          },
           borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(18),
-            hoverColor: Colors.transparent,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 100),
-              curve: Curves.easeOut,
-              width: _railItemWidth,
-              height: _railItemHeight,
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _RailGlowingIcon(
-                    icon: widget.icon,
-                    color: foreground,
-                    glowColor: widget.accent,
-                    glow: widget.selected,
+          hoverColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            curve: Curves.easeOut,
+            width: _railItemWidth,
+            height: _railItemHeight,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(18),
+              border: widget.selected
+                  ? Border.all(
+                      color: widget.accent.withValues(
+                        alpha: accentBorderAlpha,
+                      ),
+                      width: 1.0,
+                    )
+                  : null,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(widget.icon, size: 24, color: foreground),
+                const SizedBox(height: 3),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOut,
+                  style:
+                      Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: foreground,
+                        fontSize: 10,
+                      ) ??
+                      const TextStyle(),
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
-                  AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 150),
-                    curve: Curves.easeOut,
-                    style:
-                        Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: foreground,
-                          fontSize: 10,
-                        ) ??
-                        const TextStyle(),
-                    child: Text(
-                      widget.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _RailGlowingIcon extends StatelessWidget {
-  const _RailGlowingIcon({
-    required this.icon,
-    required this.color,
-    required this.glowColor,
-    required this.glow,
-    this.size = 24,
-    this.glowAlpha = 0.65,
-    this.glowBlur = 10,
-    this.intenseGlow = false,
-  });
-
-  final IconData icon;
-  final Color color;
-  final Color glowColor;
-  final bool glow;
-  final double size;
-  final double glowAlpha;
-  final double glowBlur;
-  final bool intenseGlow;
-
-  @override
-  Widget build(BuildContext context) {
-    final iconWidget = Icon(this.icon, size: size, color: color);
-    final glowTint = intenseGlow
-        ? Color.lerp(glowColor, VoyagerColors.of(context).highlightWash, 0.4)!
-        : glowColor;
-    final glowOpacity = glowAlpha.clamp(0.0, 1.0);
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          if (glow && intenseGlow) ...[
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(
-                sigmaX: glowBlur * 1.8,
-                sigmaY: glowBlur * 1.8,
-              ),
-              child: Icon(
-                this.icon,
-                size: size,
-                color: glowTint.withValues(alpha: glowOpacity * 0.75),
-              ),
-            ),
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(
-                sigmaX: glowBlur * 0.55,
-                sigmaY: glowBlur * 0.55,
-              ),
-              child: Icon(
-                this.icon,
-                size: size,
-                color: glowTint.withValues(alpha: glowOpacity),
-              ),
-            ),
-          ] else
-            AnimatedOpacity(
-              opacity: glow ? 1 : 0,
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(
-                  sigmaX: glowBlur,
-                  sigmaY: glowBlur,
-                ),
-                child: Icon(
-                  this.icon,
-                  size: size,
-                  color: glowColor.withValues(alpha: glowOpacity),
-                ),
-              ),
-            ),
-          iconWidget,
-        ],
       ),
     );
   }
@@ -479,58 +410,53 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
             ),
           ),
           const SizedBox(height: 8),
-          MouseRegion(
-            onEnter: (_) => setState(() => _weatherHovered = true),
-            onExit: (_) => setState(() => _weatherHovered = false),
-            cursor: SystemMouseCursors.click,
-            child: Semantics(
-              button: true,
-              label: 'Weather forecast',
-              child: Material(
-                color: Colors.transparent,
+          Semantics(
+            button: true,
+            label: 'Weather forecast',
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+              child: InkWell(
+                onTap: () => showWeatherForecastSheet(context),
+                onHover: (hovered) {
+                  if (_weatherHovered != hovered) {
+                    setState(() => _weatherHovered = hovered);
+                  }
+                },
                 borderRadius: BorderRadius.circular(18),
-                child: InkWell(
-                  onTap: () => showWeatherForecastSheet(context),
-                  borderRadius: BorderRadius.circular(18),
-                  hoverColor: Colors.transparent,
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 90),
-                    width: _railItemWidth,
-                    height: _railItemHeight,
-                    decoration: BoxDecoration(
-                      color: _weatherHovered
-                          ? colorScheme.onSurface.withValues(alpha: 0.10)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _RailGlowingIcon(
-                          icon: weatherIconData(icon),
-                          color: colorScheme.onSurface,
-                          glowColor: widget.accent,
-                          glow: true,
-                          size: 22,
-                          glowAlpha: 1,
-                          glowBlur: 12,
-                          intenseGlow: true,
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 90),
+                  width: _railItemWidth,
+                  height: _railItemHeight,
+                  decoration: BoxDecoration(
+                    color: _weatherHovered
+                        ? colorScheme.onSurface.withValues(alpha: 0.10)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        weatherIconData(icon),
+                        size: 22,
+                        color: colorScheme.onSurface,
+                      ),
+                      if (weather?.tempC != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${weather!.tempC!.round()}°',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: colorScheme.onSurface,
+                                fontSize: 10,
+                              ),
                         ),
-                        if (weather?.tempC != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            '${weather!.tempC!.round()}°',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: colorScheme.onSurface,
-                                  fontSize: 10,
-                                ),
-                          ),
-                        ],
                       ],
-                    ),
+                    ],
                   ),
                 ),
               ),

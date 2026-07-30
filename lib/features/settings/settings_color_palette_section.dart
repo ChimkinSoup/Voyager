@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -130,9 +131,10 @@ class _SettingsColorPaletteSectionState
               ),
             ),
             const SizedBox(width: 8),
-            FilledButton(
+            GlassButton(
               onPressed: _addColor,
-              child: const Text('Add'),
+              label: 'Add',
+              dense: true,
             ),
           ],
         ),

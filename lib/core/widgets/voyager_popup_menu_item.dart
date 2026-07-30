@@ -3,6 +3,12 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 
 /// Opens a Voyager-styled popup menu with no outer padding by default.
+///
+/// When [shiftUpToFit] is `false` (default), the menu remains anchored at its
+/// top position (e.g. directly below the trigger control) instead of pushing
+/// upwards over the popup/trigger control when the menu contains many items.
+/// In this case, the menu height is constrained to the available space below
+/// and its inner list scrollable.
 Future<T?> showVoyagerMenu<T>({
   required BuildContext context,
   required RelativeRect position,
@@ -10,24 +16,225 @@ Future<T?> showVoyagerMenu<T>({
   BoxConstraints? constraints,
   EdgeInsetsGeometry menuPadding = EdgeInsets.zero,
   Color? accentColor,
+  bool shiftUpToFit = false,
 }) {
   final theme = Theme.of(context);
   final menuStyle = VoyagerMenuTheme.showMenuStyle(theme);
-  final accent = accentColor ?? theme.colorScheme.primary;
-  return showMenu<T>(
-    context: context,
-    position: position,
-    constraints: constraints,
-    shape: accentColor != null ? VoyagerMenuTheme.shape(accent) : menuStyle.shape,
-    color: menuStyle.color,
-    elevation: menuStyle.elevation,
-    shadowColor: menuStyle.shadowColor,
-    surfaceTintColor: menuStyle.surfaceTintColor,
-    menuPadding: menuPadding,
-    clipBehavior: Clip.none,
-    items: items,
+  final shape = accentColor != null ? VoyagerMenuTheme.shape(accentColor) : menuStyle.shape;
+
+  return Navigator.of(context).push<T>(
+    VoyagerPopupMenuRoute<T>(
+      position: position,
+      items: items,
+      constraints: constraints,
+      menuPadding: menuPadding,
+      shape: shape,
+      color: menuStyle.color,
+      elevation: menuStyle.elevation,
+      shadowColor: menuStyle.shadowColor,
+      surfaceTintColor: menuStyle.surfaceTintColor,
+      clipBehavior: Clip.none,
+      shiftUpToFit: shiftUpToFit,
+    ),
   );
 }
+
+/// Custom SingleChildLayoutDelegate for Voyager popup menus.
+class VoyagerPopupMenuRouteLayout extends SingleChildLayoutDelegate {
+  VoyagerPopupMenuRouteLayout(
+    this.position,
+    this.textDirection,
+    this.padding, {
+    this.shiftUpToFit = false,
+  });
+
+  final RelativeRect position;
+  final TextDirection textDirection;
+  final EdgeInsets padding;
+  final bool shiftUpToFit;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final double maxChildWidth = constraints.maxWidth - padding.horizontal;
+    double maxChildHeight = constraints.maxHeight - padding.vertical;
+
+    if (!shiftUpToFit) {
+      final double availableBelow =
+          constraints.maxHeight - position.top - padding.bottom;
+      if (availableBelow >= 120) {
+        maxChildHeight = availableBelow;
+      } else {
+        final double availableAbove = position.top - padding.top - 8;
+        if (availableAbove > availableBelow) {
+          maxChildHeight = availableAbove;
+        }
+      }
+    }
+
+    return BoxConstraints(
+      minWidth: 0.0,
+      maxWidth: maxChildWidth,
+      minHeight: 0.0,
+      maxHeight: maxChildHeight,
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    double x;
+    if (position.left > position.right) {
+      x = position.left;
+    } else {
+      x = size.width - position.right - childSize.width;
+    }
+    x = x.clamp(padding.left, size.width - padding.right - childSize.width);
+
+    double y = position.top;
+    if (shiftUpToFit) {
+      if (y + childSize.height > size.height - padding.bottom) {
+        y = size.height - padding.bottom - childSize.height;
+      }
+      y = y.clamp(padding.top, size.height - padding.bottom - childSize.height);
+    } else {
+      final double availableBelow = size.height - position.top - padding.bottom;
+      if (availableBelow >= 120) {
+        y = position.top;
+      } else {
+        final double availableAbove = position.top - padding.top - 8;
+        if (availableAbove > availableBelow) {
+          y = (position.top - 8 - childSize.height)
+              .clamp(padding.top, position.top - 8);
+        } else {
+          y = position.top;
+        }
+      }
+    }
+
+    return Offset(x, y);
+  }
+
+  @override
+  bool shouldRelayout(VoyagerPopupMenuRouteLayout oldDelegate) {
+    return position != oldDelegate.position ||
+        textDirection != oldDelegate.textDirection ||
+        padding != oldDelegate.padding ||
+        shiftUpToFit != oldDelegate.shiftUpToFit;
+  }
+}
+
+/// Custom [PopupRoute] for Voyager popup menus.
+class VoyagerPopupMenuRoute<T> extends PopupRoute<T> {
+  VoyagerPopupMenuRoute({
+    required this.position,
+    required this.items,
+    this.constraints,
+    this.menuPadding = EdgeInsets.zero,
+    this.shape,
+    this.color,
+    this.elevation,
+    this.shadowColor,
+    this.surfaceTintColor,
+    this.clipBehavior = Clip.none,
+    this.shiftUpToFit = false,
+  });
+
+  final RelativeRect position;
+  final List<PopupMenuEntry<T>> items;
+  final BoxConstraints? constraints;
+  final EdgeInsetsGeometry menuPadding;
+  final ShapeBorder? shape;
+  final Color? color;
+  final double? elevation;
+  final Color? shadowColor;
+  final Color? surfaceTintColor;
+  final Clip clipBehavior;
+  final bool shiftUpToFit;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 300);
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  String? get barrierLabel => 'Dismiss';
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final mediaQuery = MediaQuery.of(context);
+    final popupMenuTheme = PopupMenuTheme.of(context);
+
+    final List<Widget> children = <Widget>[];
+    for (int i = 0; i < items.length; i += 1) {
+      children.add(items[i]);
+    }
+
+    final Widget menuContent = ConstrainedBox(
+      constraints:
+          constraints ?? const BoxConstraints(minWidth: 112, maxWidth: 280),
+      child: SingleChildScrollView(
+        padding: menuPadding,
+        child: ListBody(children: children),
+      ),
+    );
+
+    // The fade/scale transition is applied here, around just the menu's own
+    // box, rather than in [buildTransitions] — that method only ever sees
+    // the *page* passed to it, which is this whole route's full-screen
+    // CustomSingleChildLayout. Scaling that would grow the menu from the
+    // screen's own top-center instead of from the menu's anchored position.
+    final Widget menuContainer = FadeTransition(
+      opacity: CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOut,
+        reverseCurve: Curves.easeIn,
+      ),
+      child: ScaleTransition(
+        scale: CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        ),
+        alignment: Alignment.topCenter,
+        child: Material(
+          type: MaterialType.card,
+          color: color ?? popupMenuTheme.color,
+          elevation: elevation ?? popupMenuTheme.elevation ?? 8.0,
+          shadowColor: shadowColor ?? popupMenuTheme.shadowColor,
+          surfaceTintColor: surfaceTintColor ?? popupMenuTheme.surfaceTintColor,
+          shape: shape ?? popupMenuTheme.shape,
+          clipBehavior: clipBehavior,
+          child: menuContent,
+        ),
+      ),
+    );
+
+    return MediaQuery(
+      data: mediaQuery.removePadding(removeTop: true, removeBottom: true),
+      child: Builder(
+        builder: (BuildContext context) {
+          return CustomSingleChildLayout(
+            delegate: VoyagerPopupMenuRouteLayout(
+              position,
+              Directionality.of(context),
+              mediaQuery.padding,
+              shiftUpToFit: shiftUpToFit,
+            ),
+            child: menuContainer,
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 /// Builds popup menu entries with position-aware rounded hover highlights.
 List<PopupMenuEntry<T>> voyagerPopupMenuEntries<T>(

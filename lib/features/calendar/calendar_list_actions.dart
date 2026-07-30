@@ -6,6 +6,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
@@ -25,7 +26,7 @@ Future<String?> promptCalendarName(
         content: SizedBox(
           width: 400,
           child: LabeledTextField(
-            label: title,
+            label: 'Name',
             controller: controller,
             autofocus: true,
             textInputAction: TextInputAction.done,
@@ -33,13 +34,15 @@ Future<String?> promptCalendarName(
           ),
         ),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            label: 'Cancel',
+            dense: true,
           ),
-          FilledButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('OK'),
+            label: 'OK',
+            dense: true,
           ),
         ],
       ),

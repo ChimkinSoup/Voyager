@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 
@@ -39,9 +40,10 @@ class SyncConflictBanner extends ConsumerWidget {
                   color: Theme.of(context).colorScheme.onErrorContainer,
                 ),
               ),
-              trailing: FilledButton(
+              trailing: GlassButton(
                 onPressed: () => _openResolutionDialog(context, ref),
-                child: const Text('Resolve'),
+                label: 'Resolve',
+                dense: true,
               ),
             ),
           ),
@@ -220,7 +222,7 @@ class _SyncConflictResolutionDialogState
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton(
+                          child: GlassButton(
                             onPressed: _resolving
                                 ? null
                                 : () => _resolveAllConflicts(
@@ -228,12 +230,12 @@ class _SyncConflictResolutionDialogState
                                           .read(remoteSyncServiceProvider)
                                           .resolveAllConflictsKeepLocal(),
                                     ),
-                            child: const Text('Keep local for all'),
+                            label: 'Keep local for all',
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: OutlinedButton(
+                          child: GlassButton(
                             onPressed: _resolving
                                 ? null
                                 : () => _resolveAllConflicts(
@@ -241,7 +243,7 @@ class _SyncConflictResolutionDialogState
                                           .read(remoteSyncServiceProvider)
                                           .resolveAllConflictsKeepRemote(),
                                     ),
-                            child: const Text('Keep remote for all'),
+                            label: 'Keep remote for all',
                           ),
                         ),
                       ],
@@ -289,29 +291,25 @@ class _SyncConflictResolutionDialogState
                     enabled: !_resolving,
                   ),
                   const SizedBox(height: 16),
-                  OutlinedButton.icon(
+                  GlassButton(
                     onPressed: _resolving
                         ? null
                         : () => _confirmPermanentRemoteDelete(conflict),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error,
-                      side: BorderSide(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
+                    color: Theme.of(context).colorScheme.error,
                     icon: const Icon(Icons.cloud_off_outlined, size: 18),
-                    label: const Text('Delete from Firestore permanently'),
+                    label: 'Delete from Firestore permanently',
                   ),
                 ],
               ),
             ),
           ),
           actions: [
-            TextButton(
+            GlassButton(
               onPressed: _resolving ? null : () => Navigator.pop(context),
-              child: const Text('Close'),
+              label: 'Close',
+              dense: true,
             ),
-            TextButton(
+            GlassButton(
               onPressed: _resolving
                   ? null
                   : () => _resolveConflict(
@@ -319,9 +317,10 @@ class _SyncConflictResolutionDialogState
                             .read(remoteSyncServiceProvider)
                             .resolveConflictKeepLocal(conflict),
                       ),
-              child: const Text('Keep Local'),
+              label: 'Keep Local',
+              dense: true,
             ),
-            TextButton(
+            GlassButton(
               onPressed: _resolving
                   ? null
                   : () => _resolveConflict(
@@ -329,9 +328,10 @@ class _SyncConflictResolutionDialogState
                             .read(remoteSyncServiceProvider)
                             .resolveConflictKeepRemote(conflict),
                       ),
-              child: const Text('Keep Remote'),
+              label: 'Keep Remote',
+              dense: true,
             ),
-            FilledButton(
+            GlassButton(
               onPressed: _resolving
                   ? null
                   : () => _resolveConflict(
@@ -342,6 +342,7 @@ class _SyncConflictResolutionDialogState
                               mergedText: mergeController.text,
                             ),
                       ),
+              dense: true,
               child: _resolving
                   ? const SizedBox(
                       width: 18,
@@ -364,9 +365,10 @@ class _SyncConflictResolutionDialogState
         title: const Text('Resolve sync conflict'),
         content: Text('$error'),
         actions: [
-          TextButton(
+          GlassButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            label: 'Close',
+            dense: true,
           ),
         ],
       ),

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/dev/cache_status.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
@@ -40,6 +41,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
@@ -61,6 +63,15 @@ const _useCloudFunctions = bool.fromEnvironment(
 );
 const _openWeatherApiKey = String.fromEnvironment('OPENWEATHER_API_KEY');
 
+/// Opens the real on-disk voyager.sqlite (see [AppDatabase.create]) — not a
+/// test double. Any ProviderScope-based test (e.g. one that pumps
+/// [VoyagerApp] or another widget tree that reaches this provider) MUST
+/// override it with `AppDatabase.inMemory()`, or the test reads/writes your
+/// actual app data. Worse, real persisted settings can enable the
+/// Timer-driven background animation (geometric wave / petal field), which
+/// never stops rescheduling itself — pumpAndSettle() has no timeout, so it
+/// spins forever, ballooning memory and disk I/O. See test/widget_test.dart
+/// for the override pattern.
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase.create();
   ref.onDispose(db.close);
@@ -69,6 +80,13 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 final journalRepositoryProvider = Provider<JournalRepository>((ref) {
   return DriftJournalRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
+});
+
+final dreamRepositoryProvider = Provider<DreamRepository>((ref) {
+  return DriftDreamRepository(
     ref.watch(databaseProvider),
     syncActivity: ref.read(syncActivityProvider),
   );
@@ -91,6 +109,10 @@ final trackerRepositoryProvider = Provider<TrackerRepository>((ref) {
 
 final financeRepositoryProvider = Provider<FinanceRepository>((ref) {
   return DriftFinanceRepository(ref.watch(databaseProvider));
+});
+
+final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
+  return DriftNotificationRepository(ref.watch(databaseProvider));
 });
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
@@ -195,6 +217,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
   final service = RemoteSyncService(
     syncRepository: ref.watch(syncRepositoryProvider),
     journalRepository: ref.watch(journalRepositoryProvider),
+    dreamRepository: ref.watch(dreamRepositoryProvider),
     todoRepository: ref.watch(todoRepositoryProvider),
     weatherService: ref.watch(weatherServiceProvider),
     syncEngine: ref.watch(syncEngineProvider),
@@ -217,6 +240,13 @@ final journalWriteCoordinatorProvider = Provider<JournalWriteCoordinator>((
     journalRepository: ref.watch(journalRepositoryProvider),
     remoteSync: ref.watch(remoteSyncServiceProvider),
     onEntrySaved: () => invalidateJournalEntryProviders(ref),
+  );
+});
+
+final dreamWriteCoordinatorProvider = Provider<DreamWriteCoordinator>((ref) {
+  return DreamWriteCoordinator(
+    dreamRepository: ref.watch(dreamRepositoryProvider),
+    remoteSync: ref.watch(remoteSyncServiceProvider),
   );
 });
 
@@ -323,6 +353,7 @@ final lazyLoadProvider = Provider((ref) {
 final backgroundSyncOrchestratorProvider = Provider((ref) {
   return BackgroundSyncOrchestrator(
     journalRepository: ref.watch(journalRepositoryProvider),
+    dreamRepository: ref.watch(dreamRepositoryProvider),
     todoRepository: ref.watch(todoRepositoryProvider),
     calendarRepository: ref.watch(calendarRepositoryProvider),
     trackerRepository: ref.watch(trackerRepositoryProvider),
@@ -356,6 +387,7 @@ final petalFieldParamsProvider = Provider<PetalFieldParams>((ref) {
   if (s == null) return PetalFieldParams.defaults;
   return PetalFieldParams(
     color: Color(s.petalColor),
+    minorColors: s.minorPetalColors.map(Color.new).toList(),
     maxPetals: s.petalMaxCount,
     fallSpeed: s.petalFallSpeed,
     windFrequency: s.petalWindFrequency,
@@ -428,6 +460,11 @@ final historicalJournalEntriesProvider = FutureProvider.family((
   return ref.watch(lazyLoadProvider).loadHistoricalEntries(before: before);
 });
 
+final allDreamEntriesProvider = FutureProvider((ref) {
+  ref.keepAlive();
+  return ref.watch(dreamRepositoryProvider).getAllEntries(includeDeleted: false);
+});
+
 final todoListsProvider = FutureProvider((ref) {
   ref.keepAlive();
   return ref.watch(todoRepositoryProvider).listLists();
@@ -443,11 +480,15 @@ final todoTasksProvider = FutureProvider.family<List<TodoTask>, String>((
 
 final allTodoTasksProvider = FutureProvider<List<TodoTask>>((ref) async {
   ref.keepAlive();
-  final repo = ref.watch(todoRepositoryProvider);
   final lists = await ref.watch(todoListsProvider.future);
   final all = <TodoTask>[];
   for (final list in lists) {
-    all.addAll(await repo.listTasks(list.id));
+    // Route through the per-list family provider (instead of calling the
+    // repository directly) so this reuses its cache: invalidating this
+    // provider alone — which happens on every save — no longer forces a
+    // re-query of every list's tasks, only the ones whose own
+    // todoTasksProvider(listId) was actually invalidated.
+    all.addAll(await ref.watch(todoTasksProvider(list.id).future));
   }
   return all;
 });
@@ -455,11 +496,10 @@ final allTodoTasksProvider = FutureProvider<List<TodoTask>>((ref) async {
 final todoListStatsProvider =
     FutureProvider<Map<String, ({int active, int completed})>>((ref) async {
       ref.keepAlive();
-      final repo = ref.watch(todoRepositoryProvider);
       final lists = await ref.watch(todoListsProvider.future);
       final stats = <String, ({int active, int completed})>{};
       for (final list in lists) {
-        final tasks = await repo.listTasks(list.id);
+        final tasks = await ref.watch(todoTasksProvider(list.id).future);
         stats[list.id] = (
           active: tasks.where((t) => !t.completed).length,
           completed: tasks.where((t) => t.completed).length,
@@ -577,11 +617,15 @@ final trackerValuesProvider = FutureProvider.family((
     final analytics = ref.watch(analyticsServiceProvider);
     return wordCountTrackerValues(entries, countWords: analytics.countWords);
   }
+  if (trackerId == kDreamLoggedTrackerId) {
+    final entries = await ref.watch(allDreamEntriesProvider.future);
+    return dreamLoggedTrackerValues(entries);
+  }
   return ref.watch(trackerRepositoryProvider).listValues(trackerId);
 });
 
 /// Number of daily trackers that have no entry recorded for today's local date.
-/// Used by [StatisticsActionFab] to trigger its glow animation.
+/// Feeds the notification bell's semi-important state.
 final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
   ref.keepAlive();
   final trackers = await ref.watch(trackersProvider.future);
@@ -602,6 +646,67 @@ final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
     if (!hasToday) pending++;
   }
   return pending;
+});
+
+final pinnedNotesProvider = FutureProvider<List<PinnedNote>>((ref) {
+  ref.keepAlive();
+  return ref.watch(notificationRepositoryProvider).listPinnedNotes();
+});
+
+final notificationDismissalsProvider = FutureProvider<Set<String>>((ref) {
+  ref.keepAlive();
+  return ref.watch(notificationRepositoryProvider).listDismissals();
+});
+
+/// Every task/event/bill currently urgent enough to notify about, sorted
+/// soonest-due first, before dismissals are applied.
+final notificationFeedProvider = FutureProvider<List<NotificationFeedItem>>((
+  ref,
+) async {
+  ref.keepAlive();
+  final tasks = await ref.watch(allTodoTasksProvider.future);
+  final events = await ref.watch(calendarEventsProvider(null).future);
+  final bills = await ref.watch(subscriptionsProvider.future);
+  return buildNotificationFeed(
+    tasks: tasks,
+    events: events,
+    bills: bills,
+    now: DateTime.now(),
+  );
+});
+
+final visibleNotificationFeedProvider =
+    FutureProvider<List<NotificationFeedItem>>((ref) async {
+      final feed = await ref.watch(notificationFeedProvider.future);
+      final dismissed = await ref.watch(notificationDismissalsProvider.future);
+      return feed
+          .where((item) => !dismissed.contains(item.dismissalKey))
+          .toList();
+    });
+
+final hiddenNotificationFeedProvider =
+    FutureProvider<List<NotificationFeedItem>>((ref) async {
+      final feed = await ref.watch(notificationFeedProvider.future);
+      final dismissed = await ref.watch(notificationDismissalsProvider.future);
+      return feed
+          .where((item) => dismissed.contains(item.dismissalKey))
+          .toList();
+    });
+
+/// Idle/semi/important state driving the nav-rail bell's dot. A pending daily
+/// tracker entry counts as semi-important even though it has no row of its
+/// own in the feed (it's surfaced via the popover's embedded Analytics
+/// section instead).
+final notificationBadgeStateProvider = Provider<NotificationUrgency?>((ref) {
+  final feed =
+      ref.watch(visibleNotificationFeedProvider).valueOrNull ??
+      const <NotificationFeedItem>[];
+  final pendingStats = ref.watch(pendingStatEntriesProvider).valueOrNull ?? 0;
+  if (feed.any((i) => i.urgency == NotificationUrgency.important)) {
+    return NotificationUrgency.important;
+  }
+  if (feed.isNotEmpty || pendingStats > 0) return NotificationUrgency.semi;
+  return null;
 });
 
 final geometricShaderProvider = FutureProvider<FragmentProgram?>((ref) async {
@@ -765,6 +870,9 @@ final devGeometricTexturePanelOpenProvider = StateProvider<bool>(
 /// Whether the dev-menu geometric wave slider panel is expanded.
 final devGeometricWavePanelOpenProvider = StateProvider<bool>((ref) => false);
 
+/// Whether the dev-menu leaf design gallery is expanded.
+final devLeafGalleryPanelOpenProvider = StateProvider<bool>((ref) => false);
+
 /// Dev-only: when true the background is replaced with a row-fade visualiser
 /// that shows the dark<->regular shade transition in isolation. Not persisted —
 /// always off on a fresh launch so it can't be left on by accident.
@@ -772,6 +880,7 @@ final geometricDebugRowFadeProvider = StateProvider<bool>((ref) => false);
 
 final shellDataWarmupProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
+  if (DevFlags.disableCache) return;
   final listsFuture = ref.read(todoListsProvider.future);
 
   await Future.wait<void>([
@@ -804,6 +913,11 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
         ),
       ]);
     }),
+    ref.read(pinnedNotesProvider.future).then((_) {}),
+    ref.read(notificationDismissalsProvider.future).then((_) {}),
+    ref.read(notificationFeedProvider.future).then((_) {}),
+    ref.read(visibleNotificationFeedProvider.future).then((_) {}),
+    ref.read(hiddenNotificationFeedProvider.future).then((_) {}),
   ]);
 });
 
@@ -889,6 +1003,8 @@ final warmupTrackerProvider = ChangeNotifierProvider<WarmupTracker>((ref) {
 });
 
 final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
+  if (DevFlags.disableCache) return const CacheStatusSnapshot(items: []);
+
   final warmup = ref.watch(warmupTrackerProvider);
 
   final items = <CacheItemStatus>[

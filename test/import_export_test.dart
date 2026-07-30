@@ -295,6 +295,7 @@ void main() {
       final fakeFirestore = FakeFirebaseFirestore();
       final fakeAuth = FakeAuthRepository();
       final journalRepo = DriftJournalRepository(db);
+      final dreamRepo = DriftDreamRepository(db);
       final todoRepo = DriftTodoRepository(db);
 
       final docId = 'collision-doc-999';
@@ -338,6 +339,7 @@ void main() {
       final remoteSync = RemoteSyncService(
         syncRepository: syncRepo,
         journalRepository: journalRepo,
+        dreamRepository: dreamRepo,
         todoRepository: todoRepo,
         weatherService: weatherService,
         syncEngine: syncEngine,

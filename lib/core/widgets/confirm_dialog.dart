@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 
 Future<bool> showConfirmDialog(
   BuildContext context, {
@@ -21,13 +22,16 @@ Future<bool> showConfirmDialog(
           title: Text(title),
           content: Text(message),
           actions: [
-            TextButton(
+            GlassButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text(cancelLabel),
+              label: cancelLabel,
+              dense: true,
             ),
-            FilledButton(
+            GlassButton(
               onPressed: () => Navigator.pop(context, true),
-              child: Text(confirmLabel),
+              label: confirmLabel,
+              color: Theme.of(context).colorScheme.error,
+              dense: true,
             ),
           ],
         ),
@@ -54,23 +58,23 @@ Future<DeleteContainerChoice> showDeleteContainerDialog(
       title: Text(title),
       content: Text(message),
       actions: [
-        TextButton(
+        GlassButton(
           onPressed: () => Navigator.pop(context, DeleteContainerChoice.cancel),
-          child: const Text('Cancel'),
+          label: 'Cancel',
+          dense: true,
         ),
-        FilledButton(
+        GlassButton(
           onPressed: () =>
               Navigator.pop(context, DeleteContainerChoice.moveToDefault),
-          child: Text(moveLabel),
+          label: moveLabel,
+          dense: true,
         ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error,
-            foregroundColor: Theme.of(context).colorScheme.onError,
-          ),
+        GlassButton(
           onPressed: () =>
               Navigator.pop(context, DeleteContainerChoice.deleteAll),
-          child: Text(deleteAllLabel),
+          label: deleteAllLabel,
+          color: Theme.of(context).colorScheme.error,
+          dense: true,
         ),
       ],
     ),

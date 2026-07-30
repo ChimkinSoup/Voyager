@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_asset_modal.dart';
@@ -425,9 +426,9 @@ class _BreakdownCard extends ConsumerWidget {
     return _AnalyticsCard(
       icon: PhosphorIconsRegular.chartPieSlice,
       title: 'Spending Breakdown',
-      trailing: IconButton(
+      trailing: GlassButton(
         icon: const Icon(PhosphorIconsRegular.folderSimple, size: 16),
-        visualDensity: VisualDensity.compact,
+        dense: true,
         tooltip: 'Manage categories',
         onPressed: () => _showCategoryManager(context, ref),
       ),
@@ -619,6 +620,8 @@ class _CategoryManager extends ConsumerWidget {
                 onPressed: Navigator.of(context).pop,
                 icon: const Icon(PhosphorIconsRegular.x, size: 18),
                 tooltip: 'Close',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
@@ -665,10 +668,10 @@ class _CategoryManager extends ConsumerWidget {
                     existing: category),
               ),
           const SizedBox(height: 12),
-          FilledButton.icon(
+          GlassButton(
             onPressed: () => showCategoryModal(context, ref),
             icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-            label: const Text('New category'),
+            label: 'New category',
           ),
         ],
       ),
@@ -705,9 +708,9 @@ class _NetWorthCard extends ConsumerWidget {
     return _AnalyticsCard(
       icon: PhosphorIconsRegular.trendUp,
       title: 'Net Worth',
-      trailing: IconButton(
+      trailing: GlassButton(
         icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-        visualDensity: VisualDensity.compact,
+        dense: true,
         tooltip: 'Add asset',
         onPressed: () => showAssetModal(context, ref),
       ),

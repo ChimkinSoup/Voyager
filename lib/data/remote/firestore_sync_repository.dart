@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -36,8 +37,20 @@ class FirestoreSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<void> watchCollection(String collection) {
-    return _collection(collection).snapshots().map((_) {});
+  Stream<Set<String>> watchCollection(String collection) {
+    return _collection(collection).snapshots().map(
+      (snap) => {
+        for (final change in snap.docChanges)
+          if (change.type != DocumentChangeType.removed) change.doc.id,
+      },
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getDocument(String collection, String id) async {
+    final snap = await _doc(collection, id).get();
+    if (!snap.exists || snap.data() == null) return null;
+    return snap.data();
   }
 
   @override
@@ -82,32 +95,37 @@ class FirestoreSyncRepository implements SyncRepository {
   @override
   Future<bool> claimCalendarLock(GoogleCalendarSyncLock lock) async {
     final ref = _firestore.doc('users/$_userId/sync_locks/calendar');
-    return _firestore.runTransaction((txn) async {
-      final snap = await txn.get(ref);
-      final now = DateTime.now().toUtc();
-      if (!snap.exists || snap.data() == null) {
-        txn.set(ref, {
-          'deviceId': lock.deviceId,
-          'lockedAt': lock.lockedAt.toIso8601String(),
-          'expiresAt': lock.expiresAt.toIso8601String(),
-        });
-        return true;
-      }
-      final existing = GoogleCalendarSyncLock(
-        deviceId: snap.data()!['deviceId'] as String,
-        lockedAt: DateTime.parse(snap.data()!['lockedAt'] as String).toUtc(),
-        expiresAt: DateTime.parse(snap.data()!['expiresAt'] as String).toUtc(),
-      );
-      if (existing.isValid(lock.deviceId, now)) {
-        txn.set(ref, {
-          'deviceId': lock.deviceId,
-          'lockedAt': lock.lockedAt.toIso8601String(),
-          'expiresAt': lock.expiresAt.toIso8601String(),
-        });
-        return true;
-      }
+    try {
+      return await _firestore.runTransaction((txn) async {
+        final snap = await txn.get(ref);
+        final now = DateTime.now().toUtc();
+        if (!snap.exists || snap.data() == null) {
+          txn.set(ref, {
+            'deviceId': lock.deviceId,
+            'lockedAt': lock.lockedAt.toIso8601String(),
+            'expiresAt': lock.expiresAt.toIso8601String(),
+          });
+          return true;
+        }
+        final existing = GoogleCalendarSyncLock(
+          deviceId: snap.data()!['deviceId'] as String,
+          lockedAt: DateTime.parse(snap.data()!['lockedAt'] as String).toUtc(),
+          expiresAt: DateTime.parse(snap.data()!['expiresAt'] as String).toUtc(),
+        );
+        if (existing.isValid(lock.deviceId, now)) {
+          txn.set(ref, {
+            'deviceId': lock.deviceId,
+            'lockedAt': lock.lockedAt.toIso8601String(),
+            'expiresAt': lock.expiresAt.toIso8601String(),
+          });
+          return true;
+        }
+        return false;
+      });
+    } catch (e) {
+      debugPrint('Error claiming calendar lock: $e');
       return false;
-    });
+    }
   }
 
   @override
@@ -134,20 +152,25 @@ class FirestoreSyncRepository implements SyncRepository {
   @override
   Future<bool> claimWeatherFetchLock(WeatherFetchLock lock) async {
     final ref = _firestore.doc('users/$_userId/sync_locks/weather_fetch');
-    return _firestore.runTransaction((txn) async {
-      final snap = await txn.get(ref);
-      final now = DateTime.now().toUtc();
-      if (!snap.exists || snap.data() == null) {
-        txn.set(ref, lock.toJson());
-        return true;
-      }
-      final existing = WeatherFetchLock.fromJson(snap.data()!);
-      if (existing.isValid(lock.deviceId, now)) {
-        txn.set(ref, lock.toJson());
-        return true;
-      }
+    try {
+      return await _firestore.runTransaction((txn) async {
+        final snap = await txn.get(ref);
+        final now = DateTime.now().toUtc();
+        if (!snap.exists || snap.data() == null) {
+          txn.set(ref, lock.toJson());
+          return true;
+        }
+        final existing = WeatherFetchLock.fromJson(snap.data()!);
+        if (existing.isValid(lock.deviceId, now)) {
+          txn.set(ref, lock.toJson());
+          return true;
+        }
+        return false;
+      });
+    } catch (e) {
+      debugPrint('Error claiming weather fetch lock: $e');
       return false;
-    });
+    }
   }
 
   @override
@@ -200,6 +223,48 @@ class FirestoreSyncRepository implements SyncRepository {
       'deviceId': operation.deviceId,
       'timestamp': operation.timestamp.toUtc().toIso8601String(),
     });
+  }
+
+  @override
+  Future<void> appendOperationsBatch(List<SyncOperation> operations) async {
+    for (final chunk in _chunked(operations, 500)) {
+      final batch = _firestore.batch();
+      for (final operation in chunk) {
+        batch.set(_doc('sync_operations', operation.id), {
+          'id': operation.id,
+          'documentId': operation.documentId,
+          'sequence': operation.sequence,
+          'payload': operation.payload,
+          'deviceId': operation.deviceId,
+          'timestamp': operation.timestamp.toUtc().toIso8601String(),
+        });
+      }
+      await batch.commit();
+    }
+  }
+
+  @override
+  Future<void> upsertDocumentsBatch(
+    String collection,
+    Map<String, Map<String, dynamic>> documentsById,
+  ) async {
+    for (final chunk in _chunked(documentsById.entries.toList(), 500)) {
+      final batch = _firestore.batch();
+      for (final entry in chunk) {
+        batch.set(
+          _doc(collection, entry.key),
+          entry.value,
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
+    }
+  }
+
+  Iterable<List<T>> _chunked<T>(List<T> items, int size) sync* {
+    for (var i = 0; i < items.length; i += size) {
+      yield items.sublist(i, i + size > items.length ? items.length : i + size);
+    }
   }
 
   @override
@@ -257,6 +322,15 @@ class NoOpSyncRepository implements SyncRepository {
   Future<void> appendOperation(SyncOperation operation) async {}
 
   @override
+  Future<void> appendOperationsBatch(List<SyncOperation> operations) async {}
+
+  @override
+  Future<void> upsertDocumentsBatch(
+    String collection,
+    Map<String, Map<String, dynamic>> documentsById,
+  ) async {}
+
+  @override
   Future<bool> claimCalendarLock(GoogleCalendarSyncLock lock) async => false;
 
   @override
@@ -300,9 +374,12 @@ class NoOpSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<void> watchCollection(String collection) {
+  Stream<Set<String>> watchCollection(String collection) {
     return const Stream.empty();
   }
+
+  @override
+  Future<Map<String, dynamic>?> getDocument(String collection, String id) async => null;
 
   @override
   Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(

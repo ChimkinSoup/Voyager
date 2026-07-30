@@ -2,7 +2,21 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/widgets/leaf_shapes.dart';
+
+/// How often each minor color is chosen relative to the primary [Color],
+/// indexed by the number of minor colors configured (0-3). Index 0 of the
+/// primary is always first in the returned list; the rest follow the minor
+/// colors in rank order. See [PetalFieldParams.minorColors].
+const List<List<double>> petalColorWeights = [
+  [1.0],
+  [0.70, 0.30],
+  [0.60, 0.25, 0.15],
+  [0.50, 0.25, 0.15, 0.10],
+];
 
 /// Tunable parameters for the light theme's falling petal field.
 ///
@@ -12,6 +26,7 @@ import 'package:flutter/material.dart';
 class PetalFieldParams {
   const PetalFieldParams({
     this.color = const Color(0xFFE6A4B4),
+    this.minorColors = const [],
     this.maxPetals = 60,
     this.fallSpeed = 34.0,
     this.windFrequency = 0.12,
@@ -20,6 +35,12 @@ class PetalFieldParams {
 
   /// Petal tint. Distinct from the app accent color on purpose.
   final Color color;
+
+  /// Secondary petal tints, ranked top to bottom (first = most common minor
+  /// color). Each falling petal randomly picks [color] or one of these,
+  /// weighted by [petalColorWeights] according to how many are configured.
+  /// Only the first 3 entries are used.
+  final List<Color> minorColors;
 
   /// Ceiling on live petals. The field ramps up to this and never exceeds it.
   final int maxPetals;
@@ -39,6 +60,7 @@ class PetalFieldParams {
 
   PetalFieldParams copyWith({
     Color? color,
+    List<Color>? minorColors,
     int? maxPetals,
     double? fallSpeed,
     double? windFrequency,
@@ -46,6 +68,7 @@ class PetalFieldParams {
   }) {
     return PetalFieldParams(
       color: color ?? this.color,
+      minorColors: minorColors ?? this.minorColors,
       maxPetals: maxPetals ?? this.maxPetals,
       fallSpeed: fallSpeed ?? this.fallSpeed,
       windFrequency: windFrequency ?? this.windFrequency,
@@ -57,6 +80,7 @@ class PetalFieldParams {
   bool operator ==(Object other) {
     return other is PetalFieldParams &&
         other.color == color &&
+        listEquals(other.minorColors, minorColors) &&
         other.maxPetals == maxPetals &&
         other.fallSpeed == fallSpeed &&
         other.windFrequency == windFrequency &&
@@ -64,8 +88,14 @@ class PetalFieldParams {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(color, maxPetals, fallSpeed, windFrequency, windStrength);
+  int get hashCode => Object.hash(
+    color,
+    Object.hashAll(minorColors),
+    maxPetals,
+    fallSpeed,
+    windFrequency,
+    windStrength,
+  );
 }
 
 /// A localized wind burst.
@@ -127,7 +157,8 @@ class PetalGust {
     final falloff = t * t * (3.0 - 2.0 * t);
     final magnitude = strength * falloff * _envelope;
 
-    final dir = direction ??
+    final dir =
+        direction ??
         (distance < 1e-4
             ? const Offset(1, 0)
             : Offset(delta.dx / distance, delta.dy / distance));
@@ -208,6 +239,11 @@ class _Petal {
   /// Half-width in logical px.
   double size = 10;
 
+  /// Which sprite this petal is stamped with: 0 is the primary color, 1-3 are
+  /// [PetalFieldParams.minorColors] in rank order. Picked once per fall in
+  /// [_PetalFieldState._resetPetal] according to [petalColorWeights].
+  int colorIndex = 0;
+
   double rotation = 0;
   double rotationSpeed = 0;
 
@@ -230,6 +266,11 @@ class _Petal {
 
   /// Seconds spent in the bottom band. Null until the petal enters it.
   double? settleElapsed;
+
+  /// y position at the moment the petal entered the settle band. Used to glide
+  /// the petal the rest of the way to the true bottom edge as it settles,
+  /// rather than letting it stop wherever its residual velocity runs out.
+  double settleStartY = 0;
 
   bool get settling => settleElapsed != null;
 }
@@ -271,7 +312,7 @@ class _PetalFieldState extends State<PetalField> {
   // background is (see geometric_texture.dart): a Ticker requests a frame on
   // every vsync and pins the whole app's pipeline at the display's refresh
   // rate. A drifting petal gains nothing from 120fps.
-  static const _frameInterval = Duration(milliseconds: 33); // ~30fps
+  static const _frameInterval = Duration(milliseconds: 16); // ~60fps
 
   /// How long a petal takes to fade out once it reaches the bottom band.
   static const _settleDuration = 2.0;
@@ -289,17 +330,41 @@ class _PetalFieldState extends State<PetalField> {
   double _lastTick = 0;
   double _nextSpawnAt = 0;
   double _nextGustAt = 0;
+  var _tickerModeEnabled = true;
 
   Size _size = Size.zero;
-  ui.Image? _sprite;
-  Color? _spriteColor;
+  List<ui.Image>? _sprites;
+  List<Color>? _spriteColors;
 
   @override
   void initState() {
     super.initState();
     _clock.start();
-    _timer = Timer.periodic(_frameInterval, (_) => _tick());
+    _startTimer();
     widget.controller?.addListener(_onControllerBurst);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Same rationale as GeometricTexture: this page can stay mounted offstage
+    // (go_router's StatefulShellRoute keeps branches alive for state
+    // preservation), and a bare Timer.periodic doesn't know that — it would
+    // otherwise keep ticking setState at ~60fps on a tab nobody is looking at.
+    final enabled = TickerMode.valuesOf(context).enabled;
+    if (enabled == _tickerModeEnabled) return;
+    _tickerModeEnabled = enabled;
+    if (enabled) {
+      _startTimer();
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(_frameInterval, (_) => _tick());
   }
 
   @override
@@ -309,10 +374,9 @@ class _PetalFieldState extends State<PetalField> {
       oldWidget.controller?.removeListener(_onControllerBurst);
       widget.controller?.addListener(_onControllerBurst);
     }
-    if (oldWidget.params.color != widget.params.color) {
-      _sprite?.dispose();
-      _sprite = null;
-      _spriteColor = null;
+    if (oldWidget.params.color != widget.params.color ||
+        !listEquals(oldWidget.params.minorColors, widget.params.minorColors)) {
+      _disposeSprites();
     }
     if (widget.params.maxPetals < _petals.length) {
       _petals.removeRange(widget.params.maxPetals, _petals.length);
@@ -323,8 +387,16 @@ class _PetalFieldState extends State<PetalField> {
   void dispose() {
     widget.controller?.removeListener(_onControllerBurst);
     _timer?.cancel();
-    _sprite?.dispose();
+    _disposeSprites();
     super.dispose();
+  }
+
+  void _disposeSprites() {
+    for (final sprite in _sprites ?? const <ui.Image>[]) {
+      sprite.dispose();
+    }
+    _sprites = null;
+    _spriteColors = null;
   }
 
   void _onControllerBurst() {
@@ -333,6 +405,7 @@ class _PetalFieldState extends State<PetalField> {
 
   void _tick() {
     if (!mounted) return;
+    if (DevFlags.disablePetalField) return;
     final now = _clock.elapsedMicroseconds / 1e6;
     // Clamp so a stalled or backgrounded app doesn't resume with one enormous
     // step that teleports every petal off screen.
@@ -394,13 +467,13 @@ class _PetalFieldState extends State<PetalField> {
     }
 
     // Personal sway rides on top of the shared wind rather than replacing it.
-    windX +=
-        math.sin(_time * 1.7 + petal.swayPhase) * petal.swayAmplitude;
+    windX += math.sin(_time * 1.7 + petal.swayPhase) * petal.swayAmplitude;
 
     final settleBandTop = _size.height * (1.0 - _settleBandFraction);
     final entering = petal.y >= settleBandTop;
     if (entering && !petal.settling) {
       petal.settleElapsed = 0;
+      petal.settleStartY = petal.y;
     }
 
     if (petal.settling) {
@@ -409,16 +482,21 @@ class _PetalFieldState extends State<PetalField> {
 
       // Graceful stop: velocity, rotation and opacity all wind down together
       // over the same two seconds. No collision, no resting state — the petal
-      // is recycled the instant it is invisible.
+      // is recycled the instant it is invisible. The vertical position is
+      // eased explicitly toward the true bottom edge rather than driven by
+      // decaying velocity, so every petal actually reaches the bottom instead
+      // of stalling wherever its residual speed happened to run out.
       final progress = (elapsed / _settleDuration).clamp(0.0, 1.0);
       final ease = 1.0 - progress;
+      final settleEase = 1.0 - ease * ease;
+      final targetY = _size.height - petal.size;
       petal.vx *= decay.settleVelocity;
-      petal.vy *= decay.settleVelocity;
       petal.rotationSpeed *= decay.settleRotation;
       petal.rotation += petal.rotationSpeed * dt;
       petal.flutterPhase += petal.flutterSpeed * dt * ease;
       petal.x += petal.vx * dt;
-      petal.y += petal.vy * dt;
+      petal.y =
+          petal.settleStartY + (targetY - petal.settleStartY) * settleEase;
       petal.opacity = petal.baseOpacity * ease * ease;
 
       if (progress >= 1.0) _resetPetal(petal, fromTop: true);
@@ -431,8 +509,8 @@ class _PetalFieldState extends State<PetalField> {
     // once per frame in _FrameDecay.
     final approach = 1.0 - math.exp(petal.drag * decay.approachLogDt);
     petal.vx += (windX - petal.vx) * approach;
-    petal.vy += (widget.params.fallSpeed * petal.drag + windY - petal.vy) *
-        approach;
+    petal.vy +=
+        (widget.params.fallSpeed * petal.drag + windY - petal.vy) * approach;
 
     petal.x += petal.vx * dt;
     petal.y += petal.vy * dt;
@@ -478,9 +556,7 @@ class _PetalFieldState extends State<PetalField> {
         center: Offset(_random.nextDouble(), _random.nextDouble() * 0.8),
         radius: 0.18 + _random.nextDouble() * 0.30,
         strength: windward * (0.35 + _random.nextDouble() * 0.45),
-        duration: Duration(
-          milliseconds: 1400 + _random.nextInt(2200),
-        ),
+        duration: Duration(milliseconds: 1400 + _random.nextInt(2200)),
         direction: Offset(
           _random.nextBool() ? 1 : -1,
           -0.15 + _random.nextDouble() * 0.5,
@@ -527,20 +603,38 @@ class _PetalFieldState extends State<PetalField> {
     petal.baseOpacity = 0.28 + r.nextDouble() * 0.34;
     petal.opacity = 0;
     petal.settleElapsed = null;
+    petal.colorIndex = _pickColorIndex();
   }
 
-  /// The petal sprite is rasterized once and stamped for every petal. Building
-  /// the soft watercolor edge with a gradient and a blur costs real time; doing
-  /// it once instead of per petal per frame is the difference between a free
-  /// background and a hot one.
-  ui.Image _spriteFor(Color color) {
-    final cached = _sprite;
-    if (cached != null && _spriteColor == color) return cached;
-    cached?.dispose();
-    final image = _buildPetalSprite(color);
-    _sprite = image;
-    _spriteColor = color;
-    return image;
+  /// Randomly picks which sprite a newly (re)spawned petal falls with: 0 for
+  /// the primary color, or 1-3 for a minor color, weighted by
+  /// [petalColorWeights] according to how many minor colors are configured.
+  int _pickColorIndex() {
+    final minorCount = math.min(widget.params.minorColors.length, 3);
+    final weights = petalColorWeights[minorCount];
+    final roll = _random.nextDouble();
+    var cumulative = 0.0;
+    for (var i = 0; i < weights.length; i++) {
+      cumulative += weights[i];
+      if (roll < cumulative) return i;
+    }
+    return weights.length - 1;
+  }
+
+  /// The petal sprites are rasterized once per color and stamped for every
+  /// petal. Building the soft watercolor edge with a gradient and a blur costs
+  /// real time; doing it once per color instead of per petal per frame is the
+  /// difference between a free background and a hot one.
+  List<ui.Image> _spritesFor(List<Color> colors) {
+    final cached = _sprites;
+    if (cached != null && listEquals(_spriteColors, colors)) return cached;
+    _disposeSprites();
+    final images = [
+      for (final color in colors) buildLeafSprite(LeafDesign.petal, color),
+    ];
+    _sprites = images;
+    _spriteColors = colors;
+    return images;
   }
 
   @override
@@ -551,6 +645,10 @@ class _PetalFieldState extends State<PetalField> {
         if (size != _size) {
           _onResize(size);
         }
+        final colors = [
+          widget.params.color,
+          ...widget.params.minorColors.take(3),
+        ];
         return RepaintBoundary(
           child: CustomPaint(
             size: size,
@@ -558,7 +656,7 @@ class _PetalFieldState extends State<PetalField> {
             willChange: true,
             painter: _PetalPainter(
               petals: List<_Petal>.unmodifiable(_petals),
-              sprite: _spriteFor(widget.params.color),
+              sprites: _spritesFor(colors),
               repaintTick: _time,
             ),
           ),
@@ -582,74 +680,6 @@ class _PetalFieldState extends State<PetalField> {
   }
 }
 
-/// Rasterizes one petal into a small image: a soft-edged, gradient-filled
-/// teardrop in [color], fully opaque at its densest so per-petal opacity can be
-/// applied cheaply at draw time.
-ui.Image _buildPetalSprite(Color color) {
-  const extent = 96.0;
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder);
-
-  final rect = const Rect.fromLTWH(0, 0, extent, extent);
-  final path = _petalPath(rect);
-
-  // Watercolor reads as pigment pooling unevenly: denser along one edge,
-  // washing out toward the tip. A linear gradient across the petal plus a
-  // slightly brighter core does that far more cheaply than any real diffusion.
-  final gradient = ui.Gradient.linear(
-    Offset(rect.left + rect.width * 0.30, rect.top),
-    Offset(rect.right, rect.bottom),
-    [
-      Color.lerp(color, Colors.white, 0.42)!.withValues(alpha: 0.92),
-      color.withValues(alpha: 0.95),
-      Color.lerp(color, const Color(0xFF7C4A57), 0.28)!.withValues(alpha: 0.78),
-    ],
-    const [0.0, 0.55, 1.0],
-  );
-
-  canvas.drawPath(
-    path,
-    Paint()
-      ..shader = gradient
-      ..isAntiAlias = true,
-  );
-
-  // A faint blurred restatement of the same silhouette softens the outline so
-  // the petal sits in the paper rather than being cut out of it.
-  canvas.drawPath(
-    path,
-    Paint()
-      ..color = color.withValues(alpha: 0.35)
-      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 3.0),
-  );
-
-  return recorder.endRecording().toImageSync(extent.toInt(), extent.toInt());
-}
-
-/// A petal silhouette inscribed in [rect]: pointed at the top, full and
-/// rounded at the base, with a slight curl to one side so it never reads as a
-/// symmetrical leaf.
-Path _petalPath(Rect rect) {
-  final w = rect.width;
-  final h = rect.height;
-  Offset p(double fx, double fy) =>
-      Offset(rect.left + fx * w, rect.top + fy * h);
-
-  return Path()
-    ..moveTo(p(0.50, 0.04).dx, p(0.50, 0.04).dy)
-    ..cubicTo(
-      p(0.86, 0.22).dx, p(0.86, 0.22).dy,
-      p(0.96, 0.64).dx, p(0.96, 0.64).dy,
-      p(0.54, 0.96).dx, p(0.54, 0.96).dy,
-    )
-    ..cubicTo(
-      p(0.14, 0.72).dx, p(0.14, 0.72).dy,
-      p(0.06, 0.28).dx, p(0.06, 0.28).dy,
-      p(0.50, 0.04).dx, p(0.50, 0.04).dy,
-    )
-    ..close();
-}
-
 /// Stamps the pre-rasterized petal sprite once per petal.
 ///
 /// Each petal gets its own transform because the flutter effect needs a
@@ -658,12 +688,15 @@ Path _petalPath(Rect rect) {
 class _PetalPainter extends CustomPainter {
   _PetalPainter({
     required this.petals,
-    required this.sprite,
+    required this.sprites,
     required this.repaintTick,
   });
 
   final List<_Petal> petals;
-  final ui.Image sprite;
+
+  /// One sprite per configured color: index 0 is the primary, 1-3 are the
+  /// minor colors in rank order. See [_Petal.colorIndex].
+  final List<ui.Image> sprites;
 
   /// Simulation time. Only used to force a repaint — petal state is mutated in
   /// place, so comparing the list itself would never report a change.
@@ -671,18 +704,23 @@ class _PetalPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.isEmpty || petals.isEmpty) return;
+    if (size.isEmpty || petals.isEmpty || sprites.isEmpty) return;
 
-    final src = Rect.fromLTWH(
-      0,
-      0,
-      sprite.width.toDouble(),
-      sprite.height.toDouble(),
-    );
     final paint = Paint()..filterQuality = FilterQuality.low;
+    final lastIndex = sprites.length - 1;
 
     for (final petal in petals) {
       if (petal.opacity <= 0.01) continue;
+
+      // A petal keeps whatever index it was assigned even if the palette
+      // shrinks mid-flight — clamp rather than crash on a stale index.
+      final sprite = sprites[petal.colorIndex.clamp(0, lastIndex)];
+      final src = Rect.fromLTWH(
+        0,
+        0,
+        sprite.width.toDouble(),
+        sprite.height.toDouble(),
+      );
 
       // Squashing the width is what sells the flutter: a petal turning through
       // the airflow presents less and less of its face until it flips.
@@ -707,7 +745,7 @@ class _PetalPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PetalPainter oldDelegate) {
     return oldDelegate.repaintTick != repaintTick ||
-        oldDelegate.sprite != sprite ||
+        !listEquals(oldDelegate.sprites, sprites) ||
         oldDelegate.petals.length != petals.length;
   }
 }

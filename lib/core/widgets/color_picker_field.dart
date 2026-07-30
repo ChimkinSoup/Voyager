@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
-import 'package:voyager/core/constants/app_constants.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 const _paletteAspect = 4 / 3;
@@ -363,13 +363,15 @@ class _PalettePickDialogState extends State<_PalettePickDialog> {
             ),
           ),
           actions: [
-            TextButton(
+            GlassButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              label: 'Cancel',
+              dense: true,
             ),
-            FilledButton(
+            GlassButton(
               onPressed: () => Navigator.pop(context, _picked),
-              child: const Text('Save'),
+              label: 'Save',
+              dense: true,
             ),
           ],
         ),
@@ -415,16 +417,11 @@ class _ColorSwatch extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: swatchColor,
-          border: (!selected && used)
+          border: selected
+              ? Border.all(color: theme.colorScheme.primary, width: 3)
+              : used
               ? Border.all(color: usedRingColor, width: 3)
               : null,
-          boxShadow: selected ? [
-            BoxShadow(
-              color: swatchColor.withValues(alpha: popupGlowAlpha),
-              blurRadius: 8,
-              spreadRadius: 2,
-            ),
-          ] : null,
         ),
         child: selected ? Icon(
           PhosphorIconsFill.checkFat,

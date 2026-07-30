@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:intl/intl.dart';
-import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
@@ -15,6 +14,9 @@ import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -107,6 +109,18 @@ class AnalyticsPage extends ConsumerWidget {
             if (showDefaultsInGrid) defaultTracker,
             ...trackers,
           ];
+          final showDreamStats = settings?.showDreamStatistics ?? false;
+          final dreamEntriesAsync = showDreamStats
+              ? ref.watch(allDreamEntriesProvider)
+              : null;
+          final today = DateTime.now();
+          final dreamLoggedToday = dreamEntriesAsync?.valueOrNull?.any((e) {
+                final d = e.entryDate;
+                return d.year == today.year &&
+                    d.month == today.month &&
+                    d.day == today.day;
+              }) ??
+              false;
           return KeepAliveScrollView(
             storageKey: ShellPageStorageKeys.analyticsList,
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
@@ -122,6 +136,10 @@ class AnalyticsPage extends ConsumerWidget {
                 entriesTracker: defaultTracker,
                 streakTracker: buildStreakTracker(colorValue: accent),
                 wordCountTracker: buildWordCountTracker(colorValue: accent),
+                dreamLoggedTracker: showDreamStats
+                    ? buildDreamLoggedTracker(colorValue: accent)
+                    : null,
+                dreamLoggedToday: dreamLoggedToday,
               ),
               const SizedBox(height: 12),
               // ── Toolbar + tracker grid ────────────────────────────────
@@ -174,6 +192,8 @@ class _MacroStatsRow extends StatelessWidget {
     required this.entriesTracker,
     required this.streakTracker,
     required this.wordCountTracker,
+    this.dreamLoggedTracker,
+    this.dreamLoggedToday = false,
   });
 
   final int totalEntries;
@@ -186,6 +206,11 @@ class _MacroStatsRow extends StatelessWidget {
   final StatisticTracker entriesTracker;
   final StatisticTracker streakTracker;
   final StatisticTracker wordCountTracker;
+
+  /// Null when the "Show dream statistics in analytics" setting is off, in
+  /// which case the 4th chip isn't rendered at all.
+  final StatisticTracker? dreamLoggedTracker;
+  final bool dreamLoggedToday;
 
   @override
   Widget build(BuildContext context) {
@@ -228,6 +253,20 @@ class _MacroStatsRow extends StatelessWidget {
               analytics: analytics,
             ),
           ),
+          if (dreamLoggedTracker != null) ...[
+            const SizedBox(width: 10),
+            _StatChip(
+              label: 'Dream Today',
+              value: dreamLoggedToday ? 'Yes' : 'No',
+              icon: PhosphorIconsRegular.moonStars,
+              accent: accent,
+              onTap: () => _showStatisticDetail(
+                context: context,
+                tracker: dreamLoggedTracker!,
+                analytics: analytics,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -248,10 +287,11 @@ class _AnalyticsToolbar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        FilledButton.icon(
+        GlassButton(
           onPressed: onCreateTracker,
           icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-          label: const Text('New tracker'),
+          label: 'New tracker',
+          dense: true,
         ),
       ],
     );
@@ -465,10 +505,16 @@ class _StatTile extends StatefulWidget {
     required this.decoration,
     required this.builder,
     this.dragIndex,
+    this.menuItems = const [],
   });
 
   final StatisticTracker tracker;
   final AnalyticsService analytics;
+
+  /// Right-click menu items shown on the tile's chrome (the same press-and-hold
+  /// drag handle region — never the sparkline or heatmap squares). Empty to
+  /// disable the context menu (e.g. built-in default trackers).
+  final List<ContextMenuItem> menuItems;
 
   /// The tile's fill and border for the current hover state. Painted behind
   /// the gesture layer — see the note on hit testing above.
@@ -502,6 +548,15 @@ class _StatTileState extends State<_StatTile> {
     if (dragIndex != null) {
       tapTarget = _QuickDelayedDragStartListener(
         index: dragIndex,
+        child: tapTarget,
+      );
+    }
+    // Right-click menu lives on this same behind-the-content chrome layer, so it
+    // fires only where a drag/tap does — never over the sparkline or squares,
+    // which claim the pointer above and so never reach here.
+    if (widget.menuItems.isNotEmpty) {
+      tapTarget = ContextMenuRegion(
+        items: widget.menuItems,
         child: tapTarget,
       );
     }
@@ -672,6 +727,11 @@ class _SparklineRow extends ConsumerWidget {
       child: _StatTile(
         tracker: tracker,
         analytics: analytics,
+        menuItems: _statTileMenuItems(
+          context: context,
+          ref: ref,
+          tracker: tracker,
+        ),
         // Around the sparkline: short press opens the detail popup, hold drags
         // the row. On the sparkline itself both gestures belong to the chart
         // and mean "edit this period".
@@ -1031,8 +1091,13 @@ class _SparklineRow extends ConsumerWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: IconButton(
-                  icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 16),
-                  color: theme.colorScheme.onSurfaceVariant,
+                  icon: Icon(
+                    PhosphorIconsRegular.pencilSimple,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                   onPressed: () async {
                     final updated = await showDialog<StatisticTracker>(
                       context: context,
@@ -1416,6 +1481,11 @@ class _HeatmapRow extends ConsumerWidget {
         return _StatTile(
           tracker: tracker,
           analytics: analytics,
+          menuItems: _statTileMenuItems(
+            context: context,
+            ref: ref,
+            tracker: tracker,
+          ),
           dragIndex: dragIndex,
           // The tile has no fill of its own at rest — it only lights up on
           // hover, so the hitbox reads as spanning the whole bar out to the
@@ -1471,23 +1541,23 @@ class _HeatmapRow extends ConsumerWidget {
                               ? PhosphorIconsFill.star
                               : PhosphorIconsRegular.star,
                           size: 14,
+                          color: tracker.starred
+                              ? color
+                              : theme.colorScheme.onSurfaceVariant,
                         ),
-                        constraints: const BoxConstraints(),
                         padding: EdgeInsets.zero,
-                        color: tracker.starred
-                            ? color
-                            : theme.colorScheme.onSurfaceVariant,
+                        constraints: const BoxConstraints(),
                         onPressed: onToggleStar,
                       ),
                       const SizedBox(width: 12),
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           PhosphorIconsRegular.pencilSimple,
                           size: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                        constraints: const BoxConstraints(),
                         padding: EdgeInsets.zero,
-                        color: theme.colorScheme.onSurfaceVariant,
+                        constraints: const BoxConstraints(),
                         onPressed: () async {
                           final updated = await showDialog<StatisticTracker>(
                             context: context,
@@ -2086,27 +2156,25 @@ Color _heatmapValueColor(Color base, double intensity) {
   return hsl.withSaturation(saturation).toColor();
 }
 
-/// Intensity at which a heatmap cell starts to glow.
-const _heatmapGlowThreshold = 0.65;
+/// Intensity at which a heatmap cell starts marking itself as "hot".
+const _heatmapHotThreshold = 0.65;
 
-/// A soft [BoxShadow] in the cell's own colour, so a capped or highly active
-/// period reads as an LED lit against the dark geometric background rather
+/// A thin border in the cell's own colour, so a capped or highly active
+/// period reads as distinct against the dark geometric background rather
 /// than just a slightly-less-transparent square.
 ///
-/// Only cells above [_heatmapGlowThreshold] glow, ramping in from there: if
-/// every cell glowed, the bloom would blur the grid into a smear and none of
-/// them would stand out.
-List<BoxShadow> _heatmapGlow(Color base, double intensity) {
+/// Only cells above [_heatmapHotThreshold] get the border, ramping its
+/// alpha in from there: if every cell were bordered, none of them would
+/// stand out. Returns null below the threshold so callers can fall back to
+/// their own default border.
+Border? _heatmapHotBorder(Color base, double intensity) {
   final t = intensity.clamp(0.0, 1.0);
-  if (t < _heatmapGlowThreshold) return const [];
-  final ramp = (t - _heatmapGlowThreshold) / (1 - _heatmapGlowThreshold);
-  return [
-    BoxShadow(
-      color: base.withValues(alpha: 0.18 + 0.30 * ramp),
-      blurRadius: 5 + 7 * ramp,
-      spreadRadius: ramp,
-    ),
-  ];
+  if (t < _heatmapHotThreshold) return null;
+  final ramp = (t - _heatmapHotThreshold) / (1 - _heatmapHotThreshold);
+  return Border.all(
+    color: base.withValues(alpha: 0.55 + 0.45 * ramp),
+    width: 1.5,
+  );
 }
 
 /// The value line of a hover bubble, for heatmap squares and sparklines alike.
@@ -2123,6 +2191,9 @@ String? _hoverValueLabel({
   // reads as journaled / not journaled rather than completed / not completed.
   if (tracker.id == kJournalEntriesTrackerId) {
     return value?.boolValue == true ? 'Journaled' : 'Not journaled';
+  }
+  if (tracker.id == kDreamLoggedTrackerId) {
+    return value?.boolValue == true ? 'Dreamed' : 'No dream';
   }
   return _tooltipValueLabel(type, value);
 }
@@ -2950,11 +3021,6 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: accent.withValues(alpha: popupGlowAlpha * t),
-                        blurRadius: 12 * t,
-                        spreadRadius: 2 * t,
-                      ),
-                      BoxShadow(
                         color: VoyagerColors.of(context).shadow.withValues(
                           alpha: VoyagerColors.of(context).strongShadowAlpha * t,
                         ),
@@ -3124,27 +3190,26 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
               Row(
                 children: [
                   if (widget.initialValue != null)
-                    TextButton(
+                    GlassButton(
                       onPressed: _delete,
-                      style: TextButton.styleFrom(
-                        foregroundColor: theme.colorScheme.error,
-                      ),
-                      child: const Text('Delete'),
+                      label: 'Delete',
+                      color: theme.colorScheme.error,
+                      dense: true,
                     ),
                   const Spacer(),
-                  FilledButton(
+                  GlassButton(
                     onPressed: _save,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: accent,
-                      foregroundColor: VoyagerColors.of(context).onAccent,
-                    ),
-                    child: const Text('Save'),
+                    label: 'Save',
+                    color: accent,
+                    textColor: VoyagerColors.of(context).onAccent,
+                    dense: true,
                   ),
                   const SizedBox(width: 8),
-                  TextButton(
+                  GlassButton(
                     onPressed: Navigator.of(context).pop,
-                    style: TextButton.styleFrom(foregroundColor: accent),
-                    child: const Text('Cancel'),
+                    label: 'Cancel',
+                    textColor: accent,
+                    dense: true,
                   ),
                 ],
               ),
@@ -3225,6 +3290,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         return VoyagerDropdownButtonFormField<String>(
           initialValue: options.contains(_enumValue) ? _enumValue : null,
           accentColor: accent,
+          showCaret: false,
           decoration: const InputDecoration(labelText: 'Value', isDense: true),
           items: options
               .map((o) => DropdownMenuItem(value: o, child: Text(o)))
@@ -3382,11 +3448,11 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(5),
-          border: Border.all(
-            color: VoyagerColors.of(context).hairline,
-            width: 1,
-          ),
-          boxShadow: _heatmapGlow(color, intensity),
+          border: _heatmapHotBorder(color, intensity) ??
+              Border.all(
+                color: VoyagerColors.of(context).hairline,
+                width: 1,
+              ),
         ),
       ),
     );
@@ -3400,6 +3466,75 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
 /// Opens [_StatisticDetailPopup] for [tracker] — the large overlay that
 /// replaced the old Calendar view mode. Dismissed by tapping the scrim, the
 /// close button, or Escape.
+// ---------------------------------------------------------------------------
+// Right-click context menu for stat tiles
+// ---------------------------------------------------------------------------
+
+/// Builds the right-click menu for a stat tile: edit the tracker, view its
+/// common statistics, or delete it. Empty for built-in default trackers, which
+/// are derived at display time and can't be edited or deleted.
+List<ContextMenuItem> _statTileMenuItems({
+  required BuildContext context,
+  required WidgetRef ref,
+  required StatisticTracker tracker,
+}) {
+  if (tracker.isDefault) return const [];
+  return [
+    ContextMenuItem(
+      label: 'Edit',
+      icon: PhosphorIconsRegular.pencilSimple,
+      onTap: () => unawaited(_editTracker(context, ref, tracker)),
+    ),
+    ContextMenuItem(
+      label: 'Statistics',
+      icon: PhosphorIconsRegular.chartBar,
+      onTap: () => _showTrackerStatistics(context, tracker),
+    ),
+    ContextMenuItem(
+      label: 'Delete',
+      icon: PhosphorIconsRegular.trash,
+      isDestructive: true,
+      onTap: () => unawaited(_deleteTracker(context, ref, tracker)),
+    ),
+  ];
+}
+
+Future<void> _editTracker(
+  BuildContext context,
+  WidgetRef ref,
+  StatisticTracker tracker,
+) async {
+  final updated = await showDialog<StatisticTracker>(
+    context: context,
+    builder: (_) => _TrackerDialog(tracker: tracker),
+  );
+  if (updated == null) return;
+  await ref.read(trackerRepositoryProvider).upsertTracker(updated);
+  ref.invalidate(trackersProvider);
+}
+
+Future<void> _deleteTracker(
+  BuildContext context,
+  WidgetRef ref,
+  StatisticTracker tracker,
+) async {
+  final confirmed = await showConfirmDialog(
+    context,
+    title: 'Delete statistic?',
+    message: '"${tracker.name}" and its logged values will be moved to trash.',
+  );
+  if (!confirmed) return;
+  await ref.read(trackerRepositoryProvider).softDeleteTracker(tracker.id);
+  ref.invalidate(trackersProvider);
+}
+
+void _showTrackerStatistics(BuildContext context, StatisticTracker tracker) {
+  showDialog<void>(
+    context: context,
+    builder: (_) => _TrackerStatisticsDialog(tracker: tracker),
+  );
+}
+
 Future<void> _showStatisticDetail({
   required BuildContext context,
   required StatisticTracker tracker,
@@ -3412,6 +3547,188 @@ Future<void> _showStatisticDetail({
     builder: (_) =>
         _StatisticDetailPopup(tracker: tracker, analytics: analytics),
   );
+}
+
+/// Advances [date] by one [cadence] period (used for streak detection).
+DateTime _nextTrackerPeriod(DateTime date, TrackerCadence cadence) {
+  return switch (cadence) {
+    TrackerCadence.daily => DateTime(date.year, date.month, date.day + 1),
+    TrackerCadence.weekly => DateTime(date.year, date.month, date.day + 7),
+    TrackerCadence.monthly => DateTime(date.year, date.month + 1, date.day),
+    TrackerCadence.yearly => DateTime(date.year + 1, date.month, date.day),
+  };
+}
+
+/// Singular unit noun for a cadence, e.g. "day"/"week"/"month"/"year".
+String _cadenceUnit(TrackerCadence cadence) {
+  return switch (cadence) {
+    TrackerCadence.daily => 'day',
+    TrackerCadence.weekly => 'week',
+    TrackerCadence.monthly => 'month',
+    TrackerCadence.yearly => 'year',
+  };
+}
+
+/// Summary "common statistics" for a tracker — entries logged, streaks and
+/// value aggregates — computed from its recorded values.
+class _TrackerStatisticsDialog extends ConsumerWidget {
+  const _TrackerStatisticsDialog({required this.tracker});
+
+  final StatisticTracker tracker;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final color = Color(tracker.colorValue);
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          CircleAvatar(radius: 6, backgroundColor: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              tracker.name.isEmpty ? 'Statistic' : tracker.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 340,
+        child: valuesAsync.when(
+          data: (values) => _buildStats(context, values),
+          loading: () => const SizedBox(
+            height: 60,
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          error: (e, _) => Text('$e', style: theme.textTheme.bodySmall),
+        ),
+      ),
+      actions: [
+        GlassButton(
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Close',
+          dense: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStats(BuildContext context, List<TrackerValue> values) {
+    final theme = Theme.of(context);
+    if (values.isEmpty) {
+      return Text(
+        'No values logged yet.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    // Unique recorded periods (date-only), oldest first — the basis for both
+    // the "entries logged" count and streak detection.
+    final periods = (values
+            .map((v) => DateTime(
+                  v.periodStart.year,
+                  v.periodStart.month,
+                  v.periodStart.day,
+                ))
+            .toSet()
+            .toList())
+      ..sort();
+
+    var longestStreak = 1;
+    var run = 1;
+    for (var i = 1; i < periods.length; i++) {
+      final expected = _nextTrackerPeriod(periods[i - 1], tracker.cadence);
+      if (periods[i] == expected) {
+        run++;
+      } else {
+        run = 1;
+      }
+      if (run > longestStreak) longestStreak = run;
+    }
+    // Current streak: the unbroken run ending at the most recent recorded
+    // period (however long ago that period was).
+    final currentStreak = run;
+
+    final unit = _cadenceUnit(tracker.cadence);
+    String streakLabel(int n) => '$n ${n == 1 ? unit : '${unit}s'}';
+
+    final firstDate = DateFormat.yMMMd().format(periods.first);
+    final lastDate = DateFormat.yMMMd().format(periods.last);
+
+    final rows = <Widget>[
+      _row(context, 'Entries logged', compactNumberLabel(values.length)),
+      _row(context, 'Current streak', streakLabel(currentStreak)),
+      _row(context, 'Longest streak', streakLabel(longestStreak)),
+    ];
+
+    switch (tracker.type) {
+      case TrackerType.integer:
+        final ints = values
+            .map((v) => v.intValue)
+            .whereType<int>()
+            .toList();
+        if (ints.isNotEmpty) {
+          final total = ints.reduce((a, b) => a + b);
+          final highest = ints.reduce((a, b) => a > b ? a : b);
+          final average = total / ints.length;
+          rows.addAll([
+            _row(context, 'Total', compactNumberLabel(total)),
+            _row(context, 'Average', average.toStringAsFixed(1)),
+            _row(context, 'Highest', compactNumberLabel(highest)),
+          ]);
+        }
+      case TrackerType.boolean:
+        final completed =
+            values.where((v) => v.boolValue == true).length;
+        rows.add(_row(context, 'Times completed',
+            compactNumberLabel(completed)));
+      case TrackerType.enumType:
+        break;
+    }
+
+    rows.addAll([
+      _row(context, 'First logged', firstDate),
+      _row(context, 'Last logged', lastDate),
+    ]);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
+  }
+
+  Widget _row(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: theme.textTheme.bodyMedium),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StatisticDetailPopup extends ConsumerWidget {
@@ -3510,6 +3827,8 @@ class _StatisticDetailPopup extends ConsumerWidget {
                           size: 18,
                         ),
                         tooltip: 'Edit tracker',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                         onPressed: () async {
                           final updated = await showDialog<StatisticTracker>(
                             context: context,
@@ -3525,6 +3844,8 @@ class _StatisticDetailPopup extends ConsumerWidget {
                     IconButton(
                       icon: const Icon(PhosphorIconsRegular.x, size: 18),
                       tooltip: 'Close',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -4131,10 +4452,10 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
             MonthDayCellStyle.compact.borderRadius,
           ),
           // Spill-in days from an adjacent month render neutral, so they
-          // never glow either.
-          boxShadow: (!inMonth || value == null)
-              ? const []
-              : _heatmapGlow(color, intensity),
+          // never get a hot border either.
+          border: (!inMonth || value == null)
+              ? null
+              : _heatmapHotBorder(color, intensity),
         ),
         child: Align(
           alignment: Alignment.topLeft,
@@ -4238,9 +4559,9 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
           borderRadius: BorderRadius.circular(
             MonthDayCellStyle.compact.borderRadius,
           ),
-          // The week reads as one block, so the glow goes on the block rather
-          // than on each of its day segments.
-          boxShadow: value == null ? const [] : _heatmapGlow(color, intensity),
+          // The week reads as one block, so the hot border goes on the block
+          // rather than on each of its day segments.
+          border: value == null ? null : _heatmapHotBorder(color, intensity),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4451,10 +4772,10 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: VoyagerColors.of(context).hairline),
-                boxShadow: value == null
-                    ? const []
-                    : _heatmapGlow(color, intensity),
+                border: (value == null
+                        ? null
+                        : _heatmapHotBorder(color, intensity)) ??
+                    Border.all(color: VoyagerColors.of(context).hairline),
               ),
             ),
           ),
@@ -4640,10 +4961,10 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: VoyagerColors.of(context).hairline),
-                boxShadow: value == null
-                    ? const []
-                    : _heatmapGlow(color, intensity),
+                border: (value == null
+                        ? null
+                        : _heatmapHotBorder(color, intensity)) ??
+                    Border.all(color: VoyagerColors.of(context).hairline),
               ),
             ),
           ),
@@ -4758,7 +5079,6 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: accent, width: 3),
       ),
-      shadowColor: accent.withValues(alpha: popupGlowAlpha),
       elevation: 24,
       titlePadding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -5096,15 +5416,17 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
           onPressed: () => Navigator.pop(context),
-          style: TextButton.styleFrom(foregroundColor: accent),
-          child: const Text('Cancel'),
+          label: 'Cancel',
+          textColor: accent,
+          dense: true,
         ),
-        FilledButton(
+        GlassButton(
           onPressed: _submit,
-          style: FilledButton.styleFrom(backgroundColor: accent),
-          child: Text(widget.tracker != null ? 'Save' : 'Create'),
+          label: widget.tracker != null ? 'Save' : 'Create',
+          color: accent,
+          dense: true,
         ),
       ],
     );

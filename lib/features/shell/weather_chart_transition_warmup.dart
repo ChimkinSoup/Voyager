@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
 import 'package:voyager/features/shell/weather_chart_curve.dart';
 import 'package:voyager/features/shell/weather_forecast_chart.dart';
@@ -97,11 +98,15 @@ class _WeatherChartTransitionWarmupState
   @override
   void initState() {
     super.initState();
+    if (DevFlags.disableCache) {
+      _done = true;
+      return;
+    }
     // Delay so CalendarMorphWarmup gets its four warmup frames uncontested.
     _startTimer = Timer(
       WeatherChartTransitionWarmup._startDelay,
       () {
-        if (!mounted) return;
+        if (!mounted || DevFlags.disableCache) return;
         WidgetsBinding.instance.addPostFrameCallback(_advance);
       },
     );
@@ -114,7 +119,7 @@ class _WeatherChartTransitionWarmupState
   }
 
   void _advance(Duration _) {
-    if (!mounted) return;
+    if (!mounted || DevFlags.disableCache) return;
 
     // Do NOT call _populatePlotCache() here — that would record ui.Pictures
     // synchronously during a frame callback, blocking the rasteriser.
@@ -125,12 +130,14 @@ class _WeatherChartTransitionWarmupState
     _frame++;
     if (_frame >= 3) {
       setState(() => _done = true);
-      // Schedule real forecast data cache population at idle priority so it
-      // runs between frames and never contends with visible animations.
-      SchedulerBinding.instance.scheduleTask<void>(
-        _populatePlotCacheIdle,
-        Priority.idle,
-      );
+      if (!DevFlags.disableCache) {
+        // Schedule real forecast data cache population at idle priority so it
+        // runs between frames and never contends with visible animations.
+        SchedulerBinding.instance.scheduleTask<void>(
+          _populatePlotCacheIdle,
+          Priority.idle,
+        );
+      }
       return;
     }
 
@@ -144,7 +151,7 @@ class _WeatherChartTransitionWarmupState
   }
 
   void _populatePlotCacheIdle() {
-    if (!mounted) return;
+    if (!mounted || DevFlags.disableCache) return;
 
     final colors = weatherChartColors(ref);
     final degreeGridColor = Theme.of(context)

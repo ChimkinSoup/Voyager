@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' show max;
 import 'dart:ui' show lerpDouble;
 
@@ -7,9 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
@@ -62,7 +67,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// Coordinates multi-day animation sync and records the tapped event
   /// widget's global rect for popup anchoring.
   final _eventTapState = CalendarEventTapState();
-
 
   final _calendarAreaKey = GlobalKey();
 
@@ -120,7 +124,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   static const _calendarAnimationSlowFactor = 10;
 
   Duration get _zoomDuration => _scaledMorphDuration(_baseZoomDuration);
-  Duration get _weekMorphDuration => _scaledMorphDuration(_baseWeekMorphDuration);
+  Duration get _weekMorphDuration =>
+      _scaledMorphDuration(_baseWeekMorphDuration);
   Duration get _chainedMorphDuration =>
       _scaledMorphDuration(_baseChainedMorphDuration);
 
@@ -148,8 +153,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       duration: _weekMorphDuration,
     );
     final maxWeekScroll = calendarWeekTimelineScrollContentHeight();
-    _weekTimelineScrollOffset =
-        calendarWeekDefaultScrollOffset().clamp(0.0, maxWeekScroll);
+    _weekTimelineScrollOffset = calendarWeekDefaultScrollOffset().clamp(
+      0.0,
+      maxWeekScroll,
+    );
     _weekTimelineScrollController = ScrollController(
       initialScrollOffset: _weekTimelineScrollOffset,
     );
@@ -167,7 +174,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final calendars = await repo.listCalendars();
     if (calendars.any((c) => c.id == legacyCalendarId)) return;
     final now = utcNow();
-    final settings = ref.read(settingsProvider).valueOrNull ?? const AppSettings();
+    final settings =
+        ref.read(settingsProvider).valueOrNull ?? const AppSettings();
     final defaultCalendar = Calendar(
       id: legacyCalendarId,
       name: 'Calendar',
@@ -361,7 +369,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final box =
         _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
     if (box != null) {
-      final centre = box.localToGlobal(Offset.zero) +
+      final centre =
+          box.localToGlobal(Offset.zero) +
           Offset(box.size.width / 2, box.size.height / 2);
       return Rect.fromCenter(center: centre, width: 1, height: 1);
     }
@@ -414,7 +423,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final initialCalendarId =
         event?.calendarId ?? _selectedCalendarId ?? legacyCalendarId;
 
-    // Always pass an accent color so the popup glows.  For existing events use
+    // Always pass an accent color so the popup gets a border.  For existing events use
     // the event color; for new events use the target calendar's color, so the
     // border matches the color the panel itself will default to.
     final accentColor = event != null
@@ -433,9 +442,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       width: _eventPopupWidth,
       accentColor: accentColor,
       builder: (ctx) => CalendarEventPanel(
-        key: ValueKey(
-          event?.id ?? 'new-${date.millisecondsSinceEpoch}',
-        ),
+        key: ValueKey(event?.id ?? 'new-${date.millisecondsSinceEpoch}'),
         event: event,
         initialDate: date,
         calendars: calendars,
@@ -476,9 +483,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }) async {
     if (!mounted) return;
     final lists = ref.read(todoListsProvider).valueOrNull ?? const [];
-    final listColors = {
-      for (final list in lists) list.id: list.colorValue,
-    };
+    final listColors = {for (final list in lists) list.id: list.colorValue};
     await showContextualPopoverAt(
       context: context,
       targetRect: rect,
@@ -492,7 +497,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         onSave: (updatedTask) async {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
           await ref.read(todoRepositoryProvider).upsertTask(updatedTask);
-          await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updatedTask);
+          await ref
+              .read(remoteSyncServiceProvider)
+              .pushTodoTaskNow(updatedTask);
           ref.invalidate(calendarTodoMarkersProvider);
           ref.invalidate(allTodoTasksProvider);
         },
@@ -527,7 +534,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final now = utcNow();
     final saved = CalendarEvent(
       id: event?.id ?? newId(),
-      calendarId: result['calendarId'] as String? ??
+      calendarId:
+          result['calendarId'] as String? ??
           event?.calendarId ??
           _selectedCalendarId ??
           legacyCalendarId,
@@ -537,7 +545,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       isFullDay: result['isFullDay'] as bool,
       colorValue: result['colorValue'] as int,
       notes: result['notes'] as String,
-      recurrence: result['recurrence'] as EventRecurrence? ?? EventRecurrence.none,
+      recurrence:
+          result['recurrence'] as EventRecurrence? ?? EventRecurrence.none,
       source: event?.source ?? EventSource.local,
       externalId: event?.externalId,
       createdAt: event?.createdAt ?? now,
@@ -546,6 +555,111 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     await ref.read(calendarRepositoryProvider).upsertEvent(saved);
     ref.invalidate(calendarEventsProvider);
     if (mounted) _resetSidebar();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Right-click context menu for calendar entries (events + todos)
+  // ---------------------------------------------------------------------------
+
+  /// Builds the right-click menu shown on an event or todo in the week/month
+  /// views. Events can change/reset colour and delete; todos (which take their
+  /// colour from their parent list and have no per-task colour) only delete.
+  List<ContextMenuItem> _buildEntryMenu(CalendarDayEntry entry) {
+    if (entry.isTodo) {
+      final marker = entry.todo!;
+      return [
+        ContextMenuItem(
+          label: 'Delete',
+          icon: PhosphorIconsRegular.trash,
+          isDestructive: true,
+          onTap: () => unawaited(_deleteTodoTask(marker)),
+        ),
+      ];
+    }
+    final event = entry.event!;
+    return [
+      ContextMenuItem(
+        label: 'Change color',
+        icon: PhosphorIconsRegular.palette,
+        onTap: () => unawaited(_changeEventColor(event)),
+      ),
+      ContextMenuItem(
+        label: 'Default color',
+        icon: PhosphorIconsRegular.arrowCounterClockwise,
+        onTap: () => unawaited(_resetEventColorToDefault(event)),
+      ),
+      ContextMenuItem(
+        label: 'Delete',
+        icon: PhosphorIconsRegular.trash,
+        isDestructive: true,
+        onTap: () => unawaited(_deleteEvent(event)),
+      ),
+    ];
+  }
+
+  /// The colour an event reverts to on "Default color": its calendar's colour,
+  /// falling back to the accent colour when that calendar has none.
+  int _defaultColorForCalendar(String calendarId) {
+    final calendars = ref.read(calendarsProvider).valueOrNull ?? const [];
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final calendar = calendars.where((c) => c.id == calendarId).firstOrNull;
+    return calendar?.colorValue ?? settings?.accentColor ?? 0xFF7C9EFF;
+  }
+
+  Future<void> _persistEventColor(CalendarEvent event, int colorValue) async {
+    if (event.colorValue == colorValue) return;
+    final updated = event.copyWith(colorValue: colorValue);
+    await ref.read(calendarRepositoryProvider).upsertEvent(updated);
+    ref.invalidate(calendarEventsProvider);
+  }
+
+  Future<void> _changeEventColor(CalendarEvent event) async {
+    final palette = ref.read(colorPaletteProvider);
+    final picked = await pickColorFromPalette(
+      context,
+      palette: palette,
+      current: event.colorValue,
+      title: 'Change color',
+    );
+    if (picked == null || !mounted) return;
+    await _persistEventColor(event, picked);
+  }
+
+  Future<void> _resetEventColorToDefault(CalendarEvent event) async {
+    await _persistEventColor(event, _defaultColorForCalendar(event.calendarId));
+  }
+
+  Future<void> _deleteEvent(CalendarEvent event) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete event?',
+      message: event.title.trim().isEmpty
+          ? 'This event will be moved to trash.'
+          : '"${event.title}" will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+    await ref.read(calendarRepositoryProvider).softDeleteEvent(event.id);
+    ref.invalidate(calendarEventsProvider);
+  }
+
+  Future<void> _deleteTodoTask(CalendarTodoMarker marker) async {
+    final title = marker.title?.trim();
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete task?',
+      message: (title == null || title.isEmpty)
+          ? 'This task will be moved to trash.'
+          : '"$title" will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+    final tasks = await ref.read(allTodoTasksProvider.future);
+    final match = tasks.where((t) => t.id == marker.taskId).firstOrNull;
+    if (match == null || !mounted) return;
+    final deleted = match.copyWith(deletedAt: utcNow());
+    await ref.read(todoRepositoryProvider).upsertTask(deleted);
+    await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    ref.invalidate(calendarTodoMarkersProvider);
+    ref.invalidate(allTodoTasksProvider);
   }
 
   Future<void> _openEditor({
@@ -620,8 +734,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   Widget _buildGoToTodayButton(bool weekStartsMonday) {
     final onCurrent = _isOnCurrentPeriod(weekStartsMonday);
     final enabled = !_isZooming && !_isWeekMorphing && !onCurrent;
-    final colorScheme = Theme.of(context).colorScheme;
-    final disabledColor = colorScheme.onSurface.withValues(alpha: 0.38);
 
     return ExcludeFocus(
       child: IconButton(
@@ -629,15 +741,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             ? () => _goToToday(weekStartsMonday: weekStartsMonday)
             : null,
         tooltip: _goToTodayTooltip(),
-        visualDensity: VisualDensity.compact,
-        style: IconButton.styleFrom(
-          foregroundColor: colorScheme.onSurface,
-          disabledForegroundColor: disabledColor,
-        ),
-        icon: Icon(
-          PhosphorIconsRegular.clock,
-          color: enabled ? colorScheme.onSurface : disabledColor,
-        ),
+        icon: const Icon(PhosphorIconsRegular.clock),
       ),
     );
   }
@@ -658,21 +762,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       }),
       icon: Icon(
         PhosphorIconsRegular.calendarDots,
-        color: active ? VoyagerColors.of(context).onAccent : null,
-      ),
-      style: IconButton.styleFrom(
-        backgroundColor:
-            active ? Theme.of(context).colorScheme.primary : null,
+        color: active ? Theme.of(context).colorScheme.primary : null,
       ),
     );
   }
 
-  Widget _buildCalendarSelector(BuildContext context, List<Calendar> calendars) {
+  Widget _buildCalendarSelector(
+    BuildContext context,
+    List<Calendar> calendars,
+  ) {
     final accent = Theme.of(context).colorScheme.primary.toARGB32();
     final dropdownValue = _selectedCalendarId ?? _lastSpecificCalendarId;
-    final selected = calendars
-        .cast<Calendar?>()
-        .firstWhere((c) => c?.id == dropdownValue, orElse: () => null);
+    final selected = calendars.cast<Calendar?>().firstWhere(
+      (c) => c?.id == dropdownValue,
+      orElse: () => null,
+    );
     return RoundedDropdown<String?>(
       value: dropdownValue,
       labelColor: Color(selected?.colorValue ?? accent),
@@ -866,11 +970,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     Color? accentColor,
   }) => _calendarTitleMorphStyles(context, accentColor: accentColor);
 
-  int _weekRowForDate(
-    DateTime month,
-    DateTime day,
-    bool weekStartsMonday,
-  ) {
+  int _weekRowForDate(DateTime month, DateTime day, bool weekStartsMonday) {
     final dates = monthGridDates(month, weekStartsMonday: weekStartsMonday);
     final idx = dates.indexWhere((d) => calendarSameDay(d, day));
     if (idx < 0) return 0;
@@ -881,7 +981,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final saved = _lastViewedWeekStart;
     if (saved != null) {
       final weekStart = _weekStart(saved, weekStartsMonday);
-      final dates = monthGridDates(visibleMonth, weekStartsMonday: weekStartsMonday);
+      final dates = monthGridDates(
+        visibleMonth,
+        weekStartsMonday: weekStartsMonday,
+      );
       for (var i = 0; i < 7; i++) {
         final day = weekStart.add(Duration(days: i));
         if (dates.any((d) => calendarSameDay(d, day))) return day;
@@ -934,7 +1037,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       morphMonth: morphMonth,
       onComplete: () {
         if (!mounted) return;
-        final weekStart = _weekFocusAfterMonthToWeek(morphMonth, weekStartsMonday);
+        final weekStart = _weekFocusAfterMonthToWeek(
+          morphMonth,
+          weekStartsMonday,
+        );
         setState(() {
           _isWeekMorphing = false;
           _weekMorphForward = true;
@@ -978,9 +1084,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _weekMorphAnchor = anchor;
       _rememberViewedMonth(morphMonth);
       _weekMorphEvents = List<CalendarEvent>.from(_latestEvents);
-      _weekMorphIndicators = List<CalendarDayIndicator>.from(
-        _latestIndicators,
-      );
+      _weekMorphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
       _weekMorphTodos = List<CalendarTodoMarker>.from(_latestTodos);
     });
 
@@ -1060,9 +1164,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _weekMorphWeekRow = weekRow;
       _weekMorphAnchor = anchor;
       _weekMorphEvents = List<CalendarEvent>.from(_latestEvents);
-      _weekMorphIndicators = List<CalendarDayIndicator>.from(
-        _latestIndicators,
-      );
+      _weekMorphIndicators = List<CalendarDayIndicator>.from(_latestIndicators);
       _weekMorphTodos = List<CalendarTodoMarker>.from(_latestTodos);
     });
 
@@ -1222,7 +1324,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       duration: _chainedMorphDuration,
       onComplete: () {
         if (!mounted) return;
-        final weekStart = _weekFocusAfterMonthToWeek(morphMonth, weekStartsMonday);
+        final weekStart = _weekFocusAfterMonthToWeek(
+          morphMonth,
+          weekStartsMonday,
+        );
         setState(() {
           _isChainedYearToWeek = false;
           _isWeekMorphing = false;
@@ -1591,7 +1696,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       children: [
         ExcludeFocus(
           child: IconButton(
-            onPressed: () => _shiftFocus(-1, weekStartsMonday: weekStartsMonday),
+            onPressed: () =>
+                _shiftFocus(-1, weekStartsMonday: weekStartsMonday),
             icon: const Icon(PhosphorIconsRegular.caretLeft),
           ),
         ),
@@ -1721,6 +1827,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       onTodoTap: _openTodoSidebar,
       onWeekSlotTap: _openWeekSlotSidebar,
       onEntryTap: _handleEntryTap,
+      entryMenuBuilder: mode == CalendarViewMode.year ? null : _buildEntryMenu,
       editingEventId: editingEventId,
       hiddenMonth: hiddenMonth,
       hiddenWeekRow: hiddenWeekRow,
@@ -1811,7 +1918,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     Color? accentColor,
   }) {
     final activeEvents = _weekMorphEvents ?? _morphEvents ?? events;
-    final activeIndicators = _weekMorphIndicators ?? _morphIndicators ?? indicators;
+    final activeIndicators =
+        _weekMorphIndicators ?? _morphIndicators ?? indicators;
     final activeTodos = _weekMorphTodos ?? _morphTodos ?? todoMarkers;
     final showTodoIcons = !_isZooming && !_isWeekMorphing;
 
@@ -1839,8 +1947,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         weekRow * 7,
         weekRow * 7 + 7,
       );
-      final monthTitleStyle =
-          _titleMorphStyles(context, accentColor: accentColor).$2;
+      final monthTitleStyle = _titleMorphStyles(
+        context,
+        accentColor: accentColor,
+      ).$2;
       final monthWeekdayStyle = calendarWeekdayLabelStyle(
         context,
         accentColor: accentColor,
@@ -1853,7 +1963,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
       final chained = _isChainedWeekToYear || _isChainedYearToWeek;
       final morphEvents = chained ? const <CalendarEvent>[] : activeEvents;
-      final morphIndicators = chained ? const <CalendarDayIndicator>[] : activeIndicators;
+      final morphIndicators = chained
+          ? const <CalendarDayIndicator>[]
+          : activeIndicators;
       final morphTodos = chained ? const <CalendarTodoMarker>[] : activeTodos;
       final weekDates = List.generate(
         7,
@@ -1918,7 +2030,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         //    duplicate-header artifact without any crossfade gymnastics.
         final reverseLiveGrid = Card(
           margin: EdgeInsets.zero,
-          color: calendarPanelBackgroundColor(context),
+          color: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          shape: const RoundedRectangleBorder(side: BorderSide.none),
           child: CalendarWeekTimeline(
             weekStart: _weekStart(anchor, weekStartsMonday),
             events: activeEvents,
@@ -1948,8 +2063,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               animation: _weekMorphController,
               child: IgnorePointer(child: reverseLiveGrid),
               builder: (context, child) {
-                final opacity = Curves.easeInOut
-                    .transform(_weekMorphController.value.clamp(0.0, 1.0));
+                final opacity = Curves.easeInOut.transform(
+                  _weekMorphController.value.clamp(0.0, 1.0),
+                );
                 return Opacity(opacity: opacity, child: child);
               },
             ),
@@ -2026,8 +2142,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         fullWeekdayStyle: fullWeekdayStyle,
         yearMonthNameStyle: yearMonthNameStyle,
         monthTitleStyle: monthTitleStyleForMorph,
-        chainedYearWeekTransition:
-            _isChainedWeekToYear || _isChainedYearToWeek,
+        chainedYearWeekTransition: _isChainedWeekToYear || _isChainedYearToWeek,
         accentColor: accentColor,
         yearGrid: _calendarGrid(
           events: activeEvents,
@@ -2084,6 +2199,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   @override
   Widget build(BuildContext context) {
+    if (DevFlags.verboseSync) {
+      final active = TickerMode.valuesOf(context).enabled;
+      debugPrint(
+        '[jank] CalendarPage.build() ran (preloaded shell branch, '
+        'active=$active)',
+      );
+      ref.listen(calendarEventsProvider(_selectedCalendarId), (_, _) {
+        debugPrint('[jank] CalendarPage: calendarEventsProvider changed');
+      });
+      ref.listen(calendarsProvider, (_, _) {
+        debugPrint('[jank] CalendarPage: calendarsProvider changed');
+      });
+      ref.listen(settingsProvider, (_, _) {
+        debugPrint('[jank] CalendarPage: settingsProvider changed');
+      });
+      ref.listen(calendarTodoMarkersProvider, (_, _) {
+        debugPrint('[jank] CalendarPage: calendarTodoMarkersProvider changed');
+      });
+    }
     ref.listen<bool>(
       devSettingsProvider.select((s) => s.slowCalendarAnimations),
       (previous, next) {
@@ -2092,7 +2226,18 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
 
     final eventsAsync = ref.watch(calendarEventsProvider(_selectedCalendarId));
-    final todosAsync = ref.watch(calendarTodoMarkersProvider);
+    // This page is preloaded at app startup (see _preloadedShellPaths in
+    // app_router.dart) and stays mounted in every other branch too — so an
+    // unconditional watch here means every todo completion invalidating
+    // allTodoTasksProvider (which calendarTodoMarkersProvider derives from)
+    // rebuilds this whole page's grid off-screen, on whatever tab the user
+    // is actually looking at. ShellBranchContainer already wraps the
+    // inactive branches in TickerMode(enabled: false), so that's the signal
+    // used here too: read (no subscription) while offstage, watch (and pick
+    // up whatever changed while away) once this branch is active again.
+    final todosAsync = TickerMode.valuesOf(context).enabled
+        ? ref.watch(calendarTodoMarkersProvider)
+        : ref.read(calendarTodoMarkersProvider);
     final calendarsAsync = ref.watch(calendarsProvider);
     final calendars = calendarsAsync.valueOrNull ?? const <Calendar>[];
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
@@ -2100,9 +2245,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
     final selectedCalendar = _selectedCalendarId == null
         ? null
-        : calendars
-              .cast<Calendar?>()
-              .firstWhere((c) => c?.id == _selectedCalendarId, orElse: () => null);
+        : calendars.cast<Calendar?>().firstWhere(
+            (c) => c?.id == _selectedCalendarId,
+            orElse: () => null,
+          );
     final calendarAccentColor = selectedCalendar?.colorValue != null
         ? Color(selectedCalendar!.colorValue!)
         : null;
@@ -2112,7 +2258,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     return CalendarKeyboardShortcuts(
       navigateLeftKey: settings.calendarNavigateLeftKey,
       navigateRightKey: settings.calendarNavigateRightKey,
-      onNavigate: (delta) => _shiftFocus(delta, weekStartsMonday: weekStartsMonday),
+      onNavigate: (delta) =>
+          _shiftFocus(delta, weekStartsMonday: weekStartsMonday),
       child: Stack(
         children: [
           Padding(
@@ -2122,32 +2269,45 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               children: [
                 Row(
                   children: [
-                    _buildViewModeSelector(weekStartsMonday, accentColor: calendarAccentColor),
+                    _buildViewModeSelector(
+                      weekStartsMonday,
+                      accentColor: calendarAccentColor,
+                    ),
                     _buildGoToTodayButton(weekStartsMonday),
                     const SizedBox(width: 8),
-                    Flexible(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 360),
-                        child: _buildCalendarSelector(context, calendars),
-                      ),
+                    SizedBox(
+                      width: 360,
+                      child: _buildCalendarSelector(context, calendars),
                     ),
                     const SizedBox(width: 8),
                     _buildAllCalendarsToggle(context),
-                    if (ref.watch(devSettingsProvider).showCalendarInstantViewSwitch) ...[
+                    if (ref
+                        .watch(devSettingsProvider)
+                        .showCalendarInstantViewSwitch) ...[
                       const SizedBox(width: 8),
-                      const Text('Instant Switch:', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const Text(
+                        'Instant Switch:',
+                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
                       const SizedBox(width: 4),
-                      TextButton(
-                        onPressed: () => _instantSwitchToWeekView(weekStartsMonday),
-                        child: const Text('W'),
+                      GlassButton(
+                        onPressed: () =>
+                            _instantSwitchToWeekView(weekStartsMonday),
+                        label: 'W',
+                        dense: true,
                       ),
-                      TextButton(
-                        onPressed: () => _instantSwitchToMonthView(weekStartsMonday),
-                        child: const Text('M'),
+                      const SizedBox(width: 4),
+                      GlassButton(
+                        onPressed: () =>
+                            _instantSwitchToMonthView(weekStartsMonday),
+                        label: 'M',
+                        dense: true,
                       ),
-                      TextButton(
+                      const SizedBox(width: 4),
+                      GlassButton(
                         onPressed: _instantSwitchToYearView,
-                        child: const Text('Y'),
+                        label: 'Y',
+                        dense: true,
                       ),
                     ],
                     const Spacer(),
@@ -2157,16 +2317,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                         _dayViewDate == null)
                       _buildFocusHeader(context, weekStartsMonday),
                     const SizedBox(width: 8),
-                    OutlinedButton(
+                    GlassButton(
                       onPressed: _syncGoogle,
-                      child: const Text('Sync Google'),
+                      label: 'Sync Google',
+                      icon: const Icon(PhosphorIconsRegular.arrowClockwise),
+                      dense: true,
                     ),
                     const SizedBox(width: 8),
                     Builder(
-                      builder: (btnCtx) => FilledButton(
+                      builder: (btnCtx) => GlassButton(
                         onPressed: () {
-                          final box =
-                              btnCtx.findRenderObject() as RenderBox?;
+                          final box = btnCtx.findRenderObject() as RenderBox?;
                           Rect? anchor;
                           if (box != null) {
                             final origin = box.localToGlobal(Offset.zero);
@@ -2174,7 +2335,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                           }
                           _openEditor(day: _focused, anchorRect: anchor);
                         },
-                        child: const Text('Add event'),
+                        label: 'Add event',
+                        dense: true,
                       ),
                     ),
                   ],
@@ -2183,8 +2345,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 Expanded(
                   child: eventsAsync.when(
                     data: (events) {
-                      final rawTodos = todosAsync.valueOrNull ?? const <CalendarTodoMarker>[];
-                      final showTodos = _selectedCalendarId == null ||
+                      final rawTodos =
+                          todosAsync.valueOrNull ??
+                          const <CalendarTodoMarker>[];
+                      final showTodos =
+                          _selectedCalendarId == null ||
                           _selectedCalendarId == legacyCalendarId;
                       final todos = showTodos
                           ? rawTodos
@@ -2239,8 +2404,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 }
 
-
-
 // =============================================================================
 // Shared style helpers (used by _CalendarPageState and CalendarMorphWarmup)
 // =============================================================================
@@ -2281,8 +2444,10 @@ List<Rect> _calendarWarmupSourceRects(
   TextStyle compactWeekdayStyle,
 ) {
   const tilePadding = 6.0;
-  final titleHeight =
-      MonthTitleHeader.measureTitleText(yearTitleStyle, 'June').height;
+  final titleHeight = MonthTitleHeader.measureTitleText(
+    yearTitleStyle,
+    'June',
+  ).height;
   final weekdayHeight = WeekdayHeaderRow.totalHeight(
     compactWeekdayStyle,
     useSingleLetterLabels: true,
@@ -2372,8 +2537,10 @@ class CalendarLayoutCache {
   final List<MorphDayEventFrozenMetrics> monthMorphEventMetrics;
 
   MorphDayEventFrozenMetrics morphEventMetricsFor(int eventCount) =>
-      monthMorphEventMetrics[
-          eventCount.clamp(0, MorphDayEventStack.maxMonthEvents)];
+      monthMorphEventMetrics[eventCount.clamp(
+        0,
+        MorphDayEventStack.maxMonthEvents,
+      )];
 
   // Year-grid layout constants — must match _YearGrid.
   static const _crossAxisCount = 3;
@@ -2416,7 +2583,11 @@ class CalendarLayoutCache {
       );
       tileBounds.add(tileRect);
       tileSourceRects.add(
-        _calendarWarmupSourceRects(tileRect, yearTileNameStyle, compactWeekdayStyle),
+        _calendarWarmupSourceRects(
+          tileRect,
+          yearTileNameStyle,
+          compactWeekdayStyle,
+        ),
       );
       tileZoomMatrices.add(_zoomMatrixForTile(tileRect, areaSize));
     }
@@ -2428,9 +2599,7 @@ class CalendarLayoutCache {
     );
 
     final weekColumnRects = _weekColumnRects(areaSize, weekWeekdayStyle);
-    final monthWeekdayHeaderY = MonthTitleHeader.weekdayHeaderY(
-      fullTitleStyle,
-    );
+    final monthWeekdayHeaderY = MonthTitleHeader.weekdayHeaderY(fullTitleStyle);
     final monthCardRect = Rect.fromLTWH(0, 0, areaSize.width, areaSize.height);
     final weekAreaRect = monthCardRect;
     final monthMorphEventMetrics = calendarMorphEventFrozenMetrics(
@@ -2471,12 +2640,11 @@ class CalendarLayoutCache {
     required Size areaSize,
     required TextStyle weekdayStyle,
     required double allDayShelfHeight,
-  }) =>
-      _weekColumnRects(
-        areaSize,
-        weekdayStyle,
-        allDayShelfHeight: allDayShelfHeight,
-      );
+  }) => _weekColumnRects(
+    areaSize,
+    weekdayStyle,
+    allDayShelfHeight: allDayShelfHeight,
+  );
 
   static Matrix4 _zoomMatrixForTile(Rect tileRect, Size areaSize) {
     final sx = areaSize.width / tileRect.width;
@@ -2526,12 +2694,16 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
+    if (DevFlags.disableCache) {
+      _done = true;
+      return;
+    }
     _controller.value = _forwardT.first;
     WidgetsBinding.instance.addPostFrameCallback(_advanceWarmup);
   }
 
   void _advanceWarmup(Duration _) {
-    if (!mounted) return;
+    if (!mounted || DevFlags.disableCache) return;
     if (_step >= _forwardT.length + _reverseT.length) {
       setState(() => _done = true);
       return;
@@ -2563,13 +2735,17 @@ class _CalendarMorphWarmupState extends State<CalendarMorphWarmup>
 
   @override
   Widget build(BuildContext context) {
-    if (_done) return const SizedBox.shrink();
+    if (_done || DevFlags.disableCache) return const SizedBox.shrink();
 
     final (compact, full) = _calendarWeekdayMorphStyles(context);
     final (yearName, monthTitle) = _calendarTitleMorphStyles(context);
     final morphMonth = DateTime(DateTime.now().year, 6, 1);
     final dates = monthGridDates(morphMonth, weekStartsMonday: true);
-    final sourceRects = _calendarWarmupSourceRects(_tileRect, yearName, compact);
+    final sourceRects = _calendarWarmupSourceRects(
+      _tileRect,
+      yearName,
+      compact,
+    );
     final destRects = MonthTitleHeader.dayCellRects(
       _areaSize,
       monthTitle,
@@ -2834,7 +3010,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
       widget.monthTitleStyle,
       _monthName,
     );
-    
+
     final packedWeeks = List.generate(6, (row) {
       return calendarPackWeekEvents(
         widget.dates.sublist(row * 7, row * 7 + 7),
@@ -2850,17 +3026,15 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             key: ValueKey(widget.dates[i]),
             date: widget.dates[i],
             month: widget.morphMonth,
-            events: widget.dates[i].month == widget.morphMonth.month &&
+            events:
+                widget.dates[i].month == widget.morphMonth.month &&
                     widget.dates[i].year == widget.morphMonth.year
                 ? packedWeeks[i ~/ 7][i % 7]
                 : const <CalendarEvent?>[],
             todoMarkers:
                 widget.dates[i].month == widget.morphMonth.month &&
                     widget.dates[i].year == widget.morphMonth.year
-                ? calendarTodoMarkersForDay(
-                    widget.todoMarkers,
-                    widget.dates[i],
-                  )
+                ? calendarTodoMarkersForDay(widget.todoMarkers, widget.dates[i])
                 : const <CalendarTodoMarker>[],
           ),
         ),
@@ -2932,7 +3106,19 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                     height: bgRect.height,
                     child: Card(
                       margin: EdgeInsets.zero,
-                      color: calendarPanelBackgroundColor(context),
+                      color: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(
+                          color: Color.lerp(
+                            Colors.transparent,
+                            Theme.of(context).dividerColor,
+                            widget.morphReverse ? t : (1.0 - t),
+                          )!,
+                        ),
+                      ),
                       child: const SizedBox.expand(),
                     ),
                   ),
@@ -3115,8 +3301,9 @@ class _MorphCell extends StatelessWidget {
         : calendarAdjacentMonthBorderOpacity;
     // Colors computed once per frame by the AnimatedBuilder and threaded down
     // via _MorphProgress — avoids 42× Theme.of lookups on every animation tick.
-    final fullBorderColor =
-        inMonth ? progress.dividerColor : progress.adjacentColor;
+    final fullBorderColor = inMonth
+        ? progress.dividerColor
+        : progress.adjacentColor;
     final borderAlpha =
         compactBorderAlpha + (fullBorderAlpha - compactBorderAlpha) * styleT;
 
@@ -3128,90 +3315,48 @@ class _MorphCell extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
-      child: Padding(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: Padding(
           padding: EdgeInsets.lerp(
             _compactCellPadding,
             _fullCellPadding,
             styleT,
           )!,
           child: LayoutBuilder(
-            builder: (context, constraints) {
-              final dayLayoutSize = _dayLayoutDiameter(dayFontSize)
-                  .clamp(0.0, constraints.maxHeight);
-              final chained = progress.chainedYearWeekTransition;
-              final dotsOpacity = chained ? progress.yearEventDotsOpacity : 1.0;
-              final showEvents = events.isNotEmpty && inMonth;
-              final actualEventCount = events.where((e) => e != null).length;
-              final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
-                morphReverse: progress.morphReverse,
-                eventCount: actualEventCount,
-                styleT: styleT,
-              );
-              final layoutDayLayoutSize = _dayLayoutDiameter(_fullFontSize)
-                  .clamp(0.0, constraints.maxHeight);
-              final compactDaySize = _dayLayoutDiameter(
-                MonthDayCellStyle.compact.fontSize,
-              ).clamp(0.0, constraints.maxHeight);
+          builder: (context, constraints) {
+            final dayLayoutSize = _dayLayoutDiameter(
+              dayFontSize,
+            ).clamp(0.0, constraints.maxHeight);
+            final chained = progress.chainedYearWeekTransition;
+            final dotsOpacity = chained ? progress.yearEventDotsOpacity : 1.0;
+            final showEvents = events.isNotEmpty && inMonth;
+            final actualEventCount = events.where((e) => e != null).length;
+            final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
+              morphReverse: progress.morphReverse,
+              eventCount: actualEventCount,
+              styleT: styleT,
+            );
+            final layoutDayLayoutSize = _dayLayoutDiameter(
+              _fullFontSize,
+            ).clamp(0.0, constraints.maxHeight);
+            final compactDaySize = _dayLayoutDiameter(
+              MonthDayCellStyle.compact.fontSize,
+            ).clamp(0.0, constraints.maxHeight);
 
-              final yearAlignment = _yearDayAlignment(
-                cellHeight: constraints.maxHeight,
-                daySize: yearDotsSettled ? compactDaySize : dayLayoutSize,
-                hasEvents: showEvents,
-              );
+            final yearAlignment = _yearDayAlignment(
+              cellHeight: constraints.maxHeight,
+              daySize: yearDotsSettled ? compactDaySize : dayLayoutSize,
+              hasEvents: showEvents,
+            );
 
-              final cellAlignment = Alignment.lerp(
-                yearAlignment,
-                Alignment.topCenter,
-                styleT,
-              )!;
+            final cellAlignment = Alignment.lerp(
+              yearAlignment,
+              Alignment.topCenter,
+              styleT,
+            )!;
 
-              if (yearDotsSettled) {
-                final todoOverlay = chained
-                    ? null
-                    : _morphTodoOverlay(
-                        progress: progress,
-                        styleT: styleT,
-                        inMonth: inMonth,
-                      );
-                return Stack(
-                  clipBehavior: Clip.hardEdge,
-                  children: [
-                    Align(
-                      alignment: yearAlignment,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: CalendarDayNumber(
-                              date: date,
-                              month: month,
-                              fontSize: MonthDayCellStyle.compact.fontSize,
-                              mutedWhenAdjacent: !inMonth,
-                              accentColor: progress.accentColor,
-                            ),
-                          ),
-                          if (inMonth && events.isNotEmpty) ...[
-                            const SizedBox(height: 1),
-                            Opacity(
-                              opacity: dotsOpacity.clamp(0.0, 1.0),
-                              child: CalendarDayEventDots(
-                                events: events.where((e) => e != null).cast<CalendarEvent>().toList(),
-                                dotSize:
-                                    MonthDayCellStyle.compact.eventDotSize,
-                                maxDots:
-                                    MonthDayCellStyle.compact.maxEventLines,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    ?todoOverlay,
-                  ],
-                );
-              }
-
+            if (yearDotsSettled) {
               final todoOverlay = chained
                   ? null
                   : _morphTodoOverlay(
@@ -3219,54 +3364,102 @@ class _MorphCell extends StatelessWidget {
                       styleT: styleT,
                       inMonth: inMonth,
                     );
-
               return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Align(
-                      alignment: cellAlignment,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: CalendarDayNumber(
-                          date: date,
-                          month: month,
-                          fontSize: dayFontSize,
-                          mutedWhenAdjacent: !inMonth,
-                          accentColor: progress.accentColor,
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Align(
+                    alignment: yearAlignment,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: CalendarDayNumber(
+                            date: date,
+                            month: month,
+                            fontSize: MonthDayCellStyle.compact.fontSize,
+                            mutedWhenAdjacent: !inMonth,
+                            accentColor: progress.accentColor,
+                          ),
                         ),
-                      ),
+                        if (inMonth && events.isNotEmpty) ...[
+                          const SizedBox(height: 1),
+                          Opacity(
+                            opacity: dotsOpacity.clamp(0.0, 1.0),
+                            child: CalendarDayEventDots(
+                              events: events
+                                  .where((e) => e != null)
+                                  .cast<CalendarEvent>()
+                                  .toList(),
+                              dotSize: MonthDayCellStyle.compact.eventDotSize,
+                              maxDots: MonthDayCellStyle.compact.maxEventLines,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (showEvents)
-                      Positioned.fill(
-                        child: MorphDayEventStack(
-                          events: events,
-                          date: date,
-                          // During a chained week↔year transition styleT rises
-                          // from 0→1, which would grow year dots into bars while
-                          // they fade out. Clamping to 0 keeps them as settled
-                          // year dots; opacity (dotsOpacity) handles the fade.
-                          styleT: chained ? 0.0 : styleT,
-                          inMonth: inMonth,
-                          maxWidth: constraints.maxWidth,
-                          cellHeight: constraints.maxHeight,
-                          dayLayoutSize: dayLayoutSize,
-                          layoutDayLayoutSize: layoutDayLayoutSize,
-                          morphReverse: progress.morphReverse,
-                          opacity: dotsOpacity,
-                          frozenMetrics: progress.monthMorphEventMetrics[
-                              events.length.clamp(
-                                0,
-                                MorphDayEventStack.maxMonthEvents,
-                              )],
-                        ),
-                      ),
-                    ?todoOverlay,
-                  ],
-                );
-            },
-          ),
+                  ),
+                  ?todoOverlay,
+                ],
+              );
+            }
+
+            final todoOverlay = chained
+                ? null
+                : _morphTodoOverlay(
+                    progress: progress,
+                    styleT: styleT,
+                    inMonth: inMonth,
+                  );
+
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Align(
+                  alignment: cellAlignment,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: CalendarDayNumber(
+                      date: date,
+                      month: month,
+                      fontSize: dayFontSize,
+                      mutedWhenAdjacent: !inMonth,
+                      accentColor: progress.accentColor,
+                    ),
+                  ),
+                ),
+                if (showEvents)
+                  Positioned.fill(
+                    child: MorphDayEventStack(
+                      events: events,
+                      date: date,
+                      // During a chained week↔year transition styleT rises
+                      // from 0→1, which would grow year dots into bars while
+                      // they fade out. Clamping to 0 keeps them as settled
+                      // year dots; opacity (dotsOpacity) handles the fade.
+                      styleT: chained ? 0.0 : styleT,
+                      inMonth: inMonth,
+                      maxWidth: constraints.maxWidth,
+                      cellHeight: constraints.maxHeight,
+                      dayLayoutSize: dayLayoutSize,
+                      layoutDayLayoutSize: layoutDayLayoutSize,
+                      morphReverse: progress.morphReverse,
+                      opacity: dotsOpacity,
+                      frozenMetrics:
+                          progress.monthMorphEventMetrics[events.length.clamp(
+                            0,
+                            MorphDayEventStack.maxMonthEvents,
+                          )],
+                    ),
+                  ),
+                ?todoOverlay,
+              ],
+            );
+          },
         ),
-    );
+      ),
+    ),
+  );
   }
 }
 
@@ -3382,6 +3575,7 @@ class _ViewModeSegmentedControl extends StatelessWidget {
 
     final row = Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var index = 0; index < _labels.length; index++)
           segment(index, CalendarViewMode.values[index]),
@@ -3391,13 +3585,14 @@ class _ViewModeSegmentedControl extends StatelessWidget {
     final control = SizedBox(
       height: minSize.height,
       child: DecoratedBox(
+        position: DecorationPosition.foreground,
         decoration: BoxDecoration(
           border: Border.fromBorderSide(side),
           borderRadius: BorderRadius.circular(outerRadius.x),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(outerRadius.x),
-          child: Align(alignment: Alignment.center, child: row),
+          child: row,
         ),
       ),
     );
@@ -3512,13 +3707,12 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
       widget.morphMonth,
       weekStartsMonday: widget.weekStartsMonday,
     );
-    _weekDates = dates.sublist(
-      widget.weekRow * 7,
-      widget.weekRow * 7 + 7,
-    );
+    _weekDates = dates.sublist(widget.weekRow * 7, widget.weekRow * 7 + 7);
     _packedWeekEvents = calendarPackWeekEvents(_weekDates, widget.events);
     _monthTitleLabel = _mmmmFormat.format(widget.morphMonth);
-    _monthTitleHeight = MonthTitleHeader.preferredHeight(widget.monthTitleStyle);
+    _monthTitleHeight = MonthTitleHeader.preferredHeight(
+      widget.monthTitleStyle,
+    );
     _inactiveMonthChild = widget.inactiveMonthRows;
     _frozenEntryLayoutHeight = calendarMorphMonthInnerCellHeight(
       widget.monthRowRects.first.height,
@@ -3571,15 +3765,18 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
               t: t,
             );
             final morphBorderRadius = calendarWeekMorphBorderRadius(t);
-            final weekChromeOpacity =
-                Curves.easeInOut.transform(t.clamp(0.0, 1.0));
+            final weekChromeOpacity = Curves.easeInOut.transform(
+              t.clamp(0.0, 1.0),
+            );
             final monthEntryOpacity = (1.0 - t).clamp(0.0, 1.0);
             // week→month: borders and hour lines are provided by the live grid
             // underneath (which fades out), so the morph layer doesn't double-paint.
-            final morphBorderOpacity =
-                widget.weekMorphForward ? t.clamp(0.0, 1.0) : 0.0;
-            final hourLineOpacity =
-                widget.weekMorphForward ? weekChromeOpacity : 0.0;
+            final morphBorderOpacity = widget.weekMorphForward
+                ? t.clamp(0.0, 1.0)
+                : 0.0;
+            final hourLineOpacity = widget.weekMorphForward
+                ? weekChromeOpacity
+                : 0.0;
             final weekdayLabelStyle = TextStyle.lerp(
               widget.monthWeekdayStyle,
               widget.weekWeekdayStyle,
@@ -3590,8 +3787,9 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
               widget.weekColumnRects.first,
               t,
             )!.top;
-            final onSurfaceVariant =
-                Theme.of(context).colorScheme.onSurfaceVariant;
+            final onSurfaceVariant = Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant;
             final hourClipRects = morphBorderRects
                 .map(
                   (rect) => rect.shift(
@@ -3618,16 +3816,16 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                       opacity: widget.weekMorphForward ? 1.0 : monthFade,
                       child: Card(
                         margin: EdgeInsets.zero,
-                        color: calendarPanelBackgroundColor(context),
+                        color: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        elevation: 0,
+                        shape: const RoundedRectangleBorder(side: BorderSide.none),
                         child: const SizedBox.expand(),
                       ),
                     ),
                   ),
                   // Inactive month rows fade out during month→week morph.
-                  Opacity(
-                    opacity: monthFade,
-                    child: inactiveMonthChild!,
-                  ),
+                  Opacity(opacity: monthFade, child: inactiveMonthChild!),
                   // Month title fades out beneath morph cells as they expand upward.
                   Positioned(
                     left: MonthTitleHeader.cardPadding,
@@ -3685,9 +3883,9 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                         builder: (context, _) {
                           final scrollOffset =
                               calendarWeekEffectiveScrollOffset(
-                            widget.weekTimelineScrollController,
-                            widget.weekTimelineScrollOffset,
-                          );
+                                widget.weekTimelineScrollController,
+                                widget.weekTimelineScrollOffset,
+                              );
                           return CustomPaint(
                             painter: CalendarWeekTimeGridPainter(
                               scrollOffset: scrollOffset,
@@ -3782,13 +3980,9 @@ class _MonthWeekMorphCell extends StatelessWidget {
     final monthStyle = MonthDayCellStyle.full;
 
     final fontSize = lerpDouble(monthStyle.fontSize, 13, t)!;
-    final borderRadius = monthStyle.borderRadius +
-        (12 - monthStyle.borderRadius) * t;
-    final cellMargin = lerpDouble(
-      monthStyle.cellMargin.top,
-      1,
-      t,
-    )!;
+    final borderRadius =
+        monthStyle.borderRadius + (12 - monthStyle.borderRadius) * t;
+    final cellMargin = lerpDouble(monthStyle.cellMargin.top, 1, t)!;
     final cellPadding = EdgeInsets.lerp(
       monthStyle.cellPadding,
       const EdgeInsets.all(4),

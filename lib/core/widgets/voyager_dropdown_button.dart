@@ -23,12 +23,14 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
     super.onSaved,
     super.enabled = true,
     this.isExpanded = false,
+    this.showCaret = true,
     this.accentColor,
     this.onMenuStateChanged,
   }) : assert(items.isNotEmpty),
        super(
          builder: (field) {
            final dropdown = field.widget as VoyagerDropdownButtonFormField<T>;
+           final state = field as _VoyagerDropdownFormFieldState<T>;
            final accent = dropdown.accentColor;
            var fieldDecoration = decoration.applyDefaults(
              Theme.of(field.context).inputDecorationTheme,
@@ -52,6 +54,7 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
              );
            }
            return InputDecorator(
+             key: state.decoratorKey,
              decoration: fieldDecoration,
              isEmpty: field.value == null,
              child: _VoyagerDropdownFieldControl<T>(
@@ -59,6 +62,7 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
                items: items,
                enabled: dropdown.enabled,
                isExpanded: isExpanded,
+               showCaret: dropdown.showCaret,
                accentColor: dropdown.accentColor,
                onMenuStateChanged: dropdown.onMenuStateChanged,
                onChanged: (value) {
@@ -74,6 +78,7 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
   final InputDecoration decoration;
   final ValueChanged<T?>? onChanged;
   final bool isExpanded;
+  final bool showCaret;
   final Color? accentColor;
 
   /// Called with `true` when the popup menu opens and `false` once it has
@@ -81,6 +86,18 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
   /// other overlays — e.g. hover tooltips — so nothing paints over the menu
   /// while it animates.
   final ValueChanged<bool>? onMenuStateChanged;
+
+  @override
+  FormFieldState<T> createState() => _VoyagerDropdownFormFieldState<T>();
+}
+
+/// Owns a [GlobalKey] on the built [InputDecorator] so the menu can anchor to
+/// its exact rendered box (border included) instead of re-deriving it via
+/// [BuildContext.findRenderObject] on the [FormFieldState]'s own context,
+/// which — through the extra `Semantics`/[InputDecorator] indirection — could
+/// resolve to a differently-sized box and throw off the popup's position.
+class _VoyagerDropdownFormFieldState<T> extends FormFieldState<T> {
+  final decoratorKey = GlobalKey();
 }
 
 class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
@@ -89,6 +106,7 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
     required this.items,
     required this.enabled,
     required this.isExpanded,
+    required this.showCaret,
     required this.onChanged,
     this.accentColor,
     this.onMenuStateChanged,
@@ -98,6 +116,7 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
   final List<DropdownMenuItem<T>> items;
   final bool enabled;
   final bool isExpanded;
+  final bool showCaret;
   final ValueChanged<T?> onChanged;
   final Color? accentColor;
   final ValueChanged<bool>? onMenuStateChanged;
@@ -124,14 +143,18 @@ class _VoyagerDropdownFieldControlState<T>
   Future<void> _openMenu() async {
     if (!widget.enabled) return;
 
-    final button = context.findRenderObject()! as RenderBox;
+    final decoratorKey =
+        (widget.field as _VoyagerDropdownFormFieldState<T>).decoratorKey;
+    final buttonBox =
+        decoratorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (buttonBox == null) return;
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
-    final buttonRect = topLeft & button.size;
+    final topLeft = buttonBox.localToGlobal(Offset.zero, ancestor: overlay);
+    final buttonRect = topLeft & buttonBox.size;
     final menuRect = Rect.fromLTWH(
       buttonRect.left,
-      buttonRect.bottom + 8,
+      buttonRect.bottom,
       buttonRect.width,
       0,
     );
@@ -198,13 +221,14 @@ class _VoyagerDropdownFieldControlState<T>
                 child: selected?.child ?? const SizedBox.shrink(),
               ),
             ),
-            Icon(
-              PhosphorIconsRegular.caretDown,
-              size: 18,
-              color: theme.colorScheme.onSurface.withValues(
-                alpha: widget.enabled ? 0.8 : 0.38,
+            if (widget.showCaret)
+              Icon(
+                PhosphorIconsRegular.caretDown,
+                size: 18,
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: widget.enabled ? 0.8 : 0.38,
+                ),
               ),
-            ),
           ],
         ),
       ),
