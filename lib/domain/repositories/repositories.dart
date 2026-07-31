@@ -3,6 +3,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -122,6 +123,14 @@ abstract class NotificationRepository {
   Future<void> undismiss(String dismissalKey);
 }
 
+/// Local-only storage for the Life Tracker page's bucket list. Like
+/// [NotificationRepository] this has no sync/conflict story.
+abstract class BucketListRepository {
+  Future<List<BucketListItem>> listItems();
+  Future<void> upsertItem(BucketListItem item);
+  Future<void> deleteItem(String id);
+}
+
 abstract class FinanceRepository {
   Future<List<FinancialTransaction>> listTransactions({
     bool includeDeleted = false,
@@ -171,6 +180,9 @@ abstract class SettingsRepository {
   Future<void> saveSettings(AppSettings settings);
   Future<Map<String, int>> getTagColors();
   Future<void> setTagColor(String tag, int colorValue);
+  Future<Set<String>> getCustomWords();
+  Future<void> addCustomWord(String word);
+  Future<void> removeCustomWord(String word);
 }
 
 abstract class AuthRepository {

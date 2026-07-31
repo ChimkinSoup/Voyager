@@ -6526,6 +6526,17 @@ class $SettingsTableTable extends SettingsTable
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _birthDateMeta = const VerificationMeta(
+    'birthDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> birthDate = GeneratedColumn<DateTime>(
+    'birth_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _alertOnPeriodicPromptsMeta =
       const VerificationMeta('alertOnPeriodicPrompts');
   @override
@@ -7473,6 +7484,7 @@ class $SettingsTableTable extends SettingsTable
     calendarNavigateRightKey,
     timelineModeYearZero,
     birthYear,
+    birthDate,
     alertOnPeriodicPrompts,
     alertTimeHour,
     hideCompletedTasks,
@@ -7708,6 +7720,12 @@ class $SettingsTableTable extends SettingsTable
       context.handle(
         _birthYearMeta,
         birthYear.isAcceptableOrUnknown(data['birth_year']!, _birthYearMeta),
+      );
+    }
+    if (data.containsKey('birth_date')) {
+      context.handle(
+        _birthDateMeta,
+        birthDate.isAcceptableOrUnknown(data['birth_date']!, _birthDateMeta),
       );
     }
     if (data.containsKey('alert_on_periodic_prompts')) {
@@ -8452,6 +8470,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.int,
         data['${effectivePrefix}birth_year'],
       ),
+      birthDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}birth_date'],
+      ),
       alertOnPeriodicPrompts: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}alert_on_periodic_prompts'],
@@ -8778,6 +8800,7 @@ class SettingsTableData extends DataClass
   final String calendarNavigateRightKey;
   final bool timelineModeYearZero;
   final int? birthYear;
+  final DateTime? birthDate;
   final bool alertOnPeriodicPrompts;
   final int alertTimeHour;
   final bool hideCompletedTasks;
@@ -8872,6 +8895,7 @@ class SettingsTableData extends DataClass
     required this.calendarNavigateRightKey,
     required this.timelineModeYearZero,
     this.birthYear,
+    this.birthDate,
     required this.alertOnPeriodicPrompts,
     required this.alertTimeHour,
     required this.hideCompletedTasks,
@@ -8980,6 +9004,9 @@ class SettingsTableData extends DataClass
     map['timeline_mode_year_zero'] = Variable<bool>(timelineModeYearZero);
     if (!nullToAbsent || birthYear != null) {
       map['birth_year'] = Variable<int>(birthYear);
+    }
+    if (!nullToAbsent || birthDate != null) {
+      map['birth_date'] = Variable<DateTime>(birthDate);
     }
     map['alert_on_periodic_prompts'] = Variable<bool>(alertOnPeriodicPrompts);
     map['alert_time_hour'] = Variable<int>(alertTimeHour);
@@ -9189,6 +9216,9 @@ class SettingsTableData extends DataClass
       birthYear: birthYear == null && nullToAbsent
           ? const Value.absent()
           : Value(birthYear),
+      birthDate: birthDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(birthDate),
       alertOnPeriodicPrompts: Value(alertOnPeriodicPrompts),
       alertTimeHour: Value(alertTimeHour),
       hideCompletedTasks: Value(hideCompletedTasks),
@@ -9349,6 +9379,7 @@ class SettingsTableData extends DataClass
         json['timelineModeYearZero'],
       ),
       birthYear: serializer.fromJson<int?>(json['birthYear']),
+      birthDate: serializer.fromJson<DateTime?>(json['birthDate']),
       alertOnPeriodicPrompts: serializer.fromJson<bool>(
         json['alertOnPeriodicPrompts'],
       ),
@@ -9566,6 +9597,7 @@ class SettingsTableData extends DataClass
       ),
       'timelineModeYearZero': serializer.toJson<bool>(timelineModeYearZero),
       'birthYear': serializer.toJson<int?>(birthYear),
+      'birthDate': serializer.toJson<DateTime?>(birthDate),
       'alertOnPeriodicPrompts': serializer.toJson<bool>(alertOnPeriodicPrompts),
       'alertTimeHour': serializer.toJson<int>(alertTimeHour),
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
@@ -9729,6 +9761,7 @@ class SettingsTableData extends DataClass
     String? calendarNavigateRightKey,
     bool? timelineModeYearZero,
     Value<int?> birthYear = const Value.absent(),
+    Value<DateTime?> birthDate = const Value.absent(),
     bool? alertOnPeriodicPrompts,
     int? alertTimeHour,
     bool? hideCompletedTasks,
@@ -9829,6 +9862,7 @@ class SettingsTableData extends DataClass
         calendarNavigateRightKey ?? this.calendarNavigateRightKey,
     timelineModeYearZero: timelineModeYearZero ?? this.timelineModeYearZero,
     birthYear: birthYear.present ? birthYear.value : this.birthYear,
+    birthDate: birthDate.present ? birthDate.value : this.birthDate,
     alertOnPeriodicPrompts:
         alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
     alertTimeHour: alertTimeHour ?? this.alertTimeHour,
@@ -10023,6 +10057,7 @@ class SettingsTableData extends DataClass
           ? data.timelineModeYearZero.value
           : this.timelineModeYearZero,
       birthYear: data.birthYear.present ? data.birthYear.value : this.birthYear,
+      birthDate: data.birthDate.present ? data.birthDate.value : this.birthDate,
       alertOnPeriodicPrompts: data.alertOnPeriodicPrompts.present
           ? data.alertOnPeriodicPrompts.value
           : this.alertOnPeriodicPrompts,
@@ -10276,6 +10311,7 @@ class SettingsTableData extends DataClass
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
           ..write('birthYear: $birthYear, ')
+          ..write('birthDate: $birthDate, ')
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
@@ -10397,6 +10433,7 @@ class SettingsTableData extends DataClass
     calendarNavigateRightKey,
     timelineModeYearZero,
     birthYear,
+    birthDate,
     alertOnPeriodicPrompts,
     alertTimeHour,
     hideCompletedTasks,
@@ -10496,6 +10533,7 @@ class SettingsTableData extends DataClass
           other.calendarNavigateRightKey == this.calendarNavigateRightKey &&
           other.timelineModeYearZero == this.timelineModeYearZero &&
           other.birthYear == this.birthYear &&
+          other.birthDate == this.birthDate &&
           other.alertOnPeriodicPrompts == this.alertOnPeriodicPrompts &&
           other.alertTimeHour == this.alertTimeHour &&
           other.hideCompletedTasks == this.hideCompletedTasks &&
@@ -10610,6 +10648,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String> calendarNavigateRightKey;
   final Value<bool> timelineModeYearZero;
   final Value<int?> birthYear;
+  final Value<DateTime?> birthDate;
   final Value<bool> alertOnPeriodicPrompts;
   final Value<int> alertTimeHour;
   final Value<bool> hideCompletedTasks;
@@ -10704,6 +10743,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.calendarNavigateRightKey = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
     this.birthYear = const Value.absent(),
+    this.birthDate = const Value.absent(),
     this.alertOnPeriodicPrompts = const Value.absent(),
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
@@ -10799,6 +10839,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.calendarNavigateRightKey = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
     this.birthYear = const Value.absent(),
+    this.birthDate = const Value.absent(),
     this.alertOnPeriodicPrompts = const Value.absent(),
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
@@ -10894,6 +10935,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? calendarNavigateRightKey,
     Expression<bool>? timelineModeYearZero,
     Expression<int>? birthYear,
+    Expression<DateTime>? birthDate,
     Expression<bool>? alertOnPeriodicPrompts,
     Expression<int>? alertTimeHour,
     Expression<bool>? hideCompletedTasks,
@@ -10997,6 +11039,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (timelineModeYearZero != null)
         'timeline_mode_year_zero': timelineModeYearZero,
       if (birthYear != null) 'birth_year': birthYear,
+      if (birthDate != null) 'birth_date': birthDate,
       if (alertOnPeriodicPrompts != null)
         'alert_on_periodic_prompts': alertOnPeriodicPrompts,
       if (alertTimeHour != null) 'alert_time_hour': alertTimeHour,
@@ -11154,6 +11197,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String>? calendarNavigateRightKey,
     Value<bool>? timelineModeYearZero,
     Value<int?>? birthYear,
+    Value<DateTime?>? birthDate,
     Value<bool>? alertOnPeriodicPrompts,
     Value<int>? alertTimeHour,
     Value<bool>? hideCompletedTasks,
@@ -11253,6 +11297,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           calendarNavigateRightKey ?? this.calendarNavigateRightKey,
       timelineModeYearZero: timelineModeYearZero ?? this.timelineModeYearZero,
       birthYear: birthYear ?? this.birthYear,
+      birthDate: birthDate ?? this.birthDate,
       alertOnPeriodicPrompts:
           alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
@@ -11443,6 +11488,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (birthYear.present) {
       map['birth_year'] = Variable<int>(birthYear.value);
+    }
+    if (birthDate.present) {
+      map['birth_date'] = Variable<DateTime>(birthDate.value);
     }
     if (alertOnPeriodicPrompts.present) {
       map['alert_on_periodic_prompts'] = Variable<bool>(
@@ -11789,6 +11837,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
           ..write('birthYear: $birthYear, ')
+          ..write('birthDate: $birthDate, ')
           ..write('alertOnPeriodicPrompts: $alertOnPeriodicPrompts, ')
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
@@ -17977,6 +18026,688 @@ class DismissedNotificationsTableCompanion
   }
 }
 
+class $CustomWordsTableTable extends CustomWordsTable
+    with TableInfo<$CustomWordsTableTable, CustomWordsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomWordsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _wordMeta = const VerificationMeta('word');
+  @override
+  late final GeneratedColumn<String> word = GeneratedColumn<String>(
+    'word',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [word];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'custom_words_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustomWordsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('word')) {
+      context.handle(
+        _wordMeta,
+        word.isAcceptableOrUnknown(data['word']!, _wordMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_wordMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {word};
+  @override
+  CustomWordsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomWordsTableData(
+      word: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}word'],
+      )!,
+    );
+  }
+
+  @override
+  $CustomWordsTableTable createAlias(String alias) {
+    return $CustomWordsTableTable(attachedDatabase, alias);
+  }
+}
+
+class CustomWordsTableData extends DataClass
+    implements Insertable<CustomWordsTableData> {
+  final String word;
+  const CustomWordsTableData({required this.word});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['word'] = Variable<String>(word);
+    return map;
+  }
+
+  CustomWordsTableCompanion toCompanion(bool nullToAbsent) {
+    return CustomWordsTableCompanion(word: Value(word));
+  }
+
+  factory CustomWordsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomWordsTableData(
+      word: serializer.fromJson<String>(json['word']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{'word': serializer.toJson<String>(word)};
+  }
+
+  CustomWordsTableData copyWith({String? word}) =>
+      CustomWordsTableData(word: word ?? this.word);
+  CustomWordsTableData copyWithCompanion(CustomWordsTableCompanion data) {
+    return CustomWordsTableData(
+      word: data.word.present ? data.word.value : this.word,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomWordsTableData(')
+          ..write('word: $word')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => word.hashCode;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomWordsTableData && other.word == this.word);
+}
+
+class CustomWordsTableCompanion extends UpdateCompanion<CustomWordsTableData> {
+  final Value<String> word;
+  final Value<int> rowid;
+  const CustomWordsTableCompanion({
+    this.word = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CustomWordsTableCompanion.insert({
+    required String word,
+    this.rowid = const Value.absent(),
+  }) : word = Value(word);
+  static Insertable<CustomWordsTableData> custom({
+    Expression<String>? word,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (word != null) 'word': word,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CustomWordsTableCompanion copyWith({Value<String>? word, Value<int>? rowid}) {
+    return CustomWordsTableCompanion(
+      word: word ?? this.word,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (word.present) {
+      map['word'] = Variable<String>(word.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomWordsTableCompanion(')
+          ..write('word: $word, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BucketListItemsTableTable extends BucketListItemsTable
+    with TableInfo<$BucketListItemsTableTable, BucketListItemsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BucketListItemsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _completedMeta = const VerificationMeta(
+    'completed',
+  );
+  @override
+  late final GeneratedColumn<bool> completed = GeneratedColumn<bool>(
+    'completed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("completed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    note,
+    completed,
+    completedAt,
+    sortOrder,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'bucket_list_items_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BucketListItemsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('completed')) {
+      context.handle(
+        _completedMeta,
+        completed.isAcceptableOrUnknown(data['completed']!, _completedMeta),
+      );
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BucketListItemsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BucketListItemsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      completed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}completed'],
+      )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      ),
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BucketListItemsTableTable createAlias(String alias) {
+    return $BucketListItemsTableTable(attachedDatabase, alias);
+  }
+}
+
+class BucketListItemsTableData extends DataClass
+    implements Insertable<BucketListItemsTableData> {
+  final String id;
+  final String title;
+  final String? note;
+  final bool completed;
+  final DateTime? completedAt;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const BucketListItemsTableData({
+    required this.id,
+    required this.title,
+    this.note,
+    required this.completed,
+    this.completedAt,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['title'] = Variable<String>(title);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['completed'] = Variable<bool>(completed);
+    if (!nullToAbsent || completedAt != null) {
+      map['completed_at'] = Variable<DateTime>(completedAt);
+    }
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  BucketListItemsTableCompanion toCompanion(bool nullToAbsent) {
+    return BucketListItemsTableCompanion(
+      id: Value(id),
+      title: Value(title),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      completed: Value(completed),
+      completedAt: completedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedAt),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory BucketListItemsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BucketListItemsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      note: serializer.fromJson<String?>(json['note']),
+      completed: serializer.fromJson<bool>(json['completed']),
+      completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'title': serializer.toJson<String>(title),
+      'note': serializer.toJson<String?>(note),
+      'completed': serializer.toJson<bool>(completed),
+      'completedAt': serializer.toJson<DateTime?>(completedAt),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  BucketListItemsTableData copyWith({
+    String? id,
+    String? title,
+    Value<String?> note = const Value.absent(),
+    bool? completed,
+    Value<DateTime?> completedAt = const Value.absent(),
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => BucketListItemsTableData(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    note: note.present ? note.value : this.note,
+    completed: completed ?? this.completed,
+    completedAt: completedAt.present ? completedAt.value : this.completedAt,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  BucketListItemsTableData copyWithCompanion(
+    BucketListItemsTableCompanion data,
+  ) {
+    return BucketListItemsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      note: data.note.present ? data.note.value : this.note,
+      completed: data.completed.present ? data.completed.value : this.completed,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BucketListItemsTableData(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('note: $note, ')
+          ..write('completed: $completed, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    note,
+    completed,
+    completedAt,
+    sortOrder,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BucketListItemsTableData &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.note == this.note &&
+          other.completed == this.completed &&
+          other.completedAt == this.completedAt &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class BucketListItemsTableCompanion
+    extends UpdateCompanion<BucketListItemsTableData> {
+  final Value<String> id;
+  final Value<String> title;
+  final Value<String?> note;
+  final Value<bool> completed;
+  final Value<DateTime?> completedAt;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const BucketListItemsTableCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.note = const Value.absent(),
+    this.completed = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BucketListItemsTableCompanion.insert({
+    required String id,
+    required String title,
+    this.note = const Value.absent(),
+    this.completed = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       title = Value(title),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<BucketListItemsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? title,
+    Expression<String>? note,
+    Expression<bool>? completed,
+    Expression<DateTime>? completedAt,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (note != null) 'note': note,
+      if (completed != null) 'completed': completed,
+      if (completedAt != null) 'completed_at': completedAt,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BucketListItemsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? title,
+    Value<String?>? note,
+    Value<bool>? completed,
+    Value<DateTime?>? completedAt,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return BucketListItemsTableCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      note: note ?? this.note,
+      completed: completed ?? this.completed,
+      completedAt: completedAt ?? this.completedAt,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (completed.present) {
+      map['completed'] = Variable<bool>(completed.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BucketListItemsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('note: $note, ')
+          ..write('completed: $completed, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -18018,6 +18749,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $DismissedNotificationsTableTable dismissedNotificationsTable =
       $DismissedNotificationsTableTable(this);
+  late final $CustomWordsTableTable customWordsTable = $CustomWordsTableTable(
+    this,
+  );
+  late final $BucketListItemsTableTable bucketListItemsTable =
+      $BucketListItemsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -18046,6 +18782,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     goalAllocationsTable,
     pinnedNotesTable,
     dismissedNotificationsTable,
+    customWordsTable,
+    bucketListItemsTable,
   ];
   @override
   DriftDatabaseOptions get options =>
@@ -21147,6 +21885,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String> calendarNavigateRightKey,
       Value<bool> timelineModeYearZero,
       Value<int?> birthYear,
+      Value<DateTime?> birthDate,
       Value<bool> alertOnPeriodicPrompts,
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
@@ -21243,6 +21982,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String> calendarNavigateRightKey,
       Value<bool> timelineModeYearZero,
       Value<int?> birthYear,
+      Value<DateTime?> birthDate,
       Value<bool> alertOnPeriodicPrompts,
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
@@ -21420,6 +22160,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<int> get birthYear => $composableBuilder(
     column: $table.birthYear,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get birthDate => $composableBuilder(
+    column: $table.birthDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21902,6 +22647,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get birthDate => $composableBuilder(
+    column: $table.birthDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get alertOnPeriodicPrompts => $composableBuilder(
     column: $table.alertOnPeriodicPrompts,
     builder: (column) => ColumnOrderings(column),
@@ -22381,6 +23131,9 @@ class $$SettingsTableTableAnnotationComposer
   GeneratedColumn<int> get birthYear =>
       $composableBuilder(column: $table.birthYear, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get birthDate =>
+      $composableBuilder(column: $table.birthDate, builder: (column) => column);
+
   GeneratedColumn<bool> get alertOnPeriodicPrompts => $composableBuilder(
     column: $table.alertOnPeriodicPrompts,
     builder: (column) => column,
@@ -22815,6 +23568,7 @@ class $$SettingsTableTableTableManager
                 Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
                 Value<int?> birthYear = const Value.absent(),
+                Value<DateTime?> birthDate = const Value.absent(),
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
@@ -22927,6 +23681,7 @@ class $$SettingsTableTableTableManager
                 calendarNavigateRightKey: calendarNavigateRightKey,
                 timelineModeYearZero: timelineModeYearZero,
                 birthYear: birthYear,
+                birthDate: birthDate,
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
@@ -23027,6 +23782,7 @@ class $$SettingsTableTableTableManager
                 Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
                 Value<int?> birthYear = const Value.absent(),
+                Value<DateTime?> birthDate = const Value.absent(),
                 Value<bool> alertOnPeriodicPrompts = const Value.absent(),
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
@@ -23139,6 +23895,7 @@ class $$SettingsTableTableTableManager
                 calendarNavigateRightKey: calendarNavigateRightKey,
                 timelineModeYearZero: timelineModeYearZero,
                 birthYear: birthYear,
+                birthDate: birthDate,
                 alertOnPeriodicPrompts: alertOnPeriodicPrompts,
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
@@ -26542,6 +27299,406 @@ typedef $$DismissedNotificationsTableTableProcessedTableManager =
       DismissedNotificationsTableData,
       PrefetchHooks Function()
     >;
+typedef $$CustomWordsTableTableCreateCompanionBuilder =
+    CustomWordsTableCompanion Function({
+      required String word,
+      Value<int> rowid,
+    });
+typedef $$CustomWordsTableTableUpdateCompanionBuilder =
+    CustomWordsTableCompanion Function({Value<String> word, Value<int> rowid});
+
+class $$CustomWordsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $CustomWordsTableTable> {
+  $$CustomWordsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get word => $composableBuilder(
+    column: $table.word,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CustomWordsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $CustomWordsTableTable> {
+  $$CustomWordsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get word => $composableBuilder(
+    column: $table.word,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CustomWordsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CustomWordsTableTable> {
+  $$CustomWordsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get word =>
+      $composableBuilder(column: $table.word, builder: (column) => column);
+}
+
+class $$CustomWordsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CustomWordsTableTable,
+          CustomWordsTableData,
+          $$CustomWordsTableTableFilterComposer,
+          $$CustomWordsTableTableOrderingComposer,
+          $$CustomWordsTableTableAnnotationComposer,
+          $$CustomWordsTableTableCreateCompanionBuilder,
+          $$CustomWordsTableTableUpdateCompanionBuilder,
+          (
+            CustomWordsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $CustomWordsTableTable,
+              CustomWordsTableData
+            >,
+          ),
+          CustomWordsTableData,
+          PrefetchHooks Function()
+        > {
+  $$CustomWordsTableTableTableManager(
+    _$AppDatabase db,
+    $CustomWordsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustomWordsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CustomWordsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CustomWordsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> word = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomWordsTableCompanion(word: word, rowid: rowid),
+          createCompanionCallback:
+              ({
+                required String word,
+                Value<int> rowid = const Value.absent(),
+              }) => CustomWordsTableCompanion.insert(word: word, rowid: rowid),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CustomWordsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CustomWordsTableTable,
+      CustomWordsTableData,
+      $$CustomWordsTableTableFilterComposer,
+      $$CustomWordsTableTableOrderingComposer,
+      $$CustomWordsTableTableAnnotationComposer,
+      $$CustomWordsTableTableCreateCompanionBuilder,
+      $$CustomWordsTableTableUpdateCompanionBuilder,
+      (
+        CustomWordsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $CustomWordsTableTable,
+          CustomWordsTableData
+        >,
+      ),
+      CustomWordsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$BucketListItemsTableTableCreateCompanionBuilder =
+    BucketListItemsTableCompanion Function({
+      required String id,
+      required String title,
+      Value<String?> note,
+      Value<bool> completed,
+      Value<DateTime?> completedAt,
+      Value<int> sortOrder,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$BucketListItemsTableTableUpdateCompanionBuilder =
+    BucketListItemsTableCompanion Function({
+      Value<String> id,
+      Value<String> title,
+      Value<String?> note,
+      Value<bool> completed,
+      Value<DateTime?> completedAt,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$BucketListItemsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $BucketListItemsTableTable> {
+  $$BucketListItemsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get completed => $composableBuilder(
+    column: $table.completed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BucketListItemsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $BucketListItemsTableTable> {
+  $$BucketListItemsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get completed => $composableBuilder(
+    column: $table.completed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BucketListItemsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BucketListItemsTableTable> {
+  $$BucketListItemsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<bool> get completed =>
+      $composableBuilder(column: $table.completed, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$BucketListItemsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BucketListItemsTableTable,
+          BucketListItemsTableData,
+          $$BucketListItemsTableTableFilterComposer,
+          $$BucketListItemsTableTableOrderingComposer,
+          $$BucketListItemsTableTableAnnotationComposer,
+          $$BucketListItemsTableTableCreateCompanionBuilder,
+          $$BucketListItemsTableTableUpdateCompanionBuilder,
+          (
+            BucketListItemsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $BucketListItemsTableTable,
+              BucketListItemsTableData
+            >,
+          ),
+          BucketListItemsTableData,
+          PrefetchHooks Function()
+        > {
+  $$BucketListItemsTableTableTableManager(
+    _$AppDatabase db,
+    $BucketListItemsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BucketListItemsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BucketListItemsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$BucketListItemsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<bool> completed = const Value.absent(),
+                Value<DateTime?> completedAt = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BucketListItemsTableCompanion(
+                id: id,
+                title: title,
+                note: note,
+                completed: completed,
+                completedAt: completedAt,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String title,
+                Value<String?> note = const Value.absent(),
+                Value<bool> completed = const Value.absent(),
+                Value<DateTime?> completedAt = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => BucketListItemsTableCompanion.insert(
+                id: id,
+                title: title,
+                note: note,
+                completed: completed,
+                completedAt: completedAt,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BucketListItemsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BucketListItemsTableTable,
+      BucketListItemsTableData,
+      $$BucketListItemsTableTableFilterComposer,
+      $$BucketListItemsTableTableOrderingComposer,
+      $$BucketListItemsTableTableAnnotationComposer,
+      $$BucketListItemsTableTableCreateCompanionBuilder,
+      $$BucketListItemsTableTableUpdateCompanionBuilder,
+      (
+        BucketListItemsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $BucketListItemsTableTable,
+          BucketListItemsTableData
+        >,
+      ),
+      BucketListItemsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -26599,4 +27756,8 @@ class $AppDatabaseManager {
         _db,
         _db.dismissedNotificationsTable,
       );
+  $$CustomWordsTableTableTableManager get customWordsTable =>
+      $$CustomWordsTableTableTableManager(_db, _db.customWordsTable);
+  $$BucketListItemsTableTableTableManager get bucketListItemsTable =>
+      $$BucketListItemsTableTableTableManager(_db, _db.bucketListItemsTable);
 }

@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "lib/app/providers.dart": {
-    "mtime": 1785374166.4281104,
-    "ast_hash": "ffd288203f4ba4f32660048c1989a57f",
+    "mtime": 1785385065.9237266,
+    "ast_hash": "56d9a3c320c92cd33b3ff9301f222730",
     "semantic_hash": ""
   },
   "lib/app/voyager_app.dart": {
@@ -500,8 +500,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_dropdown_button.dart": {
-    "mtime": 1785378684.879012,
-    "ast_hash": "21a47489d324691e8c2ac6fe5dc4e70b",
+    "mtime": 1785385578.5923462,
+    "ast_hash": "39e2da8433aaf50023636966ce5e6700",
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_menu_catalog.dart": {
@@ -790,8 +790,8 @@
     "semantic_hash": ""
   },
   "lib/features/dev/dev_cache_status_tile.dart": {
-    "mtime": 1785374181.3370807,
-    "ast_hash": "1799d069e291b3ea6ef548ae6592c6d8",
+    "mtime": 1785382391.8410046,
+    "ast_hash": "b35227c0ab1893b7ccf428034e4dc15e",
     "semantic_hash": ""
   },
   "lib/features/dev/dev_calendar_debug_tile.dart": {
@@ -1175,8 +1175,8 @@
     "semantic_hash": ""
   },
   "test/widget_test.dart": {
-    "mtime": 1781999078.4500573,
-    "ast_hash": "139a98bfba7a8e87b7b1506598bc375d",
+    "mtime": 1785384756.1810584,
+    "ast_hash": "5fc4cb622856acea70af1feff30e4abe",
     "semantic_hash": ""
   },
   "windows/flutter/generated_plugin_registrant.cc": {
@@ -2220,13 +2220,13 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/tracker_entry_row.dart": {
-    "mtime": 1785379907.8549309,
-    "ast_hash": "d6966695545a148eca99cef7eb8e79a0",
+    "mtime": 1785386061.3379903,
+    "ast_hash": "e80b7c80cb6f3bab790612d510ea155e",
     "semantic_hash": ""
   },
   "lib/features/notifications/notification_bell.dart": {
-    "mtime": 1785379960.471383,
-    "ast_hash": "b3ba4c7a0499111564a42f6eb936198d",
+    "mtime": 1785383630.6457787,
+    "ast_hash": "b8754072b3d5971890556832e646b43f",
     "semantic_hash": ""
   },
   "lib/features/notifications/notification_inbox_popover.dart": {
@@ -2260,8 +2260,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/notification_urgency_dot.dart": {
-    "mtime": 1785378670.3585756,
-    "ast_hash": "c84c30f0929ddb84f4dd43be63f4f084",
+    "mtime": 1785385162.2212126,
+    "ast_hash": "528d81410184eb5a7e8dce82fd6cc2ac",
     "semantic_hash": ""
   }
 }

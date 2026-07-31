@@ -318,6 +318,22 @@ class DismissedNotificationsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Local-only storage for the Life Tracker bubble's bucket list. Like
+/// [PinnedNotesTable], nothing here leaves the device.
+class BucketListItemsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  TextColumn get note => text().nullable()();
+  BoolColumn get completed => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class SettingsTable extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
   IntColumn get accentColor =>
@@ -350,6 +366,7 @@ class SettingsTable extends Table {
   BoolColumn get timelineModeYearZero =>
       boolean().withDefault(const Constant(true))();
   IntColumn get birthYear => integer().nullable()();
+  DateTimeColumn get birthDate => dateTime().nullable()();
   BoolColumn get alertOnPeriodicPrompts =>
       boolean().withDefault(const Constant(false))();
   IntColumn get alertTimeHour => integer().withDefault(const Constant(9))();
@@ -488,6 +505,13 @@ class TagColorsTable extends Table {
   Set<Column> get primaryKey => {tag};
 }
 
+class CustomWordsTable extends Table {
+  TextColumn get word => text()();
+
+  @override
+  Set<Column> get primaryKey => {word};
+}
+
 class SyncConflictsTable extends Table {
   TextColumn get id => text()();
   TextColumn get collection => text()();
@@ -539,13 +563,15 @@ class PendingUploadsTable extends Table {
     GoalAllocationsTable,
     PinnedNotesTable,
     DismissedNotificationsTable,
+    CustomWordsTable,
+    BucketListItemsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 58;
+  int get schemaVersion => 60;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1104,6 +1130,13 @@ class AppDatabase extends _$AppDatabase {
           migrator,
           settingsTable.devDisableCache,
         );
+      }
+      if (from < 59) {
+        await migrator.createTable(customWordsTable);
+      }
+      if (from < 60) {
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.birthDate);
+        await migrator.createTable(bucketListItemsTable);
       }
     },
   );

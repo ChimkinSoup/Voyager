@@ -17,6 +17,8 @@ import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
 import 'package:voyager/core/dev/sync_compare_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
+import 'package:voyager/core/spellcheck/dictionary_loader.dart';
+import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -41,6 +43,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -113,6 +116,10 @@ final financeRepositoryProvider = Provider<FinanceRepository>((ref) {
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   return DriftNotificationRepository(ref.watch(databaseProvider));
+});
+
+final bucketListRepositoryProvider = Provider<BucketListRepository>((ref) {
+  return DriftBucketListRepository(ref.watch(databaseProvider));
 });
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
@@ -555,6 +562,40 @@ final tagColorsProvider = FutureProvider<Map<String, int>>((ref) {
   return ref.watch(settingsRepositoryProvider).getTagColors();
 });
 
+/// Bundled default spellcheck dictionary (~65k common English words).
+final dictionaryProvider = FutureProvider<Set<String>>((ref) {
+  ref.keepAlive();
+  return loadDictionaryFromAssets();
+});
+
+/// User-added spellcheck dictionary words, local-only (never synced).
+final customWordsProvider = FutureProvider<Set<String>>((ref) {
+  ref.keepAlive();
+  return ref.watch(settingsRepositoryProvider).getCustomWords();
+});
+
+/// Single long-lived [VoyagerSpellCheckService] instance kept in sync with
+/// [dictionaryProvider]/[customWordsProvider]. Read (not watched) by text
+/// field widgets, since the service mutates its internal word sets in place
+/// rather than requiring a rebuild when the dictionary/custom words change.
+final voyagerSpellCheckServiceProvider = Provider<VoyagerSpellCheckService>((
+  ref,
+) {
+  ref.keepAlive();
+  final service = VoyagerSpellCheckService();
+  ref.listen(
+    dictionaryProvider,
+    (_, next) => next.whenData(service.updateDictionary),
+    fireImmediately: true,
+  );
+  ref.listen(
+    customWordsProvider,
+    (_, next) => next.whenData(service.updateCustomWords),
+    fireImmediately: true,
+  );
+  return service;
+});
+
 /// All non-deleted recurring subscriptions, soonest-due first.
 final subscriptionsProvider = FutureProvider<List<Subscription>>((ref) {
   ref.keepAlive();
@@ -652,6 +693,52 @@ final pinnedNotesProvider = FutureProvider<List<PinnedNote>>((ref) {
   ref.keepAlive();
   return ref.watch(notificationRepositoryProvider).listPinnedNotes();
 });
+
+final bucketListItemsProvider = FutureProvider<List<BucketListItem>>((ref) {
+  ref.keepAlive();
+  return ref.watch(bucketListRepositoryProvider).listItems();
+});
+
+/// Precomputed Life Tracker blossom stats that would otherwise require a full
+/// table scan (tasks conquered, lifetime mood average). Deriving them from the
+/// already-cached [allTodoTasksProvider]/[allJournalEntriesProvider] rather
+/// than querying the database directly means the tree canvas's per-frame leaf
+/// sway animation never triggers a recompute — only an actual task/journal
+/// change does.
+final lifeTrackerStatsProvider = FutureProvider<LifeTrackerCachedStats>((
+  ref,
+) async {
+  ref.keepAlive();
+  final tasks = await ref.watch(allTodoTasksProvider.future);
+  final entries = await ref.watch(allJournalEntriesProvider.future);
+
+  final tasksConquered = tasks.where((t) => t.completed).length;
+
+  final moods = entries
+      .where((e) => e.deletedAt == null && e.mood != null)
+      .map((e) => e.mood!)
+      .toList();
+  final lifetimeMood = moods.isEmpty
+      ? null
+      : moods.reduce((a, b) => a + b) / moods.length;
+
+  return LifeTrackerCachedStats(
+    tasksConquered: tasksConquered,
+    lifetimeMood: lifetimeMood,
+  );
+});
+
+class LifeTrackerCachedStats {
+  const LifeTrackerCachedStats({
+    required this.tasksConquered,
+    required this.lifetimeMood,
+  });
+
+  final int tasksConquered;
+
+  /// Average of every non-null journal entry mood, or null if none exist yet.
+  final double? lifetimeMood;
+}
 
 final notificationDismissalsProvider = FutureProvider<Set<String>>((ref) {
   ref.keepAlive();
@@ -887,6 +974,8 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
     ref.read(geometricShaderProvider.future).then((_) {}),
     ref.read(paperShaderProvider.future).then((_) {}),
     ref.read(quotesLoadedProvider.future),
+    ref.read(dictionaryProvider.future).then((_) {}),
+    ref.read(customWordsProvider.future).then((_) {}),
     ref.read(settingsProvider.future).then((_) {}),
     ref.read(journalsProvider.future).then((_) {}),
     ref.read(journalEntriesProvider.future).then((_) {}),

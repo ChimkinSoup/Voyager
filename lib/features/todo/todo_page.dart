@@ -31,6 +31,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
@@ -1136,7 +1137,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       }
     });
     await repo.upsertTask(deleted);
-    await remoteSync.pushTodoTaskNow(deleted);
+    remoteSync.pushTodoTaskNow(deleted);
     if (!mounted) return;
     _invalidateTodoListData(listId: task.listId);
   }
@@ -1625,6 +1626,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
       todoListStatsProvider,
       (previous, next) => _refreshOrDeferWhileScrolling(),
     );
+    // Handles "Show in To-Do" from the notification popover: jump to the
+    // task's list and open its edit panel, then consume the request.
+    ref.listen<RevealRequest?>(revealRequestProvider, (previous, next) {
+      if (next == null || next.type != RevealTargetType.task) return;
+      final task = next.task!;
+      ref.read(revealRequestProvider.notifier).state = null;
+      setState(() => _selectedListId = task.listId);
+      _openEditPanel(task);
+    });
     final statsAsync = ref.read(todoListStatsProvider);
 
     return listsAsync.when(

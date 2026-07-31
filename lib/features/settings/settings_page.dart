@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -90,6 +91,29 @@ class SettingsPage extends ConsumerWidget {
           ),
           if (settings.themeMode == AppThemeMode.light)
             _PetalSettings(settings: settings, onSave: (s) => _save(ref, s)),
+          const SizedBox(height: 16),
+          Text('Life Tracker', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Birth date'),
+            subtitle: Text(
+              settings.birthDate == null
+                  ? 'Not set — the Life Tracker tree will show a placeholder'
+                  : DateFormat.yMMMMd().format(settings.birthDate!),
+            ),
+            trailing: const Icon(PhosphorIconsRegular.calendar),
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: settings.birthDate ?? DateTime(1995, 1, 1),
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now(),
+              );
+              if (picked != null) {
+                _save(ref, settings.copyWith(birthDate: picked));
+              }
+            },
+          ),
           const SizedBox(height: 16),
           Text('Statistics', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),

@@ -30,6 +30,7 @@ class AppSettings {
     this.calendarNavigateRightKey = defaultCalendarNavigateRightKey,
     this.timelineModeYearZero = true,
     this.birthYear,
+    this.birthDate,
     this.alertOnPeriodicPrompts = false,
     this.alertTimeHour = 9,
     this.hideCompletedTasks = false,
@@ -151,6 +152,11 @@ class AppSettings {
   final String calendarNavigateRightKey;
   final bool timelineModeYearZero;
   final int? birthYear;
+
+  /// Full birth date (day precision), used by the Life Tracker page's
+  /// week/age math. Separate from [birthYear], which predates it and is
+  /// year-only — insufficient for week-precision calculations.
+  final DateTime? birthDate;
   final bool alertOnPeriodicPrompts;
   final int alertTimeHour;
   final bool hideCompletedTasks;
@@ -263,6 +269,7 @@ class AppSettings {
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
     bool? hideCompletedTasks,
+    DateTime? birthDate,
     String? deviceId,
     String? lastViewedJournalId,
     String? lastViewedTodoListId,
@@ -374,6 +381,7 @@ class AppSettings {
           calendarNavigateRightKey ?? this.calendarNavigateRightKey,
       timelineModeYearZero: timelineModeYearZero,
       birthYear: birthYear,
+      birthDate: birthDate ?? this.birthDate,
       alertOnPeriodicPrompts: alertOnPeriodicPrompts,
       alertTimeHour: alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,

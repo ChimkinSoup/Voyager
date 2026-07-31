@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 
 /// Text field with accent-colored caret, an animated focus border, and a
 /// Material-style floating/notched label — all drawn by [NotchedFieldBorder].
@@ -59,7 +61,16 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
 
   FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
 
+  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
+  late final ScrollController _scrollController = ScrollController();
+
   bool _hasText = false;
+
+  bool get _spellcheckOn => isMultilineField(
+        expands: widget.expands,
+        maxLines: widget.maxLines,
+        minLines: widget.minLines,
+      );
 
   @override
   void initState() {
@@ -69,6 +80,9 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     }
     _hasText = widget.controller?.text.isNotEmpty ?? false;
     widget.controller?.addListener(_handleTextChanged);
+    if (_spellcheckOn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
+    }
   }
 
   @override
@@ -85,7 +99,17 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
   void dispose() {
     widget.controller?.removeListener(_handleTextChanged);
     _ownedFocusNode?.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _forceSpellCheck() {
+    if (!mounted || !_spellcheckOn) return;
+    forceSpellCheckDisplay(
+      context: context,
+      fieldKey: _fieldKey,
+      focusNode: _focusNode,
+    );
   }
 
   void _handleTextChanged() {
@@ -93,6 +117,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
+    if (_spellcheckOn) _forceSpellCheck();
   }
 
   @override
@@ -126,6 +151,75 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       contentPadding: contentPadding,
     );
 
+    final spellcheckOn = isMultilineField(
+      expands: widget.expands,
+      maxLines: widget.maxLines,
+      minLines: widget.minLines,
+    );
+
+    final textStyle = widget.style ??
+        theme.textTheme.bodyLarge?.copyWith(
+          color: theme.colorScheme.onSurface,
+        );
+
+    final textField = TextField(
+      key: _fieldKey,
+      contextMenuBuilder: spellcheckOn
+          ? voyagerSpellCheckContextMenuBuilder
+          : (context, editableTextState) => const SizedBox.shrink(),
+      spellCheckConfiguration: spellcheckOn
+          ? buildVoyagerSpellCheckConfiguration(context)
+          : const SpellCheckConfiguration.disabled(),
+      controller: widget.controller,
+      focusNode: _focusNode,
+      scrollController: _scrollController,
+      decoration: innerDecoration,
+      style: textStyle,
+      cursorColor: widget.cursorColor ?? accent,
+      autofocus: widget.autofocus,
+      onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
+      keyboardType: widget.keyboardType,
+      textInputAction: widget.textInputAction,
+      obscureText: widget.obscureText,
+      enabled: widget.enabled,
+      maxLines: widget.expands ? null : widget.maxLines,
+      minLines: widget.expands ? null : widget.minLines,
+      expands: widget.expands,
+      maxLength: widget.maxLength,
+      buildCounter: widget.buildCounter,
+      inputFormatters: widget.inputFormatters,
+      textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
+          ? TextAlignVertical.top
+          : TextAlignVertical.center,
+    );
+
+    Widget field = spellcheckOn
+        ? wrapWithSecondaryTapWordSelect(fieldKey: _fieldKey, child: textField)
+        : textField;
+
+    if (spellcheckOn && widget.controller != null) {
+      field = Stack(
+        fit: StackFit.passthrough,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Padding(
+                padding: contentPadding,
+                child: SpellCheckSquiggleLayer(
+                  controller: widget.controller!,
+                  focusNode: _focusNode,
+                  style: textStyle ?? const TextStyle(),
+                  scrollController: _scrollController,
+                ),
+              ),
+            ),
+          ),
+          field,
+        ],
+      );
+    }
+
     return NotchedFieldBorder(
       focusNode: _focusNode,
       accentColor: accent,
@@ -135,33 +229,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       borderRadius: radius,
       contentPadding: contentPadding,
       alignLabelToTop: widget.expands || (widget.maxLines ?? 1) > 1,
-      child: TextField(
-        contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
-        controller: widget.controller,
-        focusNode: _focusNode,
-        decoration: innerDecoration,
-        style: widget.style ??
-            theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurface,
-            ),
-        cursorColor: widget.cursorColor ?? accent,
-        autofocus: widget.autofocus,
-        onChanged: widget.onChanged,
-        onSubmitted: widget.onSubmitted,
-        keyboardType: widget.keyboardType,
-        textInputAction: widget.textInputAction,
-        obscureText: widget.obscureText,
-        enabled: widget.enabled,
-        maxLines: widget.expands ? null : widget.maxLines,
-        minLines: widget.expands ? null : widget.minLines,
-        expands: widget.expands,
-        maxLength: widget.maxLength,
-        buildCounter: widget.buildCounter,
-        inputFormatters: widget.inputFormatters,
-        textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
-            ? TextAlignVertical.top
-            : TextAlignVertical.center,
-      ),
+      child: field,
     );
   }
 }

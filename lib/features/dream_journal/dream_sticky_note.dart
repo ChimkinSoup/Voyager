@@ -1,4 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
+
+/// Content padding these fields render with (dense, unfilled, no border) —
+/// spelled out explicitly, rather than left for Flutter's InputDecorator to
+/// compute implicitly, so [SpellCheckSquiggleLayer]'s overlay can use the
+/// exact same value and stay pixel-aligned with the real text.
+const _kNoteFieldContentPadding = EdgeInsets.symmetric(vertical: 4);
 
 /// The Dream Journal's collapsible scratchpad: a corner "sticky note" that
 /// peeks from the bottom-right, expands into a small note-taking card on tap,
@@ -129,7 +137,7 @@ class _StickyNoteCorner extends StatelessWidget {
   }
 }
 
-class _StickyNoteContents extends StatelessWidget {
+class _StickyNoteContents extends StatefulWidget {
   const _StickyNoteContents({
     required this.controller,
     required this.onChanged,
@@ -147,8 +155,56 @@ class _StickyNoteContents extends StatelessWidget {
   final FocusNode? focusNode;
 
   @override
+  State<_StickyNoteContents> createState() => _StickyNoteContentsState();
+}
+
+class _StickyNoteContentsState extends State<_StickyNoteContents> {
+  FocusNode? _ownedFocusNode;
+  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
+  late final ScrollController _scrollController = ScrollController();
+
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusNode == null) {
+      _ownedFocusNode = FocusNode();
+    }
+    widget.controller.addListener(_forceSpellCheck);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
+  }
+
+  @override
+  void didUpdateWidget(covariant _StickyNoteContents oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_forceSpellCheck);
+      widget.controller.addListener(_forceSpellCheck);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_forceSpellCheck);
+    _ownedFocusNode?.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _forceSpellCheck() {
+    if (!mounted) return;
+    forceSpellCheckDisplay(
+      context: context,
+      fieldKey: _fieldKey,
+      focusNode: _focusNode,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textStyle = theme.textTheme.bodySmall ?? const TextStyle();
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
       child: Column(
@@ -167,32 +223,60 @@ class _StickyNoteContents extends StatelessWidget {
               IconButton(
                 tooltip: 'Pin notes',
                 icon: const Icon(Icons.push_pin_outlined, size: 18),
-                color: accentColor,
+                color: widget.accentColor,
                 visualDensity: VisualDensity.compact,
-                onPressed: onPin,
+                onPressed: widget.onPin,
               ),
               IconButton(
                 tooltip: 'Close',
                 icon: const Icon(Icons.close, size: 18),
                 visualDensity: VisualDensity.compact,
-                onPressed: onClose,
+                onPressed: widget.onClose,
               ),
             ],
           ),
           Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: onChanged,
-              maxLines: null,
-              expands: true,
-              textAlignVertical: TextAlignVertical.top,
-              style: theme.textTheme.bodySmall,
-              decoration: const InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                hintText: 'Jot a quick note to jog your memory later...',
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Padding(
+                      padding: _kNoteFieldContentPadding,
+                      child: SpellCheckSquiggleLayer(
+                        controller: widget.controller,
+                        focusNode: _focusNode,
+                        style: textStyle,
+                        scrollController: _scrollController,
+                      ),
+                    ),
+                  ),
+                ),
+                wrapWithSecondaryTapWordSelect(
+                  fieldKey: _fieldKey,
+                  child: TextField(
+                    key: _fieldKey,
+                    controller: widget.controller,
+                    focusNode: _focusNode,
+                    scrollController: _scrollController,
+                    onChanged: widget.onChanged,
+                    maxLines: null,
+                    expands: true,
+                    contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                    spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
+                      context,
+                    ),
+                    textAlignVertical: TextAlignVertical.top,
+                    style: textStyle,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: _kNoteFieldContentPadding,
+                      hintText: 'Jot a quick note to jog your memory later...',
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -204,7 +288,7 @@ class _StickyNoteContents extends StatelessWidget {
 /// The docked bottom panel shown while notes are pinned — see
 /// [DreamJournalPage], which swaps this in for [DreamStickyNote] and shrinks
 /// the main editor above it to make room.
-class DreamNotesDockedPanel extends StatelessWidget {
+class DreamNotesDockedPanel extends StatefulWidget {
   const DreamNotesDockedPanel({
     super.key,
     required this.controller,
@@ -219,8 +303,56 @@ class DreamNotesDockedPanel extends StatelessWidget {
   final FocusNode? focusNode;
 
   @override
+  State<DreamNotesDockedPanel> createState() => _DreamNotesDockedPanelState();
+}
+
+class _DreamNotesDockedPanelState extends State<DreamNotesDockedPanel> {
+  FocusNode? _ownedFocusNode;
+  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
+  late final ScrollController _scrollController = ScrollController();
+
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusNode == null) {
+      _ownedFocusNode = FocusNode();
+    }
+    widget.controller.addListener(_forceSpellCheck);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
+  }
+
+  @override
+  void didUpdateWidget(covariant DreamNotesDockedPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_forceSpellCheck);
+      widget.controller.addListener(_forceSpellCheck);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_forceSpellCheck);
+    _ownedFocusNode?.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _forceSpellCheck() {
+    if (!mounted) return;
+    forceSpellCheckDisplay(
+      context: context,
+      fieldKey: _fieldKey,
+      focusNode: _focusNode,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textStyle = theme.textTheme.bodySmall ?? const TextStyle();
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
@@ -244,25 +376,53 @@ class DreamNotesDockedPanel extends StatelessWidget {
                   tooltip: 'Unpin notes',
                   icon: const Icon(Icons.push_pin, size: 18),
                   visualDensity: VisualDensity.compact,
-                  onPressed: onUnpin,
+                  onPressed: widget.onUnpin,
                 ),
               ],
             ),
             SizedBox(
               height: 96,
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                onChanged: onChanged,
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                style: theme.textTheme.bodySmall,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  hintText: 'Jot a quick note to jog your memory later...',
-                ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding: _kNoteFieldContentPadding,
+                        child: SpellCheckSquiggleLayer(
+                          controller: widget.controller,
+                          focusNode: _focusNode,
+                          style: textStyle,
+                          scrollController: _scrollController,
+                        ),
+                      ),
+                    ),
+                  ),
+                  wrapWithSecondaryTapWordSelect(
+                    fieldKey: _fieldKey,
+                    child: TextField(
+                      key: _fieldKey,
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      scrollController: _scrollController,
+                      onChanged: widget.onChanged,
+                      maxLines: null,
+                      expands: true,
+                      contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                      spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
+                        context,
+                      ),
+                      textAlignVertical: TextAlignVertical.top,
+                      style: textStyle,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: _kNoteFieldContentPadding,
+                        hintText: 'Jot a quick note to jog your memory later...',
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

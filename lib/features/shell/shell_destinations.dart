@@ -7,6 +7,7 @@ import 'package:voyager/features/dev/dev_page.dart';
 import 'package:voyager/features/dream_journal/dream_journal_page.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/journal/journal_page.dart';
+import 'package:voyager/features/life_tracker/life_tracker_page.dart';
 import 'package:voyager/features/search/search_page.dart';
 import 'package:voyager/features/settings/settings_page.dart';
 import 'package:voyager/features/todo/todo_page.dart';
@@ -69,6 +70,12 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.wallet,
     label: 'Finance',
     page: FinancePage(),
+  ),
+  ShellDestination(
+    path: '/life-tracker',
+    icon: PhosphorIconsRegular.tree,
+    label: 'Life Tracker',
+    page: LifeTrackerPage(),
   ),
   ShellDestination(
     path: '/dev',

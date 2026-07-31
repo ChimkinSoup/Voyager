@@ -28,6 +28,7 @@ import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_list_actions.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
 final _mmmmFormat = DateFormat.MMMM();
@@ -497,9 +498,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         onSave: (updatedTask) async {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
           await ref.read(todoRepositoryProvider).upsertTask(updatedTask);
-          await ref
-              .read(remoteSyncServiceProvider)
-              .pushTodoTaskNow(updatedTask);
+          ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updatedTask);
           ref.invalidate(calendarTodoMarkersProvider);
           ref.invalidate(allTodoTasksProvider);
         },
@@ -657,7 +656,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     if (match == null || !mounted) return;
     final deleted = match.copyWith(deletedAt: utcNow());
     await ref.read(todoRepositoryProvider).upsertTask(deleted);
-    await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
     ref.invalidate(calendarTodoMarkersProvider);
     ref.invalidate(allTodoTasksProvider);
   }
@@ -729,6 +728,33 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         _weekTimelineScrollController.jumpTo(_weekTimelineScrollOffset);
       }
     }
+  }
+
+  /// Handles "Show in Calendar" from the notification popover: snaps the
+  /// view to the event's month (switching to whatever calendar shows it, if
+  /// it isn't the one currently selected) and opens its edit sidebar.
+  void _revealCalendarEvent(CalendarEvent event) {
+    _abortMorphAnimation();
+    setState(() {
+      _isZooming = false;
+      _morphReverse = false;
+      _clearMorphCache();
+      _isWeekMorphing = false;
+      _weekMorphForward = true;
+      _clearWeekMorphCache();
+      if (_selectedCalendarId != null &&
+          _selectedCalendarId != event.calendarId) {
+        _selectedCalendarId = null;
+      }
+      _dayViewDate = null;
+      _mode = CalendarViewMode.month;
+      _focused = DateTime(event.start.year, event.start.month, 1);
+      _rememberViewedMonth(_focused);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openEventSidebar(event: event, day: event.start, focusTitle: false);
+    });
   }
 
   Widget _buildGoToTodayButton(bool weekStartsMonday) {
@@ -2224,6 +2250,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         _syncMorphAnimationDurations();
       },
     );
+    // Handles "Show in Calendar" from the notification popover.
+    ref.listen<RevealRequest?>(revealRequestProvider, (previous, next) {
+      if (next == null || next.type != RevealTargetType.event) return;
+      final event = next.event!;
+      ref.read(revealRequestProvider.notifier).state = null;
+      _revealCalendarEvent(event);
+    });
 
     final eventsAsync = ref.watch(calendarEventsProvider(_selectedCalendarId));
     // This page is preloaded at app startup (see _preloadedShellPaths in

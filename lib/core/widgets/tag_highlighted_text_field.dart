@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 
 class TagHighlightedTextField extends StatefulWidget {
   const TagHighlightedTextField({
@@ -63,9 +65,17 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   );
 
   late final ScrollController _scrollController;
+  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
   Timer? _highlightTimer;
   String _highlightedText = '';
   bool _hasText = false;
+  bool _bringCursorScheduled = false;
+
+  bool get _spellcheckOn => isMultilineField(
+        expands: widget.expands,
+        maxLines: widget.maxLines,
+        minLines: widget.minLines,
+      );
 
   @override
   void initState() {
@@ -74,6 +84,9 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     _highlightedText = widget.controller.text;
     _hasText = widget.controller.text.isNotEmpty;
     widget.controller.addListener(_handleControllerChanged);
+    if (_spellcheckOn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
+    }
   }
 
   @override
@@ -97,6 +110,15 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     super.dispose();
   }
 
+  void _forceSpellCheck() {
+    if (!mounted || !_spellcheckOn) return;
+    forceSpellCheckDisplay(
+      context: context,
+      fieldKey: _fieldKey,
+      focusNode: widget.focusNode,
+    );
+  }
+
   void _handleControllerChanged() {
     // Immediate (undebounced) so the floating label reacts on the very first
     // keystroke; the highlight repaint itself stays debounced below.
@@ -105,6 +127,23 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       setState(() => _hasText = hasText);
     }
     _scheduleHighlightRepaint();
+    if (_spellcheckOn) _forceSpellCheck();
+    if (widget.focusNode.hasFocus) _scheduleBringCursorIntoView();
+  }
+
+  void _scheduleBringCursorIntoView() {
+    // Deferred to a post-frame callback (mirroring how EditableText schedules
+    // its own caret-into-view step): calling this synchronously here runs
+    // before EditableTextState's own controller listener has processed the
+    // new value, so RenderEditable is still laid out against the *old* text
+    // and computes a stale/incorrect caret rect.
+    if (_bringCursorScheduled) return;
+    _bringCursorScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bringCursorScheduled = false;
+      if (!mounted) return;
+      bringCursorIntoView(fieldKey: _fieldKey);
+    });
   }
 
   void _scheduleHighlightRepaint() {
@@ -151,12 +190,41 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
           ? InputBorder.none
           : widget.decoration.focusedBorder,
     );
+    final spellcheckOn = isMultilineField(
+      expands: widget.expands,
+      maxLines: widget.maxLines,
+      minLines: widget.minLines,
+    );
     final padding = widget.contentPadding.resolve(Directionality.of(context));
     final textDirection = Directionality.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
     final textHeightBehavior =
         DefaultTextHeightBehavior.maybeOf(context) ?? _textHeightBehavior;
     final locale = Localizations.maybeLocaleOf(context);
+
+    final textField = TextField(
+      key: _fieldKey,
+      contextMenuBuilder: spellcheckOn
+          ? voyagerSpellCheckContextMenuBuilder
+          : (context, editableTextState) => const SizedBox.shrink(),
+      spellCheckConfiguration: spellcheckOn
+          ? buildVoyagerSpellCheckConfiguration(context)
+          : const SpellCheckConfiguration.disabled(),
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      readOnly: widget.readOnly,
+      scrollController: _scrollController,
+      expands: widget.expands,
+      maxLines: widget.expands ? null : widget.maxLines,
+      minLines: widget.expands ? null : widget.minLines,
+      keyboardType: widget.keyboardType,
+      textAlignVertical: TextAlignVertical.top,
+      strutStyle: strutStyle,
+      style: baseStyle,
+      cursorColor: accent,
+      onChanged: widget.onChanged,
+      decoration: decoration,
+    );
 
     final field = Stack(
       fit: widget.expands ? StackFit.expand : StackFit.loose,
@@ -195,25 +263,29 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
             ),
           ),
         ),
+        if (spellcheckOn)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Padding(
+                padding: padding,
+                child: SpellCheckSquiggleLayer(
+                  controller: widget.controller,
+                  focusNode: widget.focusNode,
+                  style: baseStyle,
+                  strutStyle: strutStyle,
+                  scrollController: _scrollController,
+                ),
+              ),
+            ),
+          ),
         DefaultTextHeightBehavior(
           textHeightBehavior: textHeightBehavior,
-          child: TextField(
-            contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
-            controller: widget.controller,
-            focusNode: widget.focusNode,
-            readOnly: widget.readOnly,
-            scrollController: _scrollController,
-            expands: widget.expands,
-            maxLines: widget.expands ? null : widget.maxLines,
-            minLines: widget.expands ? null : widget.minLines,
-            keyboardType: widget.keyboardType,
-            textAlignVertical: TextAlignVertical.top,
-            strutStyle: strutStyle,
-            style: baseStyle,
-            cursorColor: accent,
-            onChanged: widget.onChanged,
-            decoration: decoration,
-          ),
+          child: spellcheckOn
+              ? wrapWithSecondaryTapWordSelect(
+                  fieldKey: _fieldKey,
+                  child: textField,
+                )
+              : textField,
         ),
       ],
     );
