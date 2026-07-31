@@ -61,6 +61,7 @@ flutter:
     - shaders/paper_texture.frag
   assets:
     - assets/quotes.json
+    - assets/dictionary_en.txt
   fonts:
     - family: IosevkaAile
       fonts:

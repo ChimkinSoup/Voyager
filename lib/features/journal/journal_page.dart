@@ -2657,6 +2657,15 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         cursorColor: widget.accentColor,
         onChanged: _handleChanged,
         hintText: 'Start writing...',
+        // Vertical contentPadding frames the field's internal scrollable
+        // viewport rather than scrolling away with the text inside it, so a
+        // large value (the previous default of 16) left a permanent blank
+        // strip at the top/bottom whenever the body was scrolled, with the
+        // first/last visible line clipped right at its edge. A small value
+        // keeps that strip imperceptible while still clearing the rounded
+        // border's corner curve; horizontal padding is unaffected since it
+        // isn't part of the scrollable axis.
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         decoration: const InputDecoration(
           filled: false,
           border: InputBorder.none,

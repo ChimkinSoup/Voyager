@@ -487,11 +487,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
           effectiveDue == widget.task.dueDate;
       if (!unchanged) {
         await repo.upsertTask(baseUpdate);
-        await remoteSync.flushDocument(
-          FirestoreCollections.todoTasks,
-          widget.task.id,
+        unawaited(
+          remoteSync.flushDocument(
+            FirestoreCollections.todoTasks,
+            widget.task.id,
+          ),
         );
-        await remoteSync.pushTodoTaskNow(baseUpdate);
+        remoteSync.pushTodoTaskNow(baseUpdate);
       }
     }
     if (notifyChanged) widget.onChanged();

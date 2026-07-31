@@ -12,6 +12,7 @@ import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
@@ -1083,6 +1084,57 @@ class DriftNotificationRepository implements NotificationRepository {
   }
 }
 
+class DriftBucketListRepository implements BucketListRepository {
+  DriftBucketListRepository(this._db);
+
+  final AppDatabase _db;
+
+  @override
+  Future<List<BucketListItem>> listItems() async {
+    final rows =
+        await (_db.select(_db.bucketListItemsTable)
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
+    return rows.map(_map).toList();
+  }
+
+  @override
+  Future<void> upsertItem(BucketListItem item) async {
+    await _db
+        .into(_db.bucketListItemsTable)
+        .insertOnConflictUpdate(
+          BucketListItemsTableCompanion(
+            id: Value(item.id),
+            title: Value(item.title),
+            note: Value(item.note),
+            completed: Value(item.completed),
+            completedAt: Value(item.completedAt),
+            sortOrder: Value(item.sortOrder),
+            createdAt: Value(item.createdAt),
+            updatedAt: Value(item.updatedAt),
+          ),
+        );
+  }
+
+  @override
+  Future<void> deleteItem(String id) async {
+    await (_db.delete(
+      _db.bucketListItemsTable,
+    )..where((t) => t.id.equals(id))).go();
+  }
+
+  BucketListItem _map(BucketListItemsTableData row) => BucketListItem(
+    id: row.id,
+    title: row.title,
+    note: row.note,
+    completed: row.completed,
+    completedAt: row.completedAt,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  );
+}
+
 class DriftFinanceRepository implements FinanceRepository {
   DriftFinanceRepository(this._db);
 
@@ -1656,6 +1708,7 @@ class DriftSettingsRepository implements SettingsRepository {
       calendarNavigateRightKey: row.calendarNavigateRightKey,
       timelineModeYearZero: row.timelineModeYearZero,
       birthYear: row.birthYear,
+      birthDate: row.birthDate,
       alertOnPeriodicPrompts: row.alertOnPeriodicPrompts,
       alertTimeHour: row.alertTimeHour,
       hideCompletedTasks: row.hideCompletedTasks,
@@ -1772,6 +1825,7 @@ class DriftSettingsRepository implements SettingsRepository {
             calendarNavigateRightKey: Value(settings.calendarNavigateRightKey),
             timelineModeYearZero: Value(settings.timelineModeYearZero),
             birthYear: Value(settings.birthYear),
+            birthDate: Value(settings.birthDate),
             alertOnPeriodicPrompts: Value(settings.alertOnPeriodicPrompts),
             alertTimeHour: Value(settings.alertTimeHour),
             hideCompletedTasks: Value(settings.hideCompletedTasks),
@@ -1894,6 +1948,30 @@ class DriftSettingsRepository implements SettingsRepository {
             colorValue: Value(colorValue),
           ),
         );
+  }
+
+  @override
+  Future<Set<String>> getCustomWords() async {
+    final rows = await _db.select(_db.customWordsTable).get();
+    return {for (final r in rows) r.word};
+  }
+
+  @override
+  Future<void> addCustomWord(String word) async {
+    final normalized = word.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    await _db
+        .into(_db.customWordsTable)
+        .insertOnConflictUpdate(
+          CustomWordsTableCompanion(word: Value(normalized)),
+        );
+  }
+
+  @override
+  Future<void> removeCustomWord(String word) async {
+    await (_db.delete(_db.customWordsTable)
+          ..where((t) => t.word.equals(word.trim().toLowerCase())))
+        .go();
   }
 }
 

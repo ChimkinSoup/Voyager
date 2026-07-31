@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 
 class LabeledTextField extends StatefulWidget {
   const LabeledTextField({
@@ -61,8 +63,17 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
 
   FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
 
+  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
+  late final ScrollController _scrollController = ScrollController();
+
   bool _hasText = false;
   bool _focused = false;
+
+  bool get _spellcheckOn => isMultilineField(
+        expands: widget.expands,
+        maxLines: widget.maxLines,
+        minLines: widget.minLines,
+      );
 
   @override
   void initState() {
@@ -74,6 +85,9 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     _focused = _focusNode.hasFocus;
     widget.controller.addListener(_handleTextChanged);
     _focusNode.addListener(_handleFocusChanged);
+    if (_spellcheckOn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
+    }
   }
 
   @override
@@ -97,7 +111,17 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     widget.controller.removeListener(_handleTextChanged);
     _focusNode.removeListener(_handleFocusChanged);
     _ownedFocusNode?.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _forceSpellCheck() {
+    if (!mounted || !_spellcheckOn) return;
+    forceSpellCheckDisplay(
+      context: context,
+      fieldKey: _fieldKey,
+      focusNode: _focusNode,
+    );
   }
 
   void _handleTextChanged() {
@@ -105,6 +129,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
+    if (_spellcheckOn) _forceSpellCheck();
   }
 
   void _handleFocusChanged() {
@@ -131,6 +156,79 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     final effectiveHint = showLabel
         ? (floated ? widget.hintText : null)
         : (widget.hintText ?? widget.label);
+    final spellcheckOn = isMultilineField(
+      expands: widget.expands,
+      maxLines: widget.maxLines,
+      minLines: widget.minLines,
+    );
+
+    final textStyle = theme.textTheme.bodyLarge?.copyWith(
+      color: theme.colorScheme.onSurface,
+      height: widget.dense ? 1.0 : null,
+    );
+
+    final textField = TextField(
+      key: _fieldKey,
+      contextMenuBuilder: spellcheckOn
+          ? voyagerSpellCheckContextMenuBuilder
+          : (context, editableTextState) => const SizedBox.shrink(),
+      spellCheckConfiguration: spellcheckOn
+          ? buildVoyagerSpellCheckConfiguration(context)
+          : const SpellCheckConfiguration.disabled(),
+      controller: widget.controller,
+      focusNode: _focusNode,
+      scrollController: _scrollController,
+      expands: widget.expands,
+      maxLines: widget.expands ? null : widget.maxLines,
+      minLines: widget.expands ? null : widget.minLines,
+      obscureText: widget.obscureText,
+      enabled: widget.enabled,
+      autofocus: widget.autofocus,
+      keyboardType: widget.keyboardType,
+      textInputAction: widget.textInputAction,
+      onChanged: widget.onChanged,
+      onSubmitted: widget.onSubmitted,
+      textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
+          ? TextAlignVertical.top
+          : TextAlignVertical.center,
+      style: textStyle,
+      cursorColor: accent,
+      decoration: InputDecoration(
+        isDense: widget.dense,
+        hintText: effectiveHint,
+        contentPadding: contentPadding,
+        filled: false,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+      ),
+    );
+
+    Widget field = spellcheckOn
+        ? wrapWithSecondaryTapWordSelect(fieldKey: _fieldKey, child: textField)
+        : textField;
+
+    if (spellcheckOn) {
+      field = Stack(
+        fit: StackFit.passthrough,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Padding(
+                padding: contentPadding,
+                child: SpellCheckSquiggleLayer(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  style: textStyle ?? const TextStyle(),
+                  scrollController: _scrollController,
+                ),
+              ),
+            ),
+          ),
+          field,
+        ],
+      );
+    }
 
     return NotchedFieldBorder(
       focusNode: _focusNode,
@@ -142,38 +240,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       alignLabelToTop: widget.alignLabelToTop ??
           (widget.expands || (widget.maxLines ?? 1) > 1),
       borderRadius: widget.borderRadius ?? (widget.dense ? 12 : 18),
-      child: TextField(
-        contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
-        controller: widget.controller,
-        focusNode: _focusNode,
-        expands: widget.expands,
-        maxLines: widget.expands ? null : widget.maxLines,
-        minLines: widget.expands ? null : widget.minLines,
-        obscureText: widget.obscureText,
-        enabled: widget.enabled,
-        autofocus: widget.autofocus,
-        keyboardType: widget.keyboardType,
-        textInputAction: widget.textInputAction,
-        onChanged: widget.onChanged,
-        onSubmitted: widget.onSubmitted,
-        textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
-            ? TextAlignVertical.top
-            : TextAlignVertical.center,
-        style: theme.textTheme.bodyLarge?.copyWith(
-          color: theme.colorScheme.onSurface,
-          height: widget.dense ? 1.0 : null,
-        ),
-        cursorColor: accent,
-        decoration: InputDecoration(
-          isDense: widget.dense,
-          hintText: effectiveHint,
-          contentPadding: contentPadding,
-          filled: false,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-        ),
-      ),
+      child: field,
     );
   }
 }

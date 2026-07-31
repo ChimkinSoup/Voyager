@@ -20,6 +20,7 @@ import 'package:voyager/features/dev/dev_geometric_texture_tile.dart';
 import 'package:voyager/features/dev/dev_geometric_wave_tile.dart';
 import 'package:voyager/features/dev/dev_leaf_gallery_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
+import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 final devVerboseSyncProvider = StateProvider<bool>((ref) => false);
@@ -82,6 +83,30 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.disablePetalField = v;
             ref.read(devDisablePetalFieldProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Life Tracker replay button'),
+          subtitle: const Text(
+            'Show a button on the Life Tracker page that resets the fallen '
+            'leaves and re-runs the opening animation on demand',
+          ),
+          value: ref.watch(lifeTrackerShowReplayButtonProvider),
+          onChanged: (v) {
+            DevFlags.showLifeTrackerReplay = v;
+            ref.read(lifeTrackerShowReplayButtonProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Life Tracker restore button'),
+          subtitle: const Text(
+            'Show a button on the Life Tracker page that puts every fallen '
+            'leaf back on the tree, without replaying the animation',
+          ),
+          value: ref.watch(lifeTrackerShowRestoreButtonProvider),
+          onChanged: (v) {
+            DevFlags.showLifeTrackerRestore = v;
+            ref.read(lifeTrackerShowRestoreButtonProvider.notifier).state = v;
           },
         ),
         SwitchListTile(

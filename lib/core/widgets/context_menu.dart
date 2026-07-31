@@ -355,7 +355,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   }
 
   Widget _buildRootMenu(BuildContext context) {
-    return _MenuPanel(
+    return ContextMenuPanel(
       panelKey: _menuKey,
       items: widget.items,
       radius: _radius,
@@ -375,7 +375,7 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
       delegate: _SubmenuLayoutDelegate(anchor: _submenuAnchor!),
       child: FadeTransition(
         opacity: _anim,
-        child: _MenuPanel(
+        child: ContextMenuPanel(
           panelKey: _submenuKey,
           items: children,
           radius: _radius,
@@ -401,8 +401,9 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
 // Menu panel (shared by the root menu and submenu flyouts)
 // ---------------------------------------------------------------------------
 
-class _MenuPanel extends StatelessWidget {
-  const _MenuPanel({
+class ContextMenuPanel extends StatelessWidget {
+  const ContextMenuPanel({
+    super.key,
     required this.panelKey,
     required this.items,
     required this.radius,

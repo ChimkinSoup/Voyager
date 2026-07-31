@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
@@ -13,6 +14,8 @@ import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 import 'package:voyager/core/widgets/voyager_checkbox.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -20,6 +23,7 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 
 /// The notification bell's popover content: pinned quick-reminders, the
 /// unified urgency-sorted feed, a hidden/dismissed browser, and an embedded
@@ -118,6 +122,7 @@ class _PinnedNotesSection extends ConsumerStatefulWidget {
 class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
 
   @override
   void initState() {
@@ -132,13 +137,25 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
       }
       return KeyEventResult.ignored;
     };
+    _controller.addListener(_forceSpellCheck);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_forceSpellCheck);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _forceSpellCheck() {
+    if (!mounted) return;
+    forceSpellCheckDisplay(
+      context: context,
+      fieldKey: _fieldKey,
+      focusNode: _focusNode,
+    );
   }
 
   Future<void> _addNote() async {
@@ -176,48 +193,79 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
     final theme = Theme.of(context);
     final notesAsync = ref.watch(pinnedNotesProvider);
     final notes = notesAsync.valueOrNull ?? const [];
+    const fieldContentPadding = EdgeInsets.symmetric(
+      horizontal: 8,
+      vertical: 8,
+    );
+    final textStyle =
+        theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _controller,
-            focusNode: _focusNode,
-            maxLines: null,
-            minLines: 1,
-            keyboardType: TextInputType.multiline,
-            onSubmitted: (_) => unawaited(_addNote()),
-            style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              filled: true,
-              fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                  width: 1.2,
+          Stack(
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Padding(
+                    padding: fieldContentPadding,
+                    child: SpellCheckSquiggleLayer(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      style: textStyle,
+                    ),
+                  ),
                 ),
               ),
-              hintText: 'Type a quick reminder...',
-              hintStyle: theme.textTheme.bodySmall?.copyWith(
-                fontSize: 10,
-                color: theme.colorScheme.onSurfaceVariant.withValues(
-                  alpha: 0.6,
+              wrapWithSecondaryTapWordSelect(
+                fieldKey: _fieldKey,
+                child: TextField(
+                  key: _fieldKey,
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  maxLines: null,
+                  minLines: 1,
+                  contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                  spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
+                    context,
+                  ),
+                  keyboardType: TextInputType.multiline,
+                  onSubmitted: (_) => unawaited(_addNote()),
+                  style: textStyle,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: fieldContentPadding,
+                    filled: true,
+                    fillColor: theme.colorScheme.onSurface.withValues(
+                      alpha: 0.04,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                        width: 1.2,
+                      ),
+                    ),
+                    hintText: 'Type a quick reminder...',
+                    hintStyle: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 10,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.6,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
           for (final note in notes)
             _PinnedNoteRow(
@@ -253,6 +301,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   late final AnimationController _exit;
   late final TextEditingController _editController;
   late final FocusNode _editFocusNode;
+  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
   bool _hovered = false;
   bool _isEditing = false;
 
@@ -264,6 +313,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
       duration: const Duration(milliseconds: 160),
     );
     _editController = TextEditingController(text: widget.note.text);
+    _editController.addListener(_forceSpellCheck);
     _editFocusNode = FocusNode()
       ..addListener(() {
         if (!_editFocusNode.hasFocus && _isEditing) {
@@ -294,9 +344,19 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   @override
   void dispose() {
     _exit.dispose();
+    _editController.removeListener(_forceSpellCheck);
     _editController.dispose();
     _editFocusNode.dispose();
     super.dispose();
+  }
+
+  void _forceSpellCheck() {
+    if (!mounted || !_isEditing) return;
+    forceSpellCheckDisplay(
+      context: context,
+      fieldKey: _fieldKey,
+      focusNode: _editFocusNode,
+    );
   }
 
   void _startEditing() {
@@ -308,6 +368,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
       );
     });
     _editFocusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
   }
 
   Future<void> _submitEdit() async {
@@ -338,44 +399,73 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
 
     Widget content;
     if (_isEditing) {
+      const fieldContentPadding = EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 6,
+      );
+      final textStyle =
+          theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle();
       content = Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
-        child: TextField(
-          controller: _editController,
-          focusNode: _editFocusNode,
-          maxLines: null,
-          minLines: 1,
-          keyboardType: TextInputType.multiline,
-          onSubmitted: (_) => unawaited(_submitEdit()),
-          style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
-          decoration: InputDecoration(
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            filled: true,
-            fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: BorderSide(
-                color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                width: 1.2,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: fieldContentPadding,
+                  child: SpellCheckSquiggleLayer(
+                    controller: _editController,
+                    focusNode: _editFocusNode,
+                    style: textStyle,
+                  ),
+                ),
               ),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: BorderSide(
-                color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                width: 1.2,
+            wrapWithSecondaryTapWordSelect(
+              fieldKey: _fieldKey,
+              child: TextField(
+                key: _fieldKey,
+                controller: _editController,
+                focusNode: _editFocusNode,
+                maxLines: null,
+                minLines: 1,
+                contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
+                  context,
+                ),
+                keyboardType: TextInputType.multiline,
+                onSubmitted: (_) => unawaited(_submitEdit()),
+                style: textStyle,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: fieldContentPadding,
+                  filled: true,
+                  fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                      width: 1.2,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                      width: 1.2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                      width: 1.2,
+                    ),
+                  ),
+                ),
               ),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(6),
-              borderSide: BorderSide(
-                color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                width: 1.2,
-              ),
-            ),
-          ),
+          ],
         ),
       );
     } else {
@@ -611,10 +701,32 @@ class _FeedRowState extends ConsumerState<_FeedRow>
     await showSubscriptionModal(context, ref, existing: widget.item.bill);
   }
 
+  void _revealTask() {
+    final task = widget.item.task!;
+    final router = GoRouter.of(context);
+    ref.read(revealRequestProvider.notifier).state = RevealRequest.task(task);
+    Navigator.of(context).pop();
+    router.go('/todo');
+  }
+
+  void _revealEvent() {
+    final event = widget.item.event!;
+    final router = GoRouter.of(context);
+    ref.read(revealRequestProvider.notifier).state =
+        RevealRequest.event(event);
+    Navigator.of(context).pop();
+    router.go('/calendar');
+  }
+
   List<ContextMenuItem> _menuItems() {
     switch (widget.item.type) {
       case NotificationItemType.task:
         return [
+          ContextMenuItem(
+            label: 'Show in To-Do',
+            icon: PhosphorIconsRegular.arrowSquareOut,
+            onTap: _revealTask,
+          ),
           ContextMenuItem(
             label: 'Delete',
             icon: PhosphorIconsRegular.trash,
@@ -624,6 +736,11 @@ class _FeedRowState extends ConsumerState<_FeedRow>
         ];
       case NotificationItemType.event:
         return [
+          ContextMenuItem(
+            label: 'Show in Calendar',
+            icon: PhosphorIconsRegular.arrowSquareOut,
+            onTap: _revealEvent,
+          ),
           ContextMenuItem(
             label: 'Change color',
             icon: PhosphorIconsRegular.palette,
