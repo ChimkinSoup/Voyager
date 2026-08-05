@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 
 /// Shows a popup that visibly grows outward from [anchorGlobalCenter] — the
 /// "expanding outward like it came from the blossom" interaction the Life
@@ -73,6 +74,7 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
+    final reduced = VoyagerMotion.reduced(context);
     return capturedThemes.wrap(
       CustomSingleChildLayout(
         delegate: _CenterOnAnchorDelegate(
@@ -84,34 +86,32 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
           builder: (context) {
             final theme = Theme.of(context);
             final accent = accentColor ?? theme.colorScheme.primary;
-            final vc = VoyagerColors.of(context);
+            final surface = GlassSurface(
+              borderRadius: BorderRadius.circular(16),
+              accentBorder: accent,
+              child: Material(
+                type: MaterialType.transparency,
+                child: builder(context),
+              ),
+            );
+            if (reduced) {
+              return FadeTransition(opacity: animation, child: surface);
+            }
+            // Grows outward from the anchor point rather than a rect, so a
+            // little overshoot reads as "popping out of the blossom" instead
+            // of a generic menu opening.
             return ScaleTransition(
-              scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+              scale: CurvedAnimation(
+                parent: animation,
+                curve: VoyagerSpring.momentumCurve,
+              ),
               alignment: Alignment.center,
               child: FadeTransition(
                 opacity: CurvedAnimation(
                   parent: animation,
                   curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: theme.scaffoldBackgroundColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: accent.withValues(alpha: 0.85), width: 2.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: vc.shadow.withValues(alpha: vc.strongShadowAlpha),
-                        blurRadius: 16 * vc.shadowBlurScale,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: builder(context),
-                  ),
-                ),
+                child: surface,
               ),
             );
           },
