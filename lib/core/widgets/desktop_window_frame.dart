@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/widgets/desktop_window_title_bar.dart';
 
@@ -32,10 +33,11 @@ class _DesktopWindowFrameState extends State<DesktopWindowFrame>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: _animDuration);
+    final reduced = VoyagerMotion.reduced(context);
     _slideAnim = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
+      curve: reduced ? Curves.easeOut : VoyagerSpring.snappyCurve,
+      reverseCurve: Curves.easeIn,
     );
   }
 
