@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 
@@ -65,10 +66,11 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
+    final reduced = VoyagerMotion.reduced(context);
     final curved = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
+      curve: reduced ? Curves.easeOut : VoyagerSpring.drawerCurve,
+      reverseCurve: Curves.easeIn,
     );
 
     return Positioned(

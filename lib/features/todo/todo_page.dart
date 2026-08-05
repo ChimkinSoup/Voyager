@@ -11,6 +11,7 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/effects/confetti.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
@@ -310,7 +311,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
     _panelAnimation = CurvedAnimation(
       parent: _panelController,
-      curve: Curves.easeOutCubic,
+      curve: VoyagerMotion.reduced(context)
+          ? Curves.easeOut
+          : VoyagerSpring.drawerCurve,
     );
     _panelController.addStatusListener((status) {
       if (!mounted) return;
@@ -2566,32 +2569,38 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
       );
     }
     _displayCompleted = widget.task.completed;
+    final reducedMotion = VoyagerMotion.reduced(context);
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: reducedMotion
+          ? VoyagerMotion.crossfade
+          : const Duration(milliseconds: 200),
     );
-    _checkScale =
-        TweenSequence<double>([
-          TweenSequenceItem(
-            tween: Tween(
-              begin: 1.0,
-              end: 1.25,
-            ).chain(CurveTween(curve: Curves.easeOut)),
-            weight: 45,
-          ),
-          TweenSequenceItem(
-            tween: Tween(
-              begin: 1.25,
-              end: 1.0,
-            ).chain(CurveTween(curve: Curves.easeOutBack)),
-            weight: 55,
-          ),
-        ]).animate(
-          CurvedAnimation(
-            parent: _animController,
-            curve: const Interval(0, 0.55, curve: Curves.linear),
-          ),
-        );
+    // Reduced motion drops the pop-overshoot entirely, matching
+    // VoyagerCheckbox's treatment of the same interaction.
+    _checkScale = reducedMotion
+        ? const AlwaysStoppedAnimation<double>(1.0)
+        : TweenSequence<double>([
+            TweenSequenceItem(
+              tween: Tween(
+                begin: 1.0,
+                end: 1.25,
+              ).chain(CurveTween(curve: Curves.easeOut)),
+              weight: 45,
+            ),
+            TweenSequenceItem(
+              tween: Tween(
+                begin: 1.25,
+                end: 1.0,
+              ).chain(CurveTween(curve: Curves.easeOutBack)),
+              weight: 55,
+            ),
+          ]).animate(
+            CurvedAnimation(
+              parent: _animController,
+              curve: const Interval(0, 0.55, curve: Curves.linear),
+            ),
+          );
 
     if (widget.task.completed) {
       _animController.value = 1.0;

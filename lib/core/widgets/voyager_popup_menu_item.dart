@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 
 /// Opens a Voyager-styled popup menu with no outer padding by default.
@@ -190,6 +191,7 @@ class VoyagerPopupMenuRoute<T> extends PopupRoute<T> {
     // the *page* passed to it, which is this whole route's full-screen
     // CustomSingleChildLayout. Scaling that would grow the menu from the
     // screen's own top-center instead of from the menu's anchored position.
+    final reduced = VoyagerMotion.reduced(context);
     final Widget menuContainer = FadeTransition(
       opacity: CurvedAnimation(
         parent: animation,
@@ -199,8 +201,8 @@ class VoyagerPopupMenuRoute<T> extends PopupRoute<T> {
       child: ScaleTransition(
         scale: CurvedAnimation(
           parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
+          curve: reduced ? Curves.easeOut : VoyagerSpring.drawerCurve,
+          reverseCurve: Curves.easeIn,
         ),
         alignment: Alignment.topCenter,
         child: Material(

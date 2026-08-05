@@ -8,6 +8,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
@@ -1082,7 +1083,9 @@ class _HiddenSectionState extends ConsumerState<_HiddenSection> {
         // scroll view around it.
         AnimatedSize(
           duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
+          curve: VoyagerMotion.reduced(context)
+              ? Curves.easeOut
+              : VoyagerSpring.moveCurve,
           alignment: Alignment.topCenter,
           child: _expanded
               ? Padding(

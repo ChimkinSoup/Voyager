@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 
 /// Shows a sleek, non-intrusive loading toast at the top of the screen while
 /// the Track button's public API fetch is in flight. Returns a callback that
@@ -70,6 +71,7 @@ class _LeetCodeToastState extends State<_LeetCodeToast>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final reduced = VoyagerMotion.reduced(context);
     return Positioned(
       top: MediaQuery.paddingOf(context).top + 8,
       left: 0,
@@ -80,9 +82,12 @@ class _LeetCodeToastState extends State<_LeetCodeToast>
             opacity: _controller,
             child: SlideTransition(
               position: Tween<Offset>(
-                begin: const Offset(0, -0.3),
+                begin: reduced ? Offset.zero : const Offset(0, -0.3),
                 end: Offset.zero,
-              ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic)),
+              ).animate(CurvedAnimation(
+                parent: _controller,
+                curve: reduced ? Curves.easeOut : VoyagerSpring.moveCurve,
+              )),
               child: Material(
                 color: theme.colorScheme.surfaceContainerHighest,
                 elevation: 4,
