@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 class VoyagerTimePickerSpinner extends StatefulWidget {
@@ -210,7 +211,7 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
     _hourController.animateToItem(
       _hourController.selectedItem + amount,
       duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
+      curve: VoyagerSpring.moveCurve,
     );
   }
 
@@ -221,7 +222,7 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
       _amPmController.animateToItem(
         next,
         duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
+        curve: VoyagerSpring.moveCurve,
       );
     }
   }
