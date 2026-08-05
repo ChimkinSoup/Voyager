@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 
 class ContextualPopover extends StatelessWidget {
   const ContextualPopover({
@@ -11,7 +12,7 @@ class ContextualPopover extends StatelessWidget {
   });
 
   static const _radius = 12.0;
-  static const _borderWidth = 3.0;
+  static const _borderWidth = 2.0;
 
   /// Corner radius of the popover's clipped content area (inside the accent
   /// border), for descendants that need to round a full-bleed edge to match.
@@ -26,35 +27,19 @@ class ContextualPopover extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = accentColor ?? theme.colorScheme.primary;
-    final vc = VoyagerColors.of(context);
-    final innerRadius = _radius - _borderWidth;
 
-    return Container(
+    return SizedBox(
       width: width,
       height: height,
-      decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
+      child: GlassSurface(
         borderRadius: BorderRadius.circular(_radius),
-        boxShadow: [
-          BoxShadow(
-            color: vc.shadow.withValues(alpha: vc.strongShadowAlpha),
-            blurRadius: 8 * vc.shadowBlurScale,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      foregroundDecoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(_radius),
-        border: Border.all(
-          color: accent.withValues(alpha: 0.85),
-          width: _borderWidth,
+        accentBorder: accent,
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(contentRadius),
+          clipBehavior: Clip.antiAlias,
+          child: child,
         ),
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(innerRadius),
-        clipBehavior: Clip.antiAlias,
-        child: child,
       ),
     );
   }
@@ -242,7 +227,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
   String? get barrierLabel => 'Dismiss';
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 200);
+  Duration get transitionDuration => const Duration(milliseconds: 260);
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
@@ -253,6 +238,11 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
       accentColor: accentColor,
       child: builder(context),
     );
+    final reduced = VoyagerMotion.reduced(context);
+    final curved = CurvedAnimation(
+      parent: animation,
+      curve: reduced ? Curves.easeOut : VoyagerSpring.drawerCurve,
+    );
     return capturedThemes.wrap(
       CustomSingleChildLayout(
         delegate: _PopoverLayoutDelegate(
@@ -262,12 +252,17 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
         ),
         child: FadeTransition(
           opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.95, end: 1.0).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-            ),
-            child: popover,
-          ),
+          child: reduced
+              ? popover
+              : ScaleTransition(
+                  // Anchored toward the trigger's corner (the layout delegate
+                  // places the popover left-aligned with targetRect) rather
+                  // than scaling from center, so it visually grows out of
+                  // what opened it.
+                  scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved),
+                  alignment: Alignment.topLeft,
+                  child: popover,
+                ),
         ),
       ),
     );

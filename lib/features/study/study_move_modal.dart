@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/features/study/study_breadcrumb.dart';
 import 'package:voyager/features/study/study_providers.dart';
@@ -16,14 +17,8 @@ Future<void> showStudyMoveModal(
   WidgetRef ref, {
   required List<String> cardIds,
 }) {
-  return showModalBottomSheet<void>(
+  return showVoyagerSheet<void>(
     context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
       child: _StudyMoveModal(cardIds: cardIds),

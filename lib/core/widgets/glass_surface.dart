@@ -120,6 +120,35 @@ class GlassSurface extends StatelessWidget {
   }
 }
 
+/// Opens [builder] in the app's standard bottom sheet chrome: rounded top
+/// corners, translucent [GlassWeight.heavy] material background instead of a
+/// solid fill, drag-to-dismiss with velocity (built into [showModalBottomSheet]
+/// via [enableDrag]).
+Future<T?> showVoyagerSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  BorderRadius borderRadius = const BorderRadius.vertical(
+    top: Radius.circular(20),
+  ),
+  BoxConstraints? constraints,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    constraints: constraints,
+    shape: RoundedRectangleBorder(borderRadius: borderRadius),
+    builder: (ctx) => GlassSurface(
+      weight: GlassWeight.heavy,
+      borderRadius: borderRadius,
+      child: builder(ctx),
+    ),
+  );
+}
+
 /// Animates a [GlassSurface]'s entrance/exit as a material arriving, not a
 /// plain fade: blur radius and scale move together. Drive [t] (0 = hidden,
 /// 1 = shown) from a spring, not a curve, so it stays interruptible.

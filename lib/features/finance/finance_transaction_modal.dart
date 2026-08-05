@@ -10,6 +10,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -27,14 +28,8 @@ Future<void> showFinanceTransactionModal(
   WidgetRef ref, {
   FinancialTransaction? existing,
 }) async {
-  await showModalBottomSheet<void>(
+  await showVoyagerSheet<void>(
     context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
       child: _TransactionModal(existing: existing),

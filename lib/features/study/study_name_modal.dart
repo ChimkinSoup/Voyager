@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 
 /// Small bottom sheet asking for a single name — used for creating/renaming
@@ -11,14 +12,8 @@ Future<String?> showStudyNameModal(
   String? initialValue,
   String hintText = 'Name',
 }) {
-  return showModalBottomSheet<String>(
+  return showVoyagerSheet<String>(
     context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => _StudyNameModal(
       title: title,
       initialValue: initialValue,

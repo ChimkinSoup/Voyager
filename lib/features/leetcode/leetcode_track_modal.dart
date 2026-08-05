@@ -6,6 +6,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -30,17 +31,11 @@ Future<bool> showLeetCodeTrackModal(
   // desktop-sized window. This form has a lot of fields plus a code editor,
   // so it gets almost the full screen instead.
   final screenSize = MediaQuery.sizeOf(context);
-  final saved = await showModalBottomSheet<bool>(
+  final saved = await showVoyagerSheet<bool>(
     context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    useSafeArea: true,
     constraints: BoxConstraints(
       maxWidth: screenSize.width * 0.96,
       maxHeight: screenSize.height * 0.96,
-    ),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
