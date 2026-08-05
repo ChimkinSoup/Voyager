@@ -1,21 +1,27 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/life_tracker/blossom_stat_popup.dart';
-import 'package:voyager/features/life_tracker/blossom_widget.dart';
 import 'package:voyager/features/life_tracker/bucket_list_popup.dart';
 import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
 import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
 import 'package:voyager/features/life_tracker/life_tree_canvas.dart';
 import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 import 'package:voyager/features/life_tracker/life_tree_popover.dart';
-import 'package:voyager/features/life_tracker/swing_bubble_widget.dart';
+import 'package:voyager/features/life_tracker/stat_leader_label.dart';
 
-/// The Unified Canvas: a watercolor tree with one blossom per life
-/// statistic, a swing + bucket-list bubble, and a first-run leaf-fall
-/// animation for every week already lived. See LIFE_TRACKER.md for the spec.
+/// The Unified Canvas: a watercolour cherry tree annotated with one life
+/// statistic per leader label, a figure resting on the trunk that opens the
+/// bucket list, and a first-run leaf-fall animation for every week already
+/// lived. See LIFE_TRACKER.md for the spec.
+///
+/// The page paints its own paper and keeps it in both themes. The whole look
+/// is ink and wash on off-white stock, and re-toning it for dark mode gives up
+/// the thing it is.
 class LifeTrackerPage extends ConsumerStatefulWidget {
   const LifeTrackerPage({super.key});
 
@@ -23,10 +29,24 @@ class LifeTrackerPage extends ConsumerStatefulWidget {
   ConsumerState<LifeTrackerPage> createState() => _LifeTrackerPageState();
 }
 
+/// The paper and the ink it is painted with, fixed across themes.
+const _paperColor = Color(0xFFF3F1EA);
+const _inkColor = Color(0xFF241F1B);
+const _grassColor = Color(0xFF8C9A79);
+
 class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   final _stackKey = GlobalKey();
   final _canvasController = LifeTreeCanvasController();
   bool _openingAnimationTriggered = false;
+
+  /// Which leader label the pointer is over, so its line and dot can light up
+  /// with it. -1 for none.
+  int _hoveredLabel = -1;
+
+  /// Whether the pointer is over the tree itself (outside the stat labels) —
+  /// drives the whole-tree hover glow and marks where a tap opens the bucket
+  /// list.
+  bool _treeHovered = false;
 
   /// Bumped whenever the fall is reset, so a fall that was already scheduled
   /// but has not started yet doesn't kick in afterwards and undo it.
@@ -124,21 +144,22 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   Widget build(BuildContext context) {
     final geometry = ref.watch(lifeTreeGeometryProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
+    final cachedStats = ref.watch(lifeTrackerStatsProvider).valueOrNull;
     final grounded = ref.watch(lifeTreeGroundedLeavesProvider) ?? const <int>{};
 
+    final minorColors = (settings?.minorPetalColors ?? const <int>[]).map(Color.new).toList();
+    if (minorColors.isEmpty) {
+      minorColors.addAll(const [
+        Color(0xFFF3C5CE),
+        Color(0xFFEAA6B5),
+        Color(0xFFDF8B9C),
+      ]);
+    }
     final leafColors = <Color>[
       Color(settings?.petalColor ?? defaultPetalColor),
-      ...(settings?.minorPetalColors ?? const <int>[]).map(Color.new),
+      ...minorColors,
     ];
     final accent = Color(settings?.accentColor ?? 0xFF7C9EFF);
-    final blossomColor = Color.lerp(accent, Colors.white, 0.55)!.withValues(alpha: 0.85);
-
-    // Wood and ground pigment: the warm mid-brown of a watercolour trunk in
-    // the light theme, which would vanish against the dark theme's
-    // background, so it lifts to a pale driftwood there.
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final inkColor = isDark ? const Color(0xFFC3A79E) : const Color(0xFF7A5348);
-    final groundColor = isDark ? const Color(0xFF9C8A86) : const Color(0xFF8A6156);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -150,6 +171,16 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) return const SizedBox.shrink();
 
+        final now = DateTime.now();
+        final labelWidth = math.min(230.0, size.width * 0.21);
+        final hub = geometry.branchHubRect;
+        final hotspot = Rect.fromLTRB(
+          hub.left * size.width,
+          hub.top * size.height,
+          hub.right * size.width,
+          hub.bottom * size.height,
+        );
+
         return Stack(
           key: _stackKey,
           children: [
@@ -157,35 +188,80 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
               child: LifeTreeCanvas(
                 geometry: geometry,
                 leafColors: leafColors,
-                inkColor: inkColor,
-                groundColor: groundColor,
+                inkColor: _inkColor,
+                paperColor: _paperColor,
+                grassColor: _grassColor,
                 groundedLeafIndices: grounded,
                 controller: _canvasController,
+                accentColor: accent,
+                hovered: _treeHovered,
+                showDebugColors: ref.watch(lifeTrackerShowDebugColorsProvider),
               ),
             ),
-            for (final blossom in geometry.blossoms)
-              Positioned(
-                left: blossom.position.dx * size.width - blossom.size * size.shortestSide * 1.1,
-                top: blossom.position.dy * size.height - blossom.size * size.shortestSide * 1.4,
-                child: BlossomWidget(
-                  size: blossom.size * size.shortestSide,
-                  color: blossomColor,
-                  shortLabel: shortLabelForStat(blossom.stat),
-                  onTap: () => _openBlossomPopup(blossom, size, accent),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: LeaderLinePainter(
+                    blossoms: geometry.blossoms,
+                    inkColor: _inkColor,
+                    accentColor: accent,
+                    highlighted: _hoveredLabel,
+                  ),
                 ),
               ),
-            Positioned(
-              left: geometry.swingAnchor.dx * size.width - 52,
-              top: geometry.swingAnchor.dy * size.height,
-              child: SwingAndBubble(
-                accentColor: accent,
-                onBubbleTap: () => _openBucketList(
-                  Offset(geometry.swingAnchor.dx, geometry.swingAnchor.dy + 0.20),
+            ),
+            Positioned.fill(
+              child: _TreeHoverRegion(
+                geometry: geometry,
+                onHoverChanged: (hovered) {
+                  if (hovered == _treeHovered) return;
+                  setState(() => _treeHovered = hovered);
+                },
+                onTap: () => _openBucketList(
+                  Offset(
+                    hotspot.center.dx / size.width,
+                    hotspot.center.dy / size.height,
+                  ),
                   size,
                   accent,
                 ),
               ),
             ),
+            for (var i = 0; i < geometry.blossoms.length; i++)
+              () {
+                final blossom = geometry.blossoms[i];
+                final resolved = resolveLifeStat(
+                  stat: blossom.stat,
+                  birthDate: settings?.birthDate,
+                  now: now,
+                  tasksConquered: cachedStats?.tasksConquered ?? 0,
+                  lifetimeMood: cachedStats?.lifetimeMood,
+                );
+                final x = blossom.labelAnchor.dx * size.width;
+                return Positioned(
+                  left: blossom.onLeft ? null : x,
+                  right: blossom.onLeft ? size.width - x : null,
+                  top: blossom.labelAnchor.dy * size.height,
+                  child: FractionalTranslation(
+                    translation: const Offset(0, -0.5),
+                    child: SizedBox(
+                      width: labelWidth,
+                      child: StatLeaderLabel(
+                        name: resolved.shortLabel,
+                        value: resolved.value,
+                        onLeft: blossom.onLeft,
+                        inkColor: _inkColor,
+                        accentColor: accent,
+                        haloColor: _paperColor,
+                        onTap: () => _openBlossomPopup(blossom, size, accent),
+                        onHoverChanged: (hovered) => setState(
+                          () => _hoveredLabel = hovered ? i : -1,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }(),
             Positioned(
               right: 16,
               top: 16,
@@ -225,4 +301,56 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
       },
     );
   }
+}
+
+/// The hover/tap target over the trunk and branches — its silhouette is
+/// baked into the canvas texture, so this is a transparent region clipped to
+/// just that shape and laid over it. Hovering it lights the tree (see
+/// [LifeTreeCanvas.hovered]); tapping it opens the bucket list. One and the
+/// same region for both, since only the trunk and branches respond to
+/// either — not the root flares or the canopy cloud. Placed below the stat
+/// labels in the stack, so their own tap/hover targets still win over this
+/// one.
+class _TreeHoverRegion extends StatelessWidget {
+  const _TreeHoverRegion({
+    required this.geometry,
+    required this.onHoverChanged,
+    required this.onTap,
+  });
+
+  final LifeTreeGeometry geometry;
+  final ValueChanged<bool> onHoverChanged;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipPath(
+      clipper: _TrunkAndBranchesClipper(geometry),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => onHoverChanged(true),
+        onExit: (_) => onHoverChanged(false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+        ),
+      ),
+    );
+  }
+}
+
+/// The exact trunk-and-branches silhouette (per user request — not the root
+/// flares, not the canopy cloud) — clips both the hover glow's trigger and
+/// the bucket-list tap target down to just that shape.
+class _TrunkAndBranchesClipper extends CustomClipper<Path> {
+  const _TrunkAndBranchesClipper(this.geometry);
+
+  final LifeTreeGeometry geometry;
+
+  @override
+  Path getClip(Size size) => buildTrunkAndBranchesPath(geometry, size);
+
+  @override
+  bool shouldReclip(covariant _TrunkAndBranchesClipper oldClipper) =>
+      oldClipper.geometry != geometry;
 }

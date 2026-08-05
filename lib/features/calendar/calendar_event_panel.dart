@@ -17,6 +17,7 @@ import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 /// Inline event add/edit panel for the calendar sidebar (no dialog).
 class CalendarEventPanel extends ConsumerStatefulWidget {
@@ -419,7 +420,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                           setState(() => _isFullDay = !_isFullDay),
                       tooltip: _isFullDay ? 'All day (on)' : 'All day (off)',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: kMinTouchTarget,
                       icon: Icon(
                         PhosphorIconsRegular.clockCountdown,
                         size: 18,
@@ -623,7 +624,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
             icon: const Icon(Icons.close, size: 16),
             tooltip: 'Close',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            constraints: kMinTouchTarget,
           ),
         ),
       ],

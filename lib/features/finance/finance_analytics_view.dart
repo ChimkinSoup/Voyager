@@ -9,6 +9,7 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_asset_modal.dart';
 import 'package:voyager/features/finance/finance_category_modal.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
 
@@ -571,6 +572,7 @@ class _BreakdownCard extends ConsumerWidget {
   Future<void> _showCategoryManager(BuildContext context, WidgetRef ref) async {
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
@@ -621,7 +623,7 @@ class _CategoryManager extends ConsumerWidget {
                 icon: const Icon(PhosphorIconsRegular.x, size: 18),
                 tooltip: 'Close',
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+                constraints: kMinTouchTarget,
               ),
             ],
           ),

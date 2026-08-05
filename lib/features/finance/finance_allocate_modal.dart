@@ -11,6 +11,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 /// Opens the "allocate funds into a goal" modal.
 Future<void> showAllocateModal(
@@ -20,6 +21,7 @@ Future<void> showAllocateModal(
 }) async {
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
@@ -170,7 +172,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: kMinTouchTarget,
                   ),
                 ],
               ),

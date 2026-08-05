@@ -14,6 +14,7 @@ import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 /// Opens the add / edit subscription modal. When [existing] is provided the
 /// modal edits that subscription in place.
@@ -24,6 +25,7 @@ Future<void> showSubscriptionModal(
 }) async {
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
@@ -207,14 +209,14 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                       ),
                       tooltip: 'Delete',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: kMinTouchTarget,
                     ),
                   IconButton(
                     onPressed: Navigator.of(context).pop,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: kMinTouchTarget,
                   ),
                 ],
               ),

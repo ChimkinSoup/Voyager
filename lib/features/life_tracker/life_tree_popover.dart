@@ -56,7 +56,7 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
   final CapturedThemes capturedThemes;
 
   @override
-  Color? get barrierColor => Colors.black.withValues(alpha: 0.08);
+  Color? get barrierColor => null;
 
   @override
   bool get barrierDismissible => true;

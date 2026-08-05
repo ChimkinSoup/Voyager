@@ -34,6 +34,7 @@ import 'package:voyager/data/remote/dev_openweather_client.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
 import 'package:voyager/data/remote/http_callable_client.dart';
+import 'package:voyager/data/remote/leetcode_api_client.dart';
 import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
@@ -43,9 +44,12 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_api_models.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -112,6 +116,20 @@ final trackerRepositoryProvider = Provider<TrackerRepository>((ref) {
 
 final financeRepositoryProvider = Provider<FinanceRepository>((ref) {
   return DriftFinanceRepository(ref.watch(databaseProvider));
+});
+
+final leetCodeRepositoryProvider = Provider<LeetCodeRepository>((ref) {
+  return DriftLeetCodeRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
+});
+
+final studyRepositoryProvider = Provider<StudyRepository>((ref) {
+  return DriftStudyRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
 });
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
@@ -226,6 +244,8 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     journalRepository: ref.watch(journalRepositoryProvider),
     dreamRepository: ref.watch(dreamRepositoryProvider),
     todoRepository: ref.watch(todoRepositoryProvider),
+    leetCodeRepository: ref.watch(leetCodeRepositoryProvider),
+    studyRepository: ref.watch(studyRepositoryProvider),
     weatherService: ref.watch(weatherServiceProvider),
     syncEngine: ref.watch(syncEngineProvider),
     syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
@@ -282,6 +302,14 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
       ref.invalidate(allTodoTasksProvider);
       ref.invalidate(todoListStatsProvider);
       ref.invalidate(syncConflictsProvider);
+      ref.invalidate(leetcodeProblemsProvider);
+      ref.invalidate(studyFolderByIdProvider);
+      ref.invalidate(studyFoldersProvider);
+      ref.invalidate(studyDeckByIdProvider);
+      ref.invalidate(studyDecksProvider);
+      ref.invalidate(studyCardsProvider);
+      ref.invalidate(studyStatsProvider);
+      ref.invalidate(studyDeckStatsProvider);
     },
   );
   ref.onDispose(controller.dispose);
@@ -365,6 +393,8 @@ final backgroundSyncOrchestratorProvider = Provider((ref) {
     calendarRepository: ref.watch(calendarRepositoryProvider),
     trackerRepository: ref.watch(trackerRepositoryProvider),
     financeRepository: ref.watch(financeRepositoryProvider),
+    leetCodeRepository: ref.watch(leetCodeRepositoryProvider),
+    studyRepository: ref.watch(studyRepositoryProvider),
   );
 });
 
@@ -554,6 +584,97 @@ final trackersProvider = FutureProvider((ref) {
 final transactionsProvider = FutureProvider<List<FinancialTransaction>>((ref) {
   ref.keepAlive();
   return ref.watch(financeRepositoryProvider).listTransactions();
+});
+
+/// All non-deleted tracked LeetCode problems, newest-solved first.
+final leetcodeProblemsProvider = FutureProvider<List<LeetCodeProblem>>((ref) {
+  ref.keepAlive();
+  return ref.watch(leetCodeRepositoryProvider).listProblems();
+});
+
+final leetCodeApiClientProvider = Provider<LeetCodeApiClient>((ref) {
+  return LeetCodeApiClient();
+});
+
+/// Folders/decks directly under [parentFolderId] (null = root level), per
+/// the breadcrumb-stack navigation model in STUDY.md.
+final studyFoldersProvider = FutureProvider.family<List<StudyFolder>, String?>(
+  (ref, parentFolderId) {
+    ref.keepAlive();
+    return ref
+        .watch(studyRepositoryProvider)
+        .listFolders(parentFolderId: parentFolderId);
+  },
+);
+
+/// Single-folder lookup by id, used to render breadcrumb pill labels for the
+/// current navigation stack without loading a whole level's children.
+final studyFolderByIdProvider = FutureProvider.family<StudyFolder?, String>((
+  ref,
+  id,
+) {
+  ref.keepAlive();
+  return ref.watch(studyRepositoryProvider).getFolder(id);
+});
+
+final studyDecksProvider = FutureProvider.family<List<StudyDeck>, String?>(
+  (ref, parentFolderId) {
+    ref.keepAlive();
+    return ref.watch(studyRepositoryProvider).listDecks(parentFolderId: parentFolderId);
+  },
+);
+
+final studyDeckByIdProvider = FutureProvider.family<StudyDeck?, String>((
+  ref,
+  id,
+) {
+  ref.keepAlive();
+  return ref.watch(studyRepositoryProvider).getDeck(id);
+});
+
+final studyCardsProvider = FutureProvider.family<List<StudyCard>, String>((
+  ref,
+  deckId,
+) {
+  ref.keepAlive();
+  return ref.watch(studyRepositoryProvider).listCards(deckId);
+});
+
+/// Global Study Hub header stats.
+final studyStatsProvider =
+    FutureProvider<({int pendingToday, int reviewedToday, int reviewedTotal})>((
+      ref,
+    ) async {
+      final repo = ref.watch(studyRepositoryProvider);
+      final pendingToday = await repo.countDueCards();
+      final reviewedToday = await repo.countCardsReviewedToday();
+      final reviewedTotal = await repo.countCardsReviewedTotal();
+      return (
+        pendingToday: pendingToday,
+        reviewedToday: reviewedToday,
+        reviewedTotal: reviewedTotal,
+      );
+    });
+
+/// Per-deck tile stats shown in the library grid and Workbench header.
+final studyDeckStatsProvider = FutureProvider.family<({int total, int due}), String>((
+  ref,
+  deckId,
+) async {
+  final repo = ref.watch(studyRepositoryProvider);
+  final cards = await repo.listCards(deckId);
+  final due = await repo.countDueCardsInDeck(deckId);
+  return (total: cards.length, due: due);
+});
+
+/// Total published LeetCode problem counts per difficulty, used as the
+/// progress rings' denominators. Not persisted locally — on fetch failure
+/// the ring UI degrades gracefully rather than blocking the page.
+final leetcodeQuestionCountsProvider = FutureProvider<LeetCodeQuestionCounts>((
+  ref,
+) {
+  ref.keepAlive();
+  return ref.watch(leetCodeApiClientProvider).fetchQuestionCounts();
 });
 
 /// Shared tag -> ARGB color map (reused across journal + finance tagging).

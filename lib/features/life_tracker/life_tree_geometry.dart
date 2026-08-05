@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:voyager/core/widgets/leaf_shapes.dart';
 
-/// Which life statistic a blossom shows. Fixed set per the Life Tracker spec.
+/// Which life statistic a label points at. Fixed set per the Life Tracker spec.
 enum LifeStat {
   weeksRemaining,
   heartbeats,
@@ -14,10 +14,10 @@ enum LifeStat {
   fullMoons,
 }
 
-/// One of the 4160 weeks of a life, and one dot of the canopy's stipple.
-/// The crown is painted as thousands of small discrete specks with bare paper
-/// showing between them — so a leaf is drawn while attached, and detaching it
-/// genuinely removes a fleck of blossom from the tree.
+/// One of the 4160 weeks of a life, and one fleck of blossom texture over the
+/// canopy wash. The crown's colour comes from the wash, not from these — they
+/// are the fine grain on top of it, and the thing that visibly detaches and
+/// drifts to the ground when a week is spent.
 class LeafSpec {
   LeafSpec({
     required this.position,
@@ -26,16 +26,15 @@ class LeafSpec {
     required this.colorIndex,
     required this.baseAngle,
     required this.swayPhase,
-    required this.clumpIndex,
+    required this.cellIndex,
   });
 
   final Offset position;
   final double size;
   final int designIndex;
 
-  /// Index into the painter's tone palette — light tint, base, or deep
-  /// shade of one of the petal colours. The reference painting gets its
-  /// depth from mixing all three, not from one flat pink.
+  /// Index into the painter's tone palette — light tint, base, or deep shade
+  /// of one of the petal colours.
   final int colorIndex;
   final double baseAngle;
 
@@ -43,33 +42,31 @@ class LeafSpec {
   /// same path down.
   final double swayPhase;
 
-  /// Which clump this leaf hangs in, so it sways with the right branch.
-  final int clumpIndex;
+  /// Nearest wash cell, so a speck sways with the same pigment it sits on.
+  final int cellIndex;
 }
 
-/// A fleck of pigment flicked off the brush, landing outside the canopy.
-/// Loose spatter around the crown is a signature of the technique and does
-/// most of the work of making the tree read as painted rather than drawn.
-class SplatterSpeck {
-  SplatterSpeck({
+/// One statistic, as a point in the canopy joined by a leader line to a label
+/// parked in the margin. Slots are assigned up front (see
+/// [_statAnchors]) rather than derived at layout time, so labels can never
+/// collide with each other.
+class BlossomSpec {
+  BlossomSpec({
     required this.position,
-    required this.size,
-    required this.colorIndex,
+    required this.labelAnchor,
+    required this.onLeft,
+    required this.stat,
   });
 
+  /// Where in the canopy the leader line starts.
   final Offset position;
-  final double size;
-  final int colorIndex;
-}
 
-/// One blossom, tied to a single statistic. Placed on a foliage clump chosen
-/// for maximum separation from the others, so they never cluster.
-class BlossomSpec {
-  BlossomSpec({required this.position, required this.stat, required this.size});
+  /// The label's inner edge — its right edge when [onLeft], left edge
+  /// otherwise.
+  final Offset labelAnchor;
 
-  final Offset position;
+  final bool onLeft;
   final LifeStat stat;
-  final double size;
 }
 
 /// One tapered woody segment — trunk, root, branch or twig. Painted as a
@@ -94,33 +91,12 @@ class TreeLimb {
   final double endWidth;
 }
 
-/// One mass of foliage hanging off a branch tip. Each clump is painted into
-/// its own cached layer and sways about [pivot] — the point where its branch
-/// meets it — so a gust can shake one side of the tree without the whole
-/// canopy moving as a rigid block.
-class FoliageClump {
-  FoliageClump({
-    required this.center,
-    required this.radiusX,
-    required this.radiusY,
-    required this.pivot,
-    required this.swayPhase,
-  });
-
-  final Offset center;
-  final double radiusX;
-  final double radiusY;
-  final Offset pivot;
-  final double swayPhase;
-}
-
-/// One soft watercolor blot inside a clump. Deliberately rim-less and
-/// heavily overlapped: a couple of dozen of these per clump build up into a
-/// continuous wash, which is what reads as watercolor — any hard outline on
-/// an individual blot immediately reads as vector art instead.
-class CanopyBlob {
-  CanopyBlob({
-    required this.clumpIndex,
+/// One pool of pigment in the canopy. The crown is not modelled as foliage
+/// hanging off branches — it is painted the way the reference is, as a mass of
+/// overlapping translucent washes with hard, irregular edges, laid over a
+/// skeleton that shows through it.
+class WashCell {
+  WashCell({
     required this.center,
     required this.radiusX,
     required this.radiusY,
@@ -128,46 +104,87 @@ class CanopyBlob {
     required this.colorIndex,
     required this.wobblePhases,
     required this.wobbleAmount,
-    required this.depth,
+    required this.alpha,
+    required this.shedOrder,
+    required this.angleRank,
+    required this.swayPhase,
   });
 
-  final int clumpIndex;
   final Offset center;
   final double radiusX;
   final double radiusY;
   final double rotation;
   final int colorIndex;
 
-  /// Phases of the three harmonics that perturb this blot's outline, so no
-  /// two blots share a silhouette.
+  /// Phases of the harmonics that perturb this pool's outline. Watercolour
+  /// dries to a crisp, lobed edge, so these run at higher frequency than a
+  /// blurred blob would need — the cauliflower rim is the whole tell.
   final List<double> wobblePhases;
   final double wobbleAmount;
 
-  /// 0 at the top of its clump, 1 at the bottom. Lower blots carry more
-  /// pigment, which is what gives the canopy its sense of volume.
-  final double depth;
+  /// Pigment strength before layering. Cells multiply over each other, so a
+  /// dozen weak pools stack into the deep patches seen in the reference.
+  final double alpha;
+
+  /// Fraction of the life that must have been spent before this pool washes
+  /// out. Uniform over the crown, so the canopy thins evenly rather than
+  /// retreating from one side.
+  final double shedOrder;
+
+  /// Position around the crown, 0-1, matching the order the opening fall
+  /// sweeps in. Decides *when* during that sweep this pool goes, so the
+  /// thinning travels with the falling petals instead of appearing at once.
+  final double angleRank;
+
+  final double swayPhase;
 }
 
-/// Everything needed to paint the tree: the woody skeleton, the foliage
-/// clumps and their blot washes, the leaf/blossom scatter, and the swing's
-/// anchor. Pure data, generated once per app run (see
-/// [generateLifeTreeGeometry]) and scaled to the actual canvas [Size] at
+/// A clump of grass at the foot of the tree. The reference sets the tree on
+/// scattered sage tufts rather than a shadow pool, and the tufts are what stop
+/// the trunk from looking like it was pasted onto blank paper.
+class GrassTuft {
+  GrassTuft({
+    required this.base,
+    required this.width,
+    required this.height,
+    required this.bladeCount,
+    required this.seed,
+    required this.toneMix,
+  });
+
+  final Offset base;
+  final double width;
+  final double height;
+  final int bladeCount;
+  final int seed;
+
+  /// 0 for the pale sage of a distant tuft, 1 for the darker green of one in
+  /// front.
+  final double toneMix;
+}
+
+/// Everything needed to paint the tree. Pure data, generated once per app run
+/// (see [generateLifeTreeGeometry]) and scaled to the actual canvas [Size] at
 /// paint time.
 class LifeTreeGeometry {
   LifeTreeGeometry({
     required this.leaves,
     required this.blossoms,
     required this.limbs,
-    required this.clumps,
-    required this.blobs,
-    required this.splatter,
+    required this.cells,
+    required this.grass,
     required this.trunkTop,
+    required this.trunkBase,
     required this.groundY,
-    required this.swingAnchor,
+    required this.figureAnchor,
+    required this.figureHeight,
+    required this.figureLean,
     required this.canopyCenter,
     required this.canopyRadiusX,
     required this.canopyRadiusY,
+    required this.branchHubRect,
     required this.leafDesigns,
+    required this.branchLimbStartIndex,
   });
 
   final List<LeafSpec> leaves;
@@ -176,32 +193,50 @@ class LifeTreeGeometry {
   /// Trunk, roots, branches and twigs, in paint order.
   final List<TreeLimb> limbs;
 
-  final List<FoliageClump> clumps;
+  /// Index into [limbs] where the above-ground branches start — everything
+  /// before it is the trunk (index 0) and the root flares. Lets code that
+  /// only wants the visible branch fan (e.g. the bucket-list tap target)
+  /// slice `limbs` without hardcoding how many root segments there are.
+  final int branchLimbStartIndex;
 
-  /// The blots making up every clump's wash, tagged with [CanopyBlob.clumpIndex].
-  final List<CanopyBlob> blobs;
+  /// The canopy's pigment, back to front.
+  final List<WashCell> cells;
 
-  /// Loose pigment flicked around the crown.
-  final List<SplatterSpeck> splatter;
+  final List<GrassTuft> grass;
 
-  /// Where the trunk ends and the crown forks — the pivot the whole canopy
-  /// breathes about.
+  /// Where the trunk forks — the pivot the whole canopy breathes about.
   final Offset trunkTop;
+
+  /// Where the trunk meets the ground and the roots fan out from. Used to
+  /// tell each root's own base cap from a mid-limb fork — see `roundBase` in
+  /// life_tree_canvas.dart's `_paintWood`.
+  final Offset trunkBase;
 
   /// Normalized y of the ground line the roots sit on.
   final double groundY;
 
-  /// Normalized attachment point of the branch the swing hangs from.
-  final Offset swingAnchor;
+  /// Where the seated figure rests on the trunk, as the midpoint of its body.
+  final Offset figureAnchor;
 
-  /// Bounding ellipse of the whole canopy. Only used to order leaves around
-  /// the tree for the opening animation.
+  /// Figure height as a fraction of the canvas height.
+  final double figureHeight;
+
+  /// How far the figure reclines back along the trunk, in radians.
+  final double figureLean;
+
+  /// Bounding ellipse of the whole canopy. Used to order leaves around the
+  /// tree for the opening animation.
   final Offset canopyCenter;
   final double canopyRadiusX;
   final double canopyRadiusY;
 
-  /// Petal silhouettes used by [LeafSpec.designIndex], in a fixed order so
-  /// the index is stable.
+  /// Bounds of the branch fan-out around the trunk fork, in unit space — the
+  /// tap target for the bucket list, since the branches converging there read
+  /// as a more natural thing to tap than the seated figure lower on the trunk.
+  final Rect branchHubRect;
+
+  /// Petal silhouettes used by [LeafSpec.designIndex], in a fixed order so the
+  /// index is stable.
   final List<LeafDesign> leafDesigns;
 
   /// Leaves ordered by angle around the canopy center, for the opening
@@ -242,472 +277,549 @@ Offset quadTangentAt(Offset a, Offset b, Offset c, double t) {
   );
 }
 
+/// Vertical offset applied to the whole tree once it's built, so the roots
+/// and grass sit near the bottom of the canvas instead of floating with a gap
+/// beneath them. Large enough that the lowest grass tufts (groundY + up to
+/// ~0.048) land right at the canvas edge.
+const _treeYShift = 0.087;
+
+Offset _shiftY(Offset o) => Offset(o.dx, o.dy + _treeYShift);
+
+Rect _shiftRect(Rect r) => r.shift(Offset(0, _treeYShift));
+
+TreeLimb _shiftLimb(TreeLimb limb) => TreeLimb(
+      start: _shiftY(limb.start),
+      control: _shiftY(limb.control),
+      end: _shiftY(limb.end),
+      startWidth: limb.startWidth,
+      endWidth: limb.endWidth,
+    );
+
 const _leafDesigns = [
   LeafDesign.watercolorPetal,
   LeafDesign.raindropPetal,
   LeafDesign.petal,
 ];
 
-/// Fixed seed so the tree's shape, leaf scatter, and blossom placement are
+/// Fixed seed so the tree's shape, leaf scatter, and label placement are
 /// identical every time the app runs — the tree should read as *this* tree,
 /// not reshuffle on every restart.
-const _treeSeed = 20260730;
+const _treeSeed = 20260802;
 
 const totalLeafCount = 4160;
 
-const _trunkTop = Offset(0.500, 0.655);
-const _groundY = 0.900;
+/// The trunk leans hard from the lower right up to the left, as in the
+/// reference — that diagonal is what the seated figure rests on, and a
+/// symmetrical upright trunk gives it nowhere to sit. The control point sits
+/// closer to _trunkBase's x than a straight lean would put it, which steepens
+/// the curve's approach to near-vertical right at the base — that's what
+/// tucks its flat end cap behind the root fan below instead of leaving a gap
+/// beside it.
+const _trunkBase = Offset(0.610, 0.850);
+const _trunkControl = Offset(0.560, 0.660);
+const _trunkFork = Offset(0.430, 0.540);
+const _groundY = 0.865;
 
-/// Where the crown forks off the trunk: `(t along the trunk, heading in
-/// radians with -pi/2 straight up, length, width)`. Two low side limbs and a
-/// three-way fork at the top — every deeper branch grows recursively out of
-/// one of these, so the skeleton is always physically connected.
-const _primaryLimbs = <(double, double, double, double)>[
-  (0.78, -2.80, 0.144, 0.0096),
-  (0.86, -0.34, 0.144, 0.0096),
-  (0.96, -2.40, 0.166, 0.0126),
-  (1.00, -1.55, 0.180, 0.0132),
-  (0.97, -0.76, 0.166, 0.0126),
-];
+/// Where the three main limbs (left sweep, center-up, right sweep) converge
+/// and first fan out from the trunk fork — the visible "hub" of branches a
+/// tap should land in to open the bucket list.
+const _branchHubRect = Rect.fromLTRB(0.280, 0.350, 0.620, 0.545);
 
-/// How many times a primary limb may fork before its tip carries foliage.
-const _maxBranchDepth = 2;
+const _figureTrunkT = 0.24;
+const _figureHeight = 0.170;
+const _figureLean = -0.42;
+const _figureTrunkOffset = 0.032;
 
-/// Chance a limb stops early and carries foliage instead of forking again.
-/// Terminating at mixed depths is what keeps the crown's outline ragged
-/// rather than a smooth arc.
-const _earlyTipChance = 0.22;
+const _crownCenter = Offset(0.490, 0.340);
+const _crownRadiusX = 0.450;
+const _crownRadiusY = 0.300;
 
-const _blobsPerClump = 10;
+const _baseLobeCount = 48;
+const _detailCellCount = 280;
 
-/// Size of the foliage strung along a limb's span, as `base + length * rate`.
-/// These are what fuse the clumps at the forks and tips into a single crown;
-/// shrink them and the canopy visibly splits back into islands.
-const _spineRadiusBase = 0.030;
-const _spineRadiusPerLength = 0.16;
+const _leafSizeMin = 0.0022;
+const _leafSizeRange = 0.0035;
 
-/// Speck size, as a fraction of the canvas's shortest side. Sized so that the
-/// [totalLeafCount] specks ink roughly four fifths of the crown: below that
-/// the stipple reads as scattered dots rather than blossom, and above it the
-/// paper stops showing through and the watercolor look goes with it.
-const _leafSizeMin = 0.0041;
-const _leafSizeRange = 0.0078;
-
-/// Tones per petal colour in the painter's palette: a light tint, the colour
-/// itself, and a deep shade. Weighted toward the lighter two, with the deep
-/// shade used sparingly as the accents that give the crown its depth.
 const _tonesPerColor = 3;
 
-int _weightedTone(math.Random rand) {
+int _washTone(math.Random rand) {
+  final base = rand.nextDouble() < 0.75 ? 0 : rand.nextInt(4);
   final r = rand.nextDouble();
-  final tone = r < 0.44
-      ? 0
-      : r < 0.82
-          ? 1
-          : 2;
-  return rand.nextInt(4) * _tonesPerColor + tone;
+  final tone = r < 0.45 ? 0 : r < 0.88 ? 1 : 2;
+  return base * _tonesPerColor + tone;
 }
 
-/// How far below horizontal a branch may head. Without this a fork can send
-/// a limb diving at the ground, which never reads as a living branch.
-const _maxHeadingDrop = 0.14;
-
-/// Keeps a heading from pointing further down than [_maxHeadingDrop],
-/// preserving which side of the tree it was growing toward.
-double _clampHeading(double angle) {
-  final dy = math.sin(angle);
-  if (dy <= _maxHeadingDrop) return angle;
-  return math.atan2(_maxHeadingDrop, math.cos(angle));
+int _leafTone(math.Random rand) {
+  final base = rand.nextDouble() < 0.80 ? 0 : rand.nextInt(4);
+  final r = rand.nextDouble();
+  final tone = r < 0.65 ? 0 : r < 0.96 ? 1 : 2;
+  return base * _tonesPerColor + tone;
 }
 
-/// Builds the tree's full geometry: a recursively-grown woody skeleton,
-/// foliage clumps at every branch tip and their blot washes,
-/// [totalLeafCount] scattered leaves, one blossom per [LifeStat], and the
-/// swing's branch anchor. Everything is normalized to [0,1]x[0,1] and
-/// deterministic (see [_treeSeed]), so it can be computed once and reused for
-/// the app's lifetime regardless of window size.
+// Each blossom position is pinned to a point on an actual limb (trunk, root
+// or branch) so its leader line always lands on drawn wood rather than blank
+// paper. Label anchors are unrelated to limb shape and stay hand-placed in an
+// evenly spaced column down each margin.
+const _statAnchors = <(Offset, Offset, bool)>[
+  (Offset(0.276, 0.258), Offset(0.192, 0.222), true),
+  (Offset(0.278, 0.431), Offset(0.192, 0.404), true),
+  (Offset(0.261, 0.495), Offset(0.192, 0.586), true),
+  // Tasks and Full Moons sit up top, above the canopy, per user request —
+  // not stacked at the bottom of their column with the others.
+  (Offset(0.417, 0.476), Offset(0.192, 0.060), true),
+  (Offset(0.753, 0.285), Offset(0.808, 0.256), false),
+  (Offset(0.778, 0.484), Offset(0.808, 0.462), false),
+  (Offset(0.502, 0.387), Offset(0.808, 0.060), false),
+];
+
 LifeTreeGeometry generateLifeTreeGeometry() {
   final rand = math.Random(_treeSeed);
   final decor = math.Random(_treeSeed ^ 0x5A5A5A);
 
   final limbs = <TreeLimb>[];
-  final clumps = <FoliageClump>[];
 
   const trunk = TreeLimb(
-    start: Offset(0.500, 0.935),
-    control: Offset(0.520, 0.790),
-    end: _trunkTop,
-    startWidth: 0.036,
-    endWidth: 0.0145,
+    start: _trunkBase,
+    control: _trunkControl,
+    end: _trunkFork,
+    startWidth: 0.075,
+    endWidth: 0.032,
   );
   limbs.add(trunk);
 
-  // Root flares gripping the ground line. They start inside the trunk so
-  // they merge with it rather than reading as spikes stuck on the side.
-  const rootSpecs = <(Offset, Offset, Offset, double, double)>[
-    (Offset(0.500, 0.874), Offset(0.462, 0.890), Offset(0.412, 0.901), 0.026, 0.0022),
-    (Offset(0.500, 0.874), Offset(0.545, 0.891), Offset(0.598, 0.901), 0.026, 0.0022),
-    (Offset(0.500, 0.882), Offset(0.474, 0.894), Offset(0.446, 0.905), 0.017, 0.0016),
-    (Offset(0.500, 0.882), Offset(0.530, 0.895), Offset(0.562, 0.905), 0.017, 0.0016),
+  // Root flares fanning out from the trunk base, each starting exactly at
+  // _trunkBase (matching trunk's own start) so the roots meet the trunk
+  // without a gap. Each is two segments rather than one smooth curve — a
+  // single bezier reads as too straight for a root, which kinks and changes
+  // direction as it goes — with the second segment bending back against the
+  // first's curvature rather than simply continuing it. Endpoints sit deep in
+  // the grass wash's span (groundY ± 0.035–0.045) so the fine tip is buried
+  // under it rather than resting on top. Deliberately not mirror images of
+  // each other, so the fan doesn't read as stamped.
+  final rootLimbs = <TreeLimb>[
+    // Outer-left root — longest, thickest.
+    const TreeLimb(
+      start: _trunkBase,
+      control: Offset(0.550, 0.872),
+      end: Offset(0.490, 0.888),
+      startWidth: 0.030,
+      endWidth: 0.015,
+    ),
+    const TreeLimb(
+      start: Offset(0.490, 0.888),
+      control: Offset(0.455, 0.906),
+      end: Offset(0.395, 0.902),
+      startWidth: 0.015,
+      endWidth: 0.005,
+    ),
+    // Inner-left root — shorter, thinner.
+    const TreeLimb(
+      start: _trunkBase,
+      control: Offset(0.590, 0.868),
+      end: Offset(0.560, 0.882),
+      startWidth: 0.020,
+      endWidth: 0.010,
+    ),
+    const TreeLimb(
+      start: Offset(0.560, 0.882),
+      control: Offset(0.530, 0.895),
+      end: Offset(0.545, 0.900),
+      startWidth: 0.010,
+      endWidth: 0.004,
+    ),
+    // Inner-right root.
+    const TreeLimb(
+      start: _trunkBase,
+      control: Offset(0.635, 0.866),
+      end: Offset(0.665, 0.880),
+      startWidth: 0.020,
+      endWidth: 0.010,
+    ),
+    const TreeLimb(
+      start: Offset(0.665, 0.880),
+      control: Offset(0.700, 0.890),
+      end: Offset(0.680, 0.898),
+      startWidth: 0.010,
+      endWidth: 0.004,
+    ),
+    // Outer-right root — longest, thickest.
+    const TreeLimb(
+      start: _trunkBase,
+      control: Offset(0.672, 0.870),
+      end: Offset(0.735, 0.885),
+      startWidth: 0.030,
+      endWidth: 0.015,
+    ),
+    const TreeLimb(
+      start: Offset(0.735, 0.885),
+      control: Offset(0.775, 0.900),
+      end: Offset(0.825, 0.895),
+      startWidth: 0.015,
+      endWidth: 0.005,
+    ),
   ];
-  for (final r in rootSpecs) {
-    limbs.add(
-      TreeLimb(
-        start: r.$1,
-        control: r.$2,
-        end: r.$3,
-        startWidth: r.$4,
-        endWidth: r.$5,
+  limbs.addAll(rootLimbs);
+
+  // Everything from here on is an above-ground branch — captured before
+  // they're added so [LifeTreeGeometry.branchLimbStartIndex] doesn't have to
+  // hardcode how many limbs precede them.
+  final branchLimbStartIndex = limbs.length;
+
+  // Hand-crafted Sumi-e Calligraphic Limbs matching the reference image 1:1.
+  // Every child limb's start point is exactly its parent's end point: the
+  // ribbon caps taper to a point at that shared coordinate (see
+  // _limbRibbon), so any mismatch there leaves a sliver of bare paper between
+  // segments instead of one continuous stroke.
+  const sumiELimbs = <TreeLimb>[
+    // 1. Main Left Arm — replaced with a shallower, more upward-angled sweep
+    // per user request, tracing the direction of a line they drew over the
+    // previous version. Tapers all the way down to a point at the tip
+    // instead of the blunt cut the old version ended in.
+    TreeLimb(start: _trunkFork, control: Offset(0.300, 0.500), end: Offset(0.170, 0.477), startWidth: 0.034, endWidth: 0.002),
+
+    // Left Arm Upper Branching (splits off along the left arm's new curve,
+    // at the same point along it as before, so it doesn't float free of the
+    // branch beneath it).
+    TreeLimb(start: Offset(0.326, 0.511), control: Offset(0.280, 0.440), end: Offset(0.240, 0.360), startWidth: 0.018, endWidth: 0.008),
+    TreeLimb(start: Offset(0.240, 0.360), control: Offset(0.200, 0.280), end: Offset(0.170, 0.210), startWidth: 0.008, endWidth: 0.002),
+    TreeLimb(start: Offset(0.240, 0.360), control: Offset(0.270, 0.280), end: Offset(0.290, 0.210), startWidth: 0.007, endWidth: 0.002),
+
+    // 2. Main Center-Up Branch
+    TreeLimb(start: _trunkFork, control: Offset(0.410, 0.430), end: Offset(0.380, 0.340), startWidth: 0.026, endWidth: 0.012),
+    TreeLimb(start: Offset(0.380, 0.340), control: Offset(0.360, 0.240), end: Offset(0.350, 0.160), startWidth: 0.012, endWidth: 0.002),
+    TreeLimb(start: Offset(0.380, 0.340), control: Offset(0.405, 0.250), end: Offset(0.430, 0.170), startWidth: 0.009, endWidth: 0.002),
+
+    // Center-Right Upper Twigs — shifted further right and up from their
+    // original spot per user request, to fill whitespace between the
+    // center-up branch and the right sweeping arm.
+    TreeLimb(start: _trunkFork, control: Offset(0.480, 0.430), end: Offset(0.520, 0.350), startWidth: 0.020, endWidth: 0.009),
+    TreeLimb(start: Offset(0.520, 0.350), control: Offset(0.510, 0.260), end: Offset(0.545, 0.190), startWidth: 0.009, endWidth: 0.002),
+    TreeLimb(start: Offset(0.520, 0.350), control: Offset(0.575, 0.260), end: Offset(0.635, 0.175), startWidth: 0.008, endWidth: 0.002),
+
+    // 3. Main Right Sweeping Arm
+    TreeLimb(start: _trunkFork, control: Offset(0.570, 0.510), end: Offset(0.680, 0.490), startWidth: 0.032, endWidth: 0.018),
+    TreeLimb(start: Offset(0.680, 0.490), control: Offset(0.740, 0.430), end: Offset(0.790, 0.360), startWidth: 0.018, endWidth: 0.008),
+    TreeLimb(start: Offset(0.790, 0.360), control: Offset(0.820, 0.280), end: Offset(0.840, 0.210), startWidth: 0.008, endWidth: 0.002),
+    TreeLimb(start: Offset(0.790, 0.360), control: Offset(0.750, 0.280), end: Offset(0.720, 0.220), startWidth: 0.006, endWidth: 0.002),
+    TreeLimb(start: Offset(0.680, 0.490), control: Offset(0.780, 0.485), end: Offset(0.870, 0.475), startWidth: 0.014, endWidth: 0.003),
+    TreeLimb(start: Offset(0.870, 0.475), control: Offset(0.910, 0.475), end: Offset(0.940, 0.475), startWidth: 0.003, endWidth: 0.0015),
+  ];
+  limbs.addAll(sumiELimbs);
+
+  // The crown's outline, as a radius multiplier per angle. Three harmonics is
+  // enough to keep the silhouette from reading as an ellipse without turning
+  // it into a starburst.
+  final envelopePhases = [
+    decor.nextDouble() * math.pi * 2,
+    decor.nextDouble() * math.pi * 2,
+    decor.nextDouble() * math.pi * 2,
+  ];
+  double envelopeAt(double angle) {
+    return 1.0 +
+        0.115 * math.sin(3 * angle + envelopePhases[0]) +
+        0.070 * math.sin(5 * angle + envelopePhases[1]) +
+        0.045 * math.sin(8 * angle + envelopePhases[2]);
+  }
+
+  double angleRankOf(Offset p) {
+    final a = math.atan2(
+      (p.dy - _crownCenter.dy) / _crownRadiusY,
+      (p.dx - _crownCenter.dx) / _crownRadiusX,
+    );
+    return (a + math.pi) / (math.pi * 2);
+  }
+
+  final cells = <WashCell>[];
+
+  // Base pools: large, pale, and spread over the whole envelope so their union
+  // is the silhouette. Their shed order starts high, so the crown keeps its
+  // shape long after the detail over it has thinned.
+  for (var i = 0; i < _baseLobeCount; i++) {
+    final angle = (i / _baseLobeCount) * math.pi * 2 + decor.nextDouble() * 0.28;
+    final radial = i == 0 ? 0.0 : (0.30 + decor.nextDouble() * 0.52);
+    final edge = envelopeAt(angle);
+    final center = Offset(
+      _crownCenter.dx + math.cos(angle) * _crownRadiusX * radial * edge,
+      _crownCenter.dy + math.sin(angle) * _crownRadiusY * radial * edge,
+    );
+    final rx = _crownRadiusX * (0.30 + decor.nextDouble() * 0.13);
+    cells.add(
+      WashCell(
+        center: center,
+        radiusX: rx,
+        radiusY: rx * (_crownRadiusY / _crownRadiusX) * (1.05 + decor.nextDouble() * 0.30),
+        rotation: decor.nextDouble() * math.pi * 2,
+        colorIndex: _washTone(decor),
+        wobblePhases: [
+          decor.nextDouble() * math.pi * 2,
+          decor.nextDouble() * math.pi * 2,
+          decor.nextDouble() * math.pi * 2,
+        ],
+        wobbleAmount: 0.14 + decor.nextDouble() * 0.08,
+        // Kept faint on purpose. These exist to guarantee the silhouette, not
+        // to colour it — if they carry the pigment, washing out the detail
+        // over them barely changes the crown and the shedding stops reading.
+        alpha: 0.055 + decor.nextDouble() * 0.035,
+        shedOrder: 0.50 + decor.nextDouble() * 0.50,
+        angleRank: angleRankOf(center),
+        swayPhase: decor.nextDouble() * 1.1,
       ),
     );
   }
 
-  /// Grows one limb from [start] heading at [angle], then either forks into
-  /// two children that begin exactly where it ended — which is what makes
-  /// the skeleton read as a tree rather than a fan of loose sticks — or
-  /// terminates and carries a clump of foliage.
-  void grow(Offset start, double angle, double length, double width, int depth) {
-    final direction = Offset(math.cos(angle), math.sin(angle));
-    final end = start + direction * length;
-    final perpendicular = Offset(-direction.dy, direction.dx);
-    final bend = (rand.nextDouble() - 0.5) * 0.42;
-
-    final control =
-        start + direction * (length * 0.5) + perpendicular * (length * bend);
-    limbs.add(
-      TreeLimb(
-        start: start,
-        control: control,
-        end: end,
-        startWidth: width,
-        endWidth: width * 0.60,
-      ),
+  // Detail pools. Smaller toward the rim, which is what frays the crown's edge
+  // into lobes instead of ending it on a clean curve.
+  for (var i = 0; i < _detailCellCount; i++) {
+    final angle = rand.nextDouble() * math.pi * 2;
+    final edge = envelopeAt(angle);
+    final radial = math.sqrt(rand.nextDouble()) * edge;
+    final center = Offset(
+      _crownCenter.dx + math.cos(angle) * _crownRadiusX * radial,
+      _crownCenter.dy + math.sin(angle) * _crownRadiusY * radial,
     );
-
-    // Foliage carried along the span of the limb, not only at its ends.
-    // Without this the clumps at successive forks sit too far apart to touch
-    // and the crown breaks into separate floating islands — the canopy has to
-    // read as one continuous mass, so every span between forks carries
-    // blossom too.
-    // Jitter drawn from [decor] rather than [rand] so that adding foliage
-    // never perturbs the random sequence the skeleton itself is grown from —
-    // otherwise tuning the canopy silently regrows a different tree.
-    final spineRadiusX = _spineRadiusBase + length * _spineRadiusPerLength;
-    clumps.add(
-      FoliageClump(
-        center: quadPointAt(start, control, end, 0.58),
-        radiusX: spineRadiusX,
-        radiusY: spineRadiusX * (1.08 + decor.nextDouble() * 0.26),
-        pivot: start,
-        swayPhase: decor.nextDouble() * 1.1,
-      ),
-    );
-
-    if (depth < _maxBranchDepth && rand.nextDouble() > _earlyTipChance) {
-      // A real fork is lopsided: the limb mostly carries on in its own
-      // direction and throws off a thinner, sharper-angled side shoot.
-      // Two equal children would give the repeated symmetrical Y that made
-      // the old crown read as a diagram.
-      final leans = rand.nextBool() ? -1.0 : 1.0;
-      final leadSpread = 0.12 + rand.nextDouble() * 0.14;
-      final shootSpread = 0.42 + rand.nextDouble() * 0.30;
-      final drift = (rand.nextDouble() - 0.5) * 0.14;
-      final childLength = length * (0.76 + rand.nextDouble() * 0.12);
-
-      // Foliage at the fork itself, not only out at the tips. Without it the
-      // wedges between diverging limbs stay bare and the crown reads as
-      // separate islands on sticks instead of one mass.
-      final forkRadiusX =
-          0.026 + rand.nextDouble() * 0.014 + (_maxBranchDepth - depth) * 0.005;
-      clumps.add(
-        FoliageClump(
-          center: end,
-          radiusX: forkRadiusX,
-          radiusY: forkRadiusX * (1.12 + rand.nextDouble() * 0.32),
-          pivot: end,
-          swayPhase: rand.nextDouble() * 1.1,
-        ),
-      );
-
-      grow(
-        end,
-        _clampHeading(angle + leans * leadSpread + drift),
-        childLength,
-        width * 0.72,
-        depth + 1,
-      );
-      grow(
-        end,
-        _clampHeading(angle - leans * shootSpread + drift),
-        childLength * (0.62 + rand.nextDouble() * 0.20),
-        width * 0.52,
-        depth + 1,
-      );
-      return;
-    }
-
-    // A tip that stops short of the outer canopy carries a heavier clump,
-    // since it is a thicker branch ending early.
-    final radiusX =
-        0.042 + rand.nextDouble() * 0.029 + (_maxBranchDepth - depth) * 0.0085;
-    // Normalized y-radius runs larger than x: the canvas is wider than it is
-    // tall, so equal normalized radii would paint every clump as a flat
-    // ellipse — which is exactly what made the old canopy read as an arch.
-    final radiusY = radiusX * (1.12 + rand.nextDouble() * 0.32);
-
-    // Bare twigs carrying on past the blossom, so the crown's edge is picked
-    // out by fine woody lines rather than stopping dead at the foliage.
-    for (var i = 0; i < 2; i++) {
-      final spurAngle = _clampHeading(angle + (rand.nextDouble() - 0.5) * 1.0);
-      final spurDirection = Offset(math.cos(spurAngle), math.sin(spurAngle));
-      final spurLength = radiusX * (1.05 + rand.nextDouble() * 0.75);
-      final spurEnd = start + direction * length + spurDirection * spurLength;
-      limbs.add(
-        TreeLimb(
-          start: end,
-          control: Offset.lerp(end, spurEnd, 0.5)! +
-              spurDirection * (spurLength * 0.12),
-          end: spurEnd,
-          startWidth: width * 0.46,
-          endWidth: width * 0.14,
-        ),
-      );
-    }
-
-    clumps.add(
-      FoliageClump(
-        center: end +
-            Offset(direction.dx * radiusX, direction.dy * radiusY) * 0.45,
-        radiusX: radiusX,
-        radiusY: radiusY,
-        pivot: end,
-        // Phases stay in a narrow band so the clumps breathe together as one
-        // canopy rather than flapping independently.
+    final taper = 1.0 - 0.32 * (radial / edge).clamp(0.0, 1.0);
+    final rx = _crownRadiusX * (0.075 + rand.nextDouble() * 0.075) * taper;
+    // One pool in eight is loaded with pigment. These are the mauve patches
+    // that give the reference its depth — evenly-weighted washes dry flat.
+    final isAccent = rand.nextDouble() < 0.05;
+    cells.add(
+      WashCell(
+        center: center,
+        radiusX: rx,
+        radiusY: rx * (_crownRadiusY / _crownRadiusX) * (0.90 + rand.nextDouble() * 0.45),
+        rotation: rand.nextDouble() * math.pi * 2,
+        colorIndex: isAccent
+            ? (rand.nextDouble() < 0.7 ? 2 : 5)
+            : _washTone(rand),
+        wobblePhases: [
+          rand.nextDouble() * math.pi * 2,
+          rand.nextDouble() * math.pi * 2,
+          rand.nextDouble() * math.pi * 2,
+        ],
+        wobbleAmount: 0.18 + rand.nextDouble() * 0.12,
+        alpha: isAccent
+            ? 0.040 + rand.nextDouble() * 0.025
+            : 0.035 + rand.nextDouble() * 0.025,
+        shedOrder: rand.nextDouble(),
+        angleRank: angleRankOf(center),
         swayPhase: rand.nextDouble() * 1.1,
       ),
     );
   }
 
-  for (final primary in _primaryLimbs) {
-    grow(
-      quadPointAt(trunk.start, trunk.control, trunk.end, primary.$1),
-      primary.$2,
-      primary.$3,
-      primary.$4,
-      0,
+  // The stipple, sampled over the same envelope as the wash and thinned toward
+  // the rim so the grain fades out before the pigment does.
+  final leaves = <LeafSpec>[];
+  var attempts = 0;
+  while (leaves.length < totalLeafCount && attempts < totalLeafCount * 40) {
+    attempts++;
+    final angle = rand.nextDouble() * math.pi * 2;
+    final edge = envelopeAt(angle);
+    final radial = math.sqrt(rand.nextDouble()) * edge * 0.98;
+    if (rand.nextDouble() < math.pow(radial / edge, 3.0) * 0.55) continue;
+    leaves.add(
+      LeafSpec(
+        position: Offset(
+          _crownCenter.dx + math.cos(angle) * _crownRadiusX * radial,
+          _crownCenter.dy + math.sin(angle) * _crownRadiusY * radial,
+        ),
+        size: _leafSizeMin + rand.nextDouble() * _leafSizeRange,
+        designIndex: rand.nextInt(_leafDesigns.length),
+        colorIndex: _leafTone(rand),
+        baseAngle: rand.nextDouble() * math.pi * 2,
+        swayPhase: rand.nextDouble() * math.pi * 2,
+        // Filled in below, once every cell exists.
+        cellIndex: 0,
+      ),
+    );
+  }
+  // Top up with unthinned specks if the rejection pass came up short, so the
+  // count stays exactly [totalLeafCount].
+  while (leaves.length < totalLeafCount) {
+    final angle = rand.nextDouble() * math.pi * 2;
+    final radial = math.sqrt(rand.nextDouble()) * 0.75;
+    leaves.add(
+      LeafSpec(
+        position: Offset(
+          _crownCenter.dx + math.cos(angle) * _crownRadiusX * radial,
+          _crownCenter.dy + math.sin(angle) * _crownRadiusY * radial,
+        ),
+        size: _leafSizeMin + rand.nextDouble() * _leafSizeRange,
+        designIndex: rand.nextInt(_leafDesigns.length),
+        colorIndex: _leafTone(rand),
+        baseAngle: rand.nextDouble() * math.pi * 2,
+        swayPhase: rand.nextDouble() * math.pi * 2,
+        cellIndex: 0,
+      ),
     );
   }
 
-  // Soft blots per clump, heavily overlapping. Their union is what the eye
-  // reads as the canopy's silhouette, so nothing here needs an outline.
-  final blobs = <CanopyBlob>[];
-  for (var i = 0; i < clumps.length; i++) {
-    final clump = clumps[i];
-    for (var j = 0; j < _blobsPerClump; j++) {
-      final angle = rand.nextDouble() * math.pi * 2;
-      final radial = math.sqrt(rand.nextDouble()) * 0.66;
-      final center = Offset(
-        clump.center.dx + math.cos(angle) * clump.radiusX * radial,
-        clump.center.dy + math.sin(angle) * clump.radiusY * radial,
-      );
-      final scale = 0.40 + rand.nextDouble() * 0.28;
-      blobs.add(
-        CanopyBlob(
-          clumpIndex: i,
-          center: center,
-          radiusX: clump.radiusX * scale,
-          radiusY: clump.radiusY * scale * (0.85 + rand.nextDouble() * 0.32),
-          rotation: rand.nextDouble() * math.pi * 2,
-          colorIndex: _weightedTone(rand),
-          wobblePhases: [
-            rand.nextDouble() * math.pi * 2,
-            rand.nextDouble() * math.pi * 2,
-            rand.nextDouble() * math.pi * 2,
-          ],
-          wobbleAmount: 0.13 + rand.nextDouble() * 0.13,
-          depth: (((center.dy - (clump.center.dy - clump.radiusY)) /
-                  (2 * clump.radiusY))
-              .clamp(0.0, 1.0)),
-        ),
-      );
-    }
-  }
-
-  // The stipple. Leaves are spread over the clumps in proportion to their
-  // area, and thinned toward each clump's rim so the crown breaks up into
-  // airy, ragged edges instead of ending at a hard boundary.
-  final leaves = <LeafSpec>[];
-  final weights = [for (final c in clumps) c.radiusX * c.radiusY];
-  final totalWeight = weights.reduce((a, b) => a + b);
-  for (var i = 0; i < clumps.length; i++) {
-    final clump = clumps[i];
-    final remaining = totalLeafCount - leaves.length;
-    final count = i == clumps.length - 1
-        ? remaining
-        : math.min(remaining, (totalLeafCount * weights[i] / totalWeight).round());
-    var placed = 0;
-    var attempts = 0;
-    while (placed < count && attempts < count * 40) {
-      attempts++;
-      final angle = rand.nextDouble() * math.pi * 2;
-      final radial = math.sqrt(rand.nextDouble()) * 1.04;
-      // Thin the outer rim: the further out, the likelier the speck is
-      // rejected and the sparser the edge reads.
-      if (rand.nextDouble() < radial * radial * radial * 0.62) continue;
-      placed++;
-      leaves.add(
-        LeafSpec(
-          position: Offset(
-            clump.center.dx + math.cos(angle) * clump.radiusX * radial,
-            clump.center.dy + math.sin(angle) * clump.radiusY * radial,
-          ),
-          size: _leafSizeMin + rand.nextDouble() * _leafSizeRange,
-          designIndex: rand.nextInt(_leafDesigns.length),
-          colorIndex: _weightedTone(rand),
-          baseAngle: rand.nextDouble() * math.pi * 2,
-          swayPhase: rand.nextDouble() * math.pi * 2,
-          clumpIndex: i,
-        ),
-      );
-    }
-    // Top up with unthinned specks if the rejection pass came up short, so
-    // the count stays exactly [totalLeafCount].
-    while (placed < count) {
-      placed++;
-      final angle = rand.nextDouble() * math.pi * 2;
-      final radial = math.sqrt(rand.nextDouble()) * 0.75;
-      leaves.add(
-        LeafSpec(
-          position: Offset(
-            clump.center.dx + math.cos(angle) * clump.radiusX * radial,
-            clump.center.dy + math.sin(angle) * clump.radiusY * radial,
-          ),
-          size: _leafSizeMin + rand.nextDouble() * _leafSizeRange,
-          designIndex: rand.nextInt(_leafDesigns.length),
-          colorIndex: _weightedTone(rand),
-          baseAngle: rand.nextDouble() * math.pi * 2,
-          swayPhase: rand.nextDouble() * math.pi * 2,
-          clumpIndex: i,
-        ),
-      );
-    }
-  }
-
-  // Blossoms go on the clumps that sit furthest from each other — picked
-  // greedily, so they end up spread across the whole crown without needing a
-  // retry loop that can fail to place them all.
-  final stats = List<LifeStat>.of(LifeStat.values);
-  final chosenClumps = <int>[];
-  var highest = 0;
-  for (var i = 1; i < clumps.length; i++) {
-    if (clumps[i].center.dy < clumps[highest].center.dy) highest = i;
-  }
-  chosenClumps.add(highest);
-  while (chosenClumps.length < stats.length && chosenClumps.length < clumps.length) {
-    var best = -1;
-    var bestDistance = -1.0;
-    for (var i = 0; i < clumps.length; i++) {
-      if (chosenClumps.contains(i)) continue;
-      var nearest = double.infinity;
-      for (final c in chosenClumps) {
-        nearest = math.min(nearest, (clumps[i].center - clumps[c].center).distance);
-      }
-      if (nearest > bestDistance) {
-        bestDistance = nearest;
-        best = i;
-      }
-    }
-    if (best == -1) break;
-    chosenClumps.add(best);
-  }
-
-  final blossoms = <BlossomSpec>[
-    for (var i = 0; i < stats.length && i < chosenClumps.length; i++)
-      BlossomSpec(
-        position: Offset(
-          clumps[chosenClumps[i]].center.dx +
-              (rand.nextDouble() - 0.5) * clumps[chosenClumps[i]].radiusX * 0.8,
-          clumps[chosenClumps[i]].center.dy +
-              (rand.nextDouble() - 0.5) * clumps[chosenClumps[i]].radiusY * 0.8,
-        ),
-        stat: stats[i],
-        size: 0.040,
+  // Bind each speck to the pigment it sits on, so it sways with that pool
+  // rather than with the crown as a rigid sheet.
+  final boundLeaves = <LeafSpec>[
+    for (final leaf in leaves)
+      LeafSpec(
+        position: leaf.position,
+        size: leaf.size,
+        designIndex: leaf.designIndex,
+        colorIndex: leaf.colorIndex,
+        baseAngle: leaf.baseAngle,
+        swayPhase: leaf.swayPhase,
+        cellIndex: _nearestCell(cells, leaf.position),
       ),
   ];
 
-  // The swing hangs from whichever branch reaches furthest out to the right
-  // at about the height of the lower crown. Fine twigs are excluded — a rope
-  // slung over a pencil-thin spur would never read as load-bearing.
-  var swingLimb = limbs.last;
-  var swingScore = double.negativeInfinity;
-  for (var i = 1 + rootSpecs.length; i < limbs.length; i++) {
-    if (limbs[i].startWidth < 0.0045) continue;
-    final end = limbs[i].end;
-    final score = end.dx - (end.dy - 0.615).abs() * 2.0;
-    if (score > swingScore) {
-      swingScore = score;
-      swingLimb = limbs[i];
-    }
-  }
-  final swingAnchor = quadPointAt(
-    swingLimb.start,
-    swingLimb.control,
-    swingLimb.end,
-    0.88,
-  );
-
-  // Canopy bounds, measured rather than assumed, so the opening animation
-  // still sweeps evenly around whatever shape the crown grew into.
-  var left = 1.0, right = 0.0, top = 1.0, bottom = 0.0;
-  for (final clump in clumps) {
-    left = math.min(left, clump.center.dx - clump.radiusX);
-    right = math.max(right, clump.center.dx + clump.radiusX);
-    top = math.min(top, clump.center.dy - clump.radiusY);
-    bottom = math.max(bottom, clump.center.dy + clump.radiusY);
-  }
-
-  final canopyCenter = Offset((left + right) / 2, (top + bottom) / 2);
-  final canopyRadiusX = (right - left) / 2;
-  final canopyRadiusY = (bottom - top) / 2;
-
-  // Loose spatter thrown around the crown, densest just outside its edge and
-  // trailing off into the empty paper.
-  final splatter = <SplatterSpeck>[];
-  for (var i = 0; i < 260; i++) {
-    final angle = rand.nextDouble() * math.pi * 2;
-    final radial = 1.0 + math.pow(rand.nextDouble(), 2.0).toDouble() * 0.85;
-    final position = Offset(
-      canopyCenter.dx + math.cos(angle) * canopyRadiusX * radial,
-      canopyCenter.dy + math.sin(angle) * canopyRadiusY * radial,
-    );
-    if (position.dy > _groundY - 0.02 ||
-        position.dy < 0.005 ||
-        position.dx < 0.005 ||
-        position.dx > 0.995) {
-      continue;
-    }
-    splatter.add(
-      SplatterSpeck(
-        position: position,
-        size: 0.0009 + math.pow(rand.nextDouble(), 2.2).toDouble() * 0.0042,
-        colorIndex: _weightedTone(rand),
+  final blossoms = <BlossomSpec>[
+    for (var i = 0; i < LifeStat.values.length && i < _statAnchors.length; i++)
+      BlossomSpec(
+        position: _statAnchors[i].$1,
+        labelAnchor: _statAnchors[i].$2,
+        onLeft: _statAnchors[i].$3,
+        stat: LifeStat.values[i],
       ),
-    );
+  ];
+
+  // Grass, densest right under the trunk and trailing off both ways. The two
+  // outlying clusters matter more than they look — without something out at
+  // the edges the ground line stops dead under the canopy.
+  const grassClusters = <(double, double, int)>[
+    (0.585, 0.170, 14),
+    (0.410, 0.110, 8),
+    (0.735, 0.110, 8),
+    (0.270, 0.070, 5),
+    (0.845, 0.060, 5),
+    (0.150, 0.045, 3),
+    (0.930, 0.040, 3),
+    // Right at the edges, so the grass runs the full screen width instead of
+    // leaving bare paper margins the wash mound alone doesn't cover.
+    (0.020, 0.020, 3),
+    (0.980, 0.020, 3),
+  ];
+  final grass = <GrassTuft>[];
+  for (final cluster in grassClusters) {
+    for (var i = 0; i < cluster.$3; i++) {
+      final x = cluster.$1 + (decor.nextDouble() - 0.5) * cluster.$2 * 2;
+      final baseY = _groundY + decor.nextDouble() * 0.048;
+      final base = Offset(x, baseY);
+      var height = 0.030 + decor.nextDouble() * 0.046;
+      // Tufts close enough to the trunk to sit against it need their
+      // tallest blades kept clear of its silhouette — grass painted with
+      // BlendMode.multiply only darkens, so a tall blade leaning in over
+      // the trunk's edge reads as the trunk's own outline growing a sharp
+      // point rather than as grass in front of it. 1.05 matches the
+      // tallest a blade actually reaches relative to [GrassTuft.height] in
+      // _paintGrass.
+      final distFromTrunkX = (x - _trunkBase.dx).abs();
+      if (distFromTrunkX < 0.14) {
+        final maxHeight = (baseY - (_trunkBase.dy - 0.010)) / 1.05;
+        height = math.min(height, math.max(0.020, maxHeight));
+      }
+      grass.add(
+        GrassTuft(
+          base: base,
+          width: height * (0.75 + decor.nextDouble() * 0.60),
+          height: height,
+          bladeCount: 16 + decor.nextInt(14),
+          seed: decor.nextInt(1 << 30),
+          toneMix: decor.nextDouble(),
+        ),
+      );
+    }
   }
+  // Front to back, so the darker near tufts overlap the pale far ones.
+  grass.sort((a, b) => a.base.dy.compareTo(b.base.dy));
 
   return LifeTreeGeometry(
-    leaves: leaves,
-    blossoms: blossoms,
-    limbs: limbs,
-    clumps: clumps,
-    blobs: blobs,
-    splatter: splatter,
-    trunkTop: _trunkTop,
-    groundY: _groundY,
-    swingAnchor: swingAnchor,
-    canopyCenter: canopyCenter,
-    canopyRadiusX: canopyRadiusX,
-    canopyRadiusY: canopyRadiusY,
+    leaves: [
+      for (final leaf in boundLeaves)
+        LeafSpec(
+          position: _shiftY(leaf.position),
+          size: leaf.size,
+          designIndex: leaf.designIndex,
+          colorIndex: leaf.colorIndex,
+          baseAngle: leaf.baseAngle,
+          swayPhase: leaf.swayPhase,
+          cellIndex: leaf.cellIndex,
+        ),
+    ],
+    blossoms: [
+      for (final blossom in blossoms)
+        BlossomSpec(
+          position: _shiftY(blossom.position),
+          labelAnchor: _shiftY(blossom.labelAnchor),
+          onLeft: blossom.onLeft,
+          stat: blossom.stat,
+        ),
+    ],
+    limbs: limbs.map(_shiftLimb).toList(),
+    cells: [
+      for (final cell in cells)
+        WashCell(
+          center: _shiftY(cell.center),
+          radiusX: cell.radiusX,
+          radiusY: cell.radiusY,
+          rotation: cell.rotation,
+          colorIndex: cell.colorIndex,
+          wobblePhases: cell.wobblePhases,
+          wobbleAmount: cell.wobbleAmount,
+          alpha: cell.alpha,
+          shedOrder: cell.shedOrder,
+          angleRank: cell.angleRank,
+          swayPhase: cell.swayPhase,
+        ),
+    ],
+    grass: [
+      for (final tuft in grass)
+        GrassTuft(
+          base: _shiftY(tuft.base),
+          width: tuft.width,
+          height: tuft.height,
+          bladeCount: tuft.bladeCount,
+          seed: tuft.seed,
+          toneMix: tuft.toneMix,
+        ),
+    ],
+    trunkTop: _shiftY(_trunkFork),
+    trunkBase: _shiftY(_trunkBase),
+    groundY: _groundY + _treeYShift,
+    figureAnchor: _shiftY(_figureSeat(trunk)),
+    figureHeight: _figureHeight,
+    figureLean: _figureLean,
+    canopyCenter: _shiftY(_crownCenter),
+    canopyRadiusX: _crownRadiusX,
+    canopyRadiusY: _crownRadiusY,
+    branchHubRect: _shiftRect(_branchHubRect),
     leafDesigns: _leafDesigns,
+    branchLimbStartIndex: branchLimbStartIndex,
   );
+}
+
+/// The point on top of the trunk the figure rests on: a point along the curve,
+/// pushed out along its normal. The trunk rises to the left, so its normal
+/// points up and to the right — which is the side of it you could sit on.
+Offset _figureSeat(TreeLimb trunk) {
+  final on = quadPointAt(trunk.start, trunk.control, trunk.end, _figureTrunkT);
+  final tangent =
+      quadTangentAt(trunk.start, trunk.control, trunk.end, _figureTrunkT);
+  final length = tangent.distance;
+  if (length == 0) return on;
+  return on +
+      Offset(-tangent.dy / length, tangent.dx / length) * _figureTrunkOffset;
+}
+
+int _nearestCell(List<WashCell> cells, Offset p) {
+  var best = 0;
+  var bestDistance = double.infinity;
+  for (var i = 0; i < cells.length; i++) {
+    // Measured in each pool's own units, so a big pale lobe doesn't claim
+    // every speck that a small pool right under them also covers.
+    final dx = (p.dx - cells[i].center.dx) / cells[i].radiusX;
+    final dy = (p.dy - cells[i].center.dy) / cells[i].radiusY;
+    final d = dx * dx + dy * dy;
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = i;
+    }
+  }
+  return best;
 }

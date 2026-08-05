@@ -11,12 +11,15 @@ import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/compact_back_bar.dart';
 import 'package:voyager/core/widgets/resizable_pane_divider.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/domain/models/dream_models.dart';
@@ -77,6 +80,12 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   double? _splitWidth;
   double? _dragStartWidth;
   var _appliedSavedWidth = false;
+
+  /// Phone shell only: whether the zen editor is covering the dream list.
+  /// Kept apart from [_selectedEntryId] so this page's auto-select of the
+  /// newest dream does not count as the user asking to open it.
+  var _compactShowingEditor = false;
+  VoidCallback? _removeBackInterceptor;
   late final Future<void> Function() _lifecycleFlushCallback;
 
   @override
@@ -84,6 +93,9 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     super.initState();
     _lifecycleFlushCallback = _lifecycleFlush;
     PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
+    _removeBackInterceptor = ShellBackInterceptors.instance.register(
+      _handleSystemBack,
+    );
     _titleFocusNode.addListener(_handleTitleFocusChanged);
     _notesFocusNode.onKeyEvent = _handleNotesKey;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -105,6 +117,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
+    _removeBackInterceptor?.call();
     _titleFocusNode.removeListener(_handleTitleFocusChanged);
     _saveTimer?.cancel();
     _notesSaveTimer?.cancel();
@@ -404,10 +417,22 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                   _splitWidth ?? DreamSplitLayout.defaultListWidth(totalWidth),
                   totalWidth,
                 );
+                // Side by side in the desktop window; one at a time on a
+                // phone, where the 35/65 split would leave the zen editor
+                // about 230dp wide.
+                final compact = context.isCompactWidth;
+                final showList = !compact || !_compactShowingEditor;
+                final showEditor = !compact || _compactShowingEditor;
+
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(width: listWidth, child: _buildEntryList(sorted)),
+                    if (showList)
+                      SizedBox(
+                        width: compact ? totalWidth : listWidth,
+                        child: _buildEntryList(sorted),
+                      ),
+                    if (!compact)
                     ResizablePaneDivider(
                       onDragStart: () {
                         _dragStartWidth = _splitWidth ??
@@ -431,10 +456,12 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                         unawaited(_persistSplitWidth(null));
                       },
                     ),
+                    if (showEditor)
                     Expanded(
                       child: _buildEditorArea(
                         accent: accent,
                         notesPinned: notesPinned,
+                        compact: compact,
                       ),
                     ),
                   ],
@@ -447,6 +474,33 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         ),
       ],
     );
+  }
+
+  void _revealCompactEditor() {
+    if (!mounted || !context.isCompactWidth || _compactShowingEditor) return;
+    setState(() => _compactShowingEditor = true);
+  }
+
+  /// Returns to the dream list on the phone shell, committing in-flight edits
+  /// first so leaving the editor is no more lossy than switching dreams.
+  Future<void> _closeCompactEditor() async {
+    await _lifecycleFlush();
+    if (!mounted) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _compactShowingEditor = false);
+  }
+
+  /// Android Back, offered here before the shell treats it as leaving the
+  /// section. Declines unless this page is both on screen and covering its
+  /// list — it stays mounted while other sections are showing.
+  bool _handleSystemBack() {
+    if (!mounted || !_compactShowingEditor) return false;
+    // The flag survives a resize past the breakpoint, where both panes are
+    // visible again and there is nothing to go back from.
+    if (!context.isCompactWidth) return false;
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return false;
+    unawaited(_closeCompactEditor());
+    return true;
   }
 
   Widget _buildEntryList(List<DreamEntry> entries) {
@@ -466,7 +520,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
               IconButton(
                 tooltip: 'New dream entry',
                 icon: const Icon(PhosphorIconsRegular.plus),
-                onPressed: () => unawaited(_createEntry()),
+                onPressed: () {
+                  _revealCompactEditor();
+                  unawaited(_createEntry());
+                },
               ),
             ],
           ),
@@ -493,7 +550,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                       isSelected: entry.id == _selectedEntryId,
                       titlePreview: _listTitlePreview,
                       bodyPreview: _listBodyPreview,
-                      onTap: () => unawaited(_selectEntry(entry)),
+                      onTap: () {
+                        _revealCompactEditor();
+                        unawaited(_selectEntry(entry));
+                      },
                     );
                   },
                 ),
@@ -502,7 +562,11 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     );
   }
 
-  Widget _buildEditorArea({required Color accent, required bool notesPinned}) {
+  Widget _buildEditorArea({
+    required Color accent,
+    required bool notesPinned,
+    required bool compact,
+  }) {
     final entry = _selectedEntry;
     if (entry == null) {
       return Center(
@@ -518,6 +582,11 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (compact)
+            CompactBackBar(
+              label: 'Dreams',
+              onBack: () => unawaited(_closeCompactEditor()),
+            ),
           TextField(
             controller: _titleController,
             focusNode: _titleFocusNode,

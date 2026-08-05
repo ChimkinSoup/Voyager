@@ -7,3 +7,8 @@ const legacyTodoHotkey = 'Ctrl+Shift+T';
 
 const defaultCalendarNavigateLeftKey = 'H';
 const defaultCalendarNavigateRightKey = 'L';
+
+const defaultStudyFailKey = 'F';
+const defaultStudyHardKey = 'H';
+const defaultStudyGoodKey = 'G';
+const defaultStudyEasyKey = 'E';

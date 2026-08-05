@@ -18,6 +18,9 @@ enum TrackerStyle { independent, consecutive }
 
 enum CalendarViewMode { week, month, year }
 
+/// LeetCode problem difficulty tier.
+enum LeetCodeDifficulty { easy, medium, hard }
+
 enum HeatmapMode { defaultAll, mood, studying, writing, custom }
 
 enum StartupPageMode { first, custom, lastSeen }

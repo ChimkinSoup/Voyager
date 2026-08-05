@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
@@ -514,9 +516,8 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
               children: [
                 Expanded(child: content),
                 if (!_isEditing)
-                  AnimatedOpacity(
-                    opacity: _hovered ? 1 : 0,
-                    duration: const Duration(milliseconds: 120),
+                  _HoverRevealed(
+                    revealed: _hovered,
                     child: InkWell(
                       onTap: _handleDelete,
                       borderRadius: BorderRadius.circular(12),
@@ -830,16 +831,16 @@ class _FeedRowState extends ConsumerState<_FeedRow>
                           ),
                         ),
                       ),
-                      AnimatedOpacity(
-                        opacity: _hovered ? 1 : 0,
-                        duration: const Duration(milliseconds: 120),
+                      // Fades in on hover, but stays a real target on touch,
+                      // where hover never fires: an invisible-yet-tappable
+                      // dismiss in the corner of every notification is worse
+                      // than a visible one.
+                      _HoverRevealed(
+                        revealed: _hovered,
                         child: IconButton(
                           icon: const Icon(PhosphorIconsRegular.x, size: 14),
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 24,
-                            minHeight: 24,
-                          ),
+                          constraints: kMinTouchTarget,
                           onPressed: _dismiss,
                         ),
                       ),
@@ -1413,3 +1414,30 @@ class _NotificationPopoverWarmupState extends State<NotificationPopoverWarmup> {
   }
 }
 
+
+/// Reveals a control on pointer hover, and unconditionally where there is no
+/// hover to enter.
+///
+/// A plain [AnimatedOpacity] at zero still hit-tests, so on a touch screen the
+/// hover-only affordances in this popover were invisible *and* live — a tap in
+/// the corner of a notification dismissed it with nothing to suggest it would.
+/// Hidden here means out of the hit-test tree as well as out of sight.
+class _HoverRevealed extends StatelessWidget {
+  const _HoverRevealed({required this.revealed, required this.child});
+
+  final bool revealed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = revealed || isAndroid;
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 120),
+        child: child,
+      ),
+    );
+  }
+}

@@ -3,7 +3,10 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/dream_models.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 /// Firestore document id for a locally stored document (handles legacy id mapping).
@@ -163,6 +166,250 @@ Journal mergeJournalFromRemote(
     updatedAt: remoteUpdated,
     version: remoteVersion,
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> leetCodeProblemToFirestore(LeetCodeProblem problem) => {
+  'id': problem.id,
+  'title': problem.title,
+  'questionId': problem.questionId,
+  'questionFrontendId': problem.questionFrontendId,
+  'titleSlug': problem.titleSlug,
+  'difficulty': problem.difficulty.name,
+  'tags': problem.tags,
+  'algorithm': problem.algorithm,
+  'timeComplexity': problem.timeComplexity,
+  'spaceComplexity': problem.spaceComplexity,
+  'explanation': problem.explanation,
+  'codeLanguage': problem.codeLanguage,
+  'code': problem.code,
+  'notes': problem.notes,
+  'solvedAt': _dateToFirestoreRequired(problem.solvedAt),
+  'createdAt': _dateToFirestoreRequired(problem.createdAt),
+  'updatedAt': _dateToFirestoreRequired(problem.updatedAt),
+  'version': problem.version,
+  'deletedAt': _dateToFirestore(problem.deletedAt),
+};
+
+LeetCodeDifficulty _parseLeetCodeDifficulty(dynamic value) {
+  if (value is String) {
+    for (final d in LeetCodeDifficulty.values) {
+      if (d.name == value) return d;
+    }
+  }
+  return LeetCodeDifficulty.medium;
+}
+
+LeetCodeProblem mergeLeetCodeProblemFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  LeetCodeProblem? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return LeetCodeProblem(
+    id: id,
+    title: data['title'] as String? ?? local?.title ?? 'Untitled problem',
+    questionId: data.containsKey('questionId')
+        ? data['questionId'] as String?
+        : local?.questionId,
+    questionFrontendId: data.containsKey('questionFrontendId')
+        ? data['questionFrontendId'] as String?
+        : local?.questionFrontendId,
+    titleSlug: data.containsKey('titleSlug')
+        ? data['titleSlug'] as String?
+        : local?.titleSlug,
+    difficulty: data.containsKey('difficulty')
+        ? _parseLeetCodeDifficulty(data['difficulty'])
+        : local?.difficulty ?? LeetCodeDifficulty.medium,
+    tags: data['tags'] != null
+        ? List<String>.from(data['tags'] as List)
+        : local?.tags ?? const [],
+    algorithm: data['algorithm'] as String? ?? local?.algorithm ?? '',
+    timeComplexity: data.containsKey('timeComplexity')
+        ? data['timeComplexity'] as String?
+        : local?.timeComplexity,
+    spaceComplexity: data.containsKey('spaceComplexity')
+        ? data['spaceComplexity'] as String?
+        : local?.spaceComplexity,
+    explanation: data['explanation'] as String? ?? local?.explanation ?? '',
+    codeLanguage: data['codeLanguage'] as String? ??
+        local?.codeLanguage ??
+        'python',
+    code: data['code'] as String? ?? local?.code ?? '',
+    notes: data.containsKey('notes') ? data['notes'] as String? : local?.notes,
+    solvedAt: parseFirestoreDate(data['solvedAt']) ??
+        local?.solvedAt ??
+        remoteUpdated,
+    createdAt: parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> studyFolderToFirestore(StudyFolder folder) => {
+  'id': folder.id,
+  'name': folder.name,
+  'parentFolderId': folder.parentFolderId,
+  'createdAt': _dateToFirestoreRequired(folder.createdAt),
+  'updatedAt': _dateToFirestoreRequired(folder.updatedAt),
+  'version': folder.version,
+  'deletedAt': _dateToFirestore(folder.deletedAt),
+};
+
+StudyFolder mergeStudyFolderFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  StudyFolder? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return StudyFolder(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? 'Folder',
+    parentFolderId: data.containsKey('parentFolderId')
+        ? data['parentFolderId'] as String?
+        : local?.parentFolderId,
+    createdAt: parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> studyDeckToFirestore(StudyDeck deck) => {
+  'id': deck.id,
+  'name': deck.name,
+  'parentFolderId': deck.parentFolderId,
+  'createdAt': _dateToFirestoreRequired(deck.createdAt),
+  'updatedAt': _dateToFirestoreRequired(deck.updatedAt),
+  'version': deck.version,
+  'deletedAt': _dateToFirestore(deck.deletedAt),
+};
+
+StudyDeck mergeStudyDeckFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  StudyDeck? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return StudyDeck(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? 'Deck',
+    parentFolderId: data.containsKey('parentFolderId')
+        ? data['parentFolderId'] as String?
+        : local?.parentFolderId,
+    createdAt: parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> studyCardToFirestore(StudyCard card) => {
+  'id': card.id,
+  'deckId': card.deckId,
+  'frontText': card.frontText,
+  'backText': card.backText,
+  'interval': card.interval,
+  'ease': card.ease,
+  'dueAt': _dateToFirestoreRequired(card.dueAt),
+  'reviewCount': card.reviewCount,
+  'createdAt': _dateToFirestoreRequired(card.createdAt),
+  'updatedAt': _dateToFirestoreRequired(card.updatedAt),
+  'version': card.version,
+  'deletedAt': _dateToFirestore(card.deletedAt),
+};
+
+StudyCard mergeStudyCardFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  StudyCard? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return StudyCard(
+    id: id,
+    deckId: data['deckId'] as String? ?? local?.deckId ?? '',
+    frontText: data['frontText'] as String? ?? local?.frontText ?? '',
+    backText: data['backText'] as String? ?? local?.backText ?? '',
+    interval: (data['interval'] as num?)?.toDouble() ?? local?.interval ?? 0,
+    ease: (data['ease'] as num?)?.toDouble() ?? local?.ease ?? 2.5,
+    dueAt: parseFirestoreDate(data['dueAt']) ?? local?.dueAt ?? remoteUpdated,
+    reviewCount: (data['reviewCount'] as num?)?.toInt() ?? local?.reviewCount ?? 0,
+    createdAt: parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> studyReviewLogToFirestore(StudyReviewLog log) => {
+  'id': log.id,
+  'cardId': log.cardId,
+  'grade': log.grade.name,
+  'reviewedAt': _dateToFirestoreRequired(log.reviewedAt),
+};
+
+StudyReviewLog mergeStudyReviewLogFromRemote(
+  Map<String, dynamic> data,
+  String id,
+) {
+  return StudyReviewLog(
+    id: id,
+    cardId: data['cardId'] as String? ?? '',
+    grade: StudyGrade.values.byName(data['grade'] as String? ?? 'good'),
+    reviewedAt: parseFirestoreDate(data['reviewedAt']) ?? utcNow(),
   );
 }
 

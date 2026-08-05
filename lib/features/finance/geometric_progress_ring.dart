@@ -15,6 +15,7 @@ class GeometricProgressRing extends StatelessWidget {
     this.segments = 28,
     this.strokeWidth = 8,
     this.child,
+    this.gradientColors,
   });
 
   /// 0..1. Values outside the range are clamped by the painter.
@@ -26,6 +27,11 @@ class GeometricProgressRing extends StatelessWidget {
 
   /// Centered content (typically the percentage label).
   final Widget? child;
+
+  /// When set, each filled segment's color is sampled from a sweep gradient
+  /// at that segment's angular position instead of the flat [color]. Leaves
+  /// every other call site (which passes `null`) byte-for-byte unchanged.
+  final List<Color>? gradientColors;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +46,7 @@ class GeometricProgressRing extends StatelessWidget {
           trackColor: theme.colorScheme.onSurface.withValues(alpha: 0.10),
           segments: segments,
           strokeWidth: strokeWidth,
+          gradientColors: gradientColors,
         ),
         child: child == null ? null : Center(child: child),
       ),
@@ -54,6 +61,7 @@ class _RingPainter extends CustomPainter {
     required this.trackColor,
     required this.segments,
     required this.strokeWidth,
+    this.gradientColors,
   });
 
   final double progress;
@@ -61,6 +69,7 @@ class _RingPainter extends CustomPainter {
   final Color trackColor;
   final int segments;
   final double strokeWidth;
+  final List<Color>? gradientColors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -80,6 +89,8 @@ class _RingPainter extends CustomPainter {
     final sweep = segmentAngle - gap;
     const start = -math.pi / 2;
 
+    final gradient = gradientColors;
+
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
@@ -87,8 +98,11 @@ class _RingPainter extends CustomPainter {
 
     for (var i = 0; i < segments; i++) {
       final fill = (clamped * segments - i).clamp(0.0, 1.0);
+      final segmentColor = gradient == null
+          ? color
+          : _sampleGradient(gradient, i / segments);
       paint.color =
-          fill <= 0 ? trackColor : Color.lerp(trackColor, color, fill)!;
+          fill <= 0 ? trackColor : Color.lerp(trackColor, segmentColor, fill)!;
       canvas.drawArc(
         rect,
         start + i * segmentAngle + gap / 2,
@@ -99,11 +113,21 @@ class _RingPainter extends CustomPainter {
     }
   }
 
+  /// Linearly interpolates through [colors] at position [t] (0..1).
+  Color _sampleGradient(List<Color> colors, double t) {
+    if (colors.length == 1) return colors.first;
+    final scaled = t.clamp(0.0, 1.0) * (colors.length - 1);
+    final index = scaled.floor();
+    if (index >= colors.length - 1) return colors.last;
+    return Color.lerp(colors[index], colors[index + 1], scaled - index)!;
+  }
+
   @override
   bool shouldRepaint(covariant _RingPainter old) =>
       old.progress != progress ||
       old.color != color ||
       old.trackColor != trackColor ||
       old.segments != segments ||
-      old.strokeWidth != strokeWidth;
+      old.strokeWidth != strokeWidth ||
+      old.gradientColors != gradientColors;
 }

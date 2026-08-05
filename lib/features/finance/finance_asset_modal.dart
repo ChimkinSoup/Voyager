@@ -13,6 +13,7 @@ import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 /// Opens the add / edit asset modal. Saving records a **new valuation** rather
 /// than overwriting the old one, so the net-worth graph keeps its history.
@@ -23,6 +24,7 @@ Future<void> showAssetModal(
 }) async {
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
@@ -238,14 +240,14 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                       ),
                       tooltip: 'Delete',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: kMinTouchTarget,
                     ),
                   IconButton(
                     onPressed: Navigator.of(context).pop,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: kMinTouchTarget,
                   ),
                 ],
               ),

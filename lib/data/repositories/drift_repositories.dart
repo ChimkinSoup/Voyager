@@ -12,9 +12,11 @@ import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
@@ -418,6 +420,139 @@ class DriftDreamRepository implements DreamRepository {
     notes: row.notes,
     entryDate: row.entryDate,
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+}
+
+class DriftLeetCodeRepository implements LeetCodeRepository {
+  DriftLeetCodeRepository(this._db, {this._syncActivity});
+
+  final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<List<LeetCodeProblem>> listProblems({
+    bool includeDeleted = false,
+  }) async {
+    final query = _db.select(_db.leetCodeProblemsTable)
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.solvedAt),
+        (t) => OrderingTerm.desc(t.createdAt),
+        (t) => OrderingTerm.desc(t.id),
+      ]);
+    final rows = await query.get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapProblem)
+        .toList();
+  }
+
+  @override
+  Future<LeetCodeProblem?> getProblem(String id) async {
+    final row = await (_db.select(
+      _db.leetCodeProblemsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapProblem(row);
+  }
+
+  @override
+  Future<void> upsertProblem(
+    LeetCodeProblem problem, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.leetCodeProblemsTable)
+        .insertOnConflictUpdate(
+          LeetCodeProblemsTableCompanion(
+            id: Value(problem.id),
+            questionId: Value(problem.questionId),
+            questionFrontendId: Value(problem.questionFrontendId),
+            title: Value(problem.title),
+            titleSlug: Value(problem.titleSlug),
+            difficulty: Value(problem.difficulty.name),
+            tagsJson: Value(jsonEncode(problem.tags)),
+            algorithm: Value(problem.algorithm),
+            timeComplexity: Value(problem.timeComplexity),
+            spaceComplexity: Value(problem.spaceComplexity),
+            explanation: Value(problem.explanation),
+            codeLanguage: Value(problem.codeLanguage),
+            code: Value(problem.code),
+            notes: Value(problem.notes),
+            solvedAt: Value(problem.solvedAt),
+            createdAt: Value(problem.createdAt),
+            updatedAt: Value(problem.updatedAt),
+            version: Value(problem.version),
+            deletedAt: Value(problem.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeProblems);
+    }
+  }
+
+  @override
+  Future<void> softDeleteProblem(String id) async {
+    await (_db.update(
+      _db.leetCodeProblemsTable,
+    )..where((t) => t.id.equals(id))).write(
+      LeetCodeProblemsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeProblems);
+  }
+
+  @override
+  Future<void> hardDeleteProblem(String id) async {
+    await (_db.delete(
+      _db.leetCodeProblemsTable,
+    )..where((t) => t.id.equals(id))).go();
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    final rows = await _db.select(_db.leetCodeProblemsTable).get();
+    for (final row in rows) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.leetCodeProblemsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+  }
+
+  @override
+  Future<List<LeetCodeProblem>> getAllProblems({
+    bool includeDeleted = true,
+  }) async {
+    final rows = await _db.select(_db.leetCodeProblemsTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapProblem)
+        .toList();
+  }
+
+  LeetCodeProblem _mapProblem(LeetCodeProblemsTableData row) => LeetCodeProblem(
+    id: row.id,
+    questionId: row.questionId,
+    questionFrontendId: row.questionFrontendId,
+    title: row.title,
+    titleSlug: row.titleSlug,
+    difficulty: LeetCodeDifficulty.values.byName(row.difficulty),
+    tags: List<String>.from(jsonDecode(row.tagsJson) as List),
+    algorithm: row.algorithm,
+    timeComplexity: row.timeComplexity,
+    spaceComplexity: row.spaceComplexity,
+    explanation: row.explanation,
+    codeLanguage: row.codeLanguage,
+    code: row.code,
+    notes: row.notes,
+    solvedAt: row.solvedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -1791,6 +1926,11 @@ class DriftSettingsRepository implements SettingsRepository {
       dreamSplitWidth: row.dreamSplitWidth,
       showDreamStatistics: row.showDreamStatistics,
       dreamNotesPinned: row.dreamNotesPinned,
+      leetcodeUsername: row.leetcodeUsername,
+      srsFailKey: row.srsFailKey,
+      srsHardKey: row.srsHardKey,
+      srsGoodKey: row.srsGoodKey,
+      srsEasyKey: row.srsEasyKey,
     );
   }
 
@@ -1928,6 +2068,11 @@ class DriftSettingsRepository implements SettingsRepository {
             dreamSplitWidth: Value(settings.dreamSplitWidth),
             showDreamStatistics: Value(settings.showDreamStatistics),
             dreamNotesPinned: Value(settings.dreamNotesPinned),
+            leetcodeUsername: Value(settings.leetcodeUsername),
+            srsFailKey: Value(settings.srsFailKey),
+            srsHardKey: Value(settings.srsHardKey),
+            srsGoodKey: Value(settings.srsGoodKey),
+            srsEasyKey: Value(settings.srsEasyKey),
           ),
         );
   }
@@ -2045,5 +2190,426 @@ class DriftSyncConflictRepository implements SyncConflictRepository {
     localText: row.localText,
     remoteText: row.remoteText,
     detectedAt: row.detectedAt,
+  );
+}
+
+class DriftStudyRepository implements StudyRepository {
+  DriftStudyRepository(this._db, {SyncActivityController? syncActivity})
+    : _syncActivity = syncActivity;
+
+  final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<List<StudyFolder>> listFolders({
+    String? parentFolderId,
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.studyFoldersTable).get();
+    final all = rows.where((r) => includeDeleted || r.deletedAt == null).toList();
+    if (parentFolderId != null) {
+      return all
+          .where((r) => r.parentFolderId == parentFolderId)
+          .map(_mapFolder)
+          .toList();
+    }
+    // Root level: a folder's stored parent may point at a folder that was
+    // deleted (possibly on another device via CRDT sync) — render it at
+    // root rather than losing it. See STUDY.md's "Ghost Parent" case.
+    final validIds = all.map((r) => r.id).toSet();
+    return all
+        .where((r) => r.parentFolderId == null || !validIds.contains(r.parentFolderId))
+        .map(_mapFolder)
+        .toList();
+  }
+
+  @override
+  Future<StudyFolder?> getFolder(String id) async {
+    final row = await (_db.select(
+      _db.studyFoldersTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapFolder(row);
+  }
+
+  @override
+  Future<void> upsertFolder(
+    StudyFolder folder, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.studyFoldersTable)
+        .insertOnConflictUpdate(
+          StudyFoldersTableCompanion(
+            id: Value(folder.id),
+            name: Value(folder.name),
+            parentFolderId: Value(folder.parentFolderId),
+            createdAt: Value(folder.createdAt),
+            updatedAt: Value(folder.updatedAt),
+            version: Value(folder.version),
+            deletedAt: Value(folder.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.studyFolders);
+    }
+  }
+
+  @override
+  Future<void> softDeleteFolder(String id) async {
+    await (_db.update(
+      _db.studyFoldersTable,
+    )..where((t) => t.id.equals(id))).write(
+      StudyFoldersTableCompanion(deletedAt: Value(utcNow()), updatedAt: Value(utcNow())),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyFolders);
+  }
+
+  @override
+  Future<bool> wouldCreateCycle(
+    String folderId,
+    String? targetParentFolderId,
+  ) async {
+    if (targetParentFolderId == null) return false;
+    if (targetParentFolderId == folderId) return true;
+    final rows = await _db.select(_db.studyFoldersTable).get();
+    final byId = {for (final r in rows) r.id: r};
+    String? cursor = targetParentFolderId;
+    final visited = <String>{};
+    while (cursor != null) {
+      if (cursor == folderId) return true;
+      if (!visited.add(cursor)) break;
+      cursor = byId[cursor]?.parentFolderId;
+    }
+    return false;
+  }
+
+  @override
+  Future<void> moveFolder(String folderId, String? newParentFolderId) async {
+    if (await wouldCreateCycle(folderId, newParentFolderId)) {
+      throw StateError('Cannot move a folder into its own descendant.');
+    }
+    await (_db.update(
+      _db.studyFoldersTable,
+    )..where((t) => t.id.equals(folderId))).write(
+      StudyFoldersTableCompanion(
+        parentFolderId: Value(newParentFolderId),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyFolders);
+  }
+
+  @override
+  Future<List<StudyDeck>> listDecks({
+    String? parentFolderId,
+    bool includeDeleted = false,
+  }) async {
+    final deckRows = await _db.select(_db.studyDecksTable).get();
+    final decks = deckRows.where((r) => includeDeleted || r.deletedAt == null).toList();
+    if (parentFolderId != null) {
+      return decks
+          .where((r) => r.parentFolderId == parentFolderId)
+          .map(_mapDeck)
+          .toList();
+    }
+    final folderRows = await _db.select(_db.studyFoldersTable).get();
+    final validFolderIds = folderRows
+        .where((r) => r.deletedAt == null)
+        .map((r) => r.id)
+        .toSet();
+    return decks
+        .where(
+          (r) => r.parentFolderId == null || !validFolderIds.contains(r.parentFolderId),
+        )
+        .map(_mapDeck)
+        .toList();
+  }
+
+  @override
+  Future<StudyDeck?> getDeck(String id) async {
+    final row = await (_db.select(
+      _db.studyDecksTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapDeck(row);
+  }
+
+  @override
+  Future<void> upsertDeck(StudyDeck deck, {bool recordLocalActivity = true}) async {
+    await _db
+        .into(_db.studyDecksTable)
+        .insertOnConflictUpdate(
+          StudyDecksTableCompanion(
+            id: Value(deck.id),
+            name: Value(deck.name),
+            parentFolderId: Value(deck.parentFolderId),
+            createdAt: Value(deck.createdAt),
+            updatedAt: Value(deck.updatedAt),
+            version: Value(deck.version),
+            deletedAt: Value(deck.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.studyDecks);
+    }
+  }
+
+  @override
+  Future<void> softDeleteDeck(String id) async {
+    await (_db.update(
+      _db.studyDecksTable,
+    )..where((t) => t.id.equals(id))).write(
+      StudyDecksTableCompanion(deletedAt: Value(utcNow()), updatedAt: Value(utcNow())),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyDecks);
+  }
+
+  @override
+  Future<void> moveDeck(String deckId, String? newParentFolderId) async {
+    await (_db.update(
+      _db.studyDecksTable,
+    )..where((t) => t.id.equals(deckId))).write(
+      StudyDecksTableCompanion(
+        parentFolderId: Value(newParentFolderId),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyDecks);
+  }
+
+  @override
+  Future<List<StudyCard>> listCards(
+    String deckId, {
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(
+      _db.studyCardsTable,
+    )..where((t) => t.deckId.equals(deckId))).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapCard)
+        .toList();
+  }
+
+  @override
+  Future<StudyCard?> getCard(String id) async {
+    final row = await (_db.select(
+      _db.studyCardsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCard(row);
+  }
+
+  @override
+  Future<void> upsertCard(StudyCard card, {bool recordLocalActivity = true}) async {
+    await _db
+        .into(_db.studyCardsTable)
+        .insertOnConflictUpdate(
+          StudyCardsTableCompanion(
+            id: Value(card.id),
+            deckId: Value(card.deckId),
+            frontText: Value(card.frontText),
+            backText: Value(card.backText),
+            interval: Value(card.interval),
+            ease: Value(card.ease),
+            dueAt: Value(card.dueAt),
+            reviewCount: Value(card.reviewCount),
+            createdAt: Value(card.createdAt),
+            updatedAt: Value(card.updatedAt),
+            version: Value(card.version),
+            deletedAt: Value(card.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.studyCards);
+    }
+  }
+
+  @override
+  Future<void> softDeleteCard(String id) async {
+    await (_db.update(
+      _db.studyCardsTable,
+    )..where((t) => t.id.equals(id))).write(
+      StudyCardsTableCompanion(deletedAt: Value(utcNow()), updatedAt: Value(utcNow())),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyCards);
+  }
+
+  @override
+  Future<void> moveCards(List<String> cardIds, String targetDeckId) async {
+    final now = utcNow();
+    for (final id in cardIds) {
+      await (_db.update(
+        _db.studyCardsTable,
+      )..where((t) => t.id.equals(id))).write(
+        StudyCardsTableCompanion(deckId: Value(targetDeckId), updatedAt: Value(now)),
+      );
+    }
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyCards);
+  }
+
+  @override
+  Future<void> duplicateCards(List<String> cardIds) async {
+    final now = utcNow();
+    for (final id in cardIds) {
+      final row = await (_db.select(
+        _db.studyCardsTable,
+      )..where((t) => t.id.equals(id))).getSingleOrNull();
+      if (row == null) continue;
+      await _db
+          .into(_db.studyCardsTable)
+          .insert(
+            StudyCardsTableCompanion.insert(
+              id: newId(),
+              deckId: row.deckId,
+              frontText: row.frontText,
+              backText: row.backText,
+              dueAt: now,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+    }
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyCards);
+  }
+
+  @override
+  Future<void> logReview(StudyReviewLog log) async {
+    await _db
+        .into(_db.studyReviewLogTable)
+        .insertOnConflictUpdate(
+          StudyReviewLogTableCompanion(
+            id: Value(log.id),
+            cardId: Value(log.cardId),
+            grade: Value(log.grade.name),
+            reviewedAt: Value(log.reviewedAt),
+          ),
+        );
+    _syncActivity?.recordLocalSave(FirestoreCollections.studyReviewLog);
+  }
+
+  @override
+  Future<int> countCardsReviewedToday({DateTime? now}) async {
+    final n = now ?? DateTime.now();
+    final startOfDayUtc = DateTime(n.year, n.month, n.day).toUtc();
+    final rows = await (_db.select(
+      _db.studyReviewLogTable,
+    )..where((t) => t.reviewedAt.isBiggerOrEqualValue(startOfDayUtc))).get();
+    return rows.length;
+  }
+
+  @override
+  Future<int> countCardsReviewedTotal() async {
+    final rows = await _db.select(_db.studyReviewLogTable).get();
+    return rows.length;
+  }
+
+  @override
+  Future<int> countDueCards({DateTime? now}) async {
+    final n = now ?? utcNow();
+    final rows = await (_db.select(_db.studyCardsTable)
+          ..where((t) => t.deletedAt.isNull() & t.dueAt.isSmallerOrEqualValue(n)))
+        .get();
+    return rows.length;
+  }
+
+  @override
+  Future<int> countDueCardsInDeck(String deckId, {DateTime? now}) async {
+    final n = now ?? utcNow();
+    final rows = await (_db.select(_db.studyCardsTable)
+          ..where(
+            (t) =>
+                t.deckId.equals(deckId) &
+                t.deletedAt.isNull() &
+                t.dueAt.isSmallerOrEqualValue(n),
+          ))
+        .get();
+    return rows.length;
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    for (final row in await _db.select(_db.studyCardsTable).get()) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.studyCardsTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    for (final row in await _db.select(_db.studyDecksTable).get()) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.studyDecksTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+    for (final row in await _db.select(_db.studyFoldersTable).get()) {
+      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
+        await (_db.delete(
+          _db.studyFoldersTable,
+        )..where((t) => t.id.equals(row.id))).go();
+      }
+    }
+  }
+
+  @override
+  Future<List<StudyFolder>> getAllFolders({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.studyFoldersTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapFolder)
+        .toList();
+  }
+
+  @override
+  Future<List<StudyDeck>> getAllDecks({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.studyDecksTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapDeck)
+        .toList();
+  }
+
+  @override
+  Future<List<StudyCard>> getAllCards({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.studyCardsTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapCard)
+        .toList();
+  }
+
+  StudyFolder _mapFolder(StudyFoldersTableData row) => StudyFolder(
+    id: row.id,
+    name: row.name,
+    parentFolderId: row.parentFolderId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  StudyDeck _mapDeck(StudyDecksTableData row) => StudyDeck(
+    id: row.id,
+    name: row.name,
+    parentFolderId: row.parentFolderId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  StudyCard _mapCard(StudyCardsTableData row) => StudyCard(
+    id: row.id,
+    deckId: row.deckId,
+    frontText: row.frontText,
+    backText: row.backText,
+    interval: row.interval,
+    ease: row.ease,
+    dueAt: row.dueAt,
+    reviewCount: row.reviewCount,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
   );
 }

@@ -110,6 +110,18 @@ class DevPage extends ConsumerWidget {
           },
         ),
         SwitchListTile(
+          title: const Text('Life Tracker segment debug colors'),
+          subtitle: const Text(
+            'Highlight each segment of the tree trunk, roots, and branches in '
+            'distinct glowing colors and labels',
+          ),
+          value: ref.watch(lifeTrackerShowDebugColorsProvider),
+          onChanged: (v) {
+            DevFlags.showLifeTreeSegmentDebug = v;
+            ref.read(lifeTrackerShowDebugColorsProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
           title: const Text('Show time selector hitboxes'),
           subtitle: const Text(
             'Show 50% red boxes over the invisible scroll hitboxes in the time picker.',

@@ -22,6 +22,8 @@ import 'package:voyager/domain/services/character_operation.dart';
 import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -33,6 +35,8 @@ class RemoteSyncService {
     required JournalRepository journalRepository,
     required DreamRepository dreamRepository,
     required TodoRepository todoRepository,
+    required LeetCodeRepository leetCodeRepository,
+    required StudyRepository studyRepository,
     required WeatherService weatherService,
     required SyncEngine syncEngine,
     SyncConflictRepository? syncConflictRepository,
@@ -47,6 +51,8 @@ class RemoteSyncService {
        _journalRepository = journalRepository,
        _dreamRepository = dreamRepository,
        _todoRepository = todoRepository,
+       _leetCodeRepository = leetCodeRepository,
+       _studyRepository = studyRepository,
        _weatherService = weatherService,
        _syncEngine = syncEngine,
        _syncConflictRepository = syncConflictRepository,
@@ -61,6 +67,8 @@ class RemoteSyncService {
   final JournalRepository _journalRepository;
   final DreamRepository _dreamRepository;
   final TodoRepository _todoRepository;
+  final LeetCodeRepository _leetCodeRepository;
+  final StudyRepository _studyRepository;
   final WeatherService _weatherService;
   final SyncEngine _syncEngine;
   final SyncConflictRepository? _syncConflictRepository;
@@ -853,6 +861,11 @@ class RemoteSyncService {
     await pullDreamEntries();
     await pullTodoLists();
     await pullTodoTasks();
+    await pullLeetCodeProblems();
+    await pullStudyFolders();
+    await pullStudyDecks();
+    await pullStudyCards();
+    await pullStudyReviewLog();
   }
 
   /// Returns whether anything was actually applied — false when every id in
@@ -877,6 +890,16 @@ class RemoteSyncService {
         return pullTodoLists(documentIds: documentIds);
       case FirestoreCollections.todoTasks:
         return pullTodoTasks(documentIds: documentIds);
+      case FirestoreCollections.leetcodeProblems:
+        return pullLeetCodeProblems(documentIds: documentIds);
+      case FirestoreCollections.studyFolders:
+        return pullStudyFolders(documentIds: documentIds);
+      case FirestoreCollections.studyDecks:
+        return pullStudyDecks(documentIds: documentIds);
+      case FirestoreCollections.studyCards:
+        return pullStudyCards(documentIds: documentIds);
+      case FirestoreCollections.studyReviewLog:
+        return pullStudyReviewLog(documentIds: documentIds);
     }
     return false;
   }
@@ -892,6 +915,68 @@ class RemoteSyncService {
           merged,
           recordLocalActivity: false,
         );
+      },
+    );
+  }
+
+  Future<bool> pullLeetCodeProblems({Set<String>? documentIds}) {
+    return _pullCollection(
+      FirestoreCollections.leetcodeProblems,
+      onlyFirestoreDocumentIds: documentIds,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _leetCodeRepository.getProblem(id);
+        final merged = mergeLeetCodeProblemFromRemote(data, id, local: local);
+        await _leetCodeRepository.upsertProblem(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullStudyFolders({Set<String>? documentIds}) {
+    return _pullCollection(
+      FirestoreCollections.studyFolders,
+      onlyFirestoreDocumentIds: documentIds,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _studyRepository.getFolder(id);
+        final merged = mergeStudyFolderFromRemote(data, id, local: local);
+        await _studyRepository.upsertFolder(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullStudyDecks({Set<String>? documentIds}) {
+    return _pullCollection(
+      FirestoreCollections.studyDecks,
+      onlyFirestoreDocumentIds: documentIds,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _studyRepository.getDeck(id);
+        final merged = mergeStudyDeckFromRemote(data, id, local: local);
+        await _studyRepository.upsertDeck(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullStudyCards({Set<String>? documentIds}) {
+    return _pullCollection(
+      FirestoreCollections.studyCards,
+      onlyFirestoreDocumentIds: documentIds,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _studyRepository.getCard(id);
+        final merged = mergeStudyCardFromRemote(data, id, local: local);
+        await _studyRepository.upsertCard(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullStudyReviewLog({Set<String>? documentIds}) {
+    return _pullCollection(
+      FirestoreCollections.studyReviewLog,
+      onlyFirestoreDocumentIds: documentIds,
+      apply: (id, data, {required fromCrdt}) async {
+        final merged = mergeStudyReviewLogFromRemote(data, id);
+        await _studyRepository.logReview(merged);
       },
     );
   }
@@ -1292,6 +1377,51 @@ class RemoteSyncService {
     unawaited(_uploadJournalNow(journal));
   }
 
+  void pushLeetCodeProblem(LeetCodeProblem problem) {
+    cancelDocument(FirestoreCollections.leetcodeProblems, problem.id);
+    unawaited(_uploadLeetCodeProblemNow(problem));
+  }
+
+  void pushStudyFolder(StudyFolder folder) {
+    cancelDocument(FirestoreCollections.studyFolders, folder.id);
+    unawaited(_uploadStudyFolderNow(folder));
+  }
+
+  void pushStudyDeck(StudyDeck deck) {
+    cancelDocument(FirestoreCollections.studyDecks, deck.id);
+    unawaited(_uploadStudyDeckNow(deck));
+  }
+
+  void pushStudyCard(StudyCard card) {
+    cancelDocument(FirestoreCollections.studyCards, card.id);
+    unawaited(_uploadStudyCardNow(card));
+  }
+
+  /// Batched counterpart to [pushStudyCard] for a set of cards that only
+  /// need a plain snapshot upload (e.g. after a multi-select move) — see
+  /// [pushTodoTasksBatch] for why batching matters for cascading writes.
+  Future<void> pushStudyCardsBatch(List<StudyCard> cards) async {
+    if (cards.isEmpty) return;
+    for (final card in cards) {
+      cancelDocument(FirestoreCollections.studyCards, card.id);
+    }
+    final payloads = {
+      for (final card in cards) card.id: studyCardToFirestore(card),
+    };
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.studyCards,
+      payloadsByDocumentId: payloads,
+    );
+    for (final card in cards) {
+      _markSelfEcho(FirestoreCollections.studyCards, card.id);
+    }
+  }
+
+  void pushStudyReviewLog(StudyReviewLog log) {
+    cancelDocument(FirestoreCollections.studyReviewLog, log.id);
+    unawaited(_uploadStudyReviewLogNow(log));
+  }
+
   void pushJournalEntry(JournalEntry entry) {
     _scheduleRemoteUpload(
       documentKey(FirestoreCollections.journalEntries, entry.id),
@@ -1430,6 +1560,51 @@ class RemoteSyncService {
     _markSelfEcho(FirestoreCollections.journals, journal.id);
   }
 
+  Future<void> _uploadLeetCodeProblemNow(LeetCodeProblem problem) async {
+    await _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.leetcodeProblems,
+      documentId: problem.id,
+      payload: leetCodeProblemToFirestore(problem),
+    );
+    _markSelfEcho(FirestoreCollections.leetcodeProblems, problem.id);
+  }
+
+  Future<void> _uploadStudyFolderNow(StudyFolder folder) async {
+    await _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.studyFolders,
+      documentId: folder.id,
+      payload: studyFolderToFirestore(folder),
+    );
+    _markSelfEcho(FirestoreCollections.studyFolders, folder.id);
+  }
+
+  Future<void> _uploadStudyDeckNow(StudyDeck deck) async {
+    await _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.studyDecks,
+      documentId: deck.id,
+      payload: studyDeckToFirestore(deck),
+    );
+    _markSelfEcho(FirestoreCollections.studyDecks, deck.id);
+  }
+
+  Future<void> _uploadStudyCardNow(StudyCard card) async {
+    await _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.studyCards,
+      documentId: card.id,
+      payload: studyCardToFirestore(card),
+    );
+    _markSelfEcho(FirestoreCollections.studyCards, card.id);
+  }
+
+  Future<void> _uploadStudyReviewLogNow(StudyReviewLog log) async {
+    await _syncEngine.syncDocumentImmediately(
+      collection: FirestoreCollections.studyReviewLog,
+      documentId: log.id,
+      payload: studyReviewLogToFirestore(log),
+    );
+    _markSelfEcho(FirestoreCollections.studyReviewLog, log.id);
+  }
+
   Future<void> _uploadTodoListNow(TodoListModel list) async {
     await _syncEngine.syncDocumentImmediately(
       collection: FirestoreCollections.todoLists,
@@ -1529,6 +1704,11 @@ class LiveSyncController {
     FirestoreCollections.dreamEntries,
     FirestoreCollections.todoLists,
     FirestoreCollections.todoTasks,
+    FirestoreCollections.leetcodeProblems,
+    FirestoreCollections.studyFolders,
+    FirestoreCollections.studyDecks,
+    FirestoreCollections.studyCards,
+    FirestoreCollections.studyReviewLog,
   ];
 
   void start() {

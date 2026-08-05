@@ -3,15 +3,23 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/features/analytics/analytics_page.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
+import 'package:voyager/features/demo/demo_page.dart';
 import 'package:voyager/features/dev/dev_page.dart';
 import 'package:voyager/features/dream_journal/dream_journal_page.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/journal/journal_page.dart';
+import 'package:voyager/features/leetcode/leetcode_page.dart';
 import 'package:voyager/features/life_tracker/life_tracker_page.dart';
 import 'package:voyager/features/search/search_page.dart';
 import 'package:voyager/features/settings/settings_page.dart';
+import 'package:voyager/features/study/study_page.dart';
 import 'package:voyager/features/todo/todo_page.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+
+/// A destination paired with its index in [shellDestinations], which is what
+/// `goBranch` expects. The pair exists because the user can reorder the nav
+/// without reordering the branches underneath it.
+typedef OrderedDestination = ({ShellDestination dest, int originalIndex});
 
 /// Add a new main section by appending one entry here and its route in [app_router.dart].
 class ShellDestination {
@@ -78,6 +86,24 @@ const shellDestinations = <ShellDestination>[
     page: LifeTrackerPage(),
   ),
   ShellDestination(
+    path: '/leetcode',
+    icon: PhosphorIconsRegular.code,
+    label: 'LeetCode',
+    page: LeetCodePage(),
+  ),
+  ShellDestination(
+    path: '/study',
+    icon: PhosphorIconsRegular.cardsThree,
+    label: 'Study',
+    page: StudyPage(),
+  ),
+  ShellDestination(
+    path: '/demo',
+    icon: PhosphorIconsRegular.flower,
+    label: 'Demo',
+    page: DemoPage(),
+  ),
+  ShellDestination(
     path: '/dev',
     icon: VoyagerIcons.debug,
     label: 'Dev',
@@ -100,7 +126,7 @@ int shellIndexForLocation(String location) {
 
 String shellPathForIndex(int index) => shellDestinations[index].path;
 
-List<({ShellDestination dest, int originalIndex})> getOrderedDestinations(
+List<OrderedDestination> getOrderedDestinations(
   AppSettings settings,
   List<ShellDestination> original,
 ) {
@@ -112,7 +138,7 @@ List<({ShellDestination dest, int originalIndex})> getOrderedDestinations(
     ];
   }
 
-  final result = <({ShellDestination dest, int originalIndex})>[];
+  final result = <OrderedDestination>[];
   for (final path in order) {
     final index = original.indexWhere((d) => d.path == path);
     if (index != -1) {

@@ -3,9 +3,11 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 
@@ -50,6 +52,19 @@ abstract class DreamRepository {
   Future<void> hardDeleteEntry(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
   Future<List<DreamEntry>> getAllEntries({bool includeDeleted = true});
+}
+
+abstract class LeetCodeRepository {
+  Future<List<LeetCodeProblem>> listProblems({bool includeDeleted = false});
+  Future<LeetCodeProblem?> getProblem(String id);
+  Future<void> upsertProblem(
+    LeetCodeProblem problem, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteProblem(String id);
+  Future<void> hardDeleteProblem(String id);
+  Future<void> purgeExpiredDeleted(DateTime now);
+  Future<List<LeetCodeProblem>> getAllProblems({bool includeDeleted = true});
 }
 
 abstract class TodoRepository {
@@ -173,6 +188,53 @@ abstract class FinanceRepository {
   Future<void> softDeleteGoalAllocation(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
+}
+
+/// Folders/decks form an arbitrary-depth tree via `parentFolderId`. Callers
+/// browse one level at a time (a breadcrumb stack of UUIDs), matching
+/// STUDY.md's "in-memory stack" navigation model rather than loading the
+/// whole tree at once.
+abstract class StudyRepository {
+  Future<List<StudyFolder>> listFolders({
+    String? parentFolderId,
+    bool includeDeleted = false,
+  });
+  Future<StudyFolder?> getFolder(String id);
+  Future<void> upsertFolder(StudyFolder folder, {bool recordLocalActivity = true});
+  Future<void> softDeleteFolder(String id);
+
+  /// True if moving [folderId] under [targetParentFolderId] would create a
+  /// cycle (the target is the folder itself or one of its own descendants).
+  /// Must be checked before every folder move.
+  Future<bool> wouldCreateCycle(String folderId, String? targetParentFolderId);
+  Future<void> moveFolder(String folderId, String? newParentFolderId);
+
+  Future<List<StudyDeck>> listDecks({
+    String? parentFolderId,
+    bool includeDeleted = false,
+  });
+  Future<StudyDeck?> getDeck(String id);
+  Future<void> upsertDeck(StudyDeck deck, {bool recordLocalActivity = true});
+  Future<void> softDeleteDeck(String id);
+  Future<void> moveDeck(String deckId, String? newParentFolderId);
+
+  Future<List<StudyCard>> listCards(String deckId, {bool includeDeleted = false});
+  Future<StudyCard?> getCard(String id);
+  Future<void> upsertCard(StudyCard card, {bool recordLocalActivity = true});
+  Future<void> softDeleteCard(String id);
+  Future<void> moveCards(List<String> cardIds, String targetDeckId);
+  Future<void> duplicateCards(List<String> cardIds);
+
+  Future<void> logReview(StudyReviewLog log);
+  Future<int> countCardsReviewedToday({DateTime? now});
+  Future<int> countCardsReviewedTotal();
+  Future<int> countDueCards({DateTime? now});
+  Future<int> countDueCardsInDeck(String deckId, {DateTime? now});
+
+  Future<void> purgeExpiredDeleted(DateTime now);
+  Future<List<StudyFolder>> getAllFolders({bool includeDeleted = true});
+  Future<List<StudyDeck>> getAllDecks({bool includeDeleted = true});
+  Future<List<StudyCard>> getAllCards({bool includeDeleted = true});
 }
 
 abstract class SettingsRepository {
