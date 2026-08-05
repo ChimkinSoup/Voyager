@@ -14,6 +14,7 @@ import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 /// The green used for money flowing in, across the finance feature. Chosen to
 /// stay legible on both the light and dark surfaces.
@@ -28,6 +29,7 @@ Future<void> showFinanceTransactionModal(
 }) async {
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
@@ -259,7 +261,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: kMinTouchTarget,
                   ),
                 ],
               ),

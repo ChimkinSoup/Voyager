@@ -138,16 +138,41 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
             : 18.0);
 
     final hasLabel = (decoration.labelText ?? '').isNotEmpty;
+    // Non-outline InputDecoration.border makes InputDecorator reserve an
+    // extra ~16px "floating label height" gap above contentPadding.top
+    // whenever a labelText is present, regardless of floatingLabelBehavior
+    // (see input_decorator.dart: floatingLabelHeight is 0 only in the
+    // isOutline branch). The visible label is painted entirely by
+    // NotchedFieldBorder below, so the real TextField's border is given an
+    // invisible outline shape purely to take that zero-gap code path.
     final innerDecoration = decoration.copyWith(
-      labelText: hasLabel ? '\u200B' : null,
+      labelText: hasLabel ? '\u200b' : null,
       floatingLabelBehavior: FloatingLabelBehavior.never,
       filled: false,
-      border: InputBorder.none,
-      enabledBorder: InputBorder.none,
-      focusedBorder: InputBorder.none,
-      disabledBorder: InputBorder.none,
-      errorBorder: InputBorder.none,
-      focusedErrorBorder: InputBorder.none,
+      border: const OutlineInputBorder(
+        borderSide: BorderSide.none,
+        gapPadding: 0,
+      ),
+      enabledBorder: const OutlineInputBorder(
+        borderSide: BorderSide.none,
+        gapPadding: 0,
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderSide: BorderSide.none,
+        gapPadding: 0,
+      ),
+      disabledBorder: const OutlineInputBorder(
+        borderSide: BorderSide.none,
+        gapPadding: 0,
+      ),
+      errorBorder: const OutlineInputBorder(
+        borderSide: BorderSide.none,
+        gapPadding: 0,
+      ),
+      focusedErrorBorder: const OutlineInputBorder(
+        borderSide: BorderSide.none,
+        gapPadding: 0,
+      ),
       contentPadding: contentPadding,
     );
 

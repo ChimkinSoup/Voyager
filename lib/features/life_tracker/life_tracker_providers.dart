@@ -32,3 +32,8 @@ final lifeTrackerShowReplayButtonProvider = StateProvider<bool>(
 final lifeTrackerShowRestoreButtonProvider = StateProvider<bool>(
   (ref) => DevFlags.showLifeTrackerRestore,
 );
+
+/// Toggles highlighting each tree segment in distinct glowing debug colors.
+final lifeTrackerShowDebugColorsProvider = StateProvider<bool>(
+  (ref) => DevFlags.showLifeTreeSegmentDebug,
+);

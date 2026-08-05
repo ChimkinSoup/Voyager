@@ -9,6 +9,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
+import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_analytics_view.dart';
@@ -663,7 +664,7 @@ class _TransactionRow extends ConsumerWidget {
                       runSpacing: 4,
                       children: [
                         for (final tag in transaction.tags)
-                          _TagChip(tag: tag, colorValue: tagColors[tag]),
+                          TagChip(tag: tag, colorValue: tagColors[tag]),
                       ],
                     ),
                   ],
@@ -680,32 +681,6 @@ class _TransactionRow extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  const _TagChip({required this.tag, this.colorValue});
-
-  final String tag;
-  final int? colorValue;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = colorValue != null
-        ? Color(colorValue!)
-        : theme.colorScheme.onSurfaceVariant;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        '#$tag',
-        style: theme.textTheme.labelSmall?.copyWith(color: color),
       ),
     );
   }

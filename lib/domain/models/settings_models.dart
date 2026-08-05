@@ -28,6 +28,10 @@ class AppSettings {
     this.todoHotkey = defaultTodoHotkey,
     this.calendarNavigateLeftKey = defaultCalendarNavigateLeftKey,
     this.calendarNavigateRightKey = defaultCalendarNavigateRightKey,
+    this.srsFailKey = defaultStudyFailKey,
+    this.srsHardKey = defaultStudyHardKey,
+    this.srsGoodKey = defaultStudyGoodKey,
+    this.srsEasyKey = defaultStudyEasyKey,
     this.timelineModeYearZero = true,
     this.birthYear,
     this.birthDate,
@@ -104,6 +108,7 @@ class AppSettings {
     this.dreamSplitWidth,
     this.showDreamStatistics = false,
     this.dreamNotesPinned = false,
+    this.leetcodeUsername,
     List<int>? colorPalette,
   }) : colorPalette = colorPalette ?? defaultColorPalette;
 
@@ -150,6 +155,13 @@ class AppSettings {
   final String todoHotkey;
   final String calendarNavigateLeftKey;
   final String calendarNavigateRightKey;
+
+  /// Grading keybinds for Study SRS/cram sessions. Space always flips the
+  /// card regardless of these — see STUDY.md's "Additional Notes".
+  final String srsFailKey;
+  final String srsHardKey;
+  final String srsGoodKey;
+  final String srsEasyKey;
   final bool timelineModeYearZero;
   final int? birthYear;
 
@@ -249,6 +261,11 @@ class AppSettings {
   /// open as a bottom panel rather than collapsed to its corner peek.
   final bool dreamNotesPinned;
 
+  /// LeetCode username used to look up the user's own submissions via the
+  /// public GraphQL endpoint (e.g. prefilling the Track modal with the
+  /// most recently accepted submission).
+  final String? leetcodeUsername;
+
   bool get hasWeatherLocation => weatherLat != null && weatherLon != null;
 
   AppSettings copyWith({
@@ -268,6 +285,10 @@ class AppSettings {
     String? todoHotkey,
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
+    String? srsFailKey,
+    String? srsHardKey,
+    String? srsGoodKey,
+    String? srsEasyKey,
     bool? hideCompletedTasks,
     DateTime? birthDate,
     String? deviceId,
@@ -340,7 +361,9 @@ class AppSettings {
     double? dreamSplitWidth,
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
+    String? leetcodeUsername,
     List<int>? colorPalette,
+    bool clearLeetcodeUsername = false,
     bool clearWeatherLocationLabel = false,
     bool clearWeatherLat = false,
     bool clearWeatherLon = false,
@@ -379,6 +402,10 @@ class AppSettings {
           calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
       calendarNavigateRightKey:
           calendarNavigateRightKey ?? this.calendarNavigateRightKey,
+      srsFailKey: srsFailKey ?? this.srsFailKey,
+      srsHardKey: srsHardKey ?? this.srsHardKey,
+      srsGoodKey: srsGoodKey ?? this.srsGoodKey,
+      srsEasyKey: srsEasyKey ?? this.srsEasyKey,
       timelineModeYearZero: timelineModeYearZero,
       birthYear: birthYear,
       birthDate: birthDate ?? this.birthDate,
@@ -517,6 +544,9 @@ class AppSettings {
           : (dreamSplitWidth ?? this.dreamSplitWidth),
       showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
       dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
+      leetcodeUsername: clearLeetcodeUsername
+          ? null
+          : (leetcodeUsername ?? this.leetcodeUsername),
     );
   }
 }

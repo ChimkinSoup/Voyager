@@ -13,6 +13,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
+import 'package:voyager/core/widgets/compact_back_bar.dart';
+import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
@@ -125,6 +128,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   double? _entryListDragStartWidth;
   DateTime? _lastEntryCreatedAt;
 
+  /// Phone shell only: whether the editor is covering the entry list.
+  ///
+  /// Deliberately separate from [_selectedEntryId], which keeps meaning "the
+  /// entry the editor is bound to" on both shells. Opening the phone editor is
+  /// a navigation event, not a selection change — so the list can arrive with
+  /// an entry already selected (the desktop shell's auto-select) without that
+  /// selection dragging the user straight into the editor.
+  var _compactShowingEditor = false;
+  VoidCallback? _removeBackInterceptor;
+
   late final Future<void> Function() _lifecycleFlushCallback;
 
   @override
@@ -133,6 +146,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _invalidateJournalCaches = ref.read(journalEntryCacheInvalidatorProvider);
     _lifecycleFlushCallback = _lifecycleFlush;
     PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
+    _removeBackInterceptor = ShellBackInterceptors.instance.register(
+      _handleSystemBack,
+    );
     _titleFocusNode.addListener(_handleTitleFocusChanged);
     _bodyFocusNode.addListener(_handleBodyFocusChanged);
     _restoreFromSettings(ref.read(settingsProvider).valueOrNull);
@@ -320,6 +336,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _metadataSaveTimer?.cancel();
     _bodySaveTimer?.cancel();
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
+    _removeBackInterceptor?.call();
     _pinFlushDependencies();
     _titleFocusNode.removeListener(_handleTitleFocusChanged);
     _bodyFocusNode.removeListener(_handleBodyFocusChanged);
@@ -1045,6 +1062,44 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await _loadEntry(current);
   }
 
+  /// Opens an entry from the list. On the desktop shell this is exactly the
+  /// old behaviour — the editor is already on screen beside the list — and on
+  /// a phone it also brings the editor forward over it.
+  Future<void> _openEntry(String id) async {
+    _revealCompactEditor();
+    await _loadEntryById(id);
+  }
+
+  void _revealCompactEditor() {
+    if (!mounted || !context.isCompactWidth || _compactShowingEditor) return;
+    setState(() => _compactShowingEditor = true);
+  }
+
+  /// Returns to the entry list on the phone shell, persisting whatever was
+  /// typed on the way out — leaving the editor is the same commitment point
+  /// as switching entries, and is handled the same way.
+  Future<void> _closeCompactEditor() async {
+    await _flushActiveEntryEdits(refreshList: true);
+    if (!mounted) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _compactShowingEditor = false);
+  }
+
+  /// Android Back, offered to this page before the shell acts on it.
+  ///
+  /// Only claims the gesture when the journal is both the section on screen
+  /// and actually covering its list with the editor; the page stays mounted
+  /// while other sections are showing, so it must not answer for them.
+  bool _handleSystemBack() {
+    if (!mounted || !_compactShowingEditor) return false;
+    // The flag survives a resize past the breakpoint, where both panes are
+    // visible again and there is nothing to go back from.
+    if (!context.isCompactWidth) return false;
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return false;
+    unawaited(_closeCompactEditor());
+    return true;
+  }
+
   /// Returns a `_JournalEntryListTile` for [entry], reusing the previous
   /// frame's widget instance when nothing that affects its rendering has
   /// changed. See `_rowWidgetCache` for why that matters.
@@ -1068,7 +1123,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       isSelected: isSelected,
       titlePreview: _listTitlePreview,
       bodyPreview: _listBodyPreview,
-      onTap: () => unawaited(_loadEntryById(entry.id)),
+      onTap: () => unawaited(_openEntry(entry.id)),
     );
     _rowWidgetCache[entry.id] = tile;
     _rowSignatureCache[entry.id] = signature;
@@ -1855,11 +1910,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                 storedListWidth,
                 totalWidth,
               );
+              // Two compositions of the same two panes. Side by side in the
+              // desktop window with a draggable divider between them; one at a
+              // time on a phone, where splitting 360dp would leave neither the
+              // list nor the editor usable.
+              final compact = context.isCompactWidth;
+              final showList = !compact || !_compactShowingEditor;
+              final showEditor = !compact || _compactShowingEditor;
+
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (showList)
                   SizedBox(
-                    width: listWidth,
+                    width: compact ? totalWidth : listWidth,
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
@@ -2049,7 +2113,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             child: Padding(
                               padding: const EdgeInsets.all(12),
                               child: GlassButton(
-                                onPressed: _createEntry,
+                                onPressed: () {
+                                  _revealCompactEditor();
+                                  unawaited(_createEntry());
+                                },
                                 label: 'New entry',
                               ),
                             ),
@@ -2058,6 +2125,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                       ],
                     ),
                   ),
+                  if (!compact)
                   ResizablePaneDivider(
                     onDragStart: () => _onEntryListDragStart(totalWidth),
                     onDragUpdate: (totalDelta) =>
@@ -2065,12 +2133,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                     onDragEnd: _onEntryListDragEnd,
                     onDoubleTapReset: _resetEntryListWidth,
                   ),
+                  if (showEditor)
                   Expanded(
                     child: Padding(
                       padding: JournalEntryListLayout.editorPadding,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (compact)
+                            CompactBackBar(
+                              label: 'Entries',
+                              onBack: () => unawaited(_closeCompactEditor()),
+                            ),
                           Padding(
                             padding: const EdgeInsets.only(top: 8, bottom: 12),
                             child: Stack(

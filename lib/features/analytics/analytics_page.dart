@@ -39,6 +39,7 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart'
         monthGridDates;
 import 'package:flutter/services.dart';
 import 'dart:ui' show lerpDouble;
+import 'package:voyager/core/layout/touch_target.dart';
 
 // ---------------------------------------------------------------------------
 // Detail view state
@@ -1097,7 +1098,7 @@ class _SparklineRow extends ConsumerWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  constraints: kMinTouchTarget,
                   onPressed: () async {
                     final updated = await showDialog<StatisticTracker>(
                       context: context,
@@ -3255,8 +3256,8 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                 contentPadding: EdgeInsets.only(
                   left: 16,
                   right: 16,
-                  top: 0,
-                  bottom: 12,
+                  top: 10,
+                  bottom: 14,
                 ),
               ),
             ),
@@ -3569,6 +3570,158 @@ String _cadenceUnit(TrackerCadence cadence) {
   };
 }
 
+/// Longest run of chronologically consecutive periods (each exactly one
+/// [_nextTrackerPeriod] step after the previous) in [sortedPeriods], along
+/// with the current run — the unbroken run ending at the most recent
+/// period, however long ago that period was. [sortedPeriods] must already be
+/// sorted ascending and deduplicated to date-only values.
+({int longest, int current}) _streakStats(
+  List<DateTime> sortedPeriods,
+  TrackerCadence cadence,
+) {
+  if (sortedPeriods.isEmpty) return (longest: 0, current: 0);
+  var longest = 1;
+  var run = 1;
+  for (var i = 1; i < sortedPeriods.length; i++) {
+    final expected = _nextTrackerPeriod(sortedPeriods[i - 1], cadence);
+    if (sortedPeriods[i] == expected) {
+      run++;
+    } else {
+      run = 1;
+    }
+    if (run > longest) longest = run;
+  }
+  return (longest: longest, current: run);
+}
+
+/// Extra statistics shown only in the click-through detail popup — how many
+/// times the tracker has been recorded (type-aware: a true-count for
+/// booleans, a per-option breakdown for enums) and the longest streak of
+/// consecutive periods (a true-streak for booleans). Deliberately not shown
+/// anywhere else (e.g. the grid tiles or the right-click "Statistics"
+/// dialog), per design — this is extra depth for the view the user already
+/// opened to look closely at one statistic.
+class _DetailStatisticsSection extends ConsumerWidget {
+  const _DetailStatisticsSection({required this.tracker});
+
+  final StatisticTracker tracker;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    return valuesAsync.when(
+      data: (values) => _buildStats(context, values),
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildStats(BuildContext context, List<TrackerValue> values) {
+    if (values.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+
+    DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+    final rows = <Widget>[];
+    ({int longest, int current}) streak;
+
+    switch (tracker.type) {
+      case TrackerType.integer:
+        rows.add(
+          _row(context, 'Entries logged', compactNumberLabel(values.length)),
+        );
+        final periods =
+            (values.map((v) => dateOnly(v.periodStart)).toSet().toList())
+              ..sort();
+        streak = _streakStats(periods, tracker.cadence);
+        final ints = values.map((v) => v.intValue).whereType<int>().toList();
+        if (ints.isNotEmpty) {
+          final average = ints.reduce((a, b) => a + b) / ints.length;
+          final highest = ints.reduce((a, b) => a > b ? a : b);
+          final lowest = ints.reduce((a, b) => a < b ? a : b);
+          rows.addAll([
+            _row(context, 'Average', average.toStringAsFixed(1)),
+            _row(context, 'Highest', compactNumberLabel(highest)),
+            _row(context, 'Lowest', compactNumberLabel(lowest)),
+          ]);
+        }
+      case TrackerType.boolean:
+        final trueCount = values.where((v) => v.boolValue == true).length;
+        rows.add(
+          _row(context, 'Recorded true', compactNumberLabel(trueCount)),
+        );
+        final completionRate = trueCount / values.length * 100;
+        rows.add(
+          _row(
+            context,
+            'Completion rate',
+            '${completionRate.toStringAsFixed(0)}%',
+          ),
+        );
+        final truePeriods =
+            (values
+                  .where((v) => v.boolValue == true)
+                  .map((v) => dateOnly(v.periodStart))
+                  .toSet()
+                  .toList())
+              ..sort();
+        streak = _streakStats(truePeriods, tracker.cadence);
+      case TrackerType.enumType:
+        for (final option in tracker.enumOptions) {
+          final count = values.where((v) => v.enumValue == option).length;
+          rows.add(_row(context, option, compactNumberLabel(count)));
+        }
+        final periods =
+            (values.map((v) => dateOnly(v.periodStart)).toSet().toList())
+              ..sort();
+        streak = _streakStats(periods, tracker.cadence);
+    }
+
+    final unit = _cadenceUnit(tracker.cadence);
+    String streakLabel(int n) => '$n ${n == 1 ? unit : '${unit}s'}';
+    rows.add(_row(context, 'Current streak', streakLabel(streak.current)));
+    rows.add(_row(context, 'Longest streak', streakLabel(streak.longest)));
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'STATISTICS',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...rows,
+        ],
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: theme.textTheme.bodyMedium),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Summary "common statistics" for a tracker — entries logged, streaks and
 /// value aggregates — computed from its recorded values.
 class _TrackerStatisticsDialog extends ConsumerWidget {
@@ -3828,7 +3981,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
                         ),
                         tooltip: 'Edit tracker',
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                        constraints: kMinTouchTarget,
                         onPressed: () async {
                           final updated = await showDialog<StatisticTracker>(
                             context: context,
@@ -3845,7 +3998,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
                       icon: const Icon(PhosphorIconsRegular.x, size: 18),
                       tooltip: 'Close',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: kMinTouchTarget,
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -3854,9 +4007,15 @@ class _StatisticDetailPopup extends ConsumerWidget {
                 // ── Body ──────────────────────────────────────────────
                 Flexible(
                   child: SingleChildScrollView(
-                    child: _StatisticDetailBody(
-                      tracker: tracker,
-                      analytics: analytics,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _StatisticDetailBody(
+                          tracker: tracker,
+                          analytics: analytics,
+                        ),
+                        _DetailStatisticsSection(tracker: tracker),
+                      ],
                     ),
                   ),
                 ),

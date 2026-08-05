@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 class DateSelectorPopover extends StatefulWidget {
   final DateTime initialStartDate;
@@ -281,7 +282,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                 IconButton(
                   icon: const Icon(PhosphorIconsRegular.caretLeft, size: 16),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  constraints: kMinTouchTarget,
                   onPressed: _previousMonth,
                 ),
                 Text(
@@ -291,7 +292,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                 IconButton(
                   icon: const Icon(PhosphorIconsRegular.caretRight, size: 16),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  constraints: kMinTouchTarget,
                   onPressed: _nextMonth,
                 ),
               ],

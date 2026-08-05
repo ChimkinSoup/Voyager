@@ -14,4 +14,7 @@ class DevFlags {
   // Shows a button on the Life Tracker page that puts every fallen leaf back
   // on the tree and leaves it there, for looking at the full canopy.
   static bool showLifeTrackerRestore = false;
+  // Highlights each segment of the tree trunk, roots, and branches in distinct
+  // glowing debug colors and labels.
+  static bool showLifeTreeSegmentDebug = false;
 }

@@ -64,6 +64,8 @@ void main() {
       journalRepository: DriftJournalRepository(db),
       dreamRepository: DriftDreamRepository(db),
       todoRepository: DriftTodoRepository(db),
+      leetCodeRepository: DriftLeetCodeRepository(db),
+      studyRepository: DriftStudyRepository(db),
       weatherService: WeatherService(
         settingsRepository: DriftSettingsRepository(db),
         syncRepository: syncRepo,

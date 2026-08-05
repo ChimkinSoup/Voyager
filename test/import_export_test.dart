@@ -297,6 +297,8 @@ void main() {
       final journalRepo = DriftJournalRepository(db);
       final dreamRepo = DriftDreamRepository(db);
       final todoRepo = DriftTodoRepository(db);
+      final leetCodeRepo = DriftLeetCodeRepository(db);
+      final studyRepo = DriftStudyRepository(db);
 
       final docId = 'collision-doc-999';
       final now = DateTime.now().toUtc();
@@ -341,6 +343,8 @@ void main() {
         journalRepository: journalRepo,
         dreamRepository: dreamRepo,
         todoRepository: todoRepo,
+        leetCodeRepository: leetCodeRepo,
+        studyRepository: studyRepo,
         weatherService: weatherService,
         syncEngine: syncEngine,
         uploadDebounceDelay: Duration.zero,

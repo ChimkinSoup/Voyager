@@ -20,6 +20,7 @@ import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 class CalendarTodoPanel extends ConsumerStatefulWidget {
   const CalendarTodoPanel({
@@ -493,7 +494,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
             icon: const Icon(Icons.close, size: 16),
             tooltip: 'Close',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            constraints: kMinTouchTarget,
           ),
         ),
       ],

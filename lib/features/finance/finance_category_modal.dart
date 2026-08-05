@@ -7,6 +7,7 @@ import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 /// Opens the add / edit category modal — a named, colored grouping of tags.
 Future<void> showCategoryModal(
@@ -16,6 +17,7 @@ Future<void> showCategoryModal(
 }) async {
   await showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
@@ -149,14 +151,14 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                       ),
                       tooltip: 'Delete',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: kMinTouchTarget,
                     ),
                   IconButton(
                     onPressed: Navigator.of(context).pop,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: kMinTouchTarget,
                   ),
                 ],
               ),

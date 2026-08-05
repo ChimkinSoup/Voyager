@@ -10,6 +10,7 @@ import 'package:voyager/features/finance/finance_goal_modal.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
 import 'package:voyager/features/finance/geometric_progress_ring.dart';
+import 'package:voyager/core/layout/touch_target.dart';
 
 /// Savings buckets shown as geometric progress rings that fill as the user
 /// allocates money into them.
@@ -158,7 +159,7 @@ class _GoalCard extends ConsumerWidget {
                 IconButton(
                   icon: const Icon(PhosphorIconsRegular.pencilSimple, size: 14),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  constraints: kMinTouchTarget,
                   tooltip: 'Edit goal',
                   onPressed: () =>
                       showGoalModal(context, ref, existing: goal),

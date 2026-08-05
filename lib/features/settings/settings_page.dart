@@ -217,6 +217,71 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
+          Text('LeetCode', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('LeetCode username'),
+            subtitle: Text(
+              settings.leetcodeUsername == null ||
+                      settings.leetcodeUsername!.isEmpty
+                  ? 'Not set — Track will open with blank fields'
+                  : settings.leetcodeUsername!,
+            ),
+            trailing: const Icon(PhosphorIconsRegular.caretRight),
+            onTap: () => _showLeetCodeUsernameDialog(context, ref, settings),
+          ),
+          const SizedBox(height: 16),
+          Text('Study', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Grade: Fail'),
+            subtitle: Text(formatKeyBinding(settings.srsFailKey)),
+            onTap: () => _pickCalendarKey(
+              context,
+              ref,
+              settings,
+              title: 'Fail key',
+              current: settings.srsFailKey,
+              onSelected: (key) => settings.copyWith(srsFailKey: key),
+            ),
+          ),
+          ListTile(
+            title: const Text('Grade: Hard'),
+            subtitle: Text(formatKeyBinding(settings.srsHardKey)),
+            onTap: () => _pickCalendarKey(
+              context,
+              ref,
+              settings,
+              title: 'Hard key',
+              current: settings.srsHardKey,
+              onSelected: (key) => settings.copyWith(srsHardKey: key),
+            ),
+          ),
+          ListTile(
+            title: const Text('Grade: Good'),
+            subtitle: Text(formatKeyBinding(settings.srsGoodKey)),
+            onTap: () => _pickCalendarKey(
+              context,
+              ref,
+              settings,
+              title: 'Good key',
+              current: settings.srsGoodKey,
+              onSelected: (key) => settings.copyWith(srsGoodKey: key),
+            ),
+          ),
+          ListTile(
+            title: const Text('Grade: Easy'),
+            subtitle: Text(formatKeyBinding(settings.srsEasyKey)),
+            onTap: () => _pickCalendarKey(
+              context,
+              ref,
+              settings,
+              title: 'Easy key',
+              current: settings.srsEasyKey,
+              onSelected: (key) => settings.copyWith(srsEasyKey: key),
+            ),
+          ),
+          const SizedBox(height: 16),
           Text('Dream Journal', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           SwitchListTile(
@@ -539,6 +604,52 @@ class SettingsPage extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _showLeetCodeUsernameDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings,
+  ) async {
+    final controller = TextEditingController(
+      text: settings.leetcodeUsername ?? '',
+    );
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('LeetCode username'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'e.g. johndoe123'),
+          ),
+          actions: [
+            GlassButton(
+              onPressed: () => Navigator.of(context).pop(),
+              label: 'Cancel',
+              dense: true,
+            ),
+            GlassButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                _save(
+                  ref,
+                  settings.copyWith(
+                    leetcodeUsername: value.isEmpty ? null : value,
+                    clearLeetcodeUsername: value.isEmpty,
+                  ),
+                );
+                Navigator.of(context).pop();
+              },
+              label: 'Save',
+              dense: true,
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
   }
 
   Future<void> _showStartupPageDialog(

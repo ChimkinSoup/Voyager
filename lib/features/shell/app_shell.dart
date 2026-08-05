@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/constants/app_constants.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
+import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
@@ -17,13 +20,13 @@ import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/notifications/notification_bell.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
 import 'package:voyager/features/journal/geometric_texture_warmup.dart';
+import 'package:voyager/features/shell/shell_back_interceptor.dart';
+import 'package:voyager/features/shell/shell_bottom_nav.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
+import 'package:voyager/features/shell/shell_nav_theme.dart';
 import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
 import 'package:voyager/features/shell/weather_forecast_sheet.dart';
-
-const _railItemWidth = 68.0;
-const _railItemHeight = 56.0;
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.child});
@@ -41,45 +44,181 @@ class AppShell extends ConsumerWidget {
     final navigationShell = _navigationShell;
     final index = navigationShell.currentIndex;
     final accent = Color(settings.accentColor);
+    final content = _ShellBranchChangeFlusher(
+      branchIndex: index,
+      child: child,
+    );
 
     return ShellKeyboardShortcuts(
       navigationShell: navigationShell,
       orderedDestinations: orderedDestinations,
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: PopScope(
+        // Always false: when a branch has something of its own to pop,
+        // go_router routes the gesture to that branch's navigator and this
+        // never fires. Reaching here means the section is at its root, and
+        // Back should step back through sections before it leaves the app.
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _handleSystemBack(navigationShell, orderedDestinations);
+        },
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Warm up calendar morph shaders immediately after login — before the
+            // user navigates to the calendar — so the first transition is smooth.
+            const CalendarMorphWarmup(),
+            const GeometricTextureWarmup(),
+            const WeatherChartTransitionWarmup(),
+            const NotificationPopoverWarmup(),
+            Scaffold(
+              backgroundColor: Colors.transparent,
+              body: context.isCompactWidth
+                  ? _CompactShell(
+                      selectedIndex: index,
+                      accent: accent,
+                      orderedDestinations: orderedDestinations,
+                      onDestinationSelected: navigationShell.goBranch,
+                      child: content,
+                    )
+                  : _ExpandedShell(
+                      selectedIndex: index,
+                      accent: accent,
+                      orderedDestinations: orderedDestinations,
+                      onDestinationSelected: navigationShell.goBranch,
+                      child: content,
+                    ),
+            ),
+            const CacheStatusOverlay(),
+            const FpsCounterOverlay(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Android Back at the root of a section.
+///
+/// Steps back to the user's first section rather than closing the app, which
+/// is what a phone user expects from a bottom bar, and only exits once they
+/// are already there.
+void _handleSystemBack(
+  StatefulNavigationShell navigationShell,
+  List<OrderedDestination> orderedDestinations,
+) {
+  // A surface showing a sub-view in place gets to close it first.
+  if (ShellBackInterceptors.instance.handle()) return;
+
+  final homeIndex = orderedDestinations.isEmpty
+      ? 0
+      : orderedDestinations.first.originalIndex;
+  if (navigationShell.currentIndex != homeIndex) {
+    navigationShell.goBranch(homeIndex);
+    return;
+  }
+  SystemNavigator.pop();
+}
+
+/// The desktop composition: persistent left rail, content beside it.
+class _ExpandedShell extends StatelessWidget {
+  const _ExpandedShell({
+    required this.selectedIndex,
+    required this.accent,
+    required this.orderedDestinations,
+    required this.onDestinationSelected,
+    required this.child,
+  });
+
+  final int selectedIndex;
+  final Color accent;
+  final List<OrderedDestination> orderedDestinations;
+  final ValueChanged<int> onDestinationSelected;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Row(
         children: [
-          // Warm up calendar morph shaders immediately after login — before the
-          // user navigates to the calendar — so the first transition is smooth.
-          const CalendarMorphWarmup(),
-          const GeometricTextureWarmup(),
-          const WeatherChartTransitionWarmup(),
-          const NotificationPopoverWarmup(),
-          Scaffold(
-            backgroundColor: Colors.transparent,
-            body: Row(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
-                  child: _VoyagerNavigationRail(
-                    selectedIndex: index,
-                    accent: accent,
-                    onDestinationSelected: navigationShell.goBranch,
-                    orderedDestinations: orderedDestinations,
-                  ),
-                ),
-                const VerticalDivider(width: 12),
-                Expanded(
-                  child: _ShellBranchChangeFlusher(
-                    branchIndex: index,
-                    child: child,
-                  ),
-                ),
-              ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+            child: _VoyagerNavigationRail(
+              selectedIndex: selectedIndex,
+              accent: accent,
+              onDestinationSelected: onDestinationSelected,
+              orderedDestinations: orderedDestinations,
             ),
           ),
-          const CacheStatusOverlay(),
-          const FpsCounterOverlay(),
+          const VerticalDivider(width: 12),
+          Expanded(child: child),
         ],
+      ),
+    );
+  }
+}
+
+/// The phone composition: one pane, a status strip above it, navigation below.
+///
+/// The rail's shoulder items — clock, weather, sync activity, notifications —
+/// move to the top strip rather than disappearing. They are shell-level
+/// information on both shells; only their axis changes.
+class _CompactShell extends StatelessWidget {
+  const _CompactShell({
+    required this.selectedIndex,
+    required this.accent,
+    required this.orderedDestinations,
+    required this.onDestinationSelected,
+    required this.child,
+  });
+
+  final int selectedIndex;
+  final Color accent;
+  final List<OrderedDestination> orderedDestinations;
+  final ValueChanged<int> onDestinationSelected;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SafeArea(bottom: false, child: _CompactStatusStrip(accent: accent)),
+        Expanded(
+          child: SafeArea(top: false, bottom: false, child: child),
+        ),
+        ShellBottomNav(
+          selectedIndex: selectedIndex,
+          accent: accent,
+          onDestinationSelected: onDestinationSelected,
+          orderedDestinations: orderedDestinations,
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactStatusStrip extends StatelessWidget {
+  const _CompactStatusStrip({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: VoyagerSpacing.sm),
+        child: Row(
+          children: [
+            const _ClockText(),
+            const SizedBox(width: VoyagerSpacing.md),
+            _WeatherButton(axis: Axis.horizontal),
+            const Spacer(),
+            const _SyncActivityIndicator(axis: Axis.horizontal),
+            const SizedBox(width: VoyagerSpacing.xs),
+            NotificationBell(accent: accent),
+          ],
+        ),
       ),
     );
   }
@@ -131,7 +270,7 @@ class _VoyagerNavigationRail extends StatelessWidget {
   final int selectedIndex;
   final Color accent;
   final ValueChanged<int> onDestinationSelected;
-  final List<({ShellDestination dest, int originalIndex})> orderedDestinations;
+  final List<OrderedDestination> orderedDestinations;
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +301,7 @@ class _VoyagerNavigationRail extends StatelessWidget {
                         ),
                       ),
                     const Spacer(),
-                    const _SyncActivityIndicator(),
+                    const _SyncActivityIndicator(axis: Axis.vertical),
                     const SizedBox(height: 4),
                     NotificationBell(accent: accent),
                   ],
@@ -177,11 +316,52 @@ class _VoyagerNavigationRail extends StatelessWidget {
 }
 
 class _SyncActivityIndicator extends ConsumerWidget {
-  const _SyncActivityIndicator();
+  const _SyncActivityIndicator({required this.axis});
+
+  final Axis axis;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activity = ref.watch(syncActivityProvider);
+
+    // NOTE: these three colors fail contrast on the light theme (audit P1).
+    // Left as-is here on purpose — retheming them is `/impeccable colorize`'s
+    // scope, and this pass only changes the axis they lay out on.
+    final slots = <Widget>[
+      _SyncActivitySlotIcon(
+        slotKey: 'local',
+        event: activity.eventFor(SyncActivityDirection.localSave),
+        tooltipPrefix: 'Saved locally',
+        icon: PhosphorIconsRegular.floppyDisk,
+        color: Colors.lightGreenAccent,
+      ),
+      _SyncActivitySlotIcon(
+        slotKey: 'upload',
+        event: activity.eventFor(SyncActivityDirection.upload),
+        tooltipPrefix: 'Uploaded',
+        icon: PhosphorIconsRegular.cloudArrowUp,
+        color: Colors.lightBlueAccent,
+      ),
+      _SyncActivitySlotIcon(
+        slotKey: 'download',
+        event: activity.eventFor(SyncActivityDirection.download),
+        tooltipPrefix: 'Checked',
+        icon: PhosphorIconsRegular.cloudArrowDown,
+        color: Colors.redAccent,
+      ),
+    ];
+
+    if (axis == Axis.horizontal) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < slots.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            slots[i],
+          ],
+        ],
+      );
+    }
 
     return SizedBox(
       width: 28,
@@ -189,29 +369,10 @@ class _SyncActivityIndicator extends ConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _SyncActivitySlotIcon(
-            slotKey: 'local',
-            event: activity.eventFor(SyncActivityDirection.localSave),
-            tooltipPrefix: 'Saved locally',
-            icon: PhosphorIconsRegular.floppyDisk,
-            color: Colors.lightGreenAccent,
-          ),
-          const SizedBox(height: 4),
-          _SyncActivitySlotIcon(
-            slotKey: 'upload',
-            event: activity.eventFor(SyncActivityDirection.upload),
-            tooltipPrefix: 'Uploaded',
-            icon: PhosphorIconsRegular.cloudArrowUp,
-            color: Colors.lightBlueAccent,
-          ),
-          const SizedBox(height: 4),
-          _SyncActivitySlotIcon(
-            slotKey: 'download',
-            event: activity.eventFor(SyncActivityDirection.download),
-            tooltipPrefix: 'Checked',
-            icon: PhosphorIconsRegular.cloudArrowDown,
-            color: Colors.redAccent,
-          ),
+          for (var i = 0; i < slots.length; i++) ...[
+            if (i > 0) const SizedBox(height: 4),
+            slots[i],
+          ],
         ],
       ),
     );
@@ -279,16 +440,14 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final foreground = widget.selected ? widget.accent : colorScheme.onSurface;
+    final theme = Theme.of(context);
+    final foreground = widget.selected
+        ? widget.accent
+        : theme.colorScheme.onSurface;
     final backgroundColor = widget.selected
-        ? Color.lerp(
-            colorScheme.surface,
-            Theme.of(context).scaffoldBackgroundColor,
-            0.35,
-          )!.withValues(alpha: 0.92)
+        ? shellNavSelectedFill(theme)
         : _hovered
-        ? colorScheme.onSurface.withValues(alpha: 0.10)
+        ? shellNavHoverFill(theme)
         : Colors.transparent;
 
     return Semantics(
@@ -312,8 +471,8 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 100),
             curve: Curves.easeOut,
-            width: _railItemWidth,
-            height: _railItemHeight,
+            width: shellNavItemWidth,
+            height: shellNavItemHeight,
             decoration: BoxDecoration(
               color: backgroundColor,
               borderRadius: BorderRadius.circular(18),
@@ -335,7 +494,7 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
                   duration: const Duration(milliseconds: 150),
                   curve: Curves.easeOut,
                   style:
-                      Theme.of(context).textTheme.labelSmall?.copyWith(
+                      theme.textTheme.labelSmall?.copyWith(
                         color: foreground,
                         fontSize: 10,
                       ) ??
@@ -355,19 +514,40 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
   }
 }
 
-class _RailClockWeather extends ConsumerStatefulWidget {
+class _RailClockWeather extends StatelessWidget {
   const _RailClockWeather({required this.accent});
 
   final Color accent;
 
   @override
-  ConsumerState<_RailClockWeather> createState() => _RailClockWeatherState();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _ClockText(),
+          const SizedBox(height: 8),
+          _WeatherButton(axis: Axis.vertical),
+        ],
+      ),
+    );
+  }
 }
 
-class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
+/// Owns the once-a-minute clock tick. Kept separate from the weather button so
+/// the tick repaints four characters rather than the whole shoulder of the
+/// rail.
+class _ClockText extends StatefulWidget {
+  const _ClockText();
+
+  @override
+  State<_ClockText> createState() => _ClockTextState();
+}
+
+class _ClockTextState extends State<_ClockText> {
   late String _time;
   Timer? _timer;
-  var _weatherHovered = false;
 
   @override
   void initState() {
@@ -388,81 +568,112 @@ class _RailClockWeatherState extends ConsumerState<_RailClockWeather> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: Text(
+        _time,
+        key: ValueKey(_time),
+        style: theme.textTheme.titleMedium?.copyWith(
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+    );
+  }
+}
+
+class _WeatherButton extends ConsumerStatefulWidget {
+  const _WeatherButton({required this.axis});
+
+  final Axis axis;
+
+  @override
+  ConsumerState<_WeatherButton> createState() => _WeatherButtonState();
+}
+
+class _WeatherButtonState extends ConsumerState<_WeatherButton> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
     final weatherAsync = ref.watch(currentWeatherProvider);
     final cachedWeather = ref.watch(cachedCurrentWeatherProvider);
     final weather = weatherAsync.valueOrNull ?? cachedWeather;
     final icon = weather?.icon;
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final horizontal = widget.axis == Axis.horizontal;
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: Text(
-              _time,
-              key: ValueKey(_time),
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: colorScheme.onSurface),
+    final iconWidget = Icon(
+      weatherIconData(icon),
+      size: 22,
+      color: onSurface,
+    );
+    final tempWidget = weather?.tempC == null
+        ? null
+        : Text(
+            '${weather!.tempC!.round()}°',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: onSurface,
+              fontSize: 10,
             ),
-          ),
-          const SizedBox(height: 8),
-          Semantics(
-            button: true,
-            label: 'Weather forecast',
-            child: Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(18),
-              child: InkWell(
-                onTap: () => showWeatherForecastSheet(context),
-                onHover: (hovered) {
-                  if (_weatherHovered != hovered) {
-                    setState(() => _weatherHovered = hovered);
-                  }
-                },
-                borderRadius: BorderRadius.circular(18),
-                hoverColor: Colors.transparent,
-                splashColor: Colors.transparent,
-                highlightColor: Colors.transparent,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 90),
-                  width: _railItemWidth,
-                  height: _railItemHeight,
-                  decoration: BoxDecoration(
-                    color: _weatherHovered
-                        ? colorScheme.onSurface.withValues(alpha: 0.10)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(18),
+          );
+
+    return Semantics(
+      button: true,
+      label: 'Weather forecast',
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: () => showWeatherForecastSheet(context),
+          onHover: (hovered) {
+            if (_hovered != hovered) {
+              setState(() => _hovered = hovered);
+            }
+          },
+          borderRadius: BorderRadius.circular(18),
+          hoverColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 90),
+            constraints: horizontal
+                ? const BoxConstraints(minWidth: 48, minHeight: 40)
+                : const BoxConstraints.tightFor(
+                    width: shellNavItemWidth,
+                    height: shellNavItemHeight,
                   ),
-                  child: Column(
+            padding: horizontal
+                ? const EdgeInsets.symmetric(horizontal: VoyagerSpacing.sm)
+                : EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: _hovered ? shellNavHoverFill(theme) : Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: horizontal
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      iconWidget,
+                      if (tempWidget != null) ...[
+                        const SizedBox(width: VoyagerSpacing.xs),
+                        tempWidget,
+                      ],
+                    ],
+                  )
+                : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        weatherIconData(icon),
-                        size: 22,
-                        color: colorScheme.onSurface,
-                      ),
-                      if (weather?.tempC != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${weather!.tempC!.round()}°',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: colorScheme.onSurface,
-                                fontSize: 10,
-                              ),
-                        ),
+                      iconWidget,
+                      if (tempWidget != null) ...[
+                        const SizedBox(height: VoyagerSpacing.xs),
+                        tempWidget,
                       ],
                     ],
                   ),
-                ),
-              ),
-            ),
           ),
-        ],
+        ),
       ),
     );
   }

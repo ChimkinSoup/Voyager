@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/utils/key_binding.dart';
+import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 
-/// True when a text field (or similar) owns focus — letter navigation keys must
-/// not fire so the user can type normally.
-@visibleForTesting
-bool isTextInputFocused() {
-  final focus = FocusManager.instance.primaryFocus;
-  if (focus == null || !focus.hasFocus) return false;
-  final context = focus.context;
-  if (context == null) return false;
-  return context.findAncestorWidgetOfExactType<EditableText>() != null;
-}
+export 'package:voyager/core/utils/keyboard_focus_utils.dart'
+    show isTextInputFocused, subtreeIsVisible;
 
 @visibleForTesting
 bool calendarNavShortcutsEnabledForState({
@@ -37,24 +30,6 @@ bool calendarNavShortcutsEnabled(BuildContext context) {
     subtreeIsVisible: subtreeIsVisible(context),
   );
 }
-
-/// Whether this widget's subtree is the one the user is actually looking at.
-///
-/// [routeIsCurrent] isn't enough on its own: the shell keeps every branch
-/// mounted at once (see `ShellBranchContainer`), each with its own navigator,
-/// so a hidden branch's page is still the current route *of that branch* — and
-/// [HardwareKeyboard] handlers fire regardless of who's on screen. Without
-/// this, an arrow key would drive every mounted calendar at once, silently
-/// paging the ones the user can't see.
-///
-/// [TickerMode] is the signal the shell already flips per branch, and Flutter
-/// disables it for offscreen routes too, so it covers a page being covered by
-/// a pushed route as well. Read via [TickerMode.getValuesNotifier] rather than
-/// [TickerMode.valuesOf] because this is called from a key handler, not a
-/// build — the latter would register an inherited dependency outside of build.
-@visibleForTesting
-bool subtreeIsVisible(BuildContext context) =>
-    TickerMode.getValuesNotifier(context).value.enabled;
 
 @visibleForTesting
 int? calendarNavDeltaForEvent(

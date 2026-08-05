@@ -67,6 +67,32 @@ class DreamEntriesTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+class LeetCodeProblemsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get questionId => text().nullable()();
+  TextColumn get questionFrontendId => text().nullable()();
+  TextColumn get title => text()();
+  TextColumn get titleSlug => text().nullable()();
+  TextColumn get difficulty => text()();
+  TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get algorithm => text().withDefault(const Constant(''))();
+  TextColumn get timeComplexity => text().nullable()();
+  TextColumn get spaceComplexity => text().nullable()();
+  TextColumn get explanation => text().withDefault(const Constant(''))();
+  TextColumn get codeLanguage =>
+      text().withDefault(const Constant('python'))();
+  TextColumn get code => text().withDefault(const Constant(''))();
+  TextColumn get notes => text().nullable()();
+  DateTimeColumn get solvedAt => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class TodoListsTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -492,6 +518,15 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get dreamNotesPinned =>
       boolean().withDefault(const Constant(false))();
+  TextColumn get leetcodeUsername => text().nullable()();
+  TextColumn get srsFailKey =>
+      text().withDefault(const Constant(defaultStudyFailKey))();
+  TextColumn get srsHardKey =>
+      text().withDefault(const Constant(defaultStudyHardKey))();
+  TextColumn get srsGoodKey =>
+      text().withDefault(const Constant(defaultStudyGoodKey))();
+  TextColumn get srsEasyKey =>
+      text().withDefault(const Constant(defaultStudyEasyKey))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -538,6 +573,60 @@ class PendingUploadsTable extends Table {
   Set<Column> get primaryKey => {documentId, collectionName};
 }
 
+class StudyFoldersTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get parentFolderId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class StudyDecksTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get parentFolderId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class StudyCardsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get deckId => text()();
+  TextColumn get frontText => text()();
+  TextColumn get backText => text()();
+  RealColumn get interval => real().withDefault(const Constant(0))();
+  RealColumn get ease => real().withDefault(const Constant(2.5))();
+  DateTimeColumn get dueAt => dateTime()();
+  IntColumn get reviewCount => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class StudyReviewLogTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get cardId => text()();
+  TextColumn get grade => text()();
+  DateTimeColumn get reviewedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     JournalsTable,
@@ -565,13 +654,18 @@ class PendingUploadsTable extends Table {
     DismissedNotificationsTable,
     CustomWordsTable,
     BucketListItemsTable,
+    LeetCodeProblemsTable,
+    StudyFoldersTable,
+    StudyDecksTable,
+    StudyCardsTable,
+    StudyReviewLogTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 60;
+  int get schemaVersion => 63;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1137,6 +1231,25 @@ class AppDatabase extends _$AppDatabase {
       if (from < 60) {
         await _addSettingsColumnIfNotExists(migrator, settingsTable.birthDate);
         await migrator.createTable(bucketListItemsTable);
+      }
+      if (from < 61) {
+        await migrator.createTable(leetCodeProblemsTable);
+      }
+      if (from < 62) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.leetcodeUsername,
+        );
+      }
+      if (from < 63) {
+        await migrator.createTable(studyFoldersTable);
+        await migrator.createTable(studyDecksTable);
+        await migrator.createTable(studyCardsTable);
+        await migrator.createTable(studyReviewLogTable);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.srsFailKey);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.srsHardKey);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.srsGoodKey);
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.srsEasyKey);
       }
     },
   );

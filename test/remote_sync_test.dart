@@ -23,6 +23,8 @@ void main() {
   late DriftJournalRepository journalRepo;
   late DriftDreamRepository dreamRepo;
   late DriftTodoRepository todoRepo;
+  late DriftLeetCodeRepository leetCodeRepo;
+  late DriftStudyRepository studyRepo;
   late InMemorySyncRepository syncRepo;
   late RemoteSyncService deviceA;
   late RemoteSyncService deviceB;
@@ -33,6 +35,8 @@ void main() {
     journalRepo = DriftJournalRepository(db);
     dreamRepo = DriftDreamRepository(db);
     todoRepo = DriftTodoRepository(db);
+    leetCodeRepo = DriftLeetCodeRepository(db);
+    studyRepo = DriftStudyRepository(db);
     syncRepo = InMemorySyncRepository();
 
     engineA = SyncEngine(
@@ -53,6 +57,8 @@ void main() {
       journalRepository: journalRepo,
       dreamRepository: dreamRepo,
       todoRepository: todoRepo,
+      leetCodeRepository: leetCodeRepo,
+      studyRepository: studyRepo,
       weatherService: weatherService,
       syncEngine: engineA,
       uploadDebounceDelay: Duration.zero,
@@ -62,6 +68,8 @@ void main() {
       journalRepository: journalRepo,
       dreamRepository: dreamRepo,
       todoRepository: todoRepo,
+      leetCodeRepository: leetCodeRepo,
+      studyRepository: studyRepo,
       weatherService: weatherService,
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
@@ -279,6 +287,8 @@ void main() {
       journalRepository: journalRepo,
       dreamRepository: dreamRepo,
       todoRepository: todoRepo,
+      leetCodeRepository: leetCodeRepo,
+      studyRepository: studyRepo,
       weatherService: WeatherService(
         settingsRepository: DriftSettingsRepository(db),
         syncRepository: syncRepo,
