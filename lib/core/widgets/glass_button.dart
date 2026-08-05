@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// A modular, reusable glassmorphic button widget featuring an authentic glass aesthetic.
@@ -124,11 +125,15 @@ class _GlassButtonState extends State<GlassButton>
     super.initState();
     _scaleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 100),
-      reverseDuration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 120),
+      reverseDuration: const Duration(milliseconds: 180),
     );
+    final reduced = VoyagerMotion.reduced(context);
     _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _scaleController, curve: Curves.easeOutCubic),
+      CurvedAnimation(
+        parent: _scaleController,
+        curve: reduced ? Curves.easeOut : VoyagerSpring.snappyCurve,
+      ),
     );
   }
 

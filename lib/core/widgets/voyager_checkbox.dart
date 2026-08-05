@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/effects/confetti.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// A custom checkbox (not Material [Checkbox]) with a fill/pop animation and
@@ -40,33 +41,38 @@ class _VoyagerCheckboxState extends State<VoyagerCheckbox>
   @override
   void initState() {
     super.initState();
+    final reduced = VoyagerMotion.reduced(context);
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: reduced ? VoyagerMotion.crossfade : const Duration(milliseconds: 200),
       value: widget.value ? 1.0 : 0.0,
     );
-    _scale =
-        TweenSequence<double>([
-          TweenSequenceItem(
-            tween: Tween(
-              begin: 1.0,
-              end: 1.25,
-            ).chain(CurveTween(curve: Curves.easeOut)),
-            weight: 45,
-          ),
-          TweenSequenceItem(
-            tween: Tween(
-              begin: 1.25,
-              end: 1.0,
-            ).chain(CurveTween(curve: Curves.easeOutBack)),
-            weight: 55,
-          ),
-        ]).animate(
-          CurvedAnimation(
-            parent: _controller,
-            curve: const Interval(0, 0.55, curve: Curves.linear),
-          ),
-        );
+    // Reduced motion drops the pop-overshoot entirely — the box still fills
+    // in (via _controller.value driving color/opacity in _visual), it just
+    // doesn't scale.
+    _scale = reduced
+        ? const AlwaysStoppedAnimation<double>(1.0)
+        : TweenSequence<double>([
+            TweenSequenceItem(
+              tween: Tween(
+                begin: 1.0,
+                end: 1.25,
+              ).chain(CurveTween(curve: Curves.easeOut)),
+              weight: 45,
+            ),
+            TweenSequenceItem(
+              tween: Tween(
+                begin: 1.25,
+                end: 1.0,
+              ).chain(CurveTween(curve: Curves.easeOutBack)),
+              weight: 55,
+            ),
+          ]).animate(
+            CurvedAnimation(
+              parent: _controller,
+              curve: const Interval(0, 0.55, curve: Curves.linear),
+            ),
+          );
   }
 
   @override
