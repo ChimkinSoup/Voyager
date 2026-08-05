@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -62,12 +63,37 @@ class _LeetCodeFlashcardState extends State<LeetCodeFlashcard>
 
   @override
   Widget build(BuildContext context) {
+    final reduced = VoyagerMotion.reduced(context);
     return GestureDetector(
       onTap: _flip,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          final t = Curves.easeInOutCubic.transform(_controller.value);
+          final v = _controller.value;
+          final front = _CardFront(
+            problem: widget.problem,
+            titleKey: _titleKey,
+            onTitleTap: _openDetail,
+          );
+          final back = _CardBack(
+            problem: widget.problem,
+            titleKey: _titleKey,
+            onTitleTap: _openDetail,
+          );
+          if (reduced) {
+            // No 3D rotation under reduced-motion — a plain crossfade instead.
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                Opacity(opacity: (1 - v * 2).clamp(0.0, 1.0), child: front),
+                Opacity(
+                  opacity: ((v - 0.5) * 2).clamp(0.0, 1.0),
+                  child: back,
+                ),
+              ],
+            );
+          }
+          final t = VoyagerSpring.moveCurve.transform(v);
           final angle = t * math.pi;
           final showBack = t >= 0.5;
           final transform = Matrix4.identity()
@@ -80,17 +106,9 @@ class _LeetCodeFlashcardState extends State<LeetCodeFlashcard>
                 ? Transform(
                     alignment: Alignment.center,
                     transform: Matrix4.identity()..rotateY(math.pi),
-                    child: _CardBack(
-                      problem: widget.problem,
-                      titleKey: _titleKey,
-                      onTitleTap: _openDetail,
-                    ),
+                    child: back,
                   )
-                : _CardFront(
-                    problem: widget.problem,
-                    titleKey: _titleKey,
-                    onTitleTap: _openDetail,
-                  ),
+                : front,
           );
         },
       ),
