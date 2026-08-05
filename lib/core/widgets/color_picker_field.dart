@@ -6,6 +6,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 const _paletteAspect = 4 / 3;
@@ -282,7 +283,7 @@ Future<int?> pickColorFromPalette(
 }) async {
   if (palette.isEmpty) return current;
 
-  return showDialog<int>(
+  return showVoyagerDialog<int>(
     context: context,
     builder: (context) => _PalettePickDialog(
       palette: palette,

@@ -26,6 +26,7 @@ import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
@@ -1611,7 +1612,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Future<void> _editQuote() async {
     final entry = _selectedEntry;
     if (entry == null) return;
-    final quote = await showDialog<String?>(
+    final quote = await showVoyagerDialog<String?>(
       context: context,
       builder: (dialogContext) =>
           _EditQuoteDialog(initialQuote: entry.customQuote ?? ''),
@@ -2782,7 +2783,7 @@ extension on _JournalPageState {
       final currentLocalText =
           _editorKey.currentState?.currentBodyText ?? entry.body;
 
-      await showDialog<void>(
+      await showVoyagerDialog<void>(
         context: this.context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Remote Value Comparison'),

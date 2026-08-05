@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 
 Future<bool> showConfirmDialog(
   BuildContext context, {
@@ -9,7 +10,7 @@ Future<bool> showConfirmDialog(
   String cancelLabel = 'Cancel',
   String confirmLabel = 'Delete',
 }) async {
-  final confirmed = await showDialog<bool>(
+  final confirmed = await showVoyagerDialog<bool>(
     context: context,
     builder: (context) => CallbackShortcuts(
       bindings: {
@@ -52,7 +53,7 @@ Future<DeleteContainerChoice> showDeleteContainerDialog(
   String moveLabel = 'Yes',
   String deleteAllLabel = 'Yes (delete all entries)',
 }) async {
-  final result = await showDialog<DeleteContainerChoice>(
+  final result = await showVoyagerDialog<DeleteContainerChoice>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),

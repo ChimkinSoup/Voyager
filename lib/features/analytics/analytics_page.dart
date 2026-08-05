@@ -18,6 +18,7 @@ import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -170,7 +171,7 @@ class AnalyticsPage extends ConsumerWidget {
   }
 
   Future<void> _createTracker(BuildContext context, WidgetRef ref) async {
-    final tracker = await showDialog<StatisticTracker>(
+    final tracker = await showVoyagerDialog<StatisticTracker>(
       context: context,
       builder: (_) => const _TrackerDialog(),
     );
@@ -1100,7 +1101,7 @@ class _SparklineRow extends ConsumerWidget {
                   padding: EdgeInsets.zero,
                   constraints: kMinTouchTarget,
                   onPressed: () async {
-                    final updated = await showDialog<StatisticTracker>(
+                    final updated = await showVoyagerDialog<StatisticTracker>(
                       context: context,
                       builder: (_) => _TrackerDialog(tracker: tracker),
                     );
@@ -1560,7 +1561,7 @@ class _HeatmapRow extends ConsumerWidget {
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: () async {
-                          final updated = await showDialog<StatisticTracker>(
+                          final updated = await showVoyagerDialog<StatisticTracker>(
                             context: context,
                             builder: (_) => _TrackerDialog(tracker: tracker),
                           );
@@ -3505,7 +3506,7 @@ Future<void> _editTracker(
   WidgetRef ref,
   StatisticTracker tracker,
 ) async {
-  final updated = await showDialog<StatisticTracker>(
+  final updated = await showVoyagerDialog<StatisticTracker>(
     context: context,
     builder: (_) => _TrackerDialog(tracker: tracker),
   );
@@ -3530,7 +3531,7 @@ Future<void> _deleteTracker(
 }
 
 void _showTrackerStatistics(BuildContext context, StatisticTracker tracker) {
-  showDialog<void>(
+  showVoyagerDialog<void>(
     context: context,
     builder: (_) => _TrackerStatisticsDialog(tracker: tracker),
   );
@@ -3541,7 +3542,7 @@ Future<void> _showStatisticDetail({
   required StatisticTracker tracker,
   required AnalyticsService analytics,
 }) {
-  return showDialog<void>(
+  return showVoyagerDialog<void>(
     context: context,
     barrierDismissible: true,
     barrierColor: VoyagerColors.of(context).scrim,
@@ -3983,7 +3984,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
                         padding: EdgeInsets.zero,
                         constraints: kMinTouchTarget,
                         onPressed: () async {
-                          final updated = await showDialog<StatisticTracker>(
+                          final updated = await showVoyagerDialog<StatisticTracker>(
                             context: context,
                             builder: (_) => _TrackerDialog(tracker: tracker),
                           );

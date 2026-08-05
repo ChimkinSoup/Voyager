@@ -11,6 +11,7 @@ import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/features/hotkeys/quick_popups.dart';
 import 'package:voyager/firebase_options.dart';
@@ -215,14 +216,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
   }
 
   void _openQuickJournal() {
-    showDialog<void>(
+    showVoyagerDialog<void>(
       context: context,
       builder: (_) => const QuickJournalPopup(),
     );
   }
 
   void _openQuickTodo() {
-    showDialog<void>(context: context, builder: (_) => const QuickTodoPopup());
+    showVoyagerDialog<void>(context: context, builder: (_) => const QuickTodoPopup());
   }
 
   @override

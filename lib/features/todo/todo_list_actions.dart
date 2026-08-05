@@ -9,6 +9,7 @@ import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
 Future<String?> promptTodoListName(
@@ -17,7 +18,7 @@ Future<String?> promptTodoListName(
   String? initial,
 }) async {
   final controller = TextEditingController(text: initial ?? '');
-  return showDialog<String>(
+  return showVoyagerDialog<String>(
     context: context,
     builder: (context) => EnterToSubmitScope(
       onSubmit: () => Navigator.pop(context, controller.text),

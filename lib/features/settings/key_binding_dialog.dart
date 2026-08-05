@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 Future<String?> showKeyBindingDialog(
   BuildContext context, {
   required String title,
   String? current,
 }) {
-  return showDialog<String>(
+  return showVoyagerDialog<String>(
     context: context,
     builder: (context) => _KeyBindingDialog(title: title, current: current),
   );

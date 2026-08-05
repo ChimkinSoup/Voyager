@@ -29,6 +29,7 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/mood_gradient_slider.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
@@ -223,7 +224,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           onTap: () async {
-                            await showDialog<void>(
+                            await showVoyagerDialog<void>(
                               context: context,
                               builder: (context) => _SearchEntryDialog(
                                 entry: entry,

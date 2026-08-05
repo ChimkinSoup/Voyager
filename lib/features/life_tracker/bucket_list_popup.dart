@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 
 /// Popup content for the swing's bubble: a bucket list that behaves like a
@@ -64,7 +65,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
 
   Future<String?> _promptForNote(BuildContext context) {
     final controller = TextEditingController();
-    return showDialog<String>(
+    return showVoyagerDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Add a note?'),
