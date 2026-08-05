@@ -200,7 +200,8 @@ class TodoPage extends ConsumerStatefulWidget {
 class _TodoPageState extends ConsumerState<TodoPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _panelController;
-  late final CurvedAnimation _panelAnimation;
+  late CurvedAnimation _panelAnimation;
+  var _configuredPanelMotion = false;
   String? _selectedListId;
   String? _selectedTaskId;
   TodoTask? _editPanelTask;
@@ -309,12 +310,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
       vsync: this,
       duration: _todoEditPanelDuration,
     );
-    _panelAnimation = CurvedAnimation(
-      parent: _panelController,
-      curve: VoyagerMotion.reduced(context)
-          ? Curves.easeOut
-          : VoyagerSpring.drawerCurve,
-    );
+    // Finalized in didChangeDependencies — inherited-widget lookups
+    // (VoyagerMotion.reduced needs MediaQuery) aren't safe in initState.
+    _panelAnimation = CurvedAnimation(parent: _panelController, curve: Curves.linear);
     _panelController.addStatusListener((status) {
       if (!mounted) return;
       if (status == AnimationStatus.dismissed) {
@@ -342,6 +340,19 @@ class _TodoPageState extends ConsumerState<TodoPage>
     if (savedId != null) {
       _selectedListId = savedId;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_configuredPanelMotion) return;
+    _configuredPanelMotion = true;
+    _panelAnimation = CurvedAnimation(
+      parent: _panelController,
+      curve: VoyagerMotion.reduced(context)
+          ? Curves.easeOut
+          : VoyagerSpring.drawerCurve,
+    );
   }
 
   Future<void> _persistLastViewedList(String listId) async {
@@ -2533,7 +2544,8 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
   }
 
   late final AnimationController _animController;
-  late final Animation<double> _checkScale;
+  late Animation<double> _checkScale;
+  var _configuredCheckMotion = false;
 
   // Drives the row between "full height" (0.0) and "collapsed to nothing"
   // (1.0). Run forward it collapses the row out of its section before the
@@ -2569,38 +2581,13 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
       );
     }
     _displayCompleted = widget.task.completed;
-    final reducedMotion = VoyagerMotion.reduced(context);
+    // Finalized in didChangeDependencies — inherited-widget lookups
+    // (VoyagerMotion.reduced needs MediaQuery) aren't safe in initState.
     _animController = AnimationController(
       vsync: this,
-      duration: reducedMotion
-          ? VoyagerMotion.crossfade
-          : const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 200),
     );
-    // Reduced motion drops the pop-overshoot entirely, matching
-    // VoyagerCheckbox's treatment of the same interaction.
-    _checkScale = reducedMotion
-        ? const AlwaysStoppedAnimation<double>(1.0)
-        : TweenSequence<double>([
-            TweenSequenceItem(
-              tween: Tween(
-                begin: 1.0,
-                end: 1.25,
-              ).chain(CurveTween(curve: Curves.easeOut)),
-              weight: 45,
-            ),
-            TweenSequenceItem(
-              tween: Tween(
-                begin: 1.25,
-                end: 1.0,
-              ).chain(CurveTween(curve: Curves.easeOutBack)),
-              weight: 55,
-            ),
-          ]).animate(
-            CurvedAnimation(
-              parent: _animController,
-              curve: const Interval(0, 0.55, curve: Curves.linear),
-            ),
-          );
+    _checkScale = _animController;
 
     if (widget.task.completed) {
       _animController.value = 1.0;
@@ -2633,6 +2620,42 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
       _exitController.value = 1.0;
       _exitController.reverse();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_configuredCheckMotion) return;
+    _configuredCheckMotion = true;
+    final reducedMotion = VoyagerMotion.reduced(context);
+    _animController.duration = reducedMotion
+        ? VoyagerMotion.crossfade
+        : const Duration(milliseconds: 200);
+    // Reduced motion drops the pop-overshoot entirely, matching
+    // VoyagerCheckbox's treatment of the same interaction.
+    _checkScale = reducedMotion
+        ? const AlwaysStoppedAnimation<double>(1.0)
+        : TweenSequence<double>([
+            TweenSequenceItem(
+              tween: Tween(
+                begin: 1.0,
+                end: 1.25,
+              ).chain(CurveTween(curve: Curves.easeOut)),
+              weight: 45,
+            ),
+            TweenSequenceItem(
+              tween: Tween(
+                begin: 1.25,
+                end: 1.0,
+              ).chain(CurveTween(curve: Curves.easeOutBack)),
+              weight: 55,
+            ),
+          ]).animate(
+            CurvedAnimation(
+              parent: _animController,
+              curve: const Interval(0, 0.55, curve: Curves.linear),
+            ),
+          );
   }
 
   @override

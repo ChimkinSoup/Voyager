@@ -1492,9 +1492,10 @@ class CalendarInteractiveEventTap extends StatefulWidget {
 class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTap>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _scale;
+  late Animation<double> _scale;
   CalendarEventTapState? _tapState;
   bool _isTapping = false;
+  var _configuredMotion = false;
 
   /// The scale pivot depends on which cap this segment is:
   ///   start-only  → right edge stays fixed  (Alignment.centerRight)
@@ -1517,19 +1518,16 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
   @override
   void initState() {
     super.initState();
-    final reduced = VoyagerMotion.reduced(context);
+    // duration/curve are finalized in didChangeDependencies — inherited-widget
+    // lookups (VoyagerMotion.reduced needs MediaQuery) aren't safe in initState.
     _controller = AnimationController(
       vsync: this,
-      duration: reduced ? Duration.zero : const Duration(milliseconds: 140),
-    );
-    final curved = CurvedAnimation(
-      parent: _controller,
-      curve: reduced ? Curves.linear : VoyagerSpring.snappyCurve,
+      duration: const Duration(milliseconds: 140),
     );
     _scale = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.92), weight: 45),
       TweenSequenceItem(tween: Tween(begin: 0.92, end: 1.0), weight: 55),
-    ]).animate(curved);
+    ]).animate(_controller);
   }
 
   @override
@@ -1540,6 +1538,20 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
       _tapState?.removeListener(_onTapStateChanged);
       _tapState = newState;
       _tapState?.addListener(_onTapStateChanged);
+    }
+    if (!_configuredMotion) {
+      _configuredMotion = true;
+      final reduced = VoyagerMotion.reduced(context);
+      _controller.duration =
+          reduced ? Duration.zero : const Duration(milliseconds: 140);
+      final curved = CurvedAnimation(
+        parent: _controller,
+        curve: reduced ? Curves.linear : VoyagerSpring.snappyCurve,
+      );
+      _scale = TweenSequence<double>([
+        TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.92), weight: 45),
+        TweenSequenceItem(tween: Tween(begin: 0.92, end: 1.0), weight: 55),
+      ]).animate(curved);
     }
   }
 

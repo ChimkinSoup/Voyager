@@ -34,19 +34,29 @@ class VoyagerCheckbox extends StatefulWidget {
 class _VoyagerCheckboxState extends State<VoyagerCheckbox>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _scale;
+  late Animation<double> _scale;
   bool _hovered = false;
   final GlobalKey _boxKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    final reduced = VoyagerMotion.reduced(context);
     _controller = AnimationController(
       vsync: this,
-      duration: reduced ? VoyagerMotion.crossfade : const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 200),
       value: widget.value ? 1.0 : 0.0,
     );
+    // Placeholder until didChangeDependencies runs (inherited-widget lookups
+    // like MediaQuery aren't safe to make in initState).
+    _scale = const AlwaysStoppedAnimation<double>(1.0);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduced = VoyagerMotion.reduced(context);
+    _controller.duration =
+        reduced ? VoyagerMotion.crossfade : const Duration(milliseconds: 200);
     // Reduced motion drops the pop-overshoot entirely — the box still fills
     // in (via _controller.value driving color/opacity in _visual), it just
     // doesn't scale.
