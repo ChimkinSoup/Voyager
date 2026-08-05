@@ -25,7 +25,7 @@ class _DesktopWindowFrameState extends State<DesktopWindowFrame>
   static const _hideDelay = Duration(milliseconds: 175);
 
   late final AnimationController _controller;
-  late final Animation<double> _slideAnim;
+  late Animation<double> _slideAnim;
   var _barVisible = false;
   Timer? _hideTimer;
 
@@ -33,6 +33,14 @@ class _DesktopWindowFrameState extends State<DesktopWindowFrame>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: _animDuration);
+    // Placeholder until didChangeDependencies runs (inherited-widget lookups
+    // like MediaQuery aren't safe to make in initState).
+    _slideAnim = _controller;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final reduced = VoyagerMotion.reduced(context);
     _slideAnim = CurvedAnimation(
       parent: _controller,

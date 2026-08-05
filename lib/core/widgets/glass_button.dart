@@ -118,7 +118,7 @@ class _GlassButtonState extends State<GlassButton>
   bool _isFocused = false;
 
   late final AnimationController _scaleController;
-  late final Animation<double> _scaleAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
@@ -128,6 +128,17 @@ class _GlassButtonState extends State<GlassButton>
       duration: const Duration(milliseconds: 120),
       reverseDuration: const Duration(milliseconds: 180),
     );
+    // Placeholder until didChangeDependencies runs (inherited-widget lookups
+    // like MediaQuery aren't safe to make in initState).
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.96,
+    ).animate(_scaleController);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final reduced = VoyagerMotion.reduced(context);
     _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
       CurvedAnimation(

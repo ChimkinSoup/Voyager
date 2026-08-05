@@ -164,7 +164,7 @@ class _ContextMenuOverlay extends StatefulWidget {
 class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _anim;
+  late Animation<double> _anim;
   final GlobalKey _menuKey = GlobalKey();
   final GlobalKey _submenuKey = GlobalKey();
 
@@ -199,12 +199,20 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 220),
     );
+    // Placeholder until didChangeDependencies runs (inherited-widget lookups
+    // like MediaQuery aren't safe to make in initState).
+    _anim = _controller;
+    _controller.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final reduced = VoyagerMotion.reduced(context);
     _anim = CurvedAnimation(
       parent: _controller,
       curve: reduced ? Curves.easeOut : VoyagerSpring.drawerCurve,
     );
-    _controller.forward();
   }
 
   @override
