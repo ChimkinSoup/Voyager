@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 
 /// Lets a caller trigger a [StudyFlipCard]'s flip programmatically (space
 /// bar, "next card" navigation) instead of only via tap.
@@ -101,12 +102,30 @@ class _StudyFlipCardState extends State<StudyFlipCard>
 
   @override
   Widget build(BuildContext context) {
+    final reduced = VoyagerMotion.reduced(context);
     return GestureDetector(
       onTap: _flip,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          final t = Curves.easeInOutCubic.transform(_controller.value);
+          final v = _controller.value;
+          if (reduced) {
+            // No 3D rotation under reduced-motion — a plain crossfade instead.
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                Opacity(
+                  opacity: (1 - v * 2).clamp(0.0, 1.0),
+                  child: widget.front,
+                ),
+                Opacity(
+                  opacity: ((v - 0.5) * 2).clamp(0.0, 1.0),
+                  child: widget.back,
+                ),
+              ],
+            );
+          }
+          final t = VoyagerSpring.moveCurve.transform(v);
           final angle = t * math.pi;
           final showBack = t >= 0.5;
           final transform = Matrix4.identity()
