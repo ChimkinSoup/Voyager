@@ -1,6 +1,7 @@
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -1516,12 +1517,15 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
   @override
   void initState() {
     super.initState();
+    final reduced = VoyagerMotion.reduced(context);
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 140),
+      duration: reduced ? Duration.zero : const Duration(milliseconds: 140),
     );
-    final curved =
-        CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+    final curved = CurvedAnimation(
+      parent: _controller,
+      curve: reduced ? Curves.linear : VoyagerSpring.snappyCurve,
+    );
     _scale = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.92), weight: 45),
       TweenSequenceItem(tween: Tween(begin: 0.92, end: 1.0), weight: 55),
