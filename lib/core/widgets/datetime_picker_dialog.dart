@@ -3,13 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 
 /// Shows a combined calendar + clock picker dialog.
 Future<DateTime?> showDateTimePickerDialog(
   BuildContext context, {
   required DateTime initialDateTime,
 }) {
-  return showDialog<DateTime>(
+  return showVoyagerDialog<DateTime>(
     context: context,
     builder: (_) => DateTimePickerDialog(initialDateTime: initialDateTime),
   );
@@ -20,7 +21,7 @@ Future<({TimeOfDay start, TimeOfDay end})?> showTimeRangePickerDialog(
   required TimeOfDay initialStart,
   required TimeOfDay initialEnd,
 }) {
-  return showDialog<({TimeOfDay start, TimeOfDay end})>(
+  return showVoyagerDialog<({TimeOfDay start, TimeOfDay end})>(
     context: context,
     builder: (_) => TimeRangePickerDialog(
       initialStart: initialStart,

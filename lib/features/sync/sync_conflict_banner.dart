@@ -9,6 +9,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 
 /// Persistent banner shown when quarantined sync conflicts exist.
@@ -58,7 +59,7 @@ class SyncConflictBanner extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
-    await showDialog<void>(
+    await showVoyagerDialog<void>(
       context: context,
       builder: (context) => const SyncConflictResolutionDialog(),
     );

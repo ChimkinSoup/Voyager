@@ -8,6 +8,7 @@ import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -17,7 +18,7 @@ Future<String?> showTodoListManageSheet(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  final createdId = await showDialog<String?>(
+  final createdId = await showVoyagerDialog<String?>(
     context: context,
     builder: (context) => const _TodoListManageDialog(),
   );
@@ -194,7 +195,7 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
 
   Future<String?> _promptName(String title, {String? initial}) async {
     final controller = TextEditingController(text: initial ?? '');
-    return showDialog<String>(
+    return showVoyagerDialog<String>(
       context: context,
       builder: (context) => EnterToSubmitScope(
         onSubmit: () => Navigator.pop(context, controller.text),

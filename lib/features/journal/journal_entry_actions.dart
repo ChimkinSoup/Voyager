@@ -6,6 +6,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
 /// Shared right-click actions for a journal entry, so the journal list and the
@@ -38,7 +39,7 @@ void showJournalEntryStatisticsDialog(
   final formattedDate = DateFormat.yMMMMd().format(entry.entryDate.toLocal());
   final formattedTime = formatTime12Hour(entry.entryDate.toLocal());
 
-  showDialog<void>(
+  showVoyagerDialog<void>(
     context: context,
     builder: (ctx) {
       final theme = Theme.of(ctx);
@@ -119,7 +120,7 @@ Future<String?> showMoveToJournalDialog(
   required String currentJournalId,
 }) {
   final accent = Theme.of(context).colorScheme.primary.toARGB32();
-  return showDialog<String>(
+  return showVoyagerDialog<String>(
     context: context,
     builder: (ctx) {
       return AlertDialog(

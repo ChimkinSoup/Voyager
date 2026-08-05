@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
@@ -14,7 +15,7 @@ import 'package:voyager/features/shell/weather_forecast_chart.dart';
 import 'package:voyager/features/shell/weather_forecast_chart_transition.dart';
 
 Future<void> showWeatherForecastSheet(BuildContext context) {
-  return showDialog<void>(
+  return showVoyagerDialog<void>(
     context: context,
     builder: (context) => const _WeatherForecastDialog(),
   );

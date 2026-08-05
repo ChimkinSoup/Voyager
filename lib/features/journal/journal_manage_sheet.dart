@@ -10,6 +10,7 @@ import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/features/journal/journal_list_actions.dart';
@@ -18,7 +19,7 @@ Future<Journal?> showJournalManageSheet(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  final created = await showDialog<Journal?>(
+  final created = await showVoyagerDialog<Journal?>(
     context: context,
     builder: (context) => const _JournalManageDialog(),
   );
@@ -209,7 +210,7 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
 
   Future<String?> _promptName(String title, {String? initial}) async {
     final controller = TextEditingController(text: initial ?? '');
-    return showDialog<String>(
+    return showVoyagerDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),

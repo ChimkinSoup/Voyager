@@ -3,6 +3,7 @@ import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 
 /// Prompts for a name and palette color when creating journals/lists.
 Future<({String name, int color})?> showCreateNameColorDialog(
@@ -13,7 +14,7 @@ Future<({String name, int color})?> showCreateNameColorDialog(
   Set<int> usedColors = const {},
   String submitLabel = 'Create',
 }) {
-  return showDialog<({String name, int color})>(
+  return showVoyagerDialog<({String name, int color})>(
     context: context,
     builder: (context) => _CreateNameColorDialog(
       title: title,
