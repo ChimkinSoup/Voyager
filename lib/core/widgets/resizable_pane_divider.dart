@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 
 class ResizablePaneDivider extends StatefulWidget {
   const ResizablePaneDivider({
@@ -80,6 +81,24 @@ class _ResizablePaneDividerState extends State<ResizablePaneDivider> {
   }
 }
 
+/// Shared by every split-pane layout (journal, dream journal): resists past
+/// [minWidth]/[maxWidth] instead of stopping hard, for use while a divider
+/// drag is live. Callers still hard-[clamp] the value once the drag ends.
+double resizePaneRubberBand({
+  required double width,
+  required double totalWidth,
+  required double minWidth,
+  required double maxWidth,
+}) {
+  if (width < minWidth) {
+    return minWidth + rubberBand(width - minWidth, totalWidth);
+  }
+  if (width > maxWidth) {
+    return maxWidth + rubberBand(width - maxWidth, totalWidth);
+  }
+  return width;
+}
+
 class JournalEntryListLayout {
   JournalEntryListLayout._();
 
@@ -92,12 +111,24 @@ class JournalEntryListLayout {
     return (totalWidth * 0.22).clamp(minListWidth, 320.0);
   }
 
+  static double _maxAllowed(double totalWidth) =>
+      (totalWidth - minEditorWidth - dividerWidth).clamp(
+        minListWidth,
+        maxListWidth,
+      );
+
   static double clampListWidth(double width, double totalWidth) {
-    final maxAllowed = (totalWidth - minEditorWidth - dividerWidth).clamp(
-      minListWidth,
-      maxListWidth,
+    return width.clamp(minListWidth, _maxAllowed(totalWidth));
+  }
+
+  /// Soft-bounded version of [clampListWidth] for use while a drag is live.
+  static double dragClampListWidth(double width, double totalWidth) {
+    return resizePaneRubberBand(
+      width: width,
+      totalWidth: totalWidth,
+      minWidth: minListWidth,
+      maxWidth: _maxAllowed(totalWidth),
     );
-    return width.clamp(minListWidth, maxAllowed);
   }
 
   static const editorPadding = EdgeInsets.fromLTRB(24, 40, 24, 24);
