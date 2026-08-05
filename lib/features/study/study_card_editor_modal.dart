@@ -5,6 +5,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
@@ -20,14 +21,8 @@ Future<void> showStudyCardEditorModal(
   required String deckId,
   StudyCard? existing,
 }) {
-  return showModalBottomSheet<void>(
+  return showVoyagerSheet<void>(
     context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
       child: _StudyCardEditorModal(deckId: deckId, existing: existing),

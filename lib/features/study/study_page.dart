@@ -5,6 +5,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/features/study/study_breadcrumb.dart';
 import 'package:voyager/features/study/study_deck_workbench_page.dart';
@@ -112,12 +113,8 @@ class _StudyPageState extends ConsumerState<StudyPage>
   }
 
   void _showCreateMenu() {
-    showModalBottomSheet<void>(
+    showVoyagerSheet<void>(
       context: context,
-      useRootNavigator: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         child: Column(

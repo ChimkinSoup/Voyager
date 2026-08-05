@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_asset_modal.dart';
@@ -570,14 +571,8 @@ class _BreakdownCard extends ConsumerWidget {
   }
 
   Future<void> _showCategoryManager(BuildContext context, WidgetRef ref) async {
-    await showModalBottomSheet<void>(
+    await showVoyagerSheet<void>(
       context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: const _CategoryManager(),

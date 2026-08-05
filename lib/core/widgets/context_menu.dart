@@ -3,8 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -196,9 +197,13 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
     _focusNode = FocusNode();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 220),
     );
-    _anim = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    final reduced = VoyagerMotion.reduced(context);
+    _anim = CurvedAnimation(
+      parent: _controller,
+      curve: reduced ? Curves.easeOut : VoyagerSpring.drawerCurve,
+    );
     _controller.forward();
   }
 
@@ -338,7 +343,11 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
                 child: FadeTransition(
                   opacity: _anim,
                   child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.93, end: 1.0).animate(_anim),
+                    // Anchored to the pointer position that opened the menu
+                    // (topLeft of the panel sits at the anchor — see
+                    // _ContextMenuLayoutDelegate), so the menu visibly grows
+                    // from the right-click point instead of its own center.
+                    scale: Tween<double>(begin: 0.92, end: 1.0).animate(_anim),
                     alignment: Alignment.topLeft,
                     child: _buildRootMenu(context),
                   ),
@@ -430,30 +439,14 @@ class ContextMenuPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final vc = VoyagerColors.of(context);
     return Material(
       key: panelKey,
       color: Colors.transparent,
       child: Container(
         constraints: BoxConstraints(minWidth: minWidth),
-        decoration: BoxDecoration(
-          color: VoyagerMenuTheme.menuColorOf(context),
+        child: GlassSurface(
           borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
-            BoxShadow(
-              color: vc.shadow.withValues(alpha: vc.strongShadowAlpha),
-              blurRadius: 20 * vc.shadowBlurScale,
-              offset: const Offset(0, 8),
-            ),
-            BoxShadow(
-              color: vc.shadow.withValues(alpha: vc.subtleShadowAlpha),
-              blurRadius: 4 * vc.shadowBlurScale,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
+          tint: VoyagerMenuTheme.menuColorOf(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

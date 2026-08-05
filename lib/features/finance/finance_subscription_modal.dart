@@ -9,6 +9,7 @@ import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -23,14 +24,8 @@ Future<void> showSubscriptionModal(
   WidgetRef ref, {
   Subscription? existing,
 }) async {
-  await showModalBottomSheet<void>(
+  await showVoyagerSheet<void>(
     context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
       child: _SubscriptionModal(existing: existing),
