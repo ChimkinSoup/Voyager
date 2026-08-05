@@ -12,6 +12,7 @@ import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
@@ -43,12 +44,24 @@ class DreamSplitLayout {
     return (totalWidth * 0.35).clamp(minListWidth, 480.0);
   }
 
+  static double _maxAllowed(double totalWidth) =>
+      (totalWidth - minEditorWidth - dividerWidth).clamp(
+        minListWidth,
+        maxListWidth,
+      );
+
   static double clampListWidth(double width, double totalWidth) {
-    final maxAllowed = (totalWidth - minEditorWidth - dividerWidth).clamp(
-      minListWidth,
-      maxListWidth,
+    return width.clamp(minListWidth, _maxAllowed(totalWidth));
+  }
+
+  /// Soft-bounded version of [clampListWidth] for use while a drag is live.
+  static double dragClampListWidth(double width, double totalWidth) {
+    return resizePaneRubberBand(
+      width: width,
+      totalWidth: totalWidth,
+      minWidth: minListWidth,
+      maxWidth: _maxAllowed(totalWidth),
     );
-    return width.clamp(minListWidth, maxAllowed);
   }
 
   static const editorPadding = EdgeInsets.fromLTRB(28, 40, 28, 24);
@@ -79,6 +92,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   Timer? _notesSaveTimer;
   double? _splitWidth;
   double? _dragStartWidth;
+  var _splitDragging = false;
   var _appliedSavedWidth = false;
 
   /// Phone shell only: whether the zen editor is covering the dream list.
@@ -413,10 +427,17 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
             return LayoutBuilder(
               builder: (context, constraints) {
                 final totalWidth = constraints.maxWidth;
-                final listWidth = DreamSplitLayout.clampListWidth(
-                  _splitWidth ?? DreamSplitLayout.defaultListWidth(totalWidth),
-                  totalWidth,
-                );
+                final storedListWidth =
+                    _splitWidth ?? DreamSplitLayout.defaultListWidth(totalWidth);
+                // While dragging, storedListWidth is already soft-bounded
+                // (see onDragUpdate below) — re-clamping here would cancel
+                // the rubber-band out before it ever reaches the screen.
+                final listWidth = _splitDragging
+                    ? storedListWidth
+                    : DreamSplitLayout.clampListWidth(
+                        storedListWidth,
+                        totalWidth,
+                      );
                 // Side by side in the desktop window; one at a time on a
                 // phone, where the 35/65 split would leave the zen editor
                 // about 230dp wide.
@@ -428,7 +449,11 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (showList)
-                      SizedBox(
+                      AnimatedContainer(
+                        duration: _splitDragging
+                            ? Duration.zero
+                            : const Duration(milliseconds: 260),
+                        curve: VoyagerSpring.moveCurve,
                         width: compact ? totalWidth : listWidth,
                         child: _buildEntryList(sorted),
                       ),
@@ -437,19 +462,35 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                       onDragStart: () {
                         _dragStartWidth = _splitWidth ??
                             DreamSplitLayout.defaultListWidth(totalWidth);
+                        setState(() => _splitDragging = true);
                       },
                       onDragUpdate: (totalDelta) {
                         final start = _dragStartWidth ??
                             DreamSplitLayout.defaultListWidth(totalWidth);
                         setState(() {
-                          _splitWidth = DreamSplitLayout.clampListWidth(
+                          // Soft-bounded while the drag is live — tracks the
+                          // pointer 1:1 but resists past the real bounds
+                          // instead of stopping dead.
+                          _splitWidth = DreamSplitLayout.dragClampListWidth(
                             start + totalDelta,
                             totalWidth,
                           );
                         });
                       },
                       onDragEnd: () {
-                        unawaited(_persistSplitWidth(_splitWidth));
+                        // Hard-clamp back to the real bound now that the drag
+                        // has ended; the spring-curved AnimatedContainer
+                        // around the pane carries the visual snap-back from
+                        // wherever the rubber-band left it.
+                        final width = _splitWidth;
+                        final settled = width == null
+                            ? null
+                            : DreamSplitLayout.clampListWidth(width, totalWidth);
+                        setState(() {
+                          _splitWidth = settled;
+                          _splitDragging = false;
+                        });
+                        unawaited(_persistSplitWidth(settled));
                       },
                       onDoubleTapReset: () {
                         setState(() => _splitWidth = null);

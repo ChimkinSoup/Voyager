@@ -14,6 +14,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/compact_back_bar.dart';
 import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
@@ -127,6 +128,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   JournalDebugLogger? _journalDebugLogger;
   double? _entryListWidth;
   double? _entryListDragStartWidth;
+  var _entryListDragging = false;
   DateTime? _lastEntryCreatedAt;
 
   /// Phone shell only: whether the editor is covering the entry list.
@@ -486,23 +488,36 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   void _onEntryListDragStart(double totalWidth) {
     _entryListDragStartWidth =
         _entryListWidth ?? JournalEntryListLayout.defaultListWidth(totalWidth);
+    setState(() => _entryListDragging = true);
   }
 
   void _onEntryListDragUpdate(double totalDelta, double totalWidth) {
     final startWidth = _entryListDragStartWidth;
     if (startWidth == null) return;
+    // Soft-bounded while the drag is live — tracks the pointer 1:1 but
+    // resists past the real bounds instead of stopping dead.
     setState(
-      () => _entryListWidth = JournalEntryListLayout.clampListWidth(
+      () => _entryListWidth = JournalEntryListLayout.dragClampListWidth(
         startWidth + totalDelta,
         totalWidth,
       ),
     );
   }
 
-  void _onEntryListDragEnd() {
+  void _onEntryListDragEnd(double totalWidth) {
     final width = _entryListWidth;
     _entryListDragStartWidth = null;
-    unawaited(_persistEntryListWidth(width));
+    // Hard-clamp back to the real bound now that the drag has ended; the
+    // spring-curved AnimatedContainer around the pane carries the visual
+    // snap-back from wherever the rubber-band left it.
+    final settled = width == null
+        ? null
+        : JournalEntryListLayout.clampListWidth(width, totalWidth);
+    setState(() {
+      _entryListWidth = settled;
+      _entryListDragging = false;
+    });
+    unawaited(_persistEntryListWidth(settled));
   }
 
   void _applyJournalDeletedUiState(
@@ -1907,10 +1922,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
               final storedListWidth =
                   _entryListWidth ??
                   JournalEntryListLayout.defaultListWidth(totalWidth);
-              final listWidth = JournalEntryListLayout.clampListWidth(
-                storedListWidth,
-                totalWidth,
-              );
+              // While dragging, storedListWidth is already soft-bounded (see
+              // _onEntryListDragUpdate) — re-clamping here would cancel the
+              // rubber-band out before it ever reaches the screen.
+              final listWidth = _entryListDragging
+                  ? storedListWidth
+                  : JournalEntryListLayout.clampListWidth(
+                      storedListWidth,
+                      totalWidth,
+                    );
               // Two compositions of the same two panes. Side by side in the
               // desktop window with a draggable divider between them; one at a
               // time on a phone, where splitting 360dp would leave neither the
@@ -1923,7 +1943,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (showList)
-                  SizedBox(
+                  AnimatedContainer(
+                    duration: _entryListDragging
+                        ? Duration.zero
+                        : const Duration(milliseconds: 260),
+                    curve: VoyagerSpring.moveCurve,
                     width: compact ? totalWidth : listWidth,
                     child: Stack(
                       clipBehavior: Clip.none,
@@ -2131,7 +2155,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                     onDragStart: () => _onEntryListDragStart(totalWidth),
                     onDragUpdate: (totalDelta) =>
                         _onEntryListDragUpdate(totalDelta, totalWidth),
-                    onDragEnd: _onEntryListDragEnd,
+                    onDragEnd: () => _onEntryListDragEnd(totalWidth),
                     onDoubleTapReset: _resetEntryListWidth,
                   ),
                   if (showEditor)
