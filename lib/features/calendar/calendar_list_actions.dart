@@ -18,37 +18,41 @@ Future<String?> promptCalendarName(
   String? initial,
 }) async {
   final controller = TextEditingController(text: initial ?? '');
-  return showVoyagerDialog<String>(
-    context: context,
-    builder: (context) => EnterToSubmitScope(
-      onSubmit: () => Navigator.pop(context, controller.text),
-      child: AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 400,
-          child: LabeledTextField(
-            label: 'Name',
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => Navigator.pop(context, controller.text),
+  try {
+    return await showVoyagerDialog<String>(
+      context: context,
+      builder: (context) => EnterToSubmitScope(
+        onSubmit: () => Navigator.pop(context, controller.text),
+        child: AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 400,
+            child: LabeledTextField(
+              label: 'Name',
+              controller: controller,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => Navigator.pop(context, controller.text),
+            ),
           ),
+          actions: [
+            GlassButton(
+              onPressed: () => Navigator.pop(context),
+              label: 'Cancel',
+              dense: true,
+            ),
+            GlassButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              label: 'OK',
+              dense: true,
+            ),
+          ],
         ),
-        actions: [
-          GlassButton(
-            onPressed: () => Navigator.pop(context),
-            label: 'Cancel',
-            dense: true,
-          ),
-          GlassButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            label: 'OK',
-            dense: true,
-          ),
-        ],
       ),
-    ),
-  );
+    );
+  } finally {
+    controller.dispose();
+  }
 }
 
 Future<void> renameCalendarList(

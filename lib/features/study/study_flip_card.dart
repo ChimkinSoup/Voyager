@@ -115,11 +115,11 @@ class _StudyFlipCardState extends State<StudyFlipCard>
               alignment: Alignment.center,
               children: [
                 Opacity(
-                  opacity: (1 - v * 2).clamp(0.0, 1.0),
+                  opacity: 1 - v,
                   child: widget.front,
                 ),
                 Opacity(
-                  opacity: ((v - 0.5) * 2).clamp(0.0, 1.0),
+                  opacity: v,
                   child: widget.back,
                 ),
               ],

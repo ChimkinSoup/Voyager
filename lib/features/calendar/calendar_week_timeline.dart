@@ -381,7 +381,11 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
       roundedMinutes = 24 * 60 - 30;
     }
 
-    final day = widget.weekStart.add(Duration(days: dayIndex));
+    final day = DateTime(
+      widget.weekStart.year,
+      widget.weekStart.month,
+      widget.weekStart.day + dayIndex,
+    );
     final time = DateTime(
       day.year,
       day.month,
@@ -412,7 +416,11 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
         );
         final weekDays = List.generate(
           7,
-          (i) => widget.weekStart.add(Duration(days: i)),
+          (i) => DateTime(
+            widget.weekStart.year,
+            widget.weekStart.month,
+            widget.weekStart.day + i,
+          ),
         );
         final today = DateTime.now();
         final todayIndex = weekDays.indexWhere((d) => calendarSameDay(d, today));

@@ -354,12 +354,28 @@ class _NotchedBorderPainter extends CustomPainter {
       return;
     }
 
-    final maxGapStart = rect.right - radius - gapWidth;
+    // The notch has to sit under the label the widget actually draws, so it is
+    // only ever slid along the top edge — never recentred. It used to recentre
+    // itself whenever the gap took up more than half the straight run, which a
+    // two-word label on a narrow field (the tracker dialog's side-by-side
+    // limit inputs) does easily. The label stayed put while the gap moved off
+    // to the middle, leaving stub segments of border stranded on either side
+    // of it and the label painted straight over the stroke.
     final minGapStart = rect.left + radius;
-    final clampedStart = gapWidth >= (maxGapStart - minGapStart)
-        ? (rect.left + rect.right - gapWidth) / 2
-        : gapStart.clamp(minGapStart, maxGapStart);
-    final gapEnd = clampedStart + gapWidth;
+    final maxGapEnd = rect.right - radius;
+    final straightSpan = maxGapEnd - minGapStart;
+
+    final double clampedStart;
+    final double gapEnd;
+    if (gapWidth >= straightSpan) {
+      // Wider than the top edge's straight run: notch the whole run rather
+      // than fitting a shorter gap inside it.
+      clampedStart = minGapStart;
+      gapEnd = maxGapEnd;
+    } else {
+      clampedStart = gapStart.clamp(minGapStart, maxGapEnd - gapWidth);
+      gapEnd = clampedStart + gapWidth;
+    }
 
     final path = Path()
       ..moveTo(gapEnd, rect.top)

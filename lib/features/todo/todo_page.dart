@@ -57,6 +57,7 @@ typedef _RowSignature = ({
   bool completed,
   bool starred,
   bool isSelected,
+  bool hovered,
   int? listColor,
   bool animateIn,
   bool forceCollapsed,
@@ -205,6 +206,40 @@ class _TodoPageState extends ConsumerState<TodoPage>
   String? _selectedListId;
   String? _selectedTaskId;
   TodoTask? _editPanelTask;
+  // The hovered row's task id, tracked here rather than in _TaskRowState so
+  // it survives the Element churn described where the active list's
+  // SliverReorderableList is built: a completion shifts every row below it,
+  // and Flutter destroys and recreates each shifted row's Element in the same
+  // frame, which detaches and reattaches its MouseRegion out from under a
+  // stationary cursor. Clearing hover is deferred a frame (see
+  // _setRowHovered) so that detach/reattach pair cancels out before either
+  // side ever paints, instead of flashing.
+  String? _hoveredTaskId;
+  String? _pendingUnhoverTaskId;
+
+  void _setRowHovered(String taskId, bool hovered) {
+    if (hovered) {
+      _pendingUnhoverTaskId = null;
+      if (_hoveredTaskId != taskId) {
+        setState(() => _hoveredTaskId = taskId);
+      }
+      return;
+    }
+    if (_hoveredTaskId != taskId) return;
+    _pendingUnhoverTaskId = taskId;
+    // A genuine mouse-leave doesn't otherwise need a new frame — nothing else
+    // is dirty — so without this the callback below could sit pending
+    // indefinitely instead of running at the next vsync.
+    SchedulerBinding.instance.ensureVisualUpdate();
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pendingUnhoverTaskId != taskId) return;
+      _pendingUnhoverTaskId = null;
+      if (_hoveredTaskId == taskId) {
+        setState(() => _hoveredTaskId = null);
+      }
+    });
+  }
+
   // Whether the task list should actually be narrowed to make room for the
   // panel right now. Flipped straight to true the instant opening starts
   // (see _openEditPanel) — before the reveal animation's first tick — and
@@ -312,7 +347,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
     // Finalized in didChangeDependencies — inherited-widget lookups
     // (VoyagerMotion.reduced needs MediaQuery) aren't safe in initState.
-    _panelAnimation = CurvedAnimation(parent: _panelController, curve: Curves.linear);
+    _panelAnimation = CurvedAnimation(
+      parent: _panelController,
+      curve: Curves.linear,
+    );
     _panelController.addStatusListener((status) {
       if (!mounted) return;
       if (status == AnimationStatus.dismissed) {
@@ -1017,6 +1055,29 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
   }
 
+  /// Sends a task to the bottom of its own category (starred/unstarred
+  /// crossed with dated/undated) from the right-click menu.
+  Future<void> _moveTaskToBottom(TodoTask task) async {
+    final activeTasks = _activeInList(_lastActiveAll, task.listId);
+    final batch = applyMoveToBottomOfCategory(task, activeTasks);
+    setState(() {
+      _applySortBatchOptimistic(batch, activeTasks);
+    });
+    final updated = batch.tasks.firstWhere(
+      (t) => t.id == task.id,
+      orElse: () => task,
+    );
+    await _persistSortBatch(batch, task.listId);
+    logTodoSortDebug(
+      ref.read(todoSortDebugLoggerProvider),
+      'MOVE_TO_BOTTOM',
+      task: updated,
+      details:
+          'right-click move to bottom of category, '
+          'sortOrder: ${task.sortOrder} → ${updated.sortOrder}',
+    );
+  }
+
   /// Sets (or replaces) a task's due date from the right-click menu. [localDue]
   /// is a local wall-clock time; a date-only selection arrives as local
   /// midnight (hour/minute == 0), matching the edit panel's picker contract.
@@ -1315,6 +1376,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     bool forceCollapsed = false,
   }) {
     final animateIn = task.id == _enteringTaskId;
+    final hovered = task.id == _hoveredTaskId;
     // `lists` is a fresh List instance (new identity, same content) any time
     // todoListsProvider re-fetches — including on every remote sync landing,
     // which invalidates it unconditionally even when only tasks changed (see
@@ -1334,6 +1396,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       completed: task.completed,
       starred: task.starred,
       isSelected: isSelected,
+      hovered: hovered,
       listColor: listColor,
       animateIn: animateIn,
       forceCollapsed: forceCollapsed,
@@ -1364,12 +1427,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
       animateIn: animateIn,
       forceCollapsed: forceCollapsed,
       isSelected: isSelected,
+      hovered: hovered,
       listColor: listColor,
       lists: lists,
       subtaskStats: _subtaskStats(task.id),
       subtaskStatsData: subtaskStatsData,
       onToggle: (v) => _toggleTask(task, v),
+      onHoverChanged: (h) => _setRowHovered(task.id, h),
       onStar: () => _toggleStar(task),
+      onMoveToBottom: () => _moveTaskToBottom(task),
       onSetDueDate: (due) => _setTaskDueDate(task, due),
       onClearDueDate: () => _clearTaskDueDate(task),
       onMoveToList: (destId) => _moveTaskToList(task, destId),
@@ -1667,6 +1733,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
           _selectedListId = listId;
         }
         final currentList = _selectedList(lists);
+        // The shade the task bar is keyed to: the list being viewed, or the
+        // plain accent while "All tasks" is on — that view spans every list
+        // and so has no colour of its own. Shared by the list dropdown and
+        // the "Add" button so neither keeps showing the last list's colour.
+        final taskBarColor = Color(
+          (_showAllTasks ? null : currentList?.colorValue) ??
+              Theme.of(context).colorScheme.primary.toARGB32(),
+        );
         final stats = statsAsync.valueOrNull;
 
         ref.listen<AsyncValue<List<TodoTask>>>(
@@ -1808,22 +1882,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
                               Row(
                                 children: [
                                   Expanded(
-                                    child: RoundedDropdown<String>(
-                                      value: listId,
+                                    child: RoundedDropdown<String?>(
+                                      // Null while "All tasks" is on: no
+                                      // single list is being viewed, so no row
+                                      // in the menu should wear the selection
+                                      // border.
+                                      value: _showAllTasks ? null : listId,
                                       displayLabel: _showAllTasks
                                           ? 'All tasks'
                                           : null,
-                                      labelColor: Color(
-                                        _showAllTasks
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.primary.toARGB32()
-                                            : currentList?.colorValue ??
-                                                  Theme.of(context)
-                                                      .colorScheme
-                                                      .primary
-                                                      .toARGB32(),
-                                      ),
+                                      labelColor: taskBarColor,
                                       closedTrailing: _showAllTasks
                                           ? null
                                           : '${active.length} | ${completed.length}',
@@ -1833,14 +1901,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                           listId == legacyTodoListId
                                           ? defaultEntityManageMenuEntries
                                           : entityManageMenuEntries,
-                                      onManage: (listId, action) {
+                                      onManage: (listId, action) async {
+                                        if (listId == null) return;
                                         final stat = _statsForList(
                                           listId,
                                           stats,
                                           activeCount: active.length,
                                           completedCount: completed.length,
                                         );
-                                        return _handleListManage(
+                                        await _handleListManage(
                                           listId,
                                           action,
                                           lists,
@@ -1854,7 +1923,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                           activeCount: active.length,
                                           completedCount: completed.length,
                                         );
-                                        return RoundedDropdownItem(
+                                        return RoundedDropdownItem<String?>(
                                           value: l.id,
                                           label: l.name,
                                           labelColor: Color(
@@ -1869,8 +1938,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                         );
                                       }).toList(),
                                       onChanged: (v) {
+                                        if (v == null) return;
                                         setState(() {
                                           _selectedListId = v;
+                                          // Picking a specific list is an
+                                          // explicit request to view *that*
+                                          // list, so it also leaves the
+                                          // all-tasks view.
+                                          _showAllTasks = false;
                                           _optimisticActiveTaskOrder = null;
                                         });
                                         _closeEditPanel();
@@ -2250,12 +2325,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                       hintText: 'Add task',
                                       controller: _taskController,
                                       focusNode: _taskFocusNode,
-                                      accentColor: Color(
-                                        currentList?.colorValue ??
-                                            Theme.of(
-                                              context,
-                                            ).colorScheme.primary.toARGB32(),
-                                      ),
+                                      accentColor: taskBarColor,
                                       onSubmitted: (_) => _addTask(),
                                     ),
                                   ),
@@ -2266,20 +2336,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                       onPressed: _addTask,
                                       label: 'Add',
                                       height: 48,
-                                      color: currentList?.colorValue == null
-                                          ? null
-                                          : Color(currentList!.colorValue!),
-                                      textColor: currentList?.colorValue == null
-                                          ? null
-                                          : (ThemeData.estimateBrightnessForColor(
-                                                      Color(
-                                                        currentList!
-                                                            .colorValue!,
-                                                      ),
-                                                    ) ==
-                                                    Brightness.dark
-                                                ? Colors.white
-                                                : Colors.black),
+                                      color: taskBarColor,
                                     ),
                                   ),
                                 ],
@@ -2447,8 +2504,11 @@ class _TaskRow extends StatefulWidget {
     super.key,
     required this.task,
     required this.isSelected,
+    required this.hovered,
     required this.onToggle,
+    required this.onHoverChanged,
     required this.onStar,
+    required this.onMoveToBottom,
     required this.onEdit,
     required this.onSetDueDate,
     required this.onClearDueDate,
@@ -2465,8 +2525,22 @@ class _TaskRow extends StatefulWidget {
 
   final TodoTask task;
   final bool isSelected;
+
+  /// Whether the pointer is currently over this row. Tracked in
+  /// _TodoPageState (see _setRowHovered) rather than locally, so the
+  /// highlight survives this row's Element being torn down and recreated
+  /// when a completion shifts its index in the active list's
+  /// SliverReorderableList.
+  final bool hovered;
   final Future<void> Function(bool?) onToggle;
+
+  /// Reports this row's own hover-enter/exit up to _TodoPageState.
+  final ValueChanged<bool> onHoverChanged;
   final VoidCallback onStar;
+
+  /// Sends the task to the bottom of its own category (see
+  /// [applyMoveToBottomOfCategory]).
+  final VoidCallback onMoveToBottom;
   final VoidCallback onEdit;
 
   /// Applies a due date picked from the right-click menu. The value is a local
@@ -2907,6 +2981,11 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
         onTap: () => unawaited(_handleToggle(!task.completed)),
       ),
       ContextMenuItem(
+        label: 'Send to bottom',
+        icon: PhosphorIconsRegular.arrowDown,
+        onTap: widget.onMoveToBottom,
+      ),
+      ContextMenuItem(
         label: 'Due today',
         icon: PhosphorIconsRegular.calendarDot,
         onTap: () => widget.onSetDueDate(today),
@@ -3010,140 +3089,126 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
         opacity: _exitFade,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
-          child: ContextMenuRegion(
-            items: _buildContextMenuItems(listColor),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              decoration: VoyagerListItemSurface.decoration(
-                context,
-                selected: widget.isSelected,
-                borderRadius: 14,
-              ),
-              child: InkWell(
-                onTap: widget.onEdit,
-                borderRadius: BorderRadius.circular(14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: _buildCheckbox(listColor),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 12,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                AnimatedDefaultTextStyle(
-                                  duration: const Duration(milliseconds: 180),
-                                  curve: Curves.easeOut,
-                                  style: Theme.of(context).textTheme.bodyLarge!
-                                      .copyWith(
-                                        color: _displayCompleted
-                                            ? strikeColor
-                                            : null,
-                                        decoration: _displayCompleted
-                                            ? TextDecoration.lineThrough
+          child: MouseRegion(
+            onEnter: (_) => widget.onHoverChanged(true),
+            onExit: (_) => widget.onHoverChanged(false),
+            child: ContextMenuRegion(
+              items: _buildContextMenuItems(listColor),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOut,
+                decoration: VoyagerListItemSurface.decoration(
+                  context,
+                  selected: widget.isSelected,
+                  hovered: widget.hovered,
+                  borderRadius: 14,
+                ),
+                child: InkWell(
+                  onTap: widget.onEdit,
+                  borderRadius: BorderRadius.circular(14),
+                  // The hover tint is painted from widget.hovered (driven by
+                  // _TodoPageState._setRowHovered) instead of this InkWell's
+                  // own ephemeral hover state, so it survives this row's
+                  // Element being torn down and recreated whenever a
+                  // completion shifts its index in the active list's
+                  // SliverReorderableList — see the KNOWN LIMITATION comment
+                  // where that list is built. Left as its own overlay here,
+                  // this would blink off and back on for a frame every time
+                  // that happens, even though the pointer never moved.
+                  hoverColor: Colors.transparent,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: _buildCheckbox(listColor),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 12,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  AnimatedDefaultTextStyle(
+                                    duration: const Duration(milliseconds: 180),
+                                    curve: Curves.easeOut,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge!
+                                        .copyWith(
+                                          color: _displayCompleted
+                                              ? strikeColor
+                                              : null,
+                                          decoration: _displayCompleted
+                                              ? TextDecoration.lineThrough
+                                              : null,
+                                        ),
+                                    child: Text(
+                                      widget.task.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  final metadataColor = Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.72);
+                                  final overdueColor = Theme.of(
+                                    context,
+                                  ).colorScheme.error;
+                                  final textStyle =
+                                      Theme.of(
+                                        context,
+                                      ).textTheme.labelSmall?.copyWith(
+                                        fontSize: 10,
+                                        color: metadataColor,
+                                      ) ??
+                                      TextStyle(
+                                        fontSize: 10,
+                                        color: metadataColor,
+                                      );
+
+                                  // Stable metadata: never depends on the Future.
+                                  final stableWidgets = <Widget>[];
+                                  if (dueLabel != null) {
+                                    stableWidgets.add(
+                                      Text(
+                                        dueLabel,
+                                        style: dueDatePast
+                                            ? TextStyle(color: overdueColor)
                                             : null,
                                       ),
-                                  child: Text(
-                                    widget.task.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Builder(
-                              builder: (context) {
-                                final metadataColor = Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.72);
-                                final overdueColor = Theme.of(
-                                  context,
-                                ).colorScheme.error;
-                                final textStyle =
-                                    Theme.of(
-                                      context,
-                                    ).textTheme.labelSmall?.copyWith(
-                                      fontSize: 10,
-                                      color: metadataColor,
-                                    ) ??
-                                    TextStyle(
-                                      fontSize: 10,
-                                      color: metadataColor,
                                     );
-
-                                // Stable metadata: never depends on the Future.
-                                final stableWidgets = <Widget>[];
-                                if (dueLabel != null) {
-                                  stableWidgets.add(
-                                    Text(
-                                      dueLabel,
-                                      style: dueDatePast
-                                          ? TextStyle(color: overdueColor)
-                                          : null,
-                                    ),
-                                  );
-                                }
-                                final hasNotes =
-                                    widget.task.notes?.trim().isNotEmpty ==
-                                    true;
-                                if (hasNotes) {
-                                  if (stableWidgets.isNotEmpty) {
-                                    stableWidgets.add(const Text(' · '));
                                   }
-                                  stableWidgets.add(
-                                    Icon(
-                                      PhosphorIconsRegular.note,
-                                      size: 10,
-                                      color: metadataColor,
-                                    ),
-                                  );
-                                }
-
-                                // Subtask count: depends on the Future; never hides
-                                // stable widgets when it's loading.
-                                final subtaskWidget = FutureBuilder(
-                                  future: widget.subtaskStats,
-                                  initialData: widget.subtaskStatsData,
-                                  builder: (context, snapshot) {
-                                    if (snapshot.hasData) {
-                                      _cachedStats = snapshot.data;
+                                  final hasNotes =
+                                      widget.task.notes?.trim().isNotEmpty ==
+                                      true;
+                                  if (hasNotes) {
+                                    if (stableWidgets.isNotEmpty) {
+                                      stableWidgets.add(const Text(' · '));
                                     }
-                                    final stats = snapshot.hasData
-                                        ? snapshot.data
-                                        : _cachedStats;
-                                    if (stats == null || stats.total == 0) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    final needsSep = stableWidgets.isNotEmpty;
-                                    return Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (needsSep) const Text(' · '),
-                                        Text(
-                                          '${stats.completed} | ${stats.total}',
-                                        ),
-                                      ],
+                                    stableWidgets.add(
+                                      Icon(
+                                        PhosphorIconsRegular.note,
+                                        size: 10,
+                                        color: metadataColor,
+                                      ),
                                     );
-                                  },
-                                );
+                                  }
 
-                                final hasStable = stableWidgets.isNotEmpty;
-                                // Always show the row if there's any stable content.
-                                // Subtask badge sits alongside it.
-                                if (!hasStable) {
-                                  // Only subtask badge; still need to show it.
-                                  return FutureBuilder(
+                                  // Subtask count: depends on the Future; never hides
+                                  // stable widgets when it's loading.
+                                  final subtaskWidget = FutureBuilder(
                                     future: widget.subtaskStats,
                                     initialData: widget.subtaskStatsData,
                                     builder: (context, snapshot) {
@@ -3156,44 +3221,78 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
                                       if (stats == null || stats.total == 0) {
                                         return const SizedBox.shrink();
                                       }
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 2),
-                                        child: DefaultTextStyle(
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: textStyle,
-                                          child: Text(
+                                      final needsSep = stableWidgets.isNotEmpty;
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (needsSep) const Text(' · '),
+                                          Text(
                                             '${stats.completed} | ${stats.total}',
                                           ),
-                                        ),
+                                        ],
                                       );
                                     },
                                   );
-                                }
 
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: DefaultTextStyle(
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: textStyle,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ...stableWidgets,
-                                        subtaskWidget,
-                                      ],
+                                  final hasStable = stableWidgets.isNotEmpty;
+                                  // Always show the row if there's any stable content.
+                                  // Subtask badge sits alongside it.
+                                  if (!hasStable) {
+                                    // Only subtask badge; still need to show it.
+                                    return FutureBuilder(
+                                      future: widget.subtaskStats,
+                                      initialData: widget.subtaskStatsData,
+                                      builder: (context, snapshot) {
+                                        if (snapshot.hasData) {
+                                          _cachedStats = snapshot.data;
+                                        }
+                                        final stats = snapshot.hasData
+                                            ? snapshot.data
+                                            : _cachedStats;
+                                        if (stats == null || stats.total == 0) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 2,
+                                          ),
+                                          child: DefaultTextStyle(
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: textStyle,
+                                            child: Text(
+                                              '${stats.completed} | ${stats.total}',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  }
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: DefaultTextStyle(
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textStyle,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ...stableWidgets,
+                                          subtaskWidget,
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    _buildStar(listColor),
-                  ],
+                      _buildStar(listColor),
+                    ],
+                  ),
                 ),
               ),
             ),

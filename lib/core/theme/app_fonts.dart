@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 abstract final class AppFonts {
   static const family = 'IosevkaAile';
 
+  /// Fixed-pitch sibling of [family], for code. Shares Aile's vertical
+  /// metrics exactly, so swapping between the two leaves baselines put.
+  static const monoFamily = 'IosevkaMono';
+
   static TextStyle style({
     double? fontSize,
     FontWeight? fontWeight,

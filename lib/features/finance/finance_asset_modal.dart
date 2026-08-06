@@ -190,11 +190,17 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     // valuations load, so editing starts from the latest figure.
     final valuations = ref.watch(assetValuationsProvider).valueOrNull;
     if (!_seededValue && existing != null && valuations != null) {
+      _seededValue = true;
       final latest = latestValuation(valuations, existing.id);
       if (latest != null) {
-        _valueController.text = (latest.valueCents / 100).toStringAsFixed(2);
+        // Deferred a frame: setting .text here synchronously would fire the
+        // controller's listener (which calls setState) while this build is
+        // still in progress.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _valueController.text = (latest.valueCents / 100).toStringAsFixed(2);
+        });
       }
-      _seededValue = true;
     }
 
     return Padding(

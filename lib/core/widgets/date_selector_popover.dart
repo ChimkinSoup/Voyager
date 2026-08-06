@@ -174,7 +174,11 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     if (dayDelta != 0) {
       setState(() {
         _showHoverRing = true;
-        _hoveredDate = _hoveredDate.add(Duration(days: dayDelta));
+        _hoveredDate = DateTime(
+          _hoveredDate.year,
+          _hoveredDate.month,
+          _hoveredDate.day + dayDelta,
+        );
         if (_hoveredDate.year != _focusedMonth.year || _hoveredDate.month != _focusedMonth.month) {
           _focusedMonth = DateTime(_hoveredDate.year, _hoveredDate.month, 1);
         }
@@ -202,14 +206,24 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
 
     final chips = [
       {'label': 'Today', 'date': today},
-      {'label': 'Tomorrow', 'date': today.add(const Duration(days: 1))},
-      {'label': 'Next Week', 'date': today.add(const Duration(days: 7))},
+      {
+        'label': 'Tomorrow',
+        'date': DateTime(today.year, today.month, today.day + 1),
+      },
+      {
+        'label': 'Next Week',
+        'date': DateTime(today.year, today.month, today.day + 7),
+      },
     ];
 
     final firstDayOfMonth = _focusedMonth;
     final firstWeekday = firstDayOfMonth.weekday; // 1 = Monday, 7 = Sunday
     final startOffset = (firstWeekday == 7) ? 0 : firstWeekday;
-    final startDate = firstDayOfMonth.subtract(Duration(days: startOffset));
+    final startDate = DateTime(
+      firstDayOfMonth.year,
+      firstDayOfMonth.month,
+      firstDayOfMonth.day - startOffset,
+    );
 
     DateTime? minDate;
     DateTime? maxDate;
@@ -311,7 +325,11 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                 ),
                 itemCount: 42, // 7x6 matrix
                 itemBuilder: (context, index) {
-                  final date = startDate.add(Duration(days: index));
+                  final date = DateTime(
+                    startDate.year,
+                    startDate.month,
+                    startDate.day + index,
+                  );
                   final isCurrentMonth = date.month == _focusedMonth.month;
                   final isToday = _isSameDay(date, today);
                   

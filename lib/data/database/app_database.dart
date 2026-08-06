@@ -577,6 +577,7 @@ class StudyFoldersTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get parentFolderId => text().nullable()();
+  IntColumn get colorValue => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -590,6 +591,7 @@ class StudyDecksTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get parentFolderId => text().nullable()();
+  IntColumn get colorValue => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -665,7 +667,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 63;
+  int get schemaVersion => 64;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1251,8 +1253,44 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(migrator, settingsTable.srsGoodKey);
         await _addSettingsColumnIfNotExists(migrator, settingsTable.srsEasyKey);
       }
+      if (from < 64) {
+        // Guard against duplicate-column error: anyone upgrading from below
+        // 63 already gets colorValue from the from-<63 createTable step
+        // above, since that step builds the table from its current (not
+        // historical) column set.
+        await _addColumnIfNotExists(
+          migrator,
+          'study_folders_table',
+          studyFoldersTable,
+          studyFoldersTable.colorValue,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'study_decks_table',
+          studyDecksTable,
+          studyDecksTable.colorValue,
+        );
+      }
     },
   );
+
+  /// Skips ADD COLUMN when the local DB already has it (e.g. after branch churn,
+  /// or because an earlier createTable step in the same upgrade run already
+  /// built the table with this column from its current schema).
+  Future<void> _addColumnIfNotExists(
+    Migrator migrator,
+    String tableName,
+    TableInfo table,
+    GeneratedColumn<Object> column,
+  ) async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('$tableName') WHERE name = ?",
+      variables: [Variable.withString(column.name)],
+    ).get();
+    if (exists.isEmpty) {
+      await migrator.addColumn(table, column);
+    }
+  }
 
   /// Skips ADD COLUMN when the local DB already has it (e.g. after branch churn).
   Future<void> _addSettingsColumnIfNotExists(

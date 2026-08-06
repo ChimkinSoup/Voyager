@@ -29,7 +29,7 @@ import 'package:voyager/features/analytics/sparkline_touch.dart';
 import 'package:voyager/features/analytics/stat_number_format.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart'
-    show calendarPanelBackgroundColor, MonthTitleHeader;
+    show MonthTitleHeader;
 import 'package:voyager/features/calendar/calendar_day_grid.dart'
     show
         WeekdayHeaderRow,
@@ -911,6 +911,10 @@ class _SparklineRow extends ConsumerWidget {
                         final dataBar = LineChartBarData(
                           spots: spots,
                           isCurved: true,
+                          // Keeps the rendered cubic from overshooting past
+                          // its own (already range-clamped) spots — see the
+                          // detail chart's copy of this for the full why.
+                          preventCurveOverShooting: true,
                           color: color.withValues(alpha: 0.9),
                           barWidth: 1.5,
                           dotData: const FlDotData(show: false),
@@ -1769,6 +1773,7 @@ void _openSparklinePeriodEditor({
     tracker: tracker,
     value: resolved.value,
     interpolatedY: dataSpot?.y,
+    onRecordedDay: resolved.onRecordedDay,
   );
   final valueLabel = reading.label;
   // The bubble stands down as the editor takes over, rather than the two
@@ -1851,6 +1856,7 @@ Widget _sparklineHoverBubble({
             tracker: tracker,
             value: resolved.value,
             interpolatedY: spot.y,
+            onRecordedDay: resolved.onRecordedDay,
           );
           final valueLabel = reading.label;
           // Anchored to the *touched point on the curve*, never to the
@@ -1912,7 +1918,7 @@ Widget _sparklineHoverBubble({
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: calendarPanelBackgroundColor(context),
+                          color: _tooltipBubbleColor(context),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: VoyagerColors.of(context).hairline,
@@ -2231,16 +2237,38 @@ String? _hoverValueLabel({
   required StatisticTracker tracker,
   required TrackerValue? value,
   required double? interpolatedY,
+  required bool onRecordedDay,
 }) {
+  final interpolates = tracker.type == TrackerType.integer;
+  // A record only speaks for the one day it's pinned to. Hovering any other
+  // day of its period lands on interpolated curve, so the reading comes off
+  // the curve there — see [resolveSparklinePeriod]'s `onRecordedDay`. Boolean
+  // and enum trackers draw no curve at all, so their record still covers the
+  // whole period.
+  final storedLabel = (!interpolates || onRecordedDay)
+      ? _hoverValueLabel(tracker: tracker, type: tracker.type, value: value)
+      : null;
   return sparklineValueReading(
-    storedLabel: _hoverValueLabel(
-      tracker: tracker,
-      type: tracker.type,
-      value: value,
-    ),
-    interpolates: tracker.type == TrackerType.integer,
+    storedLabel: storedLabel,
+    interpolates: interpolates,
     interpolatedY: interpolatedY,
   );
+}
+
+/// Background fill for the heatmap/sparkline hover bubble.
+///
+/// This used to reuse the calendar's panel tone, which is only 8% opaque —
+/// fine over a calendar's flat grid, but the analytics page paints hover
+/// rectangles and a starred-group band behind the trackers, and those showed
+/// straight through the bubble and made its text hard to read. Opaque here
+/// instead, so the bubble reads as sitting above the grid rather than tinting
+/// it.
+Color _tooltipBubbleColor(BuildContext context) {
+  final theme = Theme.of(context);
+  final base = theme.inputDecorationTheme.fillColor ??
+      theme.cardTheme.color ??
+      theme.colorScheme.surface;
+  return Color.alphaBlend(base, theme.colorScheme.surface);
 }
 
 /// The greyed-out shade a tooltip's value line takes when it isn't showing
@@ -2592,7 +2620,7 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: calendarPanelBackgroundColor(context),
+                  color: _tooltipBubbleColor(context),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: VoyagerColors.of(context).hairline,
@@ -3007,7 +3035,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: Color.lerp(
-                      calendarPanelBackgroundColor(context),
+                      // Must be the very fill the hover bubble draws with —
+                      // this frame starts life sitting exactly on top of it.
+                      _tooltipBubbleColor(context),
                       theme.colorScheme.surface,
                       t,
                     ),
@@ -3337,7 +3367,8 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           return;
         }
         final cap = widget.tracker.integerCap;
-        intVal = cap == null ? raw : raw.clamp(0, cap);
+        final minVal = widget.tracker.defaultInt;
+        intVal = cap == null ? raw : raw.clamp(minVal, cap);
       case TrackerType.boolean:
         boolVal = _boolValue;
       case TrackerType.enumType:
@@ -4163,6 +4194,12 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
               final dataBar = LineChartBarData(
                 spots: spots,
                 isCurved: true,
+                // The per-day spots are already clamped into the tracker's
+                // range, but fl_chart draws a cubic through them, and a cubic
+                // isn't bounded by its control points — a steep drop to 0 dips
+                // the rendered curve below the axis. This caps the curve's
+                // tangents so it stays inside its own data.
+                preventCurveOverShooting: true,
                 color: color,
                 barWidth: 2,
                 dotData: FlDotData(show: spots.length <= 15),
@@ -4440,7 +4477,7 @@ class _HeatmapMonthTile extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      color: calendarPanelBackgroundColor(context),
+      color: _tooltipBubbleColor(context),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
         padding: const EdgeInsets.all(6),
@@ -5145,6 +5182,16 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
 // Tracker creation dialog (updated with trackingStyle)
 // ---------------------------------------------------------------------------
 
+/// Content padding for the dialog's dense single-line fields. Symmetric on
+/// purpose: these used to run `top: 0, bottom: 12`, which squeezed the field
+/// to barely more than one line of text and pinned its text against the top
+/// border. It also matches the value editor's 10/14 split closely enough that
+/// the two dialogs read as the same control.
+const _kTrackerFieldPadding = EdgeInsets.symmetric(
+  horizontal: 16,
+  vertical: 12,
+);
+
 class _TrackerDialog extends ConsumerStatefulWidget {
   const _TrackerDialog({this.tracker});
 
@@ -5164,7 +5211,9 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   final List<FocusNode> _optionFocusNodes = [];
   final _newOptionController = TextEditingController();
   final _newOptionFocusNode = FocusNode();
+  final _nameFocusNode = FocusNode();
   String? _optionError;
+  String? _nameError;
   late TrackerType _type;
   late TrackerCadence _cadence;
   late TrackerStyle _trackingStyle;
@@ -5227,6 +5276,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
     }
     _newOptionController.dispose();
     _newOptionFocusNode.dispose();
+    _nameFocusNode.dispose();
     super.dispose();
   }
 
@@ -5256,20 +5306,31 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
               const SizedBox(height: 8),
               VoyagerTextField(
                 controller: _nameController,
+                focusNode: _nameFocusNode,
                 autofocus: true,
                 accentColor: accent,
                 decoration: const InputDecoration(
                   labelText: 'Name',
                   isDense: true,
-                  contentPadding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 0,
-                    bottom: 12,
-                  ),
+                  contentPadding: _kTrackerFieldPadding,
                 ),
+                onChanged: (_) {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
                 onSubmitted: (_) => _submit(),
               ),
+              if (_nameError != null) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _nameError!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               VoyagerDropdownButtonFormField<TrackerType>(
                 initialValue: _type,
@@ -5356,12 +5417,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                     decoration: const InputDecoration(
                       labelText: 'Default value',
                       isDense: true,
-                      contentPadding: EdgeInsets.only(
-                        left: 16,
-                        right: 16,
-                        top: 0,
-                        bottom: 12,
-                      ),
+                      contentPadding: _kTrackerFieldPadding,
                     ),
                   ),
                 ],
@@ -5394,12 +5450,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                           decoration: const InputDecoration(
                             labelText: 'Lower limit',
                             isDense: true,
-                            contentPadding: EdgeInsets.only(
-                              left: 16,
-                              right: 16,
-                              top: 0,
-                              bottom: 12,
-                            ),
+                            contentPadding: _kTrackerFieldPadding,
                           ),
                         ),
                       ),
@@ -5424,12 +5475,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                           decoration: const InputDecoration(
                             labelText: 'Upper limit',
                             isDense: true,
-                            contentPadding: EdgeInsets.only(
-                              left: 16,
-                              right: 16,
-                              top: 0,
-                              bottom: 12,
-                            ),
+                            contentPadding: _kTrackerFieldPadding,
                           ),
                         ),
                       ),
@@ -5475,12 +5521,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                                   accentColor: accent,
                                   decoration: const InputDecoration(
                                     isDense: true,
-                                    contentPadding: EdgeInsets.only(
-                                      left: 16,
-                                      right: 16,
-                                      top: 0,
-                                      bottom: 12,
-                                    ),
+                                    contentPadding: _kTrackerFieldPadding,
                                   ),
                                   onChanged: (_) => setState(() {
                                     _optionError = null;
@@ -5511,12 +5552,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   decoration: const InputDecoration(
                     labelText: 'Add option',
                     isDense: true,
-                    contentPadding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      top: 0,
-                      bottom: 12,
-                    ),
+                    contentPadding: _kTrackerFieldPadding,
                   ),
                   onChanged: (_) {
                     if (_optionError != null)
@@ -5636,7 +5672,11 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
 
   void _submit() {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      setState(() => _nameError = 'Title cannot be empty');
+      _nameFocusNode.requestFocus();
+      return;
+    }
 
     if (_type == TrackerType.enumType) {
       final pending = _newOptionController.text.trim();

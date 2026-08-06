@@ -1,9 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
+
+/// Height one bucket list row occupies (a note pushes it taller, nothing makes
+/// it shorter). The empty-state placeholder is pinned to the same number so the
+/// popup doesn't visibly shrink the moment the first item replaces it.
+const _kRowMinHeight = 48.0;
 
 /// Popup content for the swing's bubble: a bucket list that behaves like a
 /// to-do list but with hollow-circle completions, no due dates or subtasks,
@@ -19,10 +27,29 @@ class BucketListPopup extends ConsumerStatefulWidget {
 
 class _BucketListPopupState extends ConsumerState<BucketListPopup> {
   final _newItemController = TextEditingController();
+  final _editController = TextEditingController();
+  final _editFocusNode = FocusNode();
+
+  /// Id of the item whose title is currently being edited in place, if any.
+  String? _editingId;
+
+  @override
+  void initState() {
+    super.initState();
+    // Clicking away from an open editor commits it, the same as pressing
+    // Enter would — an abandoned edit that silently reverts reads as data loss.
+    _editFocusNode.addListener(() {
+      if (!_editFocusNode.hasFocus && _editingId != null) {
+        unawaited(_commitEdit());
+      }
+    });
+  }
 
   @override
   void dispose() {
     _newItemController.dispose();
+    _editController.dispose();
+    _editFocusNode.dispose();
     super.dispose();
   }
 
@@ -42,6 +69,38 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
     _newItemController.clear();
     ref.invalidate(bucketListItemsProvider);
   }
+
+  void _startEdit(BucketListItem item) {
+    setState(() {
+      _editingId = item.id;
+      _editController.text = item.title;
+      _editController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: item.title.length,
+      );
+    });
+    _editFocusNode.requestFocus();
+  }
+
+  Future<void> _commitEdit() async {
+    final id = _editingId;
+    if (id == null) return;
+    final title = _editController.text.trim();
+    setState(() => _editingId = null);
+
+    final items = ref.read(bucketListItemsProvider).valueOrNull;
+    final item = items?.where((i) => i.id == id).firstOrNull;
+    // An empty title would leave a blank row with no way back into it, so
+    // treat clearing the field as "no change" rather than as a rename.
+    if (item == null || title.isEmpty || title == item.title) return;
+
+    await ref
+        .read(bucketListRepositoryProvider)
+        .upsertItem(item.copyWith(title: title, updatedAt: utcNow()));
+    ref.invalidate(bucketListItemsProvider);
+  }
+
+  void _cancelEdit() => setState(() => _editingId = null);
 
   Future<void> _toggle(BucketListItem item) async {
     if (!item.completed) {
@@ -92,6 +151,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
   }
 
   Future<void> _deleteItem(String id) async {
+    if (_editingId == id) setState(() => _editingId = null);
     await ref.read(bucketListRepositoryProvider).deleteItem(id);
     ref.invalidate(bucketListItemsProvider);
   }
@@ -100,6 +160,8 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
   Widget build(BuildContext context) {
     final itemsAsync = ref.watch(bucketListItemsProvider);
     final theme = Theme.of(context);
+    final items = itemsAsync.valueOrNull ?? const <BucketListItem>[];
+    final done = items.where((i) => i.completed).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
@@ -107,18 +169,33 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Bucket List', style: theme.textTheme.titleMedium),
+          Row(
+            children: [
+              Text('Bucket List', style: theme.textTheme.titleMedium),
+              const Spacer(),
+              if (items.isNotEmpty)
+                Text(
+                  '$done of ${items.length} done',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 10),
           Flexible(
             child: itemsAsync.when(
               data: (items) {
                 if (items.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Text(
-                      'Nothing here yet — add something worth doing.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  return SizedBox(
+                    height: _kRowMinHeight,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Nothing here yet — add something worth doing.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
                       ),
                     ),
                   );
@@ -133,12 +210,18 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                       accentColor: widget.accentColor,
                       onToggle: () => _toggle(item),
                       onDelete: () => _deleteItem(item.id),
+                      onEdit: () => _startEdit(item),
+                      isEditing: _editingId == item.id,
+                      editController: _editController,
+                      editFocusNode: _editFocusNode,
+                      onSubmitEdit: () => unawaited(_commitEdit()),
+                      onCancelEdit: _cancelEdit,
                     );
                   },
                 );
               },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
+              loading: () => const SizedBox(
+                height: _kRowMinHeight,
                 child: Center(child: CircularProgressIndicator()),
               ),
               error: (e, _) => Text('Couldn\'t load bucket list: $e'),
@@ -173,63 +256,134 @@ class _BucketListRow extends StatelessWidget {
     required this.accentColor,
     required this.onToggle,
     required this.onDelete,
+    required this.onEdit,
+    required this.isEditing,
+    required this.editController,
+    required this.editFocusNode,
+    required this.onSubmitEdit,
+    required this.onCancelEdit,
   });
 
   final BucketListItem item;
   final Color accentColor;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
+  final bool isEditing;
+  final TextEditingController editController;
+  final FocusNode editFocusNode;
+  final VoidCallback onSubmitEdit;
+  final VoidCallback onCancelEdit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final titleStyle = theme.textTheme.bodyMedium?.copyWith(
+      decoration: item.completed ? TextDecoration.lineThrough : null,
+      color: item.completed
+          ? theme.colorScheme.onSurface.withValues(alpha: 0.5)
+          : null,
+    );
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: onToggle,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: _HollowCheckCircle(checked: item.completed, color: accentColor),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _kRowMinHeight - 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: _HollowCheckCircle(checked: item.completed, color: accentColor),
+              ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    decoration: item.completed ? TextDecoration.lineThrough : null,
-                    color: item.completed
-                        ? theme.colorScheme.onSurface.withValues(alpha: 0.5)
-                        : null,
-                  ),
-                ),
-                if (item.note != null && item.note!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      item.note!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                        fontStyle: FontStyle.italic,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isEditing)
+                    _TitleEditor(
+                      controller: editController,
+                      focusNode: editFocusNode,
+                      style: titleStyle,
+                      accentColor: accentColor,
+                      onSubmit: onSubmitEdit,
+                      onCancel: onCancelEdit,
+                    )
+                  else
+                    // Tap the title to rename in place; the circle to the left
+                    // still owns completion, so the two don't compete.
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onEdit,
+                      child: Text(item.title, style: titleStyle),
+                    ),
+                  if (item.note != null && item.note!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        item.note!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          IconButton(
-            iconSize: 18,
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.close),
-            onPressed: onDelete,
-          ),
-        ],
+            IconButton(
+              iconSize: 18,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The in-place rename field. Enter commits, Escape backs out; losing focus
+/// commits too (see the listener in [_BucketListPopupState.initState]).
+class _TitleEditor extends StatelessWidget {
+  const _TitleEditor({
+    required this.controller,
+    required this.focusNode,
+    required this.style,
+    required this.accentColor,
+    required this.onSubmit,
+    required this.onCancel,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final TextStyle? style;
+  final Color accentColor;
+  final VoidCallback onSubmit;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): onCancel,
+      },
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        style: style?.copyWith(decoration: TextDecoration.none),
+        cursorColor: accentColor,
+        decoration: const InputDecoration(
+          isDense: true,
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+        ),
+        onSubmitted: (_) => onSubmit(),
       ),
     );
   }

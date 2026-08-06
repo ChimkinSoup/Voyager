@@ -337,6 +337,14 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _exit.duration = VoyagerMotion.reduced(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 160);
+  }
+
+  @override
   void didUpdateWidget(covariant _PinnedNoteRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.note.text != oldWidget.note.text && !_isEditing) {
@@ -594,6 +602,14 @@ class _FeedRowState extends ConsumerState<_FeedRow>
       vsync: this,
       duration: const Duration(milliseconds: 160),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _exit.duration = VoyagerMotion.reduced(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 160);
   }
 
   @override
@@ -1260,12 +1276,26 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
     }
   }
 
+  /// Flushes any pending integer-tracker edit before letting a dismiss (tap
+  /// outside, Escape) actually close the popover, so it isn't silently
+  /// dropped. See [TrackerEntryRowState.commit] / [_saveAll].
+  Future<void> _flushAndClose() async {
+    await _saveAll();
+    if (mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final trackersAsync = ref.watch(trackersProvider);
     final isToday = _isSameDate(_selectedDate, DateTime.now());
-    return Padding(
+    return PopScope(
+      canPop: _dirtyTrackerIds.isEmpty,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _flushAndClose();
+      },
+      child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1354,6 +1384,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
             error: (e, _) => Text('$e'),
           ),
         ],
+      ),
       ),
     );
   }

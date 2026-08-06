@@ -47,7 +47,16 @@ int touchedSpotIndex(List<FlSpot> spots, double? touchedX) {
 /// records fall in one period (possible for non-daily cadences, whose records
 /// need not share a periodStart day), whichever comes first in [values] wins
 /// everywhere.
-({DateTime periodStart, TrackerValue? value}) resolveSparklinePeriod({
+/// [onRecordedDay] tells the two apart: it is true only when [x] lands on the
+/// very day the record was filed under — the day the curve is pinned to. Every
+/// other day in the period sits *on the interpolated stretch* between that knot
+/// and the next one, so the number under the pointer there is the curve's, not
+/// the record's. Reading the record on those days is what made a weekly or
+/// monthly tracker print one flat figure across a visibly climbing curve; the
+/// hover bubble uses this to fall back to the interpolated value instead, while
+/// the editor keeps opening on [value] regardless.
+({DateTime periodStart, TrackerValue? value, bool onRecordedDay})
+resolveSparklinePeriod({
   required double x,
   required DateTime from,
   required List<TrackerValue> values,
@@ -57,13 +66,20 @@ int touchedSpotIndex(List<FlSpot> spots, double? touchedX) {
   // x axis counts days on the calendar, and adding elapsed time instead lands
   // an hour short across a DST fall-back, flooring to the previous day and
   // resolving the whole hover to the period on the left.
-  final period = periodStartOf(addCalendarDays(from, x.round()));
+  final day = x.round();
+  final period = periodStartOf(addCalendarDays(from, day));
   for (final value in values) {
     if (periodStartOf(value.periodStart) == period) {
-      return (periodStart: period, value: value);
+      return (
+        periodStart: period,
+        value: value,
+        // The knot's day index, matched the same way
+        // [AnalyticsService.interpolateConsecutive] places it.
+        onRecordedDay: calendarDaysBetween(from, value.periodStart) == day,
+      );
     }
   }
-  return (periodStart: period, value: null);
+  return (periodStart: period, value: null, onRecordedDay: false);
 }
 
 /// What a sparkline's hover bubble prints for one point, given the label its

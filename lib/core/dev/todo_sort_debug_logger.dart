@@ -215,7 +215,7 @@ class TodoSortDebugLogger extends ChangeNotifier {
   }
 
   Future<void> _enqueue(Future<void> Function() action) {
-    _writeChain = _writeChain!.then((_) => action());
+    _writeChain = _writeChain!.then((_) => action()).catchError((_) {});
     return _writeChain!;
   }
 }

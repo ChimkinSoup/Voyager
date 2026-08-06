@@ -195,34 +195,38 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
 
   Future<String?> _promptName(String title, {String? initial}) async {
     final controller = TextEditingController(text: initial ?? '');
-    return showVoyagerDialog<String>(
-      context: context,
-      builder: (context) => EnterToSubmitScope(
-        onSubmit: () => Navigator.pop(context, controller.text),
-        child: AlertDialog(
-          title: Text(title),
-          content: LabeledTextField(
-            label: 'Name',
-            controller: controller,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => Navigator.pop(context, controller.text),
+    try {
+      return await showVoyagerDialog<String>(
+        context: context,
+        builder: (context) => EnterToSubmitScope(
+          onSubmit: () => Navigator.pop(context, controller.text),
+          child: AlertDialog(
+            title: Text(title),
+            content: LabeledTextField(
+              label: 'Name',
+              controller: controller,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => Navigator.pop(context, controller.text),
+          ),
+          actions: [
+            GlassButton(
+              dense: true,
+              onPressed: () => Navigator.pop(context),
+              label: 'Cancel',
+            ),
+            GlassButton(
+              dense: true,
+              onPressed: () => Navigator.pop(context, controller.text),
+              label: 'OK',
+            ),
+          ],
         ),
-        actions: [
-          GlassButton(
-            dense: true,
-            onPressed: () => Navigator.pop(context),
-            label: 'Cancel',
-          ),
-          GlassButton(
-            dense: true,
-            onPressed: () => Navigator.pop(context, controller.text),
-            label: 'OK',
-          ),
-        ],
-      ),
-      ),
-    );
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   @override

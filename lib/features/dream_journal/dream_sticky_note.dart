@@ -10,24 +10,19 @@ import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 const _kNoteFieldContentPadding = EdgeInsets.symmetric(vertical: 4);
 
 /// The Dream Journal's collapsible scratchpad: a corner "sticky note" that
-/// peeks from the bottom-right, expands into a small note-taking card on tap,
-/// and can be pinned — which hands control to the parent (see
-/// [DreamJournalPage]) to swap this floating card out for a docked bottom
-/// panel showing the same [controller] text, shrinking the main editor above
-/// it. Unpinning swaps back.
+/// peeks from the bottom-right and expands into a small note-taking card on
+/// tap.
 class DreamStickyNote extends StatefulWidget {
   const DreamStickyNote({
     super.key,
     required this.controller,
     required this.onChanged,
-    required this.onPin,
     this.focusNode,
     this.accentColor,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
-  final VoidCallback onPin;
   final FocusNode? focusNode;
   final Color? accentColor;
 
@@ -99,7 +94,7 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
                 width: width,
                 height: height,
                 child: contentOpacity <= 0
-                    ? const _StickyNoteCorner()
+                    ? _StickyNoteCorner(color: accent)
                     : Opacity(
                         opacity: contentOpacity,
                         child: _StickyNoteContents(
@@ -107,7 +102,6 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
                           onChanged: widget.onChanged,
                           focusNode: widget.focusNode,
                           accentColor: accent,
-                          onPin: widget.onPin,
                           onClose: _toggleExpanded,
                         ),
                       ),
@@ -122,19 +116,20 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
   double lerpDouble(double a, double b, double t) => a + (b - a) * t;
 }
 
-/// The peeking corner sliver — a plain fold-style triangle so only a hint of
-/// the note reads as "there" before the user taps it.
+/// The peeking corner sliver — a hint of the note before the user taps it.
+///
+/// Drawn in the page accent rather than the usual muted on-surface tone: it
+/// floats over the dream body's text field, where the muted shade was close
+/// enough to the field's own text colour that the icon disappeared into it.
 class _StickyNoteCorner extends StatelessWidget {
-  const _StickyNoteCorner();
+  const _StickyNoteCorner({required this.color});
+
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Icon(
-        Icons.sticky_note_2_outlined,
-        size: 22,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
+      child: Icon(Icons.sticky_note_2_outlined, size: 22, color: color),
     );
   }
 }
@@ -144,7 +139,6 @@ class _StickyNoteContents extends StatefulWidget {
     required this.controller,
     required this.onChanged,
     required this.accentColor,
-    required this.onPin,
     required this.onClose,
     this.focusNode,
   });
@@ -152,7 +146,6 @@ class _StickyNoteContents extends StatefulWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final Color accentColor;
-  final VoidCallback onPin;
   final VoidCallback onClose;
   final FocusNode? focusNode;
 
@@ -223,13 +216,6 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                 ),
               ),
               IconButton(
-                tooltip: 'Pin notes',
-                icon: const Icon(Icons.push_pin_outlined, size: 18),
-                color: widget.accentColor,
-                visualDensity: VisualDensity.compact,
-                onPressed: widget.onPin,
-              ),
-              IconButton(
                 tooltip: 'Close',
                 icon: const Icon(Icons.close, size: 18),
                 visualDensity: VisualDensity.compact,
@@ -282,153 +268,6 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// The docked bottom panel shown while notes are pinned — see
-/// [DreamJournalPage], which swaps this in for [DreamStickyNote] and shrinks
-/// the main editor above it to make room.
-class DreamNotesDockedPanel extends StatefulWidget {
-  const DreamNotesDockedPanel({
-    super.key,
-    required this.controller,
-    required this.onChanged,
-    required this.onUnpin,
-    this.focusNode,
-  });
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onUnpin;
-  final FocusNode? focusNode;
-
-  @override
-  State<DreamNotesDockedPanel> createState() => _DreamNotesDockedPanelState();
-}
-
-class _DreamNotesDockedPanelState extends State<DreamNotesDockedPanel> {
-  FocusNode? _ownedFocusNode;
-  final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
-  late final ScrollController _scrollController = ScrollController();
-
-  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.focusNode == null) {
-      _ownedFocusNode = FocusNode();
-    }
-    widget.controller.addListener(_forceSpellCheck);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
-  }
-
-  @override
-  void didUpdateWidget(covariant DreamNotesDockedPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_forceSpellCheck);
-      widget.controller.addListener(_forceSpellCheck);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_forceSpellCheck);
-    _ownedFocusNode?.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _forceSpellCheck() {
-    if (!mounted) return;
-    forceSpellCheckDisplay(
-      context: context,
-      fieldKey: _fieldKey,
-      focusNode: _focusNode,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textStyle = theme.textTheme.bodySmall ?? const TextStyle();
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Dream notes',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Unpin notes',
-                  icon: const Icon(Icons.push_pin, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: widget.onUnpin,
-                ),
-              ],
-            ),
-            SizedBox(
-              height: 96,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Padding(
-                        padding: _kNoteFieldContentPadding,
-                        child: SpellCheckSquiggleLayer(
-                          controller: widget.controller,
-                          focusNode: _focusNode,
-                          style: textStyle,
-                          scrollController: _scrollController,
-                        ),
-                      ),
-                    ),
-                  ),
-                  wrapWithSecondaryTapWordSelect(
-                    fieldKey: _fieldKey,
-                    child: TextField(
-                      key: _fieldKey,
-                      controller: widget.controller,
-                      focusNode: _focusNode,
-                      scrollController: _scrollController,
-                      onChanged: widget.onChanged,
-                      maxLines: null,
-                      expands: true,
-                      contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
-                      spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
-                        context,
-                      ),
-                      textAlignVertical: TextAlignVertical.top,
-                      style: textStyle,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: InputBorder.none,
-                        contentPadding: _kNoteFieldContentPadding,
-                        hintText: 'Jot a quick note to jog your memory later...',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

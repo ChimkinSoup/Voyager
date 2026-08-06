@@ -110,6 +110,7 @@ class ColorPaletteGrid extends StatelessWidget {
     this.maxWidth,
     this.maxHeight,
     this.tightLayout = false,
+    this.keyboardSelect = false,
   });
 
   final List<int> palette;
@@ -122,6 +123,20 @@ class ColorPaletteGrid extends StatelessWidget {
 
   /// When true, sizes the grid to its content instead of a fixed 4:3 box.
   final bool tightLayout;
+
+  /// Makes the grid keyboard-drivable: the currently selected swatch takes
+  /// focus when the grid appears, and moving focus (arrow keys, via the
+  /// framework's directional traversal) moves the selection with it.
+  ///
+  /// Focusing the selection up front is what makes the *first* arrow press
+  /// step one swatch away from the current color instead of jumping to the
+  /// top-left one, which is where traversal starts from when nothing in the
+  /// grid holds focus yet.
+  ///
+  /// Off by default: a grid embedded in a form (e.g. the calendar event
+  /// panel) must not steal focus from that form's text fields, nor repaint
+  /// the user's color just because they tabbed past it.
+  final bool keyboardSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -165,18 +180,28 @@ class ColorPaletteGrid extends StatelessWidget {
             runSpacing: _paletteSpacing,
             children: palette.map((colorValue) {
               final normalized = normalizeColorValue(colorValue);
+              final isSelected = normalized == normalizedSelected;
               return _ColorSwatch(
                 colorValue: colorValue,
-                selected: normalized == normalizedSelected,
+                selected: isSelected,
                 used: usedColors.map(normalizeColorValue).contains(normalized),
                 radius: _swatchVisualRadius(swatchRadius),
                 onTap: () => onSelected(normalized),
+                selectOnFocus: keyboardSelect,
+                autofocus: keyboardSelect && isSelected,
               );
             }).toList(),
           ),
         );
 
-        Widget content = wrap;
+        // Keeps arrow-key traversal inside the palette instead of escaping to
+        // whatever else the surrounding dialog happens to hold.
+        Widget content = keyboardSelect
+            ? FocusTraversalGroup(
+                policy: ReadingOrderTraversalPolicy(),
+                child: wrap,
+              )
+            : wrap;
 
         if (needsScroll) {
           content = SingleChildScrollView(
@@ -360,6 +385,7 @@ class _PalettePickDialogState extends State<_PalettePickDialog> {
                 maxWidth: 520,
                 maxHeight: paletteViewportHeight(32, visibleRows: 3),
                 tightLayout: true,
+                keyboardSelect: true,
               ),
             ),
           ),
@@ -388,6 +414,8 @@ class _ColorSwatch extends StatelessWidget {
     required this.used,
     required this.radius,
     required this.onTap,
+    this.selectOnFocus = false,
+    this.autofocus = false,
   });
 
   final int colorValue;
@@ -395,6 +423,8 @@ class _ColorSwatch extends StatelessWidget {
   final bool used;
   final double radius;
   final VoidCallback onTap;
+  final bool selectOnFocus;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -408,9 +438,11 @@ class _ColorSwatch extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      onFocusChange: (focused) {
-        if (focused) onTap();
-      },
+      autofocus: autofocus,
+      // The selection ring *is* the focus indicator, so keyboard traversal
+      // has to carry the selection with it — otherwise arrow keys move an
+      // invisible cursor and Enter saves whatever was picked by mouse.
+      onFocusChange: selectOnFocus ? (focused) { if (focused) onTap(); } : null,
       customBorder: const CircleBorder(),
       child: Ink(
         width: diameter,

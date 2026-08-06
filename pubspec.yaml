@@ -84,3 +84,13 @@ flutter:
         - asset: assets/Iosevka-Bold/Iosevka-Aile-Bold-Italic-03.ttf
           weight: 700
           style: italic
+    # Monospace sibling of Aile, used only by the LeetCode code block. Subset
+    # to Latin/Greek/Cyrillic plus punctuation, math, arrows and box drawing —
+    # the full faces are ~10 MB each. Regenerate with tool/subset_mono_font.py.
+    - family: IosevkaMono
+      fonts:
+        - asset: assets/Iosevka-Regular/Iosevka-Term-01.ttf
+          weight: 400
+        - asset: assets/Iosevka-Regular/Iosevka-Term-Italic-03.ttf
+          weight: 400
+          style: italic

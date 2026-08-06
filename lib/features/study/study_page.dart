@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
+import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/features/study/study_actions.dart';
 import 'package:voyager/features/study/study_breadcrumb.dart';
 import 'package:voyager/features/study/study_deck_workbench_page.dart';
 import 'package:voyager/features/study/study_name_modal.dart';
@@ -48,11 +52,14 @@ class _StudyPageState extends ConsumerState<StudyPage>
       _sourceRect = origin & tileBox.size;
     });
     ref.read(studyActiveDeckIdProvider.notifier).state = deck.id;
-    _zoom.forward(from: 0);
+    // No `from:` — snapping to 0 before playing would flash to the wrong
+    // endpoint if this interrupts an in-flight close.
+    _zoom.forward();
   }
 
   void _closeDeck() {
-    _zoom.reverse(from: 1).whenComplete(() {
+    // No `from:` — see _openDeck.
+    _zoom.reverse().whenComplete(() {
       if (!mounted) return;
       setState(() {
         _openDeckId = null;
@@ -166,6 +173,7 @@ class _StudyPageState extends ConsumerState<StudyPage>
           : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
+          final reducedMotion = VoyagerMotion.reduced(context);
           return Stack(
             key: _stackKey,
             children: [
@@ -189,6 +197,26 @@ class _StudyPageState extends ConsumerState<StudyPage>
                 AnimatedBuilder(
                   animation: _zoom,
                   builder: (context, _) {
+                    final workbench = StudyDeckWorkbenchPage(
+                      deckId: _openDeckId!,
+                      folderStack: stack,
+                      deckNameHint: _openDeckName,
+                      onBack: _closeDeck,
+                      onJumpToRoot: _jumpToRoot,
+                      onJumpToFolder: _jumpToFolderIndex,
+                    );
+                    if (reducedMotion) {
+                      final opacity = _zoom.value.clamp(0.0, 1.0);
+                      return Positioned.fill(
+                        child: Opacity(
+                          opacity: opacity,
+                          child: IgnorePointer(
+                            ignoring: opacity == 0,
+                            child: workbench,
+                          ),
+                        ),
+                      );
+                    }
                     final t = Curves.easeInOutCubic.transform(_zoom.value);
                     final full = Offset.zero & constraints.biggest;
                     final rect = Rect.lerp(_sourceRect, full, t) ?? full;
@@ -197,20 +225,16 @@ class _StudyPageState extends ConsumerState<StudyPage>
                       BorderRadius.zero,
                       t,
                     )!;
-                    return Positioned.fromRect(
-                      rect: rect,
+                    // Content is always laid out at full screen size (via
+                    // Positioned.fill) and just revealed through a growing
+                    // clip mask — laying it out at the tiny source-tile rect
+                    // instead would overflow its Rows/Columns mid-animation.
+                    return Positioned.fill(
                       child: Opacity(
                         opacity: t.clamp(0.0, 1.0),
-                        child: ClipRRect(
-                          borderRadius: radius,
-                          child: StudyDeckWorkbenchPage(
-                            deckId: _openDeckId!,
-                            folderStack: stack,
-                            deckNameHint: _openDeckName,
-                            onBack: _closeDeck,
-                            onJumpToRoot: _jumpToRoot,
-                            onJumpToFolder: _jumpToFolderIndex,
-                          ),
+                        child: ClipPath(
+                          clipper: _RevealClipper(rect: rect, radius: radius),
+                          child: workbench,
                         ),
                       ),
                     );
@@ -368,46 +392,86 @@ class _StudyLibraryGrid extends StatelessWidget {
       itemBuilder: (context, index) {
         if (index < sortedFolders.length) {
           final folder = sortedFolders[index];
-          return _FolderTile(folder: folder, onTap: () => onOpenFolder(folder));
+          return _FolderTile(
+            folder: folder,
+            siblingFolders: sortedFolders,
+            onTap: () => onOpenFolder(folder),
+          );
         }
         final deck = sortedDecks[index - sortedFolders.length];
-        return _DeckTile(deck: deck, onTap: (box) => onOpenDeck(deck, box));
+        return _DeckTile(
+          deck: deck,
+          siblingDecks: sortedDecks,
+          onTap: (box) => onOpenDeck(deck, box),
+        );
       },
     );
   }
 }
 
-class _FolderTile extends StatelessWidget {
-  const _FolderTile({required this.folder, required this.onTap});
+class _FolderTile extends ConsumerWidget {
+  const _FolderTile({
+    required this.folder,
+    required this.siblingFolders,
+    required this.onTap,
+  });
 
   final StudyFolder folder;
+  final List<StudyFolder> siblingFolders;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(
-                PhosphorIconsRegular.folder,
-                size: 32,
-                color: theme.colorScheme.primary,
-              ),
-              Text(
-                folder.name,
-                style: theme.textTheme.titleSmall,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+    return ContextMenuRegion(
+      items: [
+        ContextMenuItem(
+          label: 'Recolor',
+          icon: PhosphorIconsRegular.palette,
+          onTap: () => changeStudyFolderColor(context, ref, folder, siblingFolders),
+        ),
+        ContextMenuItem(
+          label: 'Rename',
+          icon: PhosphorIconsRegular.textAa,
+          onTap: () => renameStudyFolder(context, ref, folder),
+        ),
+        ContextMenuItem(
+          label: 'Move to…',
+          icon: PhosphorIconsRegular.folderOpen,
+          onTap: () => moveStudyFolder(context, ref, folder),
+        ),
+        ContextMenuItem(
+          label: 'Delete',
+          icon: PhosphorIconsRegular.trash,
+          isDestructive: true,
+          onTap: () => deleteStudyFolder(context, ref, folder),
+        ),
+      ],
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(
+                  PhosphorIconsRegular.folder,
+                  size: 32,
+                  color: folder.colorValue != null
+                      ? presetColor(folder.colorValue!)
+                      : theme.colorScheme.primary,
+                ),
+                Text(
+                  folder.name,
+                  style: theme.textTheme.titleSmall,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -416,9 +480,14 @@ class _FolderTile extends StatelessWidget {
 }
 
 class _DeckTile extends ConsumerStatefulWidget {
-  const _DeckTile({required this.deck, required this.onTap});
+  const _DeckTile({
+    required this.deck,
+    required this.siblingDecks,
+    required this.onTap,
+  });
 
   final StudyDeck deck;
+  final List<StudyDeck> siblingDecks;
   final void Function(RenderBox tileBox) onTap;
 
   @override
@@ -440,52 +509,95 @@ class _DeckTileState extends ConsumerState<_DeckTile> {
     final statsAsync = ref.watch(studyDeckStatsProvider(widget.deck.id));
     final due = statsAsync.valueOrNull?.due;
 
-    return Card(
-      key: _boxKey,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: _handleTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Icon(
-                    PhosphorIconsRegular.cardsThree,
-                    size: 32,
-                    color: theme.colorScheme.secondary,
-                  ),
-                  Text(
-                    widget.deck.name,
-                    style: theme.textTheme.titleSmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-              if (due != null && due > 0)
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      borderRadius: BorderRadius.circular(10),
+    return ContextMenuRegion(
+      items: [
+        ContextMenuItem(
+          label: 'Recolor',
+          icon: PhosphorIconsRegular.palette,
+          onTap: () => changeStudyDeckColor(context, ref, widget.deck, widget.siblingDecks),
+        ),
+        ContextMenuItem(
+          label: 'Rename',
+          icon: PhosphorIconsRegular.textAa,
+          onTap: () => renameStudyDeck(context, ref, widget.deck),
+        ),
+        ContextMenuItem(
+          label: 'Move to…',
+          icon: PhosphorIconsRegular.folderOpen,
+          onTap: () => moveStudyDeck(context, ref, widget.deck),
+        ),
+        ContextMenuItem(
+          label: 'Delete',
+          icon: PhosphorIconsRegular.trash,
+          isDestructive: true,
+          onTap: () => deleteStudyDeck(context, ref, widget.deck),
+        ),
+      ],
+      child: Card(
+        key: _boxKey,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _handleTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Stack(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Icon(
+                      PhosphorIconsRegular.cardsThree,
+                      size: 32,
+                      color: widget.deck.colorValue != null
+                          ? presetColor(widget.deck.colorValue!)
+                          : theme.colorScheme.secondary,
                     ),
-                    child: Text(
-                      '$due',
-                      style: theme.textTheme.labelSmall?.copyWith(color: vc.onAccent),
+                    Text(
+                      widget.deck.name,
+                      style: theme.textTheme.titleSmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
+                  ],
                 ),
-            ],
+                if (due != null && due > 0)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '$due',
+                        style: theme.textTheme.labelSmall?.copyWith(color: vc.onAccent),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Clips to an animated rounded rect, used to reveal the full-size deck
+/// workbench through a mask that grows from the tapped tile to fullscreen.
+class _RevealClipper extends CustomClipper<Path> {
+  const _RevealClipper({required this.rect, required this.radius});
+
+  final Rect rect;
+  final BorderRadius radius;
+
+  @override
+  Path getClip(Size size) => Path()..addRRect(radius.toRRect(rect));
+
+  @override
+  bool shouldReclip(covariant _RevealClipper oldClipper) =>
+      oldClipper.rect != rect || oldClipper.radius != radius;
 }

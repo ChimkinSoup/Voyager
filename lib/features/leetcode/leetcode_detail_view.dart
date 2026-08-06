@@ -79,6 +79,8 @@ class _LeetCodeDetailOverlayState extends State<_LeetCodeDetailOverlay>
         builder: (context, child) {
           final t = Curves.easeInOutCubic.transform(_controller.value);
           final rect = Rect.lerp(widget.anchorRect, fullScreenRect, t)!;
+          final scaleX = rect.width / fullScreenRect.width;
+          final scaleY = rect.height / fullScreenRect.height;
           return Stack(
             children: [
               Positioned.fill(
@@ -86,11 +88,20 @@ class _LeetCodeDetailOverlayState extends State<_LeetCodeDetailOverlay>
                   child: Container(color: Colors.black.withValues(alpha: 0.5 * t)),
                 ),
               ),
-              Positioned.fromRect(
-                rect: rect,
-                child: Opacity(
-                  opacity: t,
-                  child: child,
+              // The card is always laid out at full-screen size and scaled
+              // via Transform (rather than resized via Positioned.fromRect)
+              // so its content never has to reflow into anchorRect's tiny
+              // starting dimensions, which caused RenderFlex overflows.
+              Positioned.fill(
+                child: Transform(
+                  alignment: Alignment.topLeft,
+                  transform: Matrix4.identity()
+                    ..translate(rect.left, rect.top)
+                    ..scale(scaleX, scaleY),
+                  child: Opacity(
+                    opacity: t,
+                    child: child,
+                  ),
                 ),
               ),
             ],

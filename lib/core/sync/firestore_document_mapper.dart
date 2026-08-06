@@ -264,6 +264,7 @@ Map<String, dynamic> studyFolderToFirestore(StudyFolder folder) => {
   'id': folder.id,
   'name': folder.name,
   'parentFolderId': folder.parentFolderId,
+  'colorValue': folder.colorValue,
   'createdAt': _dateToFirestoreRequired(folder.createdAt),
   'updatedAt': _dateToFirestoreRequired(folder.updatedAt),
   'version': folder.version,
@@ -293,6 +294,9 @@ StudyFolder mergeStudyFolderFromRemote(
     parentFolderId: data.containsKey('parentFolderId')
         ? data['parentFolderId'] as String?
         : local?.parentFolderId,
+    colorValue: data.containsKey('colorValue')
+        ? data['colorValue'] as int?
+        : local?.colorValue,
     createdAt: parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
@@ -306,6 +310,7 @@ Map<String, dynamic> studyDeckToFirestore(StudyDeck deck) => {
   'id': deck.id,
   'name': deck.name,
   'parentFolderId': deck.parentFolderId,
+  'colorValue': deck.colorValue,
   'createdAt': _dateToFirestoreRequired(deck.createdAt),
   'updatedAt': _dateToFirestoreRequired(deck.updatedAt),
   'version': deck.version,
@@ -335,6 +340,9 @@ StudyDeck mergeStudyDeckFromRemote(
     parentFolderId: data.containsKey('parentFolderId')
         ? data['parentFolderId'] as String?
         : local?.parentFolderId,
+    colorValue: data.containsKey('colorValue')
+        ? data['colorValue'] as int?
+        : local?.colorValue,
     createdAt: parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
@@ -480,7 +488,9 @@ JournalEntry mergeJournalEntryFromRemote(
   return JournalEntry(
     id: id,
     journalId: journalReferenceIdFromFirestore(
-      data['journalId'] as String? ?? local?.journalId ?? legacyJournalId,
+      metadataRemoteWins
+          ? (data['journalId'] as String? ?? local?.journalId ?? legacyJournalId)
+          : local!.journalId,
     ),
     title: metadataRemoteWins
         ? (data['title'] as String? ?? local?.title ?? '')
@@ -615,7 +625,9 @@ TodoTask mergeTodoTaskFromRemote(
     notes = local!.notes;
   }
 
-  final listId = data['listId'] as String? ?? local?.listId;
+  final listId = metadataRemoteWins
+      ? (data['listId'] as String? ?? local?.listId)
+      : local?.listId;
   if (listId == null) {
     throw StateError('Remote todo task $id is missing listId.');
   }

@@ -60,6 +60,9 @@ class _DesktopWindowFrameState extends State<DesktopWindowFrame>
     _hideTimer?.cancel();
     if (!_barVisible) {
       setState(() => _barVisible = true);
+    }
+    if (_controller.status != AnimationStatus.forward &&
+        _controller.status != AnimationStatus.completed) {
       _controller.forward();
     }
   }

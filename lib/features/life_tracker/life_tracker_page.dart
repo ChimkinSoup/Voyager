@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/life_tracker/blossom_stat_popup.dart';
 import 'package:voyager/features/life_tracker/bucket_list_popup.dart';
@@ -83,7 +84,7 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     await showTreePopover(
       context: context,
       anchorGlobalCenter: anchor,
-      width: 360,
+      width: 480,
       height: 460,
       accentColor: accent,
       builder: (_) => BucketListPopup(accentColor: accent),
@@ -130,6 +131,13 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
       for (var i = 0; i < count; i++)
         orderedIndices[(i * stride).floor().clamp(0, orderedIndices.length - 1)],
     ];
+
+    if (VoyagerMotion.reduced(context)) {
+      // Skip the multi-second leaf-fall cascade — land straight on the
+      // settled state.
+      ref.read(lifeTreeGroundedLeavesProvider.notifier).state = chosen.toSet();
+      return;
+    }
 
     // Let the fully-leaved tree render for a beat before it starts shedding.
     Future.delayed(const Duration(milliseconds: 700), () {

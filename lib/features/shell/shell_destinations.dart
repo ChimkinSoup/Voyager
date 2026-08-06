@@ -82,7 +82,7 @@ const shellDestinations = <ShellDestination>[
   ShellDestination(
     path: '/life-tracker',
     icon: PhosphorIconsRegular.tree,
-    label: 'Life Tracker',
+    label: 'Life',
     page: LifeTrackerPage(),
   ),
   ShellDestination(

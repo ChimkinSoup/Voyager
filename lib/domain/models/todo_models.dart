@@ -78,6 +78,8 @@ class TodoTask extends SoftDeletable {
     bool clearPreStarSortOrder = false,
     DateTime? dueDateSetAt,
     bool clearDueDateSetAt = false,
+    String? parentTaskId,
+    bool clearParentTaskId = false,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -101,7 +103,9 @@ class TodoTask extends SoftDeletable {
       dueDateSetAt: clearDueDateSetAt
           ? null
           : (dueDateSetAt ?? this.dueDateSetAt),
-      parentTaskId: parentTaskId,
+      parentTaskId: clearParentTaskId
+          ? null
+          : (parentTaskId ?? this.parentTaskId),
     );
   }
 
