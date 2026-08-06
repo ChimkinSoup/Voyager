@@ -149,6 +149,27 @@ List<TodoTask> normalizeUnstarredSection(List<TodoTask> unstarred) {
   return [...dated, ...undated];
 }
 
+/// Moves [task] to the bottom of its own category — starred/unstarred
+/// crossed with dated/undated — leaving every other task's relative order
+/// untouched. Dated tasks stay above undated ones within the same
+/// starred-ness, matching [buildStarredOrder]/[buildUnstarredOrderForDueDate].
+TodoSortBatch applyMoveToBottomOfCategory(
+  TodoTask task,
+  List<TodoTask> activeTasks,
+) {
+  final sameCategory =
+      activeTasks.where((t) => t.id != task.id && t.starred == task.starred).toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final dated = sameCategory.where((t) => t.dueDate != null).toList();
+  final undated = sameCategory.where((t) => t.dueDate == null).toList();
+
+  final ordered = task.dueDate != null
+      ? [...dated, task, ...undated]
+      : [...dated, ...undated, task];
+
+  return _batchFromOrder(activeTasks, ordered, starredSegment: task.starred);
+}
+
 TodoSortBatch applyStarToggle(TodoTask task, List<TodoTask> activeTasks) {
   if (task.starred) {
     return _applyUnstar(task, activeTasks);

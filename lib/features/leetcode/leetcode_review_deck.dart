@@ -4,11 +4,24 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
 
 /// Focused flashcard mode: swipe/paginate through every tracked problem.
-class LeetCodeReviewDeck extends ConsumerWidget {
+class LeetCodeReviewDeck extends ConsumerStatefulWidget {
   const LeetCodeReviewDeck({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LeetCodeReviewDeck> createState() => _LeetCodeReviewDeckState();
+}
+
+class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
+  late final PageController _controller = PageController(viewportFraction: 0.86);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final problemsAsync = ref.watch(leetcodeProblemsProvider);
     final problems = problemsAsync.valueOrNull ?? const [];
@@ -36,7 +49,7 @@ class LeetCodeReviewDeck extends ConsumerWidget {
         // here, so letting shadows bleed into the gutter is safe.
         clipBehavior: Clip.none,
         itemCount: problems.length,
-        controller: PageController(viewportFraction: 0.86),
+        controller: _controller,
         itemBuilder: (context, index) => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: LeetCodeFlashcard(problem: problems[index]),

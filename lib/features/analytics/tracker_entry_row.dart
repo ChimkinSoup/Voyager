@@ -63,11 +63,44 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   void didUpdateWidget(covariant TrackerEntryRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.date != widget.date) {
+      if (_dirty) {
+        _commitPendingForDateChange(_existing, oldWidget.date);
+        widget.onDirtyChanged?.call(false);
+      }
       setState(() {
         _saved = false;
         _dirty = false;
       });
     }
+  }
+
+  /// Flushes a pending integer edit for the date being navigated away from,
+  /// so switching dates (or closing the popover) doesn't silently drop it.
+  /// Written separately from [_saveValue] because that path targets
+  /// `widget.date`, which has already moved on to the new date by the time
+  /// this runs.
+  Future<void> _commitPendingForDateChange(
+    TrackerValue? existing,
+    DateTime date,
+  ) async {
+    final raw = int.tryParse(_intController.text.trim());
+    if (raw == null) return;
+    final val = _clampInt(raw);
+    final now = utcNow();
+    await ref
+        .read(trackerRepositoryProvider)
+        .upsertValue(
+          TrackerValue(
+            id: existing?.id ?? trackerValueId(widget.tracker.id, date),
+            trackerId: widget.tracker.id,
+            periodStart: date,
+            intValue: val,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+          ),
+        );
+    ref.invalidate(trackerValuesProvider(widget.tracker.id));
+    ref.invalidate(pendingStatEntriesProvider);
   }
 
   @override

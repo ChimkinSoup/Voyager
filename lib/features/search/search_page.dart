@@ -320,6 +320,13 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
         _bodyFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
+      // Enter commits from the title too, not just the body — Tab is what
+      // moves between the two fields.
+      if (event.logicalKey == LogicalKeyboardKey.enter &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _saveAndClose();
+        return KeyEventResult.handled;
+      }
       return KeyEventResult.ignored;
     };
 
@@ -328,8 +335,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.enter &&
           !HardwareKeyboard.instance.isShiftPressed) {
-        unawaited(_save());
-        if (mounted) Navigator.pop(context);
+        _saveAndClose();
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -397,6 +403,13 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   Future<void> _lifecycleFlush() async {
     await _save();
+  }
+
+  /// Closes first, then saves: the popup disappearing is the user's
+  /// confirmation that Enter landed, so it must not wait on the write.
+  void _saveAndClose() {
+    unawaited(_save());
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
@@ -500,10 +513,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                       label: 'Title',
                       controller: _titleController,
                       focusNode: _titleFocusNode,
-                      textInputAction: TextInputAction.next,
+                      textInputAction: TextInputAction.done,
                       accentColor: _accentColor,
                       contentPadding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
-                      onSubmitted: (_) => _bodyFocusNode.requestFocus(),
+                      onSubmitted: (_) => _saveAndClose(),
                     ),
                     Positioned(
                       top: 0,

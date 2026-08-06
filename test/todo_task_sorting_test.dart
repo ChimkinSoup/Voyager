@@ -397,6 +397,60 @@ void main() {
     expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
   });
 
+  test('move to bottom sends unstarred undated task below its siblings', () {
+    final due = DateTime.utc(2026, 6, 1, 9);
+    final active = [
+      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
+      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1),
+      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+    ];
+
+    final batch = applyMoveToBottomOfCategory(active[1], active);
+    final sorted = _sortedAfterBatch(active, batch);
+    expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
+  });
+
+  test('move to bottom keeps unstarred dated task above undated section', () {
+    final dueEarly = DateTime.utc(2026, 6, 1, 9);
+    final dueLate = DateTime.utc(2026, 6, 3, 9);
+    final active = [
+      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
+      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+    ];
+
+    final batch = applyMoveToBottomOfCategory(active[0], active);
+    final sorted = _sortedAfterBatch(active, batch);
+    expect(sorted.map((t) => t.id).toList(), ['b', 'a', 'c']);
+  });
+
+  test('move to bottom sends starred task below its starred siblings', () {
+    final active = [
+      _task(id: 'a', starred: true, sortOrder: 0),
+      _task(id: 'b', starred: true, sortOrder: 1),
+      _task(id: 'c', sortOrder: unstarredSortOrderBase),
+    ];
+
+    final batch = applyMoveToBottomOfCategory(active[0], active);
+    final sorted = _sortedAfterBatch(active, batch);
+    expect(sorted.map((t) => t.id).toList(), ['b', 'a', 'c']);
+  });
+
+  test('move to bottom keeps starred dated task above starred undated', () {
+    final dueEarly = DateTime.utc(2026, 6, 1, 9);
+    final dueLate = DateTime.utc(2026, 6, 3, 9);
+    final active = [
+      _task(id: 'a', starred: true, sortOrder: 0, dueDate: dueEarly),
+      _task(id: 'e', starred: true, sortOrder: 1, dueDate: dueLate),
+      _task(id: 'b', starred: true, sortOrder: 2),
+      _task(id: 'c', sortOrder: unstarredSortOrderBase),
+    ];
+
+    final batch = applyMoveToBottomOfCategory(active[0], active);
+    final sorted = _sortedAfterBatch(active, batch);
+    expect(sorted.map((t) => t.id).toList(), ['e', 'a', 'b', 'c']);
+  });
+
   test('setting the same due date again does not reorder', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final task = _task(

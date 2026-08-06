@@ -61,7 +61,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   bool _isTimePopoverOpen = false;
   bool _intentionalDiscard = false;
   bool _closingAfterSave = false;
-  final _timePillKey = GlobalKey();
+  late final FocusNode _allDayFocusNode;
 
   @override
   void initState() {
@@ -70,18 +70,28 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _titleController = TextEditingController(text: e?.title ?? '');
     _notesController = TextEditingController(text: e?.notes ?? '');
     _lastNotesText = _notesController.text;
+    // Tab walks the three controls that are always on screen: title → notes →
+    // all-day. The time pill used to sit between title and notes, but it only
+    // exists once all-day is switched off, so tabbing through it landed on
+    // nothing for a default new event.
     _titleFocusNode = FocusNode();
     _titleFocusNode.onKeyEvent = (node, event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.tab &&
           !HardwareKeyboard.instance.isShiftPressed) {
-        _titleFocusNode.unfocus();
-        if (!_isFullDay) {
-          final timeContext = _timePillKey.currentContext;
-          if (timeContext != null) {
-            _openTimePopover(timeContext);
-          }
-        }
+        _notesFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+    _allDayFocusNode = FocusNode();
+    // Enter on the focused all-day button toggles it. The panel's
+    // [EnterToSubmitScope] sits above this node and would otherwise swallow
+    // the key and save the event instead.
+    _allDayFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.enter) {
+        setState(() => _isFullDay = !_isFullDay);
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -95,6 +105,12 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         if (handleListTab(controller: _notesController, outdent: outdent)) {
           // Keep _lastNotesText in sync for the next keystroke's diff.
           _handleNotesChanged(_notesController.text);
+          return KeyEventResult.handled;
+        }
+        // Not on a list line, so there's nothing to indent — Tab moves on to
+        // the all-day button instead.
+        if (!outdent) {
+          _allDayFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -186,6 +202,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _notesController.dispose();
     _titleFocusNode.dispose();
     _notesFocusNode.dispose();
+    _allDayFocusNode.dispose();
     super.dispose();
   }
 
@@ -262,6 +279,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         },
       ),
     );
+    if (!mounted) return;
     setState(() => _isTimePopoverOpen = false);
     if (result != null) {
       setState(() {
@@ -416,6 +434,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                   Transform.translate(
                     offset: const Offset(2, 0),
                     child: IconButton(
+                      focusNode: _allDayFocusNode,
                       onPressed: () =>
                           setState(() => _isFullDay = !_isFullDay),
                       tooltip: _isFullDay ? 'All day (on)' : 'All day (off)',
@@ -482,6 +501,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                 accentColor: accent,
                               ),
                             );
+                            if (!mounted) return;
                             setState(() => _isDatePopoverOpen = false);
                             if (dateRange != null) {
                               setState(() {
@@ -508,7 +528,6 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                     if (!_isFullDay) ...[
                       const SizedBox(width: 6),
                       Builder(
-                        key: _timePillKey,
                         builder: (buttonContext) => SelectorPill(
                           dense: true,
                           ellipsize: false,

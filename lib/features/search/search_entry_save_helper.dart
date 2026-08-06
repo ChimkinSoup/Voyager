@@ -67,8 +67,15 @@ class SearchEntrySaveHelper {
         await remoteSync.forceOverwriteJournalEntryText(result!);
       }
       return result;
-    } catch (e, st) {
-      debugPrint('Error saving entry in SearchEntrySaveHelper: $e\n$st');
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'SearchEntrySaveHelper',
+          context: ErrorDescription('while saving entry from Search'),
+        ),
+      );
       return null;
     }
   }

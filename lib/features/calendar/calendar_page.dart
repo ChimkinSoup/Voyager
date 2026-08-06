@@ -900,12 +900,18 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _clearWeekMorphCache();
       final base = _dayViewDate ?? _focused;
       if (_dayViewDate != null) {
-        _dayViewDate = base.add(Duration(days: delta));
+        // Field-based (not Duration) so this stays correct across DST
+        // transitions.
+        _dayViewDate = DateTime(base.year, base.month, base.day + delta);
         _focused = DateTime(_dayViewDate!.year, _dayViewDate!.month, 1);
         return;
       }
       _focused = switch (_mode) {
-        CalendarViewMode.week => _focused.add(Duration(days: 7 * delta)),
+        CalendarViewMode.week => DateTime(
+          _focused.year,
+          _focused.month,
+          _focused.day + 7 * delta,
+        ),
         CalendarViewMode.month => DateTime(
           _focused.year,
           _focused.month + delta,
@@ -1012,7 +1018,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         weekStartsMonday: weekStartsMonday,
       );
       for (var i = 0; i < 7; i++) {
-        final day = weekStart.add(Duration(days: i));
+        final day = DateTime(weekStart.year, weekStart.month, weekStart.day + i);
         if (dates.any((d) => calendarSameDay(d, day))) return day;
       }
       // Week view was on a different month — still restore that week.
@@ -1993,9 +1999,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           ? const <CalendarDayIndicator>[]
           : activeIndicators;
       final morphTodos = chained ? const <CalendarTodoMarker>[] : activeTodos;
+      final weekStartAnchor = _weekStart(anchor, weekStartsMonday);
       final weekDates = List.generate(
         7,
-        (i) => _weekStart(anchor, weekStartsMonday).add(Duration(days: i)),
+        (i) => DateTime(
+          weekStartAnchor.year,
+          weekStartAnchor.month,
+          weekStartAnchor.day + i,
+        ),
       );
       final weekAllDayShelfHeight = calendarWeekAllDayShelfHeightFor(
         events: morphEvents,
@@ -4086,9 +4097,12 @@ class _MonthWeekMorphCell extends StatelessWidget {
 DateTime _weekStart(DateTime focused, bool weekStartsMonday) {
   final weekday = focused.weekday;
   final firstDay = weekStartsMonday ? DateTime.monday : DateTime.sunday;
+  // Field-based subtraction (not Duration), so this stays correct across
+  // DST transitions — Duration(days:) is a fixed elapsed-time delta and can
+  // land on the wrong calendar day for a local DateTime.
   return DateTime(
     focused.year,
     focused.month,
-    focused.day,
-  ).subtract(Duration(days: (weekday - firstDay) % 7));
+    focused.day - (weekday - firstDay) % 7,
+  );
 }

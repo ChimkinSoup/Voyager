@@ -206,7 +206,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         padding: EdgeInsets.only(bottom: viewInsets),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -215,7 +215,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                   child: Container(
                     width: 36,
                     height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
+                    margin: const EdgeInsets.only(bottom: 6),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.onSurfaceVariant.withValues(
                         alpha: 0.3,

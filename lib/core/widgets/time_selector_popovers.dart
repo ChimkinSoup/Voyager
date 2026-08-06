@@ -208,8 +208,8 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     setState(() {
       _endDt = newEndDt;
       
-      // Failsafe: if end is pushed before start, push start backwards to maintain a minimum 1-hour duration
-      if (_endDt.difference(_startDt) < const Duration(hours: 1)) {
+      // Failsafe: if end is pushed to or before start, push start backwards to maintain a minimum 1-hour duration
+      if (!_endDt.isAfter(_startDt)) {
          _startDt = _endDt.subtract(const Duration(hours: 1));
       }
       _duration = _endDt.difference(_startDt);

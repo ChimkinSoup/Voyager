@@ -310,6 +310,7 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
       ref.invalidate(studyCardsProvider);
       ref.invalidate(studyStatsProvider);
       ref.invalidate(studyDeckStatsProvider);
+      ref.invalidate(allDreamEntriesProvider);
     },
   );
   ref.onDispose(controller.dispose);

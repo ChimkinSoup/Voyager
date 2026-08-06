@@ -20077,6 +20077,17 @@ class $StudyFoldersTableTable extends StudyFoldersTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -20127,6 +20138,7 @@ class $StudyFoldersTableTable extends StudyFoldersTable
     id,
     name,
     parentFolderId,
+    colorValue,
     createdAt,
     updatedAt,
     version,
@@ -20164,6 +20176,12 @@ class $StudyFoldersTableTable extends StudyFoldersTable
           data['parent_folder_id']!,
           _parentFolderIdMeta,
         ),
+      );
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -20215,6 +20233,10 @@ class $StudyFoldersTableTable extends StudyFoldersTable
         DriftSqlType.string,
         data['${effectivePrefix}parent_folder_id'],
       ),
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -20245,6 +20267,7 @@ class StudyFoldersTableData extends DataClass
   final String id;
   final String name;
   final String? parentFolderId;
+  final int? colorValue;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -20253,6 +20276,7 @@ class StudyFoldersTableData extends DataClass
     required this.id,
     required this.name,
     this.parentFolderId,
+    this.colorValue,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -20265,6 +20289,9 @@ class StudyFoldersTableData extends DataClass
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || parentFolderId != null) {
       map['parent_folder_id'] = Variable<String>(parentFolderId);
+    }
+    if (!nullToAbsent || colorValue != null) {
+      map['color_value'] = Variable<int>(colorValue);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -20282,6 +20309,9 @@ class StudyFoldersTableData extends DataClass
       parentFolderId: parentFolderId == null && nullToAbsent
           ? const Value.absent()
           : Value(parentFolderId),
+      colorValue: colorValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorValue),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -20300,6 +20330,7 @@ class StudyFoldersTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       parentFolderId: serializer.fromJson<String?>(json['parentFolderId']),
+      colorValue: serializer.fromJson<int?>(json['colorValue']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -20313,6 +20344,7 @@ class StudyFoldersTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'parentFolderId': serializer.toJson<String?>(parentFolderId),
+      'colorValue': serializer.toJson<int?>(colorValue),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -20324,6 +20356,7 @@ class StudyFoldersTableData extends DataClass
     String? id,
     String? name,
     Value<String?> parentFolderId = const Value.absent(),
+    Value<int?> colorValue = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -20334,6 +20367,7 @@ class StudyFoldersTableData extends DataClass
     parentFolderId: parentFolderId.present
         ? parentFolderId.value
         : this.parentFolderId,
+    colorValue: colorValue.present ? colorValue.value : this.colorValue,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -20346,6 +20380,9 @@ class StudyFoldersTableData extends DataClass
       parentFolderId: data.parentFolderId.present
           ? data.parentFolderId.value
           : this.parentFolderId,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -20359,6 +20396,7 @@ class StudyFoldersTableData extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('parentFolderId: $parentFolderId, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -20372,6 +20410,7 @@ class StudyFoldersTableData extends DataClass
     id,
     name,
     parentFolderId,
+    colorValue,
     createdAt,
     updatedAt,
     version,
@@ -20384,6 +20423,7 @@ class StudyFoldersTableData extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.parentFolderId == this.parentFolderId &&
+          other.colorValue == this.colorValue &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -20395,6 +20435,7 @@ class StudyFoldersTableCompanion
   final Value<String> id;
   final Value<String> name;
   final Value<String?> parentFolderId;
+  final Value<int?> colorValue;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -20404,6 +20445,7 @@ class StudyFoldersTableCompanion
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.parentFolderId = const Value.absent(),
+    this.colorValue = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -20414,6 +20456,7 @@ class StudyFoldersTableCompanion
     required String id,
     required String name,
     this.parentFolderId = const Value.absent(),
+    this.colorValue = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -20427,6 +20470,7 @@ class StudyFoldersTableCompanion
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? parentFolderId,
+    Expression<int>? colorValue,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -20437,6 +20481,7 @@ class StudyFoldersTableCompanion
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (parentFolderId != null) 'parent_folder_id': parentFolderId,
+      if (colorValue != null) 'color_value': colorValue,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -20449,6 +20494,7 @@ class StudyFoldersTableCompanion
     Value<String>? id,
     Value<String>? name,
     Value<String?>? parentFolderId,
+    Value<int?>? colorValue,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -20459,6 +20505,7 @@ class StudyFoldersTableCompanion
       id: id ?? this.id,
       name: name ?? this.name,
       parentFolderId: parentFolderId ?? this.parentFolderId,
+      colorValue: colorValue ?? this.colorValue,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -20478,6 +20525,9 @@ class StudyFoldersTableCompanion
     }
     if (parentFolderId.present) {
       map['parent_folder_id'] = Variable<String>(parentFolderId.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -20503,6 +20553,7 @@ class StudyFoldersTableCompanion
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('parentFolderId: $parentFolderId, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -20546,6 +20597,17 @@ class $StudyDecksTableTable extends StudyDecksTable
     aliasedName,
     true,
     type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
@@ -20598,6 +20660,7 @@ class $StudyDecksTableTable extends StudyDecksTable
     id,
     name,
     parentFolderId,
+    colorValue,
     createdAt,
     updatedAt,
     version,
@@ -20635,6 +20698,12 @@ class $StudyDecksTableTable extends StudyDecksTable
           data['parent_folder_id']!,
           _parentFolderIdMeta,
         ),
+      );
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -20686,6 +20755,10 @@ class $StudyDecksTableTable extends StudyDecksTable
         DriftSqlType.string,
         data['${effectivePrefix}parent_folder_id'],
       ),
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -20716,6 +20789,7 @@ class StudyDecksTableData extends DataClass
   final String id;
   final String name;
   final String? parentFolderId;
+  final int? colorValue;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -20724,6 +20798,7 @@ class StudyDecksTableData extends DataClass
     required this.id,
     required this.name,
     this.parentFolderId,
+    this.colorValue,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -20736,6 +20811,9 @@ class StudyDecksTableData extends DataClass
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || parentFolderId != null) {
       map['parent_folder_id'] = Variable<String>(parentFolderId);
+    }
+    if (!nullToAbsent || colorValue != null) {
+      map['color_value'] = Variable<int>(colorValue);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -20753,6 +20831,9 @@ class StudyDecksTableData extends DataClass
       parentFolderId: parentFolderId == null && nullToAbsent
           ? const Value.absent()
           : Value(parentFolderId),
+      colorValue: colorValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorValue),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -20771,6 +20852,7 @@ class StudyDecksTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       parentFolderId: serializer.fromJson<String?>(json['parentFolderId']),
+      colorValue: serializer.fromJson<int?>(json['colorValue']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -20784,6 +20866,7 @@ class StudyDecksTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'parentFolderId': serializer.toJson<String?>(parentFolderId),
+      'colorValue': serializer.toJson<int?>(colorValue),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -20795,6 +20878,7 @@ class StudyDecksTableData extends DataClass
     String? id,
     String? name,
     Value<String?> parentFolderId = const Value.absent(),
+    Value<int?> colorValue = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -20805,6 +20889,7 @@ class StudyDecksTableData extends DataClass
     parentFolderId: parentFolderId.present
         ? parentFolderId.value
         : this.parentFolderId,
+    colorValue: colorValue.present ? colorValue.value : this.colorValue,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -20817,6 +20902,9 @@ class StudyDecksTableData extends DataClass
       parentFolderId: data.parentFolderId.present
           ? data.parentFolderId.value
           : this.parentFolderId,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -20830,6 +20918,7 @@ class StudyDecksTableData extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('parentFolderId: $parentFolderId, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -20843,6 +20932,7 @@ class StudyDecksTableData extends DataClass
     id,
     name,
     parentFolderId,
+    colorValue,
     createdAt,
     updatedAt,
     version,
@@ -20855,6 +20945,7 @@ class StudyDecksTableData extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.parentFolderId == this.parentFolderId &&
+          other.colorValue == this.colorValue &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -20865,6 +20956,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
   final Value<String> id;
   final Value<String> name;
   final Value<String?> parentFolderId;
+  final Value<int?> colorValue;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -20874,6 +20966,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.parentFolderId = const Value.absent(),
+    this.colorValue = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -20884,6 +20977,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
     required String id,
     required String name,
     this.parentFolderId = const Value.absent(),
+    this.colorValue = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -20897,6 +20991,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? parentFolderId,
+    Expression<int>? colorValue,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -20907,6 +21002,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (parentFolderId != null) 'parent_folder_id': parentFolderId,
+      if (colorValue != null) 'color_value': colorValue,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -20919,6 +21015,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
     Value<String>? id,
     Value<String>? name,
     Value<String?>? parentFolderId,
+    Value<int?>? colorValue,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -20929,6 +21026,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
       id: id ?? this.id,
       name: name ?? this.name,
       parentFolderId: parentFolderId ?? this.parentFolderId,
+      colorValue: colorValue ?? this.colorValue,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -20948,6 +21046,9 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
     }
     if (parentFolderId.present) {
       map['parent_folder_id'] = Variable<String>(parentFolderId.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -20973,6 +21074,7 @@ class StudyDecksTableCompanion extends UpdateCompanion<StudyDecksTableData> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('parentFolderId: $parentFolderId, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -31610,6 +31712,7 @@ typedef $$StudyFoldersTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<String?> parentFolderId,
+      Value<int?> colorValue,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -31621,6 +31724,7 @@ typedef $$StudyFoldersTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String?> parentFolderId,
+      Value<int?> colorValue,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -31649,6 +31753,11 @@ class $$StudyFoldersTableTableFilterComposer
 
   ColumnFilters<String> get parentFolderId => $composableBuilder(
     column: $table.parentFolderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -31697,6 +31806,11 @@ class $$StudyFoldersTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -31735,6 +31849,11 @@ class $$StudyFoldersTableTableAnnotationComposer
 
   GeneratedColumn<String> get parentFolderId => $composableBuilder(
     column: $table.parentFolderId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
     builder: (column) => column,
   );
 
@@ -31794,6 +31913,7 @@ class $$StudyFoldersTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> parentFolderId = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -31803,6 +31923,7 @@ class $$StudyFoldersTableTableTableManager
                 id: id,
                 name: name,
                 parentFolderId: parentFolderId,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -31814,6 +31935,7 @@ class $$StudyFoldersTableTableTableManager
                 required String id,
                 required String name,
                 Value<String?> parentFolderId = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -31823,6 +31945,7 @@ class $$StudyFoldersTableTableTableManager
                 id: id,
                 name: name,
                 parentFolderId: parentFolderId,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -31863,6 +31986,7 @@ typedef $$StudyDecksTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<String?> parentFolderId,
+      Value<int?> colorValue,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -31874,6 +31998,7 @@ typedef $$StudyDecksTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String?> parentFolderId,
+      Value<int?> colorValue,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -31902,6 +32027,11 @@ class $$StudyDecksTableTableFilterComposer
 
   ColumnFilters<String> get parentFolderId => $composableBuilder(
     column: $table.parentFolderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -31950,6 +32080,11 @@ class $$StudyDecksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -31988,6 +32123,11 @@ class $$StudyDecksTableTableAnnotationComposer
 
   GeneratedColumn<String> get parentFolderId => $composableBuilder(
     column: $table.parentFolderId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
     builder: (column) => column,
   );
 
@@ -32044,6 +32184,7 @@ class $$StudyDecksTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> parentFolderId = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -32053,6 +32194,7 @@ class $$StudyDecksTableTableTableManager
                 id: id,
                 name: name,
                 parentFolderId: parentFolderId,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -32064,6 +32206,7 @@ class $$StudyDecksTableTableTableManager
                 required String id,
                 required String name,
                 Value<String?> parentFolderId = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -32073,6 +32216,7 @@ class $$StudyDecksTableTableTableManager
                 id: id,
                 name: name,
                 parentFolderId: parentFolderId,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

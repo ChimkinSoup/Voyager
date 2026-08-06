@@ -11,15 +11,19 @@ class StudyFolder extends SoftDeletable {
     super.deletedAt,
     required this.name,
     this.parentFolderId,
+    this.colorValue,
   });
 
   final String name;
   final String? parentFolderId;
+  final int? colorValue;
 
   StudyFolder copyWith({
     String? name,
     String? parentFolderId,
     bool clearParentFolderId = false,
+    int? colorValue,
+    bool clearColorValue = false,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -34,6 +38,7 @@ class StudyFolder extends SoftDeletable {
       parentFolderId: clearParentFolderId
           ? null
           : (parentFolderId ?? this.parentFolderId),
+      colorValue: clearColorValue ? null : (colorValue ?? this.colorValue),
     );
   }
 
@@ -41,6 +46,7 @@ class StudyFolder extends SoftDeletable {
     'id': id,
     'name': name,
     'parentFolderId': parentFolderId,
+    'colorValue': colorValue,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'version': version,
@@ -52,6 +58,7 @@ class StudyFolder extends SoftDeletable {
       id: json['id'] as String,
       name: json['name'] as String,
       parentFolderId: json['parentFolderId'] as String?,
+      colorValue: json['colorValue'] as int?,
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       version: json['version'] as int? ?? 0,
@@ -71,15 +78,19 @@ class StudyDeck extends SoftDeletable {
     super.deletedAt,
     required this.name,
     this.parentFolderId,
+    this.colorValue,
   });
 
   final String name;
   final String? parentFolderId;
+  final int? colorValue;
 
   StudyDeck copyWith({
     String? name,
     String? parentFolderId,
     bool clearParentFolderId = false,
+    int? colorValue,
+    bool clearColorValue = false,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -94,6 +105,7 @@ class StudyDeck extends SoftDeletable {
       parentFolderId: clearParentFolderId
           ? null
           : (parentFolderId ?? this.parentFolderId),
+      colorValue: clearColorValue ? null : (colorValue ?? this.colorValue),
     );
   }
 
@@ -101,6 +113,7 @@ class StudyDeck extends SoftDeletable {
     'id': id,
     'name': name,
     'parentFolderId': parentFolderId,
+    'colorValue': colorValue,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'version': version,
@@ -112,6 +125,7 @@ class StudyDeck extends SoftDeletable {
       id: json['id'] as String,
       name: json['name'] as String,
       parentFolderId: json['parentFolderId'] as String?,
+      colorValue: json['colorValue'] as int?,
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       version: json['version'] as int? ?? 0,

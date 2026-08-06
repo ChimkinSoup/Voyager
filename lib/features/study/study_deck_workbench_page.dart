@@ -190,7 +190,6 @@ class StudyDeckWorkbenchPage extends ConsumerWidget {
                                         deckId: deckId,
                                         existing: card,
                                       ),
-                                onLongPress: () {},
                                 behavior: multiSelect
                                     ? HitTestBehavior.opaque
                                     : HitTestBehavior.deferToChild,

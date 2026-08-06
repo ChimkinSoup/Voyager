@@ -181,6 +181,11 @@ const calendarFocusedWeekHighlightOpacity = 0.16;
 /// Background fill for focused-week days that fall outside the displayed month.
 const calendarFocusedWeekAdjacentHighlightOpacity = 0.06;
 
+/// Background fill for today, when it falls inside the focused week row.
+/// Deliberately stronger than [calendarFocusedWeekHighlightOpacity] so today
+/// still reads as one cell rather than dissolving into the week's band.
+const calendarTodayHighlightOpacity = 0.34;
+
 bool calendarDateInWeek(DateTime date, DateTime weekStart) {
   final start = DateUtils.dateOnly(weekStart);
   final day = DateUtils.dateOnly(date);
@@ -197,9 +202,14 @@ double calendarFocusedWeekHighlightAlpha({
   if (weekStart == null || opacity <= 0) return 0;
   if (!calendarDateInWeek(date, weekStart)) return 0;
   final inMonth = date.month == month.month && date.year == month.year;
-  final base = inMonth
-      ? calendarFocusedWeekHighlightOpacity
-      : calendarFocusedWeekAdjacentHighlightOpacity;
+  final double base;
+  if (DateUtils.isSameDay(date, DateTime.now())) {
+    base = calendarTodayHighlightOpacity;
+  } else {
+    base = inMonth
+        ? calendarFocusedWeekHighlightOpacity
+        : calendarFocusedWeekAdjacentHighlightOpacity;
+  }
   return base * opacity.clamp(0.0, 1.0);
 }
 

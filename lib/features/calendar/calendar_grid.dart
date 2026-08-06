@@ -1046,9 +1046,8 @@ class _DayEventTile extends StatelessWidget {
 DateTime _weekStart(DateTime date, bool weekStartsMonday) {
   final weekday = date.weekday;
   final offset = weekStartsMonday ? weekday - DateTime.monday : weekday % 7;
-  return DateTime(
-    date.year,
-    date.month,
-    date.day,
-  ).subtract(Duration(days: offset));
+  // Field-based subtraction (not Duration), so this stays correct across
+  // DST transitions — Duration(days:) is a fixed elapsed-time delta and can
+  // land on the wrong calendar day for a local DateTime.
+  return DateTime(date.year, date.month, date.day - offset);
 }

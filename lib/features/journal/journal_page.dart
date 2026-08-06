@@ -1904,6 +1904,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       (j) => j!.id == journalFilter,
       orElse: () => null,
     );
+    // The shade the entry-list bar is keyed to: the journal being viewed, or
+    // the plain accent while "All journals" is on (which has no colour of its
+    // own). Shared by the journal dropdown at the top of the bar and the
+    // "New entry" button at the bottom so the two ends agree.
+    final journalBarColor = Color(
+      _viewAllJournals || selectedJournal == null
+          ? Theme.of(context).colorScheme.primary.toARGB32()
+          : _journalFlagColor(selectedJournal),
+    );
 
     // Drop cached row widgets for entries no longer displayed, so
     // deleted/filtered-out entries don't leak entries indefinitely.
@@ -1947,7 +1956,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                     duration: _entryListDragging
                         ? Duration.zero
                         : const Duration(milliseconds: 260),
-                    curve: VoyagerSpring.moveCurve,
+                    curve: VoyagerMotion.reduced(context)
+                        ? Curves.easeOut
+                        : VoyagerSpring.moveCurve,
                     width: compact ? totalWidth : listWidth,
                     child: Stack(
                       clipBehavior: Clip.none,
@@ -2054,19 +2065,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       displayLabel: _viewAllJournals
                                           ? 'All journals'
                                           : null,
-                                      labelColor: Color(
-                                        _viewAllJournals
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.primary.toARGB32()
-                                            : selectedJournal == null
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.primary.toARGB32()
-                                            : _journalFlagColor(
-                                                selectedJournal,
-                                              ),
-                                      ),
+                                      labelColor: journalBarColor,
                                       closedTrailing: _viewAllJournals
                                           ? '${filtered.length}'
                                           : '${entryCounts[journalFilter] ?? 0}',
@@ -2143,6 +2142,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   unawaited(_createEntry());
                                 },
                                 label: 'New entry',
+                                color: journalBarColor,
                               ),
                             ),
                           ),

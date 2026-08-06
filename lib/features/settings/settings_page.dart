@@ -564,6 +564,10 @@ class SettingsPage extends ConsumerWidget {
                 width: 320,
                 child: ReorderableListView(
                   shrinkWrap: true,
+                  // The default desktop handle makes only the trailing icon
+                  // draggable; wrapping each row ourselves makes the whole
+                  // option — icon, label and handle — the grab area.
+                  buildDefaultDragHandles: false,
                   onReorder: (oldIndex, newIndex) {
                     if (oldIndex < newIndex) {
                       newIndex -= 1;
@@ -574,11 +578,14 @@ class SettingsPage extends ConsumerWidget {
                   },
                   children: [
                     for (var i = 0; i < items.length; i++)
-                      ListTile(
+                      ReorderableDragStartListener(
                         key: ValueKey(items[i].dest.path),
-                        leading: Icon(items[i].dest.icon),
-                        title: Text(items[i].dest.label),
-                        trailing: const Icon(Icons.drag_handle),
+                        index: i,
+                        child: ListTile(
+                          leading: Icon(items[i].dest.icon),
+                          title: Text(items[i].dest.label),
+                          trailing: const Icon(Icons.drag_handle),
+                        ),
                       ),
                   ],
                 ),

@@ -21,8 +21,17 @@ import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/compact_back_bar.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/datetime_selector_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/resizable_pane_divider.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
+import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart' show firstSentencePreview;
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -99,6 +108,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   /// Kept apart from [_selectedEntryId] so this page's auto-select of the
   /// newest dream does not count as the user asking to open it.
   var _compactShowingEditor = false;
+  var _isDatePickerOpen = false;
   VoidCallback? _removeBackInterceptor;
   late final Future<void> Function() _lifecycleFlushCallback;
 
@@ -368,15 +378,82 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     _titleFocusNode.requestFocus();
   }
 
-  void _togglePinned(bool pinned) {
-    unawaited(() async {
-      final settingsRepo = ref.read(settingsRepositoryProvider);
-      final settings = await settingsRepo.getSettings();
-      await settingsRepo.saveSettings(
-        settings.copyWith(dreamNotesPinned: pinned),
-      );
-      ref.invalidate(settingsProvider);
-    }());
+  Future<void> _deleteEntry(DreamEntry entry) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete dream?',
+      message: 'This dream will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+
+    if (_selectedEntryId == entry.id) {
+      await _flushActiveEdits();
+      await _flushNotes();
+      if (!mounted) return;
+      setState(() {
+        _selectedEntryId = null;
+        _selectedEntry = null;
+        _titleController.clear();
+        _notesController.clear();
+        _lastNotesText = '';
+        _listTitlePreview.value = '';
+        _listBodyPreview.value = '';
+      });
+    }
+
+    final repo = _repoOrNull();
+    if (repo == null) return;
+    await repo.softDeleteEntry(entry.id);
+    _syncOrNull()?.pushDreamEntryNow(entry.copyWith(deletedAt: utcNow()));
+    if (mounted) ref.invalidate(allDreamEntriesProvider);
+  }
+
+  Future<void> _changeEntryDate(BuildContext buttonContext) async {
+    final entry = _selectedEntry;
+    if (entry == null) return;
+    await _flushActiveEdits();
+    if (!mounted || !buttonContext.mounted) return;
+
+    final accent = Theme.of(context).colorScheme.primary;
+    setState(() => _isDatePickerOpen = true);
+    final picked = await showContextualPopover<DateTime>(
+      context: context,
+      buttonContext: buttonContext,
+      width: 500,
+      height: 380,
+      accentColor: accent,
+      builder: (ctx) => DateTimeSelectorPopover(
+        initialDateTime: entry.entryDate.toLocal(),
+        accentColor: accent,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _isDatePickerOpen = false);
+    if (picked == null) return;
+
+    final repo = _repoOrNull();
+    if (repo == null) return;
+    final existing = await repo.getEntry(entry.id);
+    if (existing == null || !mounted) return;
+    final updated = existing.copyWith(entryDate: picked.toUtc());
+    await repo.upsertEntry(updated);
+    _syncOrNull()?.pushDreamEntryNow(updated);
+    if (!mounted) return;
+    setState(() => _selectedEntry = updated);
+    ref.invalidate(allDreamEntriesProvider);
+  }
+
+  void _showEntryStatistics(DreamEntry entry) {
+    final wordCount = ref.read(analyticsServiceProvider).countWords(entry.body);
+    unawaited(
+      showVoyagerDialog<void>(
+        context: context,
+        builder: (context) => DreamStatisticsDialog(
+          entry: entry,
+          wordCount: wordCount,
+        ),
+      ),
+    );
   }
 
   Future<void> _persistSplitWidth(double? width) async {
@@ -399,7 +476,6 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       _splitWidth = settings.dreamSplitWidth;
       _appliedSavedWidth = true;
     }
-    final notesPinned = settings?.dreamNotesPinned ?? false;
     final accent = Theme.of(context).colorScheme.primary;
     final petalColor = Color(settings?.petalColor ?? 0xFFE6A4B4);
     final minorPetalColors = (settings?.minorPetalColors ?? const <int>[])
@@ -453,7 +529,9 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                         duration: _splitDragging
                             ? Duration.zero
                             : const Duration(milliseconds: 260),
-                        curve: VoyagerSpring.moveCurve,
+                        curve: VoyagerMotion.reduced(context)
+                            ? Curves.easeOut
+                            : VoyagerSpring.moveCurve,
                         width: compact ? totalWidth : listWidth,
                         child: _buildEntryList(sorted),
                       ),
@@ -501,7 +579,6 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                     Expanded(
                       child: _buildEditorArea(
                         accent: accent,
-                        notesPinned: notesPinned,
                         compact: compact,
                       ),
                     ),
@@ -549,24 +626,14 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              Text(
-                'Dreams',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'New dream entry',
-                icon: const Icon(PhosphorIconsRegular.plus),
-                onPressed: () {
-                  _revealCompactEditor();
-                  unawaited(_createEntry());
-                },
-              ),
-            ],
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Dreams',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
           ),
         ),
         Expanded(
@@ -586,28 +653,53 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                   itemCount: entries.length,
                   itemBuilder: (context, index) {
                     final entry = entries[index];
-                    return _DreamEntryListTile(
-                      entry: entry,
-                      isSelected: entry.id == _selectedEntryId,
-                      titlePreview: _listTitlePreview,
-                      bodyPreview: _listBodyPreview,
-                      onTap: () {
-                        _revealCompactEditor();
-                        unawaited(_selectEntry(entry));
-                      },
+                    return ContextMenuRegion(
+                      items: [
+                        ContextMenuItem(
+                          label: 'See statistics',
+                          icon: PhosphorIconsRegular.chartBar,
+                          onTap: () => _showEntryStatistics(entry),
+                        ),
+                        ContextMenuItem(
+                          label: 'Delete',
+                          icon: PhosphorIconsRegular.trash,
+                          isDestructive: true,
+                          onTap: () => unawaited(_deleteEntry(entry)),
+                        ),
+                      ],
+                      child: _DreamEntryListTile(
+                        entry: entry,
+                        isSelected: entry.id == _selectedEntryId,
+                        titlePreview: _listTitlePreview,
+                        bodyPreview: _listBodyPreview,
+                        onTap: () {
+                          _revealCompactEditor();
+                          unawaited(_selectEntry(entry));
+                        },
+                      ),
                     );
                   },
                 ),
+        ),
+        // Bottom-anchored, matching the Journal page's "New entry" button —
+        // the list's own action belongs at the end of the list, not stacked
+        // beside its heading.
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: GlassButton(
+            onPressed: () {
+              _revealCompactEditor();
+              unawaited(_createEntry());
+            },
+            label: 'New dream',
+            color: Theme.of(context).colorScheme.primary,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildEditorArea({
-    required Color accent,
-    required bool notesPinned,
-    required bool compact,
-  }) {
+  Widget _buildEditorArea({required Color accent, required bool compact}) {
     final entry = _selectedEntry;
     if (entry == null) {
       return Center(
@@ -618,6 +710,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       );
     }
 
+    final local = entry.entryDate.toLocal();
     final editorColumn = Padding(
       padding: DreamSplitLayout.editorPadding,
       child: Column(
@@ -628,15 +721,38 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
               label: 'Dreams',
               onBack: () => unawaited(_closeCompactEditor()),
             ),
-          TextField(
+          LabeledTextField(
+            label: 'Title',
             controller: _titleController,
             focusNode: _titleFocusNode,
-            style: Theme.of(context).textTheme.headlineSmall,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              hintText: 'Untitled dream',
-            ),
+            accentColor: accent,
             onChanged: (_) => _scheduleBodySave(),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Builder(
+                builder: (buttonContext) => SelectorPill(
+                  dense: false,
+                  ellipsize: false,
+                  isActive: _isDatePickerOpen,
+                  label:
+                      '${MaterialLocalizations.of(context).formatShortDate(local)}'
+                      ' at ${formatTime12Hour(local)}',
+                  accentColor: accent,
+                  onTap: () => unawaited(_changeEntryDate(buttonContext)),
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Delete dream',
+                onPressed: () => unawaited(_deleteEntry(entry)),
+                icon: Icon(
+                  PhosphorIconsRegular.trash,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -654,32 +770,13 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
 
     return Stack(
       children: [
-        Column(
-          children: [
-            Expanded(child: editorColumn),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeOutCubic,
-              child: notesPinned
-                  ? DreamNotesDockedPanel(
-                      key: const ValueKey('docked'),
-                      controller: _notesController,
-                      focusNode: _notesFocusNode,
-                      onChanged: _handleNotesChanged,
-                      onUnpin: () => _togglePinned(false),
-                    )
-                  : const SizedBox(width: double.infinity, height: 0),
-            ),
-          ],
+        editorColumn,
+        DreamStickyNote(
+          controller: _notesController,
+          focusNode: _notesFocusNode,
+          accentColor: accent,
+          onChanged: _handleNotesChanged,
         ),
-        if (!notesPinned)
-          DreamStickyNote(
-            controller: _notesController,
-            focusNode: _notesFocusNode,
-            accentColor: accent,
-            onChanged: _handleNotesChanged,
-            onPin: () => _togglePinned(true),
-          ),
       ],
     );
   }
@@ -1016,6 +1113,106 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
+      ),
+    );
+  }
+}
+
+/// Per-dream facts, shown from the entry list's right-click menu: when it was
+/// logged, how much was written, and which themes it was tagged with.
+class DreamStatisticsDialog extends StatelessWidget {
+  const DreamStatisticsDialog({
+    super.key,
+    required this.entry,
+    required this.wordCount,
+  });
+
+  final DreamEntry entry;
+  final int wordCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final local = entry.entryDate.toLocal();
+    final logged =
+        '${MaterialLocalizations.of(context).formatFullDate(local)}'
+        ' at ${formatTime12Hour(local)}';
+
+    return AlertDialog(
+      title: Text(entry.title.isEmpty ? 'Untitled' : entry.title),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _StatLine(label: 'Logged', value: logged),
+            _StatLine(label: 'Words', value: '$wordCount'),
+            _StatLine(
+              label: 'Characters',
+              value: '${entry.body.characters.length}',
+            ),
+            _StatLine(
+              label: 'Notes',
+              value: (entry.notes ?? '').trim().isEmpty ? 'None' : 'Written',
+            ),
+            const SizedBox(height: 12),
+            Text('Themes', style: theme.textTheme.labelMedium),
+            const SizedBox(height: 6),
+            if (entry.tags.isEmpty)
+              Text(
+                'No #tags in this dream yet.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              )
+            else
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final tag in entry.tags) TagChip(tag: tag),
+                ],
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        GlassButton(
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Close',
+          dense: true,
+        ),
+      ],
+    );
+  }
+}
+
+class _StatLine extends StatelessWidget {
+  const _StatLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
+          ),
+          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
+        ],
       ),
     );
   }

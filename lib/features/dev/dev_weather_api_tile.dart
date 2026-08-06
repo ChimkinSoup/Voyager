@@ -25,7 +25,10 @@ class _DevWeatherApiTileState extends ConsumerState<DevWeatherApiTile> {
     _apiKeyController = TextEditingController(
       text: widget.settings.devOpenWeatherApiKey ?? '',
     );
+    _apiKeyController.addListener(_onTextChanged);
   }
+
+  void _onTextChanged() => setState(() {});
 
   @override
   void didUpdateWidget(covariant DevWeatherApiTile oldWidget) {
@@ -38,6 +41,7 @@ class _DevWeatherApiTileState extends ConsumerState<DevWeatherApiTile> {
 
   @override
   void dispose() {
+    _apiKeyController.removeListener(_onTextChanged);
     _apiKeyController.dispose();
     super.dispose();
   }

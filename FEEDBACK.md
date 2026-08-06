@@ -1,24 +1,39 @@
 # FEEDBACK
 Here is some feedback, implement fixes in the best way you see fit. If there is any unclarity, ask questions before proceeding. If the change is applicable to other parts of the app (Such as a universal change like changing a textbox or a repeated UI), apply the change to wherever necessary. If there are contradictory requests, ask before implementing.
-- [ ] Currently there are black boxes around the "new journal" and the journal dropdown menu, remove these.
-- [ ] In the dropdown menu to select the journal or a list, the current selection is highlighted by a border. Round the edges of the borders just slightly more
-- [ ] Make it so that the names of todo lists and journals are NOT bolded
-- [ ] The currently selected journal entry is highlighted on the left bar by a dark rectangle. Decrease that rectangle's opacity to 65% 
-	- [ ] Do the same for the background that indicates a current task is being edited in todo list
-- [ ] When selecting the color of a todo list or a journal, and then I scroll until a color patch is halfway covered by the top or bottom (Like it is cut off), and then hover over the color circle, then it is highlighted by a slight grey circle, and that full circle appears, it is NOT cut off. Ensure it is cut off too
-- [ ] When the user presses enter to save a journal entry in the search page, the pop up does not close immediately. Ensure that it closes immediately (So the UI immediately reflects what the user does), then save it
-- [ ] If the user closes the journal entry editor pop up in the search page, by clicking out, then their edits should automatically be saved
-- [ ] When the user hovers over the "add journal" or "add list" button, it lights up slightly. Can you make it so that it lights up more?
-- [ ] When dragging around subtasks, the dragged around box is a rectangle with corners that are 90 degrees, can you round those out? Also when dragging around a main task this also still happens, so fix that too. 
-- [ ] Add some more padding to the left of the checkmarks of main tasks in the todo list page, so that there is some space between the left edge of the circular hitbox when the user hovers over the checkmark, and the left border of the task rectangle
-- [ ] The strikethrough effect that appears once the user marks a subtask as complete starts in the correct spot, but on multi-lined subtasks, the strikethrough extends until the end of the line, not where the text ends, ensure it ends where the text ends
-- [ ] In the "Choose color" popup, the user should be able to press enter to save their selection and close the popup. Additionally allow the user to use the arrow keys to move around. Currently the user can press an arrow key, then enter to move colors (Like left then enter to move left one), but pressing an arrow key should immediately move their pointer, and pressing enter should save and close the popup
-- [ ] The user should be able to press enter when making a new event in the calendar page to save it. It should not matter if the user is currently focused on the event name or the event notes. 
-	- [ ] The user should be able to press tab when focused on the event title to switch to focus on the events notes
-- [ ] When the user selects a color at the top row of the color selection section in the calendar page (When adding a new event), the color selected glows (Which is supposed to happen), but it is cut off at the top by the top (invisible) border of the color section. Ensure this cut off doesn't happen (You can either add more padding to the top to give some space for the glow to appear, or allow the glow to appear above the border cutoff). Additionally the user is not able to scroll past the colors section. Allow the user to scroll
-- [ ] Make sure that when the user tries to create a new event in the calendar page, the color is ALREADY selected as the default accent color (But the user should be able to switch it after)
-- [ ] The user should be able to press enter when editing the title of a new journal to create the new journal.
-- [ ] When I switch from a journal with entries (So the editor on the very right side is showing that entry) in the journal page, then switch to another journal that has no entries, then first the icons 
-- [ ] The "Color already in palette" red error text when adding a new color in the settings page appears at the bottom of the text box, but I want it to appear OUTSIDE of the text box. 
-- [ ] When the user is adding colors in settings, they are able to press enter to save a color, but then the text box is unfocused. Ensure that the text box remains focused so that they are able to enter colors back to back
-- [ ] In the journal page, when I switch from viewing a journal with some entries to a journal with none, then the editor (The rightmost panel) keeps the last viewed entry title, so if I used to be viewing an entry with title "AAA" in journal A, then switch to journal B which has no entries, I can still see "AAA" in the title. Additionally the mood bar, weather icon, date, and trash can icons disappear, and the body text box takes up the extra space (Although the body text box is blank as to be expected). Can you make it so that the second the user switches to an empty journal (So immediately upon the user CREATING a journal since that automatically opens up the new journal which will have no entries), a new blank entry is created for them. This should NOT occur when they open up "All journals" and it is empty however. 
+## Journal 
+- [x] If the user tries to use arrow keys to move around in the color selection menu (When editing the color of a journal), their first arrow key input causes the current selection to jump back to the first color, then they are able to move normally. Instead make the pointer start from the currently selected color.
+- [x] Make the "new entry" button the same shade as the journal 
+## Todo List
+- [x] If the user views all tasks, then opens the todo list dropdown menu, and selects a specific journal, it should be opened and "All tasks" should be untoggled
+- [x] If the user toggles all tasks then views the dropdown menu to select a specific list there is still the last seen list bordered as if it is currently selected, remove this
+- [x] If the user toggles all tasks the "Add" button to add a new task remains the last viewed list's accent color when it should be the same color as the all tasks list (Which is just the main accent color)
+- [x] If the user tries to use arrow keys to move around in the color selection menu (When editing the color of a todo list), their first arrow key input causes the current selection to jump back to the first color, then they are able to move normally. Instead make the pointer start from the currently selected color.
+## Search
+- [x] Currently if the user is editing the title of a journal entry, then presses enter, their focus is shifted to the entry body. Instead, make it so that pressing enter, either when editing the title OR the body, then the popup is closed and the edit is saved
+## Calendar
+- [x] When making a new event entry in the calendar, the user is automatically focused on the title text box. If the user presses tab, they should then become focused on the notes text box, then if they press tab again, it should be focused on the "All day" icon. If they press enter when focused on the all day icon it should toggle to be off. Currently the order is like title-> time selector -> notes, but by default the time selector does not appear so I want to change this behavior.
+- [x] Currently in the monthly calendar the current week is highlighted by the calendar color, but can you make the current day be highlighted with a slightly higher opacity than the rest of the week, so the current day stands out more?
+## Analytics 
+- [x] If the user tries to add a new tracker that has no name, it cannot be created but no error message pops up. Make user that red text that says the title cannot empty shows up BELOW the title text box
+- [x] When the user hovers over a heatmap statistic, the informative popup appears but it is hidden beneath the background rectangles (Like the hover rectangle that shows you are hovering over a specific statistic or the starred region that indicates starred statistics), ensure the informative popup appears above them (Like make it a little bit more opaque so it is easier to read the text of the popup)
+- [x] If the user hovers over interpolated values in a sparkline it does not show the interpolated value, instead it shows the value that the user has entered (This only happens sometimes, like for some curves it will show the interpolated value but for some it will show half interpolated, half the closest exact value the user has entered, and some just an exact value the user has entered, even though the graph shows that the value is obviously changing since it is being interpolated)
+- [x] If a sparkline shows a very sharp jump between a very high value and a very low value (Like 0), then the graph has a small dip BELOW 0. I want this fixed so the graph never goes below the min or above the max. 
+- [x] Thin text boxes appear to be broken. Like when inputting an integer value as the default value for a new statistic, or entering the title of a new statistic. The border has little rectangles on the left and right side that stick out, and also the text boxes are in general too thin. Find and fix all of these everywhere they are present
+## Settings
+- [x] When i try to reorder the nav pages, instead of keeping the "hitbox" for the draggable space only the icon, make it the whole, option (including the text and the nav icon too)
+## Dream Journal
+- [x] Add the date and trash icon to a dream journal
+- [x] Add right click menu so that when the user right clicks on a specific dream journal on the left bar it will give them the option to see statistics or to delete it
+- [ ] Add dreams as a statistic in the analytics page so for every dream journal it will be a boolean that is shown as an additional statistic (skipped — withdrawn)
+- [x] Change the hint text of the title to "Title" and make it like the journal title text box, so if the user clicks on the text box then the hint text should move to the top of the text box
+- [x] Make the dream notes icon a different shade so it doesn't blend into the text box
+- [x] Move the "Add" button to the bottom of the left bar and instead add text that says "New dream" just like the journal page
+- [x] Remove the option to pin the notes to the bottom of the screen entirely. 
+## Life Tracker
+- [x] Shorten nav page name to "Life" instead of "Life Tracker"
+- [x] Widen the bucket list popup
+- [x] Allow the user to edit their bucket list items that have already been added
+- [x] Give a sum of all bucket list items and how many are complete in the popup too
+- [x] Currently if the user starts with an empty bucket list and then adds one item, since the "nothing here yet" text disappears and is replaced by the first item, the height of the bucket list popup actually shortens. I want it to stay consistent so just change the height of the "nothing here yet" to be equal to the height of ONE bucket list item
+## LeetCode Tracker
+- [x] Reduce the padding between the top of the "Track a problem" popup UI and the actual start of the popup (Like the edge of the popup and the text that says "Track a problem" and the X button, I want that gap decreased)
