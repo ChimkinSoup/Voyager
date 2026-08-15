@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/voyager_time_picker_spinner.dart';
 
 class TimeTextInputFormatter extends TextInputFormatter {
@@ -380,6 +381,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,
+            scrollPadding: kVoyagerFieldScrollPadding,
             style: theme.textTheme.titleMedium?.copyWith(
               color: focusNode.hasFocus ? accent : theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),

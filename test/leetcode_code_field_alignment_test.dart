@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 
 const _code = 'code\ncode\niarse\nfor this in this:';
@@ -12,8 +13,8 @@ const _codeLineStarts = <int>[0, 5, 10, 16];
 const _numberLineStarts = <int>[0, 2, 4, 6];
 
 /// A theme whose `bodyLarge` and `titleMedium` deliberately disagree on size
-/// and leading. The line-number column resolves its metrics from the former
-/// and `CodeField` seeds its own default from the latter, so under this theme
+/// and leading. The line-number column would resolve its metrics from the
+/// former and a bare code [TextField] from the latter, so under this theme
 /// any reliance on inheritance shows up as a baseline drift between the
 /// gutter and the code.
 ThemeData _divergedTypeScale() {
@@ -81,5 +82,38 @@ void main() {
         reason: 'line ${line + 1}',
       );
     }
+  });
+
+  testWidgets('selection overlay origin sits on the first glyph', (tester) async {
+    final renderers = await _pumpCodeView(tester);
+    final editable = tester.state<EditableTextState>(
+      find.byType(EditableText).last,
+    );
+    editable.widget.focusNode.requestFocus();
+    editable.widget.controller.selection = const TextSelection(
+      baseOffset: 0,
+      extentOffset: 1,
+    );
+    await tester.pump();
+
+    final code = renderers.last;
+    final glyph = code.localToGlobal(
+      code.getLocalRectForCaret(const TextPosition(offset: 0)).topLeft,
+    );
+
+    final overlay = tester.renderObject<RenderBox>(
+      find.descendant(
+        of: find.byType(SelectionHighlightLayer),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    final origin = overlay.localToGlobal(Offset.zero);
+
+    expect(origin.dx, moreOrLessEquals(glyph.dx, epsilon: 0.5));
+    expect(
+      origin.dy,
+      moreOrLessEquals(glyph.dy, epsilon: 0.5),
+      reason: 'highlight is shifted off the glyphs — density inset missing?',
+    );
   });
 }

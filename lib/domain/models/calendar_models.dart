@@ -39,6 +39,7 @@ class CalendarEvent extends SoftDeletable {
     required super.id,
     required super.createdAt,
     required super.updatedAt,
+    super.version,
     super.deletedAt,
     required this.calendarId,
     required this.title,
@@ -73,11 +74,13 @@ class CalendarEvent extends SoftDeletable {
     String? notes,
     DateTime? deletedAt,
     EventRecurrence? recurrence,
+    bool bumpVersion = true,
   }) {
     return CalendarEvent(
       id: id,
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
+      version: bumpVersion ? version + 1 : version,
       deletedAt: deletedAt ?? this.deletedAt,
       calendarId: calendarId ?? this.calendarId,
       title: title ?? this.title,

@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/widgets/field_hint_style.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 
-/// Content padding these fields render with (dense, unfilled, no border) —
-/// spelled out explicitly, rather than left for Flutter's InputDecorator to
-/// compute implicitly, so [SpellCheckSquiggleLayer]'s overlay can use the
-/// exact same value and stay pixel-aligned with the real text.
-const _kNoteFieldContentPadding = EdgeInsets.symmetric(vertical: 4);
+/// Content padding the note field renders with — spelled out explicitly,
+/// rather than left for Flutter's InputDecorator to compute implicitly, so
+/// [SpellCheckSquiggleLayer]'s overlay can derive the exact same geometry and
+/// stay pixel-aligned with the real text.
+///
+/// The field carries the theme's outline border (an `InputDecoration.border`
+/// of [InputBorder.none] would not suppress it — the theme's state-specific
+/// `enabledBorder`/`focusedBorder` win), so these insets are measured from
+/// that outline: the horizontal ones are short by the input gap InputDecorator
+/// adds for it (see [withInputGap]), leaving the text 10px in from the stroke
+/// on every side.
+const _kNoteFieldContentPadding = EdgeInsets.fromLTRB(6, 10, 6, 10);
 
 /// The Dream Journal's collapsible scratchpad: a corner "sticky note" that
 /// peeks from the bottom-right and expands into a small note-taking card on
@@ -87,6 +99,10 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
             ),
             shadowColor: Colors.black.withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(14),
+            // Material clips nothing by default, so note text scrolling
+            // through the field's viewport painted straight over the card's
+            // rounded top corners instead of disappearing behind them.
+            clipBehavior: Clip.antiAlias,
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: _expanded ? null : _toggleExpanded,
@@ -199,7 +215,9 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final textStyle = theme.textTheme.bodySmall ?? const TextStyle();
+    final textStyle = withSquiggleRoom(
+      theme.textTheme.bodySmall ?? const TextStyle(),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
       child: Column(
@@ -224,47 +242,82 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
             ],
           ),
           Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Padding(
-                      padding: _kNoteFieldContentPadding,
-                      child: SpellCheckSquiggleLayer(
-                        controller: widget.controller,
-                        focusNode: _focusNode,
-                        style: textStyle,
-                        scrollController: _scrollController,
-                      ),
-                    ),
-                  ),
-                ),
-                wrapWithSecondaryTapWordSelect(
-                  fieldKey: _fieldKey,
-                  child: TextField(
-                    key: _fieldKey,
+            // The header's trailing padding is cut short to let the close
+            // button's own hit-box padding reach the card edge; the field's
+            // outline is a visible box, so it makes that gap up here and sits
+            // evenly inset on both sides.
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: VimTextScope(
+                enabled: VimEnabledScope.of(context) && vimSuitsField(),
+                controller: widget.controller,
+                multiline: true,
+                builder: (context, vim) {
+                  const hintText =
+                      'Jot a quick note to jog your memory later...';
+                  final overlayPadding = vimOverlayPadding(
+                    contentPadding: _kNoteFieldContentPadding,
+                    density: theme.visualDensity,
+                    cursorWidth: vim.overlayCaretWidth,
+                    outlineGap: true,
+                  );
+                  return VimOverlayHost(
+                    session: vim.session,
+                    overlayPaintsSelection: vim.overlayPaintsSelection,
                     controller: widget.controller,
                     focusNode: _focusNode,
-                    scrollController: _scrollController,
-                    onChanged: widget.onChanged,
-                    maxLines: null,
-                    expands: true,
-                    contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
-                    spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
-                      context,
-                    ),
-                    textAlignVertical: TextAlignVertical.top,
                     style: textStyle,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: InputBorder.none,
-                      contentPadding: _kNoteFieldContentPadding,
-                      hintText: 'Jot a quick note to jog your memory later...',
+                    accentColor: theme.colorScheme.primary,
+                    overlayPadding: overlayPadding,
+                    scrollController: _scrollController,
+                    hintText: hintText,
+                    fit: StackFit.expand,
+                    underlay: SpellCheckSquiggleLayer(
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      style: textStyle,
+                      scrollController: _scrollController,
+                      suppressActiveWord: vim.suppressSpellcheckActiveWord,
                     ),
-                  ),
-                ),
-              ],
+                    child: wrapWithSecondaryTapWordSelect(
+                      fieldKey: _fieldKey,
+                      child: TextField(
+                        key: _fieldKey,
+                        controller: widget.controller,
+                        focusNode: _focusNode,
+                        scrollController: _scrollController,
+                        onChanged: widget.onChanged,
+                        cursorColor: vim.overlayCaretColor(
+                          theme.colorScheme.primary,
+                        ),
+                        cursorWidth: vim.overlayCaretWidth,
+                        undoController: vim.undoController,
+                        maxLines: null,
+                        expands: true,
+                        scrollPadding: kVoyagerFieldScrollPadding,
+                        contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                        spellCheckConfiguration:
+                            buildVoyagerSpellCheckConfiguration(context),
+                        textAlignVertical: TextAlignVertical.top,
+                        style: textStyle,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: _kNoteFieldContentPadding,
+                          hintText: hintText,
+                          // Matched to the field's own text metrics — see
+                          // [fieldHintStyle]. The theme's hint is a `bodyMedium`
+                          // with a lower baseline than this `bodySmall` text, and
+                          // InputDecorator baseline-aligns the input to whichever
+                          // of the two sits lower — pushing the real glyphs a
+                          // couple of pixels below where this field's overlays
+                          // (the Vim block caret, the squiggles) compute them.
+                          hintStyle: fieldHintStyle(context, textStyle),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],

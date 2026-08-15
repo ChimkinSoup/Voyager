@@ -1,9 +1,12 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
+import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -19,6 +22,7 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
@@ -241,22 +245,19 @@ class DriftJournalRepository implements JournalRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    final entries = await _db.select(_db.journalEntriesTable).get();
-    for (final row in entries) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.journalEntriesTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final journals = await _db.select(_db.journalsTable).get();
-    for (final row in journals) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.journalsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    // One statement per table rather than reading every row into Dart to
+    // decide. `deletedAt <= cutoff` is the same rule [SoftDeletePolicy.isExpired]
+    // applies, and SQLite can evaluate it without materialising — and JSON
+    // decoding — the whole table on the UI isolate during the app's first
+    // seconds. A NULL `deletedAt` never satisfies the comparison, so live rows
+    // are excluded for free.
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.journalEntriesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.journalsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
   }
 
   @override
@@ -394,14 +395,11 @@ class DriftDreamRepository implements DreamRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    final entries = await _db.select(_db.dreamEntriesTable).get();
-    for (final row in entries) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.dreamEntriesTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    await (_db.delete(_db.dreamEntriesTable)
+          ..where(
+            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)),
+          ))
+        .go();
   }
 
   @override
@@ -475,14 +473,26 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
             titleSlug: Value(problem.titleSlug),
             difficulty: Value(problem.difficulty.name),
             tagsJson: Value(jsonEncode(problem.tags)),
-            algorithm: Value(problem.algorithm),
-            timeComplexity: Value(problem.timeComplexity),
-            spaceComplexity: Value(problem.spaceComplexity),
-            explanation: Value(problem.explanation),
+            description: Value(problem.description),
+            examplesJson: Value(jsonEncode(problem.examples)),
+            solutionsJson: Value(
+              jsonEncode([for (final s in problem.solutions) s.toJson()]),
+            ),
+            // The legacy single-solution columns, kept in step with solution 1
+            // rather than left at whatever they held before this problem grew
+            // alternatives. Nothing reads them; see the table definition.
+            algorithm: Value(problem.primarySolution?.algorithm ?? ''),
+            timeComplexity: Value(problem.primarySolution?.timeComplexity),
+            spaceComplexity: Value(problem.primarySolution?.spaceComplexity),
+            explanation: Value(problem.primarySolution?.explanation ?? ''),
             codeLanguage: Value(problem.codeLanguage),
-            code: Value(problem.code),
-            notes: Value(problem.notes),
+            code: Value(problem.primarySolution?.code ?? ''),
+            notes: Value(problem.primarySolution?.notes),
             solvedAt: Value(problem.solvedAt),
+            interval: Value(problem.interval),
+            ease: Value(problem.ease),
+            dueAt: Value(problem.dueAt),
+            reviewCount: Value(problem.reviewCount),
             createdAt: Value(problem.createdAt),
             updatedAt: Value(problem.updatedAt),
             version: Value(problem.version),
@@ -516,14 +526,11 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    final rows = await _db.select(_db.leetCodeProblemsTable).get();
-    for (final row in rows) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.leetCodeProblemsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    await (_db.delete(_db.leetCodeProblemsTable)
+          ..where(
+            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)),
+          ))
+        .go();
   }
 
   @override
@@ -545,14 +552,16 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
     titleSlug: row.titleSlug,
     difficulty: LeetCodeDifficulty.values.byName(row.difficulty),
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
-    algorithm: row.algorithm,
-    timeComplexity: row.timeComplexity,
-    spaceComplexity: row.spaceComplexity,
-    explanation: row.explanation,
-    codeLanguage: row.codeLanguage,
-    code: row.code,
-    notes: row.notes,
+    description: row.description,
+    examples: List<String>.from(jsonDecode(row.examplesJson) as List),
+    solutions: LeetCodeSolution.listFromJson(
+      jsonDecode(row.solutionsJson) as List,
+    ),
     solvedAt: row.solvedAt,
+    interval: row.interval,
+    ease: row.ease,
+    dueAt: row.dueAt,
+    reviewCount: row.reviewCount,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -775,22 +784,13 @@ class DriftTodoRepository implements TodoRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    final lists = await _db.select(_db.todoListsTable).get();
-    for (final row in lists) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.todoListsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final tasks = await _db.select(_db.todoTasksTable).get();
-    for (final row in tasks) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.todoTasksTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.todoListsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.todoTasksTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
   }
 
   @override
@@ -812,9 +812,11 @@ class DriftTodoRepository implements TodoRepository {
 }
 
 class DriftCalendarRepository implements CalendarRepository {
-  DriftCalendarRepository(this._db);
+  DriftCalendarRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
 
   final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
   final _policy = const SoftDeletePolicy();
 
   @override
@@ -827,7 +829,18 @@ class DriftCalendarRepository implements CalendarRepository {
   }
 
   @override
-  Future<void> upsertCalendar(Calendar calendar) async {
+  Future<Calendar?> getCalendar(String id) async {
+    final row = await (_db.select(
+      _db.calendarsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCalendar(row);
+  }
+
+  @override
+  Future<void> upsertCalendar(
+    Calendar calendar, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.calendarsTable)
         .insertOnConflictUpdate(
@@ -841,31 +854,29 @@ class DriftCalendarRepository implements CalendarRepository {
             deletedAt: Value(calendar.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.calendars, calendar);
+    }
   }
 
+  // Soft deletes read-modify-write through the model rather than issuing a
+  // bare UPDATE, so the row's version advances with the tombstone. A delete
+  // that left version behind would lose to any concurrent edit from another
+  // device under version-first conflict resolution.
   @override
   Future<void> softDeleteCalendar(String id) async {
-    await (_db.update(
-      _db.calendarsTable,
-    )..where((t) => t.id.equals(id))).write(
-      CalendarsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    final calendar = await getCalendar(id);
+    if (calendar == null) return;
+    await upsertCalendar(calendar.copyWith(deletedAt: utcNow()));
   }
 
   @override
   Future<void> softDeleteEventsInCalendar(String calendarId) async {
+    final events = await listEvents(calendarId: calendarId);
     final now = utcNow();
-    await (_db.update(_db.calendarEventsTable)
-          ..where((t) => t.calendarId.equals(calendarId)))
-        .write(
-      CalendarEventsTableCompanion(
-        deletedAt: Value(now),
-        updatedAt: Value(now),
-      ),
-    );
+    for (final event in events) {
+      await upsertEvent(event.copyWith(deletedAt: now));
+    }
   }
 
   @override
@@ -873,14 +884,13 @@ class DriftCalendarRepository implements CalendarRepository {
     String fromCalendarId,
     String toCalendarId,
   ) async {
-    await (_db.update(_db.calendarEventsTable)
-          ..where((t) => t.calendarId.equals(fromCalendarId)))
-        .write(
-      CalendarEventsTableCompanion(
-        calendarId: Value(toCalendarId),
-        updatedAt: Value(utcNow()),
-      ),
+    final events = await listEvents(
+      calendarId: fromCalendarId,
+      includeDeleted: true,
     );
+    for (final event in events) {
+      await upsertEvent(event.copyWith(calendarId: toCalendarId));
+    }
   }
 
   @override
@@ -908,7 +918,18 @@ class DriftCalendarRepository implements CalendarRepository {
   }
 
   @override
-  Future<void> upsertEvent(CalendarEvent event) async {
+  Future<CalendarEvent?> getEvent(String id) async {
+    final row = await (_db.select(
+      _db.calendarEventsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapEvent(row);
+  }
+
+  @override
+  Future<void> upsertEvent(
+    CalendarEvent event, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.calendarEventsTable)
         .insertOnConflictUpdate(
@@ -926,21 +947,23 @@ class DriftCalendarRepository implements CalendarRepository {
             recurrence: Value(event.recurrence.name),
             createdAt: Value(event.createdAt),
             updatedAt: Value(event.updatedAt),
+            version: Value(event.version),
             deletedAt: Value(event.deletedAt),
           ),
         );
+    // Google-imported events are re-derived from Google on each device by
+    // [replaceGoogleEvents], which wipes and rebuilds them wholesale. Syncing
+    // them would put that wipe in a fight with the pull that restores them.
+    if (recordLocalActivity && event.source != EventSource.google) {
+      _syncedWrites?.notifyOne(FirestoreCollections.calendarEvents, event);
+    }
   }
 
   @override
   Future<void> softDeleteEvent(String id) async {
-    await (_db.update(
-      _db.calendarEventsTable,
-    )..where((t) => t.id.equals(id))).write(
-      CalendarEventsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    final event = await getEvent(id);
+    if (event == null) return;
+    await upsertEvent(event.copyWith(deletedAt: utcNow()));
   }
 
   @override
@@ -962,22 +985,13 @@ class DriftCalendarRepository implements CalendarRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    final rows = await _db.select(_db.calendarEventsTable).get();
-    for (final row in rows) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.calendarEventsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final calendars = await _db.select(_db.calendarsTable).get();
-    for (final row in calendars) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.calendarsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.calendarEventsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.calendarsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
   }
 
   Calendar _mapCalendar(CalendarsTableData row) => Calendar(
@@ -1005,14 +1019,17 @@ class DriftCalendarRepository implements CalendarRepository {
         recurrenceFromStorage(row.recurrence),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
     deletedAt: row.deletedAt,
   );
 }
 
 class DriftTrackerRepository implements TrackerRepository {
-  DriftTrackerRepository(this._db);
+  DriftTrackerRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
 
   final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
   final _policy = const SoftDeletePolicy();
 
   @override
@@ -1027,7 +1044,18 @@ class DriftTrackerRepository implements TrackerRepository {
   }
 
   @override
-  Future<void> upsertTracker(StatisticTracker tracker) async {
+  Future<StatisticTracker?> getTracker(String id) async {
+    final row = await (_db.select(
+      _db.trackersTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapTracker(row);
+  }
+
+  @override
+  Future<void> upsertTracker(
+    StatisticTracker tracker, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.trackersTable)
         .insertOnConflictUpdate(
@@ -1048,31 +1076,49 @@ class DriftTrackerRepository implements TrackerRepository {
             sortOrder: Value(tracker.sortOrder),
             createdAt: Value(tracker.createdAt),
             updatedAt: Value(tracker.updatedAt),
+            version: Value(tracker.version),
             deletedAt: Value(tracker.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.trackers, tracker);
+    }
   }
 
   @override
   Future<void> softDeleteTracker(String id) async {
-    await (_db.update(_db.trackersTable)..where((t) => t.id.equals(id))).write(
-      TrackersTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    final tracker = await getTracker(id);
+    if (tracker == null) return;
+    await upsertTracker(tracker.copyWith(deletedAt: utcNow()));
   }
 
   @override
-  Future<List<TrackerValue>> listValues(String trackerId) async {
-    final rows = await (_db.select(
-      _db.trackerValuesTable,
-    )..where((t) => t.trackerId.equals(trackerId) & t.deletedAt.isNull())).get();
+  Future<List<TrackerValue>> listValues(
+    String trackerId, {
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(_db.trackerValuesTable)..where(
+          (t) => includeDeleted
+              ? t.trackerId.equals(trackerId)
+              : t.trackerId.equals(trackerId) & t.deletedAt.isNull(),
+        ))
+        .get();
     return rows.map(_mapValue).toList();
   }
 
   @override
-  Future<void> upsertValue(TrackerValue value) async {
+  Future<TrackerValue?> getValue(String id) async {
+    final row = await (_db.select(
+      _db.trackerValuesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapValue(row);
+  }
+
+  @override
+  Future<void> upsertValue(
+    TrackerValue value, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.trackerValuesTable)
         .insertOnConflictUpdate(
@@ -1085,39 +1131,31 @@ class DriftTrackerRepository implements TrackerRepository {
             enumValue: Value(value.enumValue),
             createdAt: Value(value.createdAt),
             updatedAt: Value(value.updatedAt),
+            version: Value(value.version),
             deletedAt: Value(value.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.trackerValues, value);
+    }
   }
 
   @override
   Future<void> softDeleteValue(String id) async {
-    await (_db.update(_db.trackerValuesTable)..where((t) => t.id.equals(id))).write(
-      TrackerValuesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    final value = await getValue(id);
+    if (value == null) return;
+    await upsertValue(value.copyWith(deletedAt: utcNow()));
   }
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    final trackers = await _db.select(_db.trackersTable).get();
-    for (final row in trackers) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.trackersTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final values = await _db.select(_db.trackerValuesTable).get();
-    for (final row in values) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.trackerValuesTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.trackersTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.trackerValuesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
   }
 
   StatisticTracker _mapTracker(TrackersTableData row) => StatisticTracker(
@@ -1141,6 +1179,7 @@ class DriftTrackerRepository implements TrackerRepository {
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
     deletedAt: row.deletedAt,
   );
 
@@ -1153,28 +1192,44 @@ class DriftTrackerRepository implements TrackerRepository {
     enumValue: row.enumValue,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
     deletedAt: row.deletedAt,
   );
 }
 
 class DriftNotificationRepository implements NotificationRepository {
-  DriftNotificationRepository(this._db);
+  DriftNotificationRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
 
   final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
+  final _policy = const SoftDeletePolicy();
 
   @override
-  Future<List<PinnedNote>> listPinnedNotes() async {
+  Future<List<PinnedNote>> listPinnedNotes({bool includeDeleted = false}) async {
     final rows =
         await (_db.select(_db.pinnedNotesTable)
               ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
             .get();
     return rows
-        .map((r) => PinnedNote(id: r.id, text: r.body, createdAt: r.createdAt))
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapNote)
         .toList();
   }
 
   @override
-  Future<void> upsertPinnedNote(PinnedNote note) async {
+  Future<PinnedNote?> getPinnedNote(String id) async {
+    final row = await (_db.select(
+      _db.pinnedNotesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapNote(row);
+  }
+
+  @override
+  Future<void> upsertPinnedNote(
+    PinnedNote note, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.pinnedNotesTable)
         .insertOnConflictUpdate(
@@ -1182,59 +1237,166 @@ class DriftNotificationRepository implements NotificationRepository {
             id: Value(note.id),
             body: Value(note.text),
             createdAt: Value(note.createdAt),
+            updatedAt: Value(note.updatedAt),
+            version: Value(note.version),
+            deletedAt: Value(note.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.pinnedNotes, note);
+    }
   }
 
   @override
   Future<void> deletePinnedNote(String id) async {
-    await (_db.delete(
-      _db.pinnedNotesTable,
-    )..where((t) => t.id.equals(id))).go();
+    final note = await getPinnedNote(id);
+    if (note == null) return;
+    await upsertPinnedNote(
+      note.copyWith(
+        updatedAt: utcNow(),
+        version: note.version + 1,
+        deletedAt: utcNow(),
+      ),
+    );
   }
 
   @override
   Future<Set<String>> listDismissals() async {
     final rows = await _db.select(_db.dismissedNotificationsTable).get();
-    return rows.map((r) => r.id).toSet();
+    return rows.where((r) => r.deletedAt == null).map((r) => r.id).toSet();
+  }
+
+  @override
+  Future<List<DismissedNotification>> listDismissalRecords() async {
+    final rows = await _db.select(_db.dismissedNotificationsTable).get();
+    return rows.map(_mapDismissal).toList();
+  }
+
+  @override
+  Future<DismissedNotification?> getDismissal(String dismissalKey) async {
+    final row = await (_db.select(
+      _db.dismissedNotificationsTable,
+    )..where((t) => t.id.equals(dismissalKey))).getSingleOrNull();
+    return row == null ? null : _mapDismissal(row);
   }
 
   @override
   Future<void> dismiss(String dismissalKey) async {
+    final existing = await getDismissal(dismissalKey);
+    await upsertDismissal(
+      DismissedNotification(
+        key: dismissalKey,
+        dismissedAt: utcNow(),
+        updatedAt: utcNow(),
+        version: (existing?.version ?? -1) + 1,
+      ),
+    );
+  }
+
+  /// Un-dismissing tombstones the row rather than deleting it, so the other
+  /// devices hear "no longer dismissed" instead of never hearing anything.
+  @override
+  Future<void> undismiss(String dismissalKey) async {
+    final existing = await getDismissal(dismissalKey);
+    if (existing == null) return;
+    await upsertDismissal(
+      DismissedNotification(
+        key: dismissalKey,
+        dismissedAt: existing.dismissedAt,
+        updatedAt: utcNow(),
+        version: existing.version + 1,
+        deletedAt: utcNow(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> upsertDismissal(
+    DismissedNotification dismissal, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.dismissedNotificationsTable)
         .insertOnConflictUpdate(
           DismissedNotificationsTableCompanion(
-            id: Value(dismissalKey),
-            dismissedAt: Value(utcNow()),
+            id: Value(dismissal.key),
+            dismissedAt: Value(dismissal.dismissedAt),
+            updatedAt: Value(dismissal.updatedAt),
+            version: Value(dismissal.version),
+            deletedAt: Value(dismissal.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.dismissedNotifications,
+        dismissal,
+      );
+    }
   }
 
   @override
-  Future<void> undismiss(String dismissalKey) async {
-    await (_db.delete(
-      _db.dismissedNotificationsTable,
-    )..where((t) => t.id.equals(dismissalKey))).go();
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.pinnedNotesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.dismissedNotificationsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
   }
+
+  PinnedNote _mapNote(PinnedNotesTableData row) => PinnedNote(
+    id: row.id,
+    text: row.body,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  DismissedNotification _mapDismissal(DismissedNotificationsTableData row) =>
+      DismissedNotification(
+        key: row.id,
+        dismissedAt: row.dismissedAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
 }
 
 class DriftBucketListRepository implements BucketListRepository {
-  DriftBucketListRepository(this._db);
+  DriftBucketListRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
 
   final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
+  final _policy = const SoftDeletePolicy();
 
   @override
-  Future<List<BucketListItem>> listItems() async {
+  Future<List<BucketListItem>> listItems({bool includeDeleted = false}) async {
     final rows =
         await (_db.select(_db.bucketListItemsTable)
               ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
             .get();
-    return rows.map(_map).toList();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_map)
+        .toList();
   }
 
   @override
-  Future<void> upsertItem(BucketListItem item) async {
+  Future<BucketListItem?> getItem(String id) async {
+    final row = await (_db.select(
+      _db.bucketListItemsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _map(row);
+  }
+
+  @override
+  Future<void> upsertItem(
+    BucketListItem item, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.bucketListItemsTable)
         .insertOnConflictUpdate(
@@ -1247,15 +1409,35 @@ class DriftBucketListRepository implements BucketListRepository {
             sortOrder: Value(item.sortOrder),
             createdAt: Value(item.createdAt),
             updatedAt: Value(item.updatedAt),
+            version: Value(item.version),
+            deletedAt: Value(item.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.bucketListItems, item);
+    }
   }
 
   @override
   Future<void> deleteItem(String id) async {
-    await (_db.delete(
-      _db.bucketListItemsTable,
-    )..where((t) => t.id.equals(id))).go();
+    final item = await getItem(id);
+    if (item == null) return;
+    await upsertItem(
+      item.copyWith(
+        updatedAt: utcNow(),
+        version: item.version + 1,
+        deletedAt: utcNow(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    await (_db.delete(_db.bucketListItemsTable)
+          ..where(
+            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)),
+          ))
+        .go();
   }
 
   BucketListItem _map(BucketListItemsTableData row) => BucketListItem(
@@ -1267,13 +1449,17 @@ class DriftBucketListRepository implements BucketListRepository {
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
   );
 }
 
 class DriftFinanceRepository implements FinanceRepository {
-  DriftFinanceRepository(this._db);
+  DriftFinanceRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
 
   final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
   final _policy = const SoftDeletePolicy();
 
   @override
@@ -1291,7 +1477,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertTransaction(FinancialTransaction transaction) async {
+  Future<void> upsertTransaction(
+    FinancialTransaction transaction, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.transactionsTable)
         .insertOnConflictUpdate(
@@ -1308,16 +1497,23 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(transaction.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.transactions, transaction);
+    }
   }
 
   @override
   Future<void> softDeleteTransaction(String id) async {
-    await (_db.update(
+    final row = await (_db.select(
       _db.transactionsTable,
-    )..where((t) => t.id.equals(id))).write(
-      TransactionsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final transaction = _map(row);
+    await upsertTransaction(
+      transaction.copyWith(
+        updatedAt: utcNow(),
+        version: transaction.version + 1,
+        deletedAt: utcNow(),
       ),
     );
   }
@@ -1337,7 +1533,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertSubscription(Subscription subscription) async {
+  Future<void> upsertSubscription(
+    Subscription subscription, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.subscriptionsTable)
         .insertOnConflictUpdate(
@@ -1355,16 +1554,23 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(subscription.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.subscriptions, subscription);
+    }
   }
 
   @override
   Future<void> softDeleteSubscription(String id) async {
-    await (_db.update(
+    final row = await (_db.select(
       _db.subscriptionsTable,
-    )..where((t) => t.id.equals(id))).write(
-      SubscriptionsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final subscription = _mapSubscription(row);
+    await upsertSubscription(
+      subscription.copyWith(
+        updatedAt: utcNow(),
+        version: subscription.version + 1,
+        deletedAt: utcNow(),
       ),
     );
   }
@@ -1381,7 +1587,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertBudget(Budget budget) async {
+  Future<void> upsertBudget(
+    Budget budget, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.budgetsTable)
         .insertOnConflictUpdate(
@@ -1395,14 +1604,23 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(budget.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.budgets, budget);
+    }
   }
 
   @override
   Future<void> softDeleteBudget(String id) async {
-    await (_db.update(_db.budgetsTable)..where((t) => t.id.equals(id))).write(
-      BudgetsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    final row = await (_db.select(
+      _db.budgetsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final budget = _mapBudget(row);
+    await upsertBudget(
+      budget.copyWith(
+        updatedAt: utcNow(),
+        version: budget.version + 1,
+        deletedAt: utcNow(),
       ),
     );
   }
@@ -1422,7 +1640,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertCategory(FinanceCategory category) async {
+  Future<void> upsertCategory(
+    FinanceCategory category, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.financeCategoriesTable)
         .insertOnConflictUpdate(
@@ -1437,16 +1658,23 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(category.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.financeCategories, category);
+    }
   }
 
   @override
   Future<void> softDeleteCategory(String id) async {
-    await (_db.update(
+    final row = await (_db.select(
       _db.financeCategoriesTable,
-    )..where((t) => t.id.equals(id))).write(
-      FinanceCategoriesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final category = _mapCategory(row);
+    await upsertCategory(
+      category.copyWith(
+        updatedAt: utcNow(),
+        version: category.version + 1,
+        deletedAt: utcNow(),
       ),
     );
   }
@@ -1463,7 +1691,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertAsset(Asset asset) async {
+  Future<void> upsertAsset(
+    Asset asset, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.assetsTable)
         .insertOnConflictUpdate(
@@ -1478,26 +1709,38 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(asset.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.assets, asset);
+    }
   }
 
   @override
   Future<void> softDeleteAsset(String id) async {
-    await (_db.update(_db.assetsTable)..where((t) => t.id.equals(id))).write(
-      AssetsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    final row = await (_db.select(
+      _db.assetsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final asset = _mapAsset(row);
+    await upsertAsset(
+      asset.copyWith(
+        updatedAt: utcNow(),
+        version: asset.version + 1,
+        deletedAt: utcNow(),
       ),
     );
     // Tombstone the asset's valuations too, so a deleted asset stops
-    // contributing to historical net-worth points.
-    await (_db.update(
-      _db.assetValuationsTable,
-    )..where((t) => t.assetId.equals(id) & t.deletedAt.isNull())).write(
-      AssetValuationsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    // contributing to historical net-worth points. One row at a time rather
+    // than a bulk UPDATE, so each tombstone carries its own version bump and
+    // reaches the user's other devices.
+    for (final valuation in await listAssetValuations(assetId: id)) {
+      await upsertAssetValuation(
+        valuation.copyWith(
+          updatedAt: utcNow(),
+          version: valuation.version + 1,
+          deletedAt: utcNow(),
+        ),
+      );
+    }
   }
 
   @override
@@ -1516,7 +1759,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertAssetValuation(AssetValuation valuation) async {
+  Future<void> upsertAssetValuation(
+    AssetValuation valuation, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.assetValuationsTable)
         .insertOnConflictUpdate(
@@ -1531,16 +1777,23 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(valuation.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.assetValuations, valuation);
+    }
   }
 
   @override
   Future<void> softDeleteAssetValuation(String id) async {
-    await (_db.update(
+    final row = await (_db.select(
       _db.assetValuationsTable,
-    )..where((t) => t.id.equals(id))).write(
-      AssetValuationsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final assetValuation = _mapValuation(row);
+    await upsertAssetValuation(
+      assetValuation.copyWith(
+        updatedAt: utcNow(),
+        version: assetValuation.version + 1,
+        deletedAt: utcNow(),
       ),
     );
   }
@@ -1559,7 +1812,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertSavingsGoal(SavingsGoal goal) async {
+  Future<void> upsertSavingsGoal(
+    SavingsGoal goal, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.savingsGoalsTable)
         .insertOnConflictUpdate(
@@ -1576,27 +1832,36 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(goal.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.savingsGoals, goal);
+    }
   }
 
   @override
   Future<void> softDeleteSavingsGoal(String id) async {
-    await (_db.update(
+    final row = await (_db.select(
       _db.savingsGoalsTable,
-    )..where((t) => t.id.equals(id))).write(
-      SavingsGoalsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final savingsGoal = _mapGoal(row);
+    await upsertSavingsGoal(
+      savingsGoal.copyWith(
+        updatedAt: utcNow(),
+        version: savingsGoal.version + 1,
+        deletedAt: utcNow(),
       ),
     );
     // Tombstone the goal's allocations so they stop counting toward progress.
-    await (_db.update(
-      _db.goalAllocationsTable,
-    )..where((t) => t.goalId.equals(id) & t.deletedAt.isNull())).write(
-      GoalAllocationsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    // Row at a time, for the same reason as the asset's valuations above.
+    for (final allocation in await listGoalAllocations(goalId: id)) {
+      await upsertGoalAllocation(
+        allocation.copyWith(
+          updatedAt: utcNow(),
+          version: allocation.version + 1,
+          deletedAt: utcNow(),
+        ),
+      );
+    }
   }
 
   @override
@@ -1615,7 +1880,10 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> upsertGoalAllocation(GoalAllocation allocation) async {
+  Future<void> upsertGoalAllocation(
+    GoalAllocation allocation, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.goalAllocationsTable)
         .insertOnConflictUpdate(
@@ -1631,16 +1899,23 @@ class DriftFinanceRepository implements FinanceRepository {
             deletedAt: Value(allocation.deletedAt),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.goalAllocations, allocation);
+    }
   }
 
   @override
   Future<void> softDeleteGoalAllocation(String id) async {
-    await (_db.update(
+    final row = await (_db.select(
       _db.goalAllocationsTable,
-    )..where((t) => t.id.equals(id))).write(
-      GoalAllocationsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final goalAllocation = _mapAllocation(row);
+    await upsertGoalAllocation(
+      goalAllocation.copyWith(
+        updatedAt: utcNow(),
+        version: goalAllocation.version + 1,
+        deletedAt: utcNow(),
       ),
     );
   }
@@ -1706,70 +1981,33 @@ class DriftFinanceRepository implements FinanceRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    final rows = await _db.select(_db.transactionsTable).get();
-    for (final row in rows) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.transactionsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final subscriptions = await _db.select(_db.subscriptionsTable).get();
-    for (final row in subscriptions) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.subscriptionsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final budgets = await _db.select(_db.budgetsTable).get();
-    for (final row in budgets) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.budgetsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final categories = await _db.select(_db.financeCategoriesTable).get();
-    for (final row in categories) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.financeCategoriesTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final valuations = await _db.select(_db.assetValuationsTable).get();
-    for (final row in valuations) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.assetValuationsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final assets = await _db.select(_db.assetsTable).get();
-    for (final row in assets) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.assetsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final allocations = await _db.select(_db.goalAllocationsTable).get();
-    for (final row in allocations) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.goalAllocationsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    final goals = await _db.select(_db.savingsGoalsTable).get();
-    for (final row in goals) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.savingsGoalsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    final cutoff = _policy.purgeCutoff(now);
+    // Valuations before assets and allocations before goals, as the row-by-row
+    // version did: the child rows reference the parent.
+    await (_db.delete(_db.transactionsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.subscriptionsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.budgetsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.financeCategoriesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.assetValuationsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.assetsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.goalAllocationsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.savingsGoalsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
   }
 
   Budget _mapBudget(BudgetsTableData row) => Budget(
@@ -1811,9 +2049,12 @@ class DriftFinanceRepository implements FinanceRepository {
 }
 
 class DriftSettingsRepository implements SettingsRepository {
-  DriftSettingsRepository(this._db);
+  DriftSettingsRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
 
   final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
+  final _policy = const SoftDeletePolicy();
 
   @override
   Future<AppSettings> getSettings() async {
@@ -1822,9 +2063,16 @@ class DriftSettingsRepository implements SettingsRepository {
     )..where((t) => t.id.equals(1))).getSingleOrNull();
     if (row == null) {
       const defaults = AppSettings();
-      await saveSettings(defaults);
+      // Not a local activity: writing the default row is not the user
+      // choosing anything, and treating it as one would upload untouched
+      // defaults over the settings their other devices already agreed on.
+      await saveSettings(defaults, recordLocalActivity: false);
       return defaults;
     }
+    return _mapSettings(row);
+  }
+
+  AppSettings _mapSettings(SettingsTableData row) {
     return AppSettings(
       accentColor: row.accentColor,
       themeMode: AppThemeMode.values.byName(row.themeMode),
@@ -1847,9 +2095,12 @@ class DriftSettingsRepository implements SettingsRepository {
       alertOnPeriodicPrompts: row.alertOnPeriodicPrompts,
       alertTimeHour: row.alertTimeHour,
       hideCompletedTasks: row.hideCompletedTasks,
+      vimModeEnabled: row.vimModeEnabled,
       deviceId: row.deviceId,
       lastViewedJournalId: row.lastViewedJournalId,
       lastViewedTodoListId: row.lastViewedTodoListId,
+      journalShowAllEntries: row.journalShowAllEntries,
+      todoShowAllTasks: row.todoShowAllTasks,
       weatherLocationLabel: row.weatherLocationLabel,
       weatherLat: row.weatherLat,
       weatherLon: row.weatherLon,
@@ -1927,15 +2178,71 @@ class DriftSettingsRepository implements SettingsRepository {
       showDreamStatistics: row.showDreamStatistics,
       dreamNotesPinned: row.dreamNotesPinned,
       leetcodeUsername: row.leetcodeUsername,
+      showNeetCode150: row.showNeetCode150,
       srsFailKey: row.srsFailKey,
       srsHardKey: row.srsHardKey,
       srsGoodKey: row.srsGoodKey,
       srsEasyKey: row.srsEasyKey,
+      weightUnit: WeightUnit.values.byName(row.weightUnit),
+      workoutRestTimerEnabled: row.workoutRestTimerEnabled,
+      workoutRestSeconds: row.workoutRestSeconds,
+      showWorkoutsOnCalendar: row.showWorkoutsOnCalendar,
+      showWorkoutStatistics: row.showWorkoutStatistics,
+      updatedAt: row.updatedAt,
+      syncBackfillVersion: row.syncBackfillVersion,
     );
   }
 
   @override
-  Future<void> saveSettings(AppSettings settings) async {
+  Future<void> saveSettings(
+    AppSettings settings, {
+    bool recordLocalActivity = true,
+  }) async {
+    // Only a change to a *synced* setting moves the last-write-wins clock and
+    // reaches the sync layer. Most saves are device-local — a weather refresh,
+    // a dev-flag toggle, remembering which page you were on — and letting
+    // those bump the clock would mean simply opening the app could overwrite a
+    // preference another device changed more recently.
+    final previous = await _readSettings();
+    final syncedFieldsChanged =
+        previous == null ||
+        !_sameSyncedSettings(previous, settings);
+    final effective = recordLocalActivity && syncedFieldsChanged
+        ? settings.copyWith(updatedAt: utcNow())
+        : settings;
+
+    await _saveSettingsRow(effective);
+
+    if (recordLocalActivity && syncedFieldsChanged) {
+      _syncedWrites?.notifyOne(FirestoreCollections.settings, effective);
+    }
+  }
+
+  bool _sameSyncedSettings(AppSettings a, AppSettings b) {
+    // Compared as encoded JSON rather than field by field: the payload builder
+    // is the single list of what syncs, so a field added there is covered here
+    // without a second list to keep in step.
+    return jsonEncode(settingsSyncPayload(a)) ==
+        jsonEncode(settingsSyncPayload(b));
+  }
+
+  /// [getSettings] without the default-row insert, so [saveSettings] can ask
+  /// what changed without recursing back into itself.
+  ///
+  /// Maps the row it just fetched instead of throwing it away and calling
+  /// [getSettings], which would run the same select and the same hundred-column
+  /// mapping — with its `jsonDecode`s — a second time. Settings are written far
+  /// more often than the name suggests: every weather refresh, the midnight
+  /// forecast prune, page-position bookkeeping, the minute timer.
+  Future<AppSettings?> _readSettings() async {
+    final row = await (_db.select(
+      _db.settingsTable,
+    )..where((t) => t.id.equals(1))).getSingleOrNull();
+    if (row == null) return null;
+    return _mapSettings(row);
+  }
+
+  Future<void> _saveSettingsRow(AppSettings settings) async {
     await _db
         .into(_db.settingsTable)
         .insertOnConflictUpdate(
@@ -1969,9 +2276,12 @@ class DriftSettingsRepository implements SettingsRepository {
             alertOnPeriodicPrompts: Value(settings.alertOnPeriodicPrompts),
             alertTimeHour: Value(settings.alertTimeHour),
             hideCompletedTasks: Value(settings.hideCompletedTasks),
+            vimModeEnabled: Value(settings.vimModeEnabled),
             deviceId: Value(settings.deviceId),
             lastViewedJournalId: Value(settings.lastViewedJournalId),
             lastViewedTodoListId: Value(settings.lastViewedTodoListId),
+            journalShowAllEntries: Value(settings.journalShowAllEntries),
+            todoShowAllTasks: Value(settings.todoShowAllTasks),
             weatherLocationLabel: Value(settings.weatherLocationLabel),
             weatherLat: Value(settings.weatherLat),
             weatherLon: Value(settings.weatherLon),
@@ -2069,10 +2379,18 @@ class DriftSettingsRepository implements SettingsRepository {
             showDreamStatistics: Value(settings.showDreamStatistics),
             dreamNotesPinned: Value(settings.dreamNotesPinned),
             leetcodeUsername: Value(settings.leetcodeUsername),
+            showNeetCode150: Value(settings.showNeetCode150),
             srsFailKey: Value(settings.srsFailKey),
             srsHardKey: Value(settings.srsHardKey),
             srsGoodKey: Value(settings.srsGoodKey),
             srsEasyKey: Value(settings.srsEasyKey),
+            weightUnit: Value(settings.weightUnit.name),
+            workoutRestTimerEnabled: Value(settings.workoutRestTimerEnabled),
+            workoutRestSeconds: Value(settings.workoutRestSeconds),
+            showWorkoutsOnCalendar: Value(settings.showWorkoutsOnCalendar),
+            showWorkoutStatistics: Value(settings.showWorkoutStatistics),
+            updatedAt: Value(settings.updatedAt),
+            syncBackfillVersion: Value(settings.syncBackfillVersion),
           ),
         );
   }
@@ -2084,39 +2402,219 @@ class DriftSettingsRepository implements SettingsRepository {
   }
 
   @override
+  Future<List<TagColorRecord>> getTagColorRecords() async {
+    final rows = await _db.select(_db.tagColorsTable).get();
+    return rows.map(_mapTagColor).toList();
+  }
+
+  @override
+  Future<TagColorRecord?> getTagColorRecord(String tag) async {
+    final row = await (_db.select(
+      _db.tagColorsTable,
+    )..where((t) => t.tag.equals(tag))).getSingleOrNull();
+    return row == null ? null : _mapTagColor(row);
+  }
+
+  @override
   Future<void> setTagColor(String tag, int colorValue) async {
+    final existing = await getTagColorRecord(tag);
+    await upsertTagColor(
+      TagColorRecord(
+        tag: tag,
+        colorValue: colorValue,
+        updatedAt: utcNow(),
+        version: (existing?.version ?? -1) + 1,
+      ),
+    );
+  }
+
+  @override
+  Future<void> upsertTagColor(
+    TagColorRecord tagColor, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.tagColorsTable)
         .insertOnConflictUpdate(
           TagColorsTableCompanion(
-            tag: Value(tag),
-            colorValue: Value(colorValue),
+            tag: Value(tagColor.tag),
+            colorValue: Value(tagColor.colorValue),
+            updatedAt: Value(tagColor.updatedAt),
+            version: Value(tagColor.version),
           ),
         );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.tagColors, tagColor);
+    }
   }
 
   @override
   Future<Set<String>> getCustomWords() async {
     final rows = await _db.select(_db.customWordsTable).get();
-    return {for (final r in rows) r.word};
+    return {
+      for (final r in rows)
+        if (r.deletedAt == null) r.word,
+    };
+  }
+
+  @override
+  Future<List<CustomWord>> getCustomWordRecords() async {
+    final rows = await _db.select(_db.customWordsTable).get();
+    return rows.map(_mapCustomWord).toList();
+  }
+
+  @override
+  Future<CustomWord?> getCustomWordRecord(String word) async {
+    final row = await (_db.select(
+      _db.customWordsTable,
+    )..where((t) => t.word.equals(word))).getSingleOrNull();
+    return row == null ? null : _mapCustomWord(row);
   }
 
   @override
   Future<void> addCustomWord(String word) async {
     final normalized = word.trim().toLowerCase();
     if (normalized.isEmpty) return;
+    final existing = await getCustomWordRecord(normalized);
+    await upsertCustomWord(
+      CustomWord(
+        word: normalized,
+        createdAt: existing?.createdAt ?? utcNow(),
+        updatedAt: utcNow(),
+        version: (existing?.version ?? -1) + 1,
+        // Re-adding a word that was removed clears its tombstone rather than
+        // leaving the row invisible.
+      ),
+    );
+  }
+
+  /// Removing a word tombstones it rather than dropping the row, so the
+  /// removal reaches the user's other devices instead of the word coming back
+  /// on their next pull.
+  @override
+  Future<void> removeCustomWord(String word) async {
+    final normalized = word.trim().toLowerCase();
+    final existing = await getCustomWordRecord(normalized);
+    if (existing == null) return;
+    await upsertCustomWord(
+      CustomWord(
+        word: normalized,
+        createdAt: existing.createdAt,
+        updatedAt: utcNow(),
+        version: existing.version + 1,
+        deletedAt: utcNow(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> upsertCustomWord(
+    CustomWord word, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.customWordsTable)
         .insertOnConflictUpdate(
-          CustomWordsTableCompanion(word: Value(normalized)),
+          CustomWordsTableCompanion(
+            word: Value(word.word),
+            createdAt: Value(word.createdAt),
+            updatedAt: Value(word.updatedAt),
+            version: Value(word.version),
+            deletedAt: Value(word.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.customWords, word);
+    }
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    await (_db.delete(_db.customWordsTable)
+          ..where(
+            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)),
+          ))
+        .go();
+  }
+
+  TagColorRecord _mapTagColor(TagColorsTableData row) => TagColorRecord(
+    tag: row.tag,
+    colorValue: row.colorValue,
+    updatedAt: row.updatedAt,
+    version: row.version,
+  );
+
+  CustomWord _mapCustomWord(CustomWordsTableData row) => CustomWord(
+    word: row.word,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  CustomQuote _mapCustomQuote(CustomQuotesTableData row) => CustomQuote(
+    id: row.id,
+    text: row.quote,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  @override
+  Future<List<CustomQuote>> getCustomQuotes({bool includeDeleted = false}) async {
+    final rows = await (_db.select(
+      _db.customQuotesTable,
+    )..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapCustomQuote(row),
+    ];
+  }
+
+  @override
+  Future<CustomQuote?> getCustomQuote(String id) async {
+    final row = await (_db.select(
+      _db.customQuotesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCustomQuote(row);
+  }
+
+  /// [recordLocalActivity] is accepted for symmetry with the other synced
+  /// repositories (the pull path passes false) but goes unused: wiring a
+  /// [SyncActivityController] in here would make settingsRepositoryProvider
+  /// and syncActivityProvider depend on each other, and the controller only
+  /// drives the activity indicator.
+  @override
+  Future<void> upsertCustomQuote(
+    CustomQuote quote, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.customQuotesTable)
+        .insertOnConflictUpdate(
+          CustomQuotesTableCompanion(
+            id: Value(quote.id),
+            quote: Value(quote.text),
+            createdAt: Value(quote.createdAt),
+            updatedAt: Value(quote.updatedAt),
+            version: Value(quote.version),
+            deletedAt: Value(quote.deletedAt),
+          ),
         );
   }
 
   @override
-  Future<void> removeCustomWord(String word) async {
-    await (_db.delete(_db.customWordsTable)
-          ..where((t) => t.word.equals(word.trim().toLowerCase())))
-        .go();
+  Future<void> softDeleteCustomQuote(String id) async {
+    final now = utcNow();
+    await (_db.update(
+      _db.customQuotesTable,
+    )..where((t) => t.id.equals(id))).write(
+      CustomQuotesTableCompanion(
+        deletedAt: Value(now),
+        updatedAt: Value(now),
+      ),
+    );
   }
 }
 
@@ -2530,27 +3028,18 @@ class DriftStudyRepository implements StudyRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    for (final row in await _db.select(_db.studyCardsTable).get()) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.studyCardsTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    for (final row in await _db.select(_db.studyDecksTable).get()) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.studyDecksTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
-    for (final row in await _db.select(_db.studyFoldersTable).get()) {
-      if (row.deletedAt != null && _policy.isExpired(row.deletedAt!, now)) {
-        await (_db.delete(
-          _db.studyFoldersTable,
-        )..where((t) => t.id.equals(row.id))).go();
-      }
-    }
+    // Cards, then decks, then folders — children before their parents, as the
+    // row-by-row version did.
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.studyCardsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.studyDecksTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.studyFoldersTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
   }
 
   @override
@@ -2579,6 +3068,19 @@ class DriftStudyRepository implements StudyRepository {
         .map(_mapCard)
         .toList();
   }
+
+  @override
+  Future<List<StudyReviewLog>> getAllReviewLogs() async {
+    final rows = await _db.select(_db.studyReviewLogTable).get();
+    return rows.map(_mapReviewLog).toList();
+  }
+
+  StudyReviewLog _mapReviewLog(StudyReviewLogTableData row) => StudyReviewLog(
+    id: row.id,
+    cardId: row.cardId,
+    grade: StudyGrade.values.byName(row.grade),
+    reviewedAt: row.reviewedAt,
+  );
 
   StudyFolder _mapFolder(StudyFoldersTableData row) => StudyFolder(
     id: row.id,
@@ -2611,6 +3113,592 @@ class DriftStudyRepository implements StudyRepository {
     ease: row.ease,
     dueAt: row.dueAt,
     reviewCount: row.reviewCount,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+}
+
+class DriftWorkoutRepository implements WorkoutRepository {
+  DriftWorkoutRepository(this._db, {SyncActivityController? syncActivity})
+    : _syncActivity = syncActivity;
+
+  final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<void> ensureSeeded() async {
+    final planRows = await _db.select(_db.workoutPlansTable).get();
+    final existingPlanIds = {for (final r in planRows) r.id};
+    final now = utcNow();
+    // The anchor only matters for the cycle plan, but both rows carry one so
+    // the column can stay non-nullable. Today is the sensible Day 1.
+    final localNow = DateTime.now();
+    final today = DateTime(localNow.year, localNow.month, localNow.day);
+
+    if (!existingPlanIds.contains(kWeeklyWorkoutPlanId)) {
+      await upsertPlan(
+        WorkoutPlan(
+          id: kWeeklyWorkoutPlanId,
+          name: 'Weekly',
+          mode: WorkoutPlanMode.weekly,
+          cycleAnchor: today,
+          // Active out of the box: weekly is the mode the planner opens on,
+          // and anything else would show an inactive plan on first launch
+          // with nothing explaining why.
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+        recordLocalActivity: false,
+      );
+    }
+    if (!existingPlanIds.contains(kCycleWorkoutPlanId)) {
+      await upsertPlan(
+        WorkoutPlan(
+          id: kCycleWorkoutPlanId,
+          name: 'Split',
+          mode: WorkoutPlanMode.cycle,
+          cycleLength: 4,
+          cycleAnchor: today,
+          createdAt: now,
+          updatedAt: now,
+        ),
+        recordLocalActivity: false,
+      );
+    }
+
+    // Deleted rows count toward this check on purpose â€” a library the user
+    // cleared out should stay cleared rather than re-seeding next launch.
+    final exerciseCount = (await _db.select(_db.exercisesTable).get()).length;
+    if (exerciseCount == 0) {
+      for (var i = 0; i < kStarterExercises.length; i++) {
+        await upsertExercise(
+          Exercise(
+            id: newId(),
+            name: kStarterExercises[i],
+            sortOrder: i,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          recordLocalActivity: false,
+        );
+      }
+    }
+  }
+
+  @override
+  Future<List<Exercise>> listExercises({bool includeDeleted = false}) async {
+    final rows = await _db.select(_db.exercisesTable).get();
+    final exercises = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapExercise)
+        .toList();
+    exercises.sort((a, b) {
+      final byOrder = a.sortOrder.compareTo(b.sortOrder);
+      return byOrder != 0
+          ? byOrder
+          : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return exercises;
+  }
+
+  @override
+  Future<Exercise?> getExercise(String id) async {
+    final row = await (_db.select(
+      _db.exercisesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapExercise(row);
+  }
+
+  @override
+  Future<void> upsertExercise(
+    Exercise exercise, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.exercisesTable)
+        .insertOnConflictUpdate(
+          ExercisesTableCompanion(
+            id: Value(exercise.id),
+            name: Value(exercise.name),
+            formCues: Value(exercise.formCues),
+            colorValue: Value(exercise.colorValue),
+            sortOrder: Value(exercise.sortOrder),
+            targetSets: Value(exercise.targetSets),
+            targetReps: Value(exercise.targetReps),
+            targetWeightKg: Value(exercise.targetWeightKg),
+            createdAt: Value(exercise.createdAt),
+            updatedAt: Value(exercise.updatedAt),
+            version: Value(exercise.version),
+            deletedAt: Value(exercise.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.exercises);
+    }
+  }
+
+  @override
+  Future<void> softDeleteExercise(String id) async {
+    await (_db.update(
+      _db.exercisesTable,
+    )..where((t) => t.id.equals(id))).write(
+      ExercisesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    // Plan entries pointing at a deleted exercise would render as blank cards,
+    // so they go with it. Logged sets deliberately do not: they are history,
+    // and the detail view still needs them to explain past volume.
+    final entries = await (_db.select(
+      _db.workoutPlanEntriesTable,
+    )..where((t) => t.exerciseId.equals(id))).get();
+    for (final entry in entries) {
+      if (entry.deletedAt != null) continue;
+      await softDeletePlanEntry(entry.id);
+    }
+    _syncActivity?.recordLocalSave(FirestoreCollections.exercises);
+  }
+
+  @override
+  Future<List<WorkoutPlan>> listPlans({bool includeDeleted = false}) async {
+    final rows = await _db.select(_db.workoutPlansTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapPlan)
+        .toList();
+  }
+
+  @override
+  Future<WorkoutPlan?> getPlan(String id) async {
+    final row = await (_db.select(
+      _db.workoutPlansTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapPlan(row);
+  }
+
+  @override
+  Future<void> upsertPlan(
+    WorkoutPlan plan, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.workoutPlansTable)
+        .insertOnConflictUpdate(
+          WorkoutPlansTableCompanion(
+            id: Value(plan.id),
+            name: Value(plan.name),
+            mode: Value(plan.mode.name),
+            cycleLength: Value(plan.cycleLength),
+            cycleAnchor: Value(plan.cycleAnchor),
+            isActive: Value(plan.isActive),
+            createdAt: Value(plan.createdAt),
+            updatedAt: Value(plan.updatedAt),
+            version: Value(plan.version),
+            deletedAt: Value(plan.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlans);
+    }
+  }
+
+  @override
+  Future<void> setActivePlan(String planId) async {
+    for (final plan in await listPlans()) {
+      final shouldBeActive = plan.id == planId;
+      if (plan.isActive == shouldBeActive) continue;
+      await upsertPlan(
+        plan.copyWith(isActive: shouldBeActive),
+        recordLocalActivity: false,
+      );
+    }
+    _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlans);
+  }
+
+  @override
+  Future<List<WorkoutPlanEntry>> listPlanEntries(
+    String planId, {
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(
+      _db.workoutPlanEntriesTable,
+    )..where((t) => t.planId.equals(planId))).get();
+    final entries = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapPlanEntry)
+        .toList();
+    entries.sort((a, b) {
+      final byDay = a.dayIndex.compareTo(b.dayIndex);
+      return byDay != 0 ? byDay : a.sortOrder.compareTo(b.sortOrder);
+    });
+    return entries;
+  }
+
+  @override
+  Future<WorkoutPlanEntry?> getPlanEntry(String id) async {
+    final row = await (_db.select(
+      _db.workoutPlanEntriesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapPlanEntry(row);
+  }
+
+  @override
+  Future<void> upsertPlanEntry(
+    WorkoutPlanEntry entry, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.workoutPlanEntriesTable)
+        .insertOnConflictUpdate(
+          WorkoutPlanEntriesTableCompanion(
+            id: Value(entry.id),
+            planId: Value(entry.planId),
+            dayIndex: Value(entry.dayIndex),
+            exerciseId: Value(entry.exerciseId),
+            sortOrder: Value(entry.sortOrder),
+            createdAt: Value(entry.createdAt),
+            updatedAt: Value(entry.updatedAt),
+            version: Value(entry.version),
+            deletedAt: Value(entry.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlanEntries);
+    }
+  }
+
+  @override
+  Future<void> softDeletePlanEntry(String id) async {
+    await (_db.update(
+      _db.workoutPlanEntriesTable,
+    )..where((t) => t.id.equals(id))).write(
+      WorkoutPlanEntriesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlanEntries);
+  }
+
+  @override
+  Future<List<WorkoutSession>> listSessions({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.workoutSessionsTable).get();
+    final sessions = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapSession)
+        .toList();
+    sessions.sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    return sessions;
+  }
+
+  @override
+  Future<WorkoutSession?> getSession(String id) async {
+    final row = await (_db.select(
+      _db.workoutSessionsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapSession(row);
+  }
+
+  @override
+  Future<WorkoutSession?> getActiveSession() async {
+    // listSessions is newest-started-first, so the first live row wins if a
+    // sync race ever left two open at once.
+    for (final session in await listSessions()) {
+      if (session.isActive) return session;
+    }
+    return null;
+  }
+
+  @override
+  Future<void> upsertSession(
+    WorkoutSession session, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.workoutSessionsTable)
+        .insertOnConflictUpdate(
+          WorkoutSessionsTableCompanion(
+            id: Value(session.id),
+            planId: Value(session.planId),
+            dayIndex: Value(session.dayIndex),
+            date: Value(session.date),
+            startedAt: Value(session.startedAt),
+            endedAt: Value(session.endedAt),
+            createdAt: Value(session.createdAt),
+            updatedAt: Value(session.updatedAt),
+            version: Value(session.version),
+            deletedAt: Value(session.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.workoutSessions);
+    }
+  }
+
+  @override
+  Future<void> softDeleteSession(String id) async {
+    await (_db.update(
+      _db.workoutSessionsTable,
+    )..where((t) => t.id.equals(id))).write(
+      WorkoutSessionsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    final logs = await (_db.select(
+      _db.workoutSetLogsTable,
+    )..where((t) => t.sessionId.equals(id))).get();
+    for (final log in logs) {
+      if (log.deletedAt != null) continue;
+      await softDeleteSetLog(log.id);
+    }
+    _syncActivity?.recordLocalSave(FirestoreCollections.workoutSessions);
+  }
+
+  @override
+  Future<List<WorkoutSetLog>> listSetLogs({
+    String? sessionId,
+    String? exerciseId,
+    bool includeDeleted = false,
+  }) async {
+    final query = _db.select(_db.workoutSetLogsTable);
+    if (sessionId != null) {
+      query.where((t) => t.sessionId.equals(sessionId));
+    }
+    if (exerciseId != null) {
+      query.where((t) => t.exerciseId.equals(exerciseId));
+    }
+    final rows = await query.get();
+    final logs = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapSetLog)
+        .toList();
+    logs.sort((a, b) {
+      final byExercise = a.exerciseOrder.compareTo(b.exerciseOrder);
+      return byExercise != 0 ? byExercise : a.setIndex.compareTo(b.setIndex);
+    });
+    return logs;
+  }
+
+  @override
+  Future<WorkoutSetLog?> getSetLog(String id) async {
+    final row = await (_db.select(
+      _db.workoutSetLogsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapSetLog(row);
+  }
+
+  @override
+  Future<void> upsertSetLog(
+    WorkoutSetLog log, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.workoutSetLogsTable)
+        .insertOnConflictUpdate(_setLogCompanion(log));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.workoutSetLogs);
+    }
+  }
+
+  @override
+  Future<void> upsertSetLogsBatch(
+    List<WorkoutSetLog> logs, {
+    bool recordLocalActivity = true,
+  }) async {
+    if (logs.isEmpty) return;
+    // One batched statement rather than N awaits: materialising a session
+    // writes every set of every exercise at once, which is dozens of rows on
+    // a big day and would otherwise land as dozens of round-trips to the
+    // database isolate mid-tap.
+    await _db.batch((batch) {
+      for (final log in logs) {
+        final companion = _setLogCompanion(log);
+        batch.insert(
+          _db.workoutSetLogsTable,
+          companion,
+          onConflict: DoUpdate((_) => companion),
+        );
+      }
+    });
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.workoutSetLogs);
+    }
+  }
+
+  @override
+  Future<void> softDeleteSetLog(String id) async {
+    await (_db.update(
+      _db.workoutSetLogsTable,
+    )..where((t) => t.id.equals(id))).write(
+      WorkoutSetLogsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.workoutSetLogs);
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    // Set logs, then sessions, then plan entries, then exercises — children
+    // before their parents, as the row-by-row version did.
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.workoutSetLogsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.workoutSessionsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.workoutPlanEntriesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.exercisesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+  }
+
+  @override
+  Future<List<Exercise>> getAllExercises({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.exercisesTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapExercise)
+        .toList();
+  }
+
+  @override
+  Future<List<WorkoutPlan>> getAllPlans({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.workoutPlansTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapPlan)
+        .toList();
+  }
+
+  @override
+  Future<List<WorkoutPlanEntry>> getAllPlanEntries({
+    bool includeDeleted = true,
+  }) async {
+    final rows = await _db.select(_db.workoutPlanEntriesTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapPlanEntry)
+        .toList();
+  }
+
+  @override
+  Future<List<WorkoutSession>> getAllSessions({
+    bool includeDeleted = true,
+  }) async {
+    final rows = await _db.select(_db.workoutSessionsTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapSession)
+        .toList();
+  }
+
+  @override
+  Future<List<WorkoutSetLog>> getAllSetLogs({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.workoutSetLogsTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapSetLog)
+        .toList();
+  }
+
+  WorkoutSetLogsTableCompanion _setLogCompanion(WorkoutSetLog log) =>
+      WorkoutSetLogsTableCompanion(
+        id: Value(log.id),
+        sessionId: Value(log.sessionId),
+        exerciseId: Value(log.exerciseId),
+        exerciseOrder: Value(log.exerciseOrder),
+        setIndex: Value(log.setIndex),
+        weightKg: Value(log.weightKg),
+        reps: Value(log.reps),
+        plannedWeightKg: Value(log.plannedWeightKg),
+        plannedReps: Value(log.plannedReps),
+        completed: Value(log.completed),
+        completedAt: Value(log.completedAt),
+        createdAt: Value(log.createdAt),
+        updatedAt: Value(log.updatedAt),
+        version: Value(log.version),
+        deletedAt: Value(log.deletedAt),
+      );
+
+  Exercise _mapExercise(ExercisesTableData row) => Exercise(
+    id: row.id,
+    name: row.name,
+    formCues: row.formCues,
+    colorValue: row.colorValue,
+    sortOrder: row.sortOrder,
+    targetSets: row.targetSets,
+    targetReps: row.targetReps,
+    targetWeightKg: row.targetWeightKg,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  WorkoutPlan _mapPlan(WorkoutPlansTableData row) => WorkoutPlan(
+    id: row.id,
+    name: row.name,
+    mode: WorkoutPlanMode.values.byName(row.mode),
+    cycleLength: row.cycleLength,
+    cycleAnchor: row.cycleAnchor,
+    isActive: row.isActive,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  WorkoutPlanEntry _mapPlanEntry(WorkoutPlanEntriesTableData row) =>
+      WorkoutPlanEntry(
+        id: row.id,
+        planId: row.planId,
+        dayIndex: row.dayIndex,
+        exerciseId: row.exerciseId,
+        sortOrder: row.sortOrder,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  WorkoutSession _mapSession(WorkoutSessionsTableData row) => WorkoutSession(
+    id: row.id,
+    planId: row.planId,
+    dayIndex: row.dayIndex,
+    date: row.date,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  WorkoutSetLog _mapSetLog(WorkoutSetLogsTableData row) => WorkoutSetLog(
+    id: row.id,
+    sessionId: row.sessionId,
+    exerciseId: row.exerciseId,
+    exerciseOrder: row.exerciseOrder,
+    setIndex: row.setIndex,
+    weightKg: row.weightKg,
+    reps: row.reps,
+    plannedWeightKg: row.plannedWeightKg,
+    plannedReps: row.plannedReps,
+    completed: row.completed,
+    completedAt: row.completedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,

@@ -118,6 +118,7 @@ class CalendarGrid extends StatelessWidget {
     required this.onMonthTap,
     this.indicators = const [],
     this.todoMarkers = const [],
+    this.workoutDays = const {},
     this.showTodoIcons = true,
     this.weekStartsMonday = true,
     this.monthTileKeyBuilder,
@@ -146,6 +147,10 @@ class CalendarGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
+
+  /// Local calendar days with a completed workout. Empty unless the calendar
+  /// workout setting is on; the year view never receives it.
+  final Set<DateTime> workoutDays;
   final void Function(DateTime day) onDayTap;
   final void Function(DateTime month) onMonthTap;
   final bool showTodoIcons;
@@ -195,6 +200,7 @@ class CalendarGrid extends StatelessWidget {
         focused: focused,
         events: events,
         todoMarkers: todoMarkers,
+        workoutDays: workoutDays,
         onEventTap: onEventTap,
         onTodoTap: onTodoTap,
         onSlotTap: onWeekSlotTap,
@@ -210,6 +216,7 @@ class CalendarGrid extends StatelessWidget {
         events: events,
         indicators: indicators,
         todoMarkers: todoMarkers,
+        workoutDays: workoutDays,
         showTodoIcons: showTodoIcons,
         onDayTap: onDayTap,
         onEntryTap: onEntryTap,
@@ -698,6 +705,7 @@ class _MonthGrid extends StatelessWidget {
     required this.events,
     required this.indicators,
     required this.todoMarkers,
+    this.workoutDays = const {},
     required this.showTodoIcons,
     required this.onDayTap,
     required this.weekStartsMonday,
@@ -718,6 +726,7 @@ class _MonthGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
+  final Set<DateTime> workoutDays;
   final bool showTodoIcons;
   final void Function(DateTime day) onDayTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
@@ -786,6 +795,7 @@ class _MonthGrid extends StatelessWidget {
                 events: events,
                 indicators: indicators,
                 todoMarkers: todoMarkers,
+                workoutDays: workoutDays,
                 showTodoIcons: showTodoIcons,
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
@@ -811,6 +821,7 @@ class _WeekGrid extends StatelessWidget {
     required this.focused,
     required this.events,
     required this.todoMarkers,
+    this.workoutDays = const {},
     required this.onEventTap,
     required this.onTodoTap,
     required this.onSlotTap,
@@ -825,6 +836,7 @@ class _WeekGrid extends StatelessWidget {
   final DateTime focused;
   final List<CalendarEvent> events;
   final List<CalendarTodoMarker> todoMarkers;
+  final Set<DateTime> workoutDays;
   final void Function(CalendarEvent event)? onEventTap;
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onSlotTap;
@@ -860,6 +872,7 @@ class _WeekGrid extends StatelessWidget {
       editingEventId: editingEventId,
       entryFadeEnabled: entryFadeEnabled,
       weekdayAccentColor: accentColor,
+      workoutDays: workoutDays,
       ),
     );
   }

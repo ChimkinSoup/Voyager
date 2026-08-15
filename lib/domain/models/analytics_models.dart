@@ -22,11 +22,17 @@ const String kWordCountTrackerId = '__default_word_count__';
 /// [kJournalEntriesTrackerId] — see [buildDreamLoggedTracker].
 const String kDreamLoggedTrackerId = '__default_dream_logged__';
 
+/// Reserved id for the built-in "Worked Out" default tracker, shown only when
+/// [AppSettings.showWorkoutStatistics] is on. Virtual like
+/// [kJournalEntriesTrackerId] — see [buildWorkedOutTracker].
+const String kWorkedOutTrackerId = '__default_worked_out__';
+
 class StatisticTracker extends SoftDeletable {
   const StatisticTracker({
     required super.id,
     required super.createdAt,
     required super.updatedAt,
+    super.version,
     super.deletedAt,
     required this.name,
     required this.type,
@@ -85,11 +91,13 @@ class StatisticTracker extends SoftDeletable {
     TrackerStyle? trackingStyle,
     bool? starred,
     int? sortOrder,
+    bool bumpVersion = true,
   }) {
     return StatisticTracker(
       id: id,
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
+      version: bumpVersion ? version + 1 : version,
       deletedAt: deletedAt ?? this.deletedAt,
       name: name ?? this.name,
       type: type,
@@ -208,11 +216,49 @@ List<TrackerValue> dreamLoggedTrackerValues(List<DreamEntry> entries) {
   ];
 }
 
+/// Builds the virtual "Worked Out" default tracker: a daily boolean where each
+/// day is true iff a workout was finished on it. Not persisted — its values
+/// come from the workout sessions themselves (see [workedOutTrackerValues]),
+/// so the stat can never drift from what the tracker page shows.
+StatisticTracker buildWorkedOutTracker({required int colorValue}) {
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  return StatisticTracker(
+    id: kWorkedOutTrackerId,
+    createdAt: epoch,
+    updatedAt: epoch,
+    name: 'Worked Out',
+    type: TrackerType.boolean,
+    cadence: TrackerCadence.daily,
+    colorValue: colorValue,
+    isDefault: true,
+  );
+}
+
+/// Derives the virtual "Worked Out" tracker's values from the local calendar
+/// [days] that carry a finished workout. Days without one get no value at all
+/// rather than an explicit false — same convention as the journal and dream
+/// trackers, which renders as an empty cell instead of a filled "no".
+List<TrackerValue> workedOutTrackerValues(Set<DateTime> days) {
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  return [
+    for (final day in days)
+      TrackerValue(
+        id: '$kWorkedOutTrackerId:${day.year}-${day.month}-${day.day}',
+        trackerId: kWorkedOutTrackerId,
+        periodStart: day,
+        boolValue: true,
+        createdAt: epoch,
+        updatedAt: epoch,
+      ),
+  ];
+}
+
 class TrackerValue extends SoftDeletable {
   const TrackerValue({
     required super.id,
     required super.createdAt,
     required super.updatedAt,
+    super.version,
     super.deletedAt,
     required this.trackerId,
     required this.periodStart,
@@ -226,6 +272,27 @@ class TrackerValue extends SoftDeletable {
   final int? intValue;
   final bool? boolValue;
   final String? enumValue;
+
+  TrackerValue copyWith({
+    int? intValue,
+    bool? boolValue,
+    String? enumValue,
+    DateTime? deletedAt,
+    bool bumpVersion = true,
+  }) {
+    return TrackerValue(
+      id: id,
+      createdAt: createdAt,
+      updatedAt: DateTime.now().toUtc(),
+      version: bumpVersion ? version + 1 : version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      trackerId: trackerId,
+      periodStart: periodStart,
+      intValue: intValue ?? this.intValue,
+      boolValue: boolValue ?? this.boolValue,
+      enumValue: enumValue ?? this.enumValue,
+    );
+  }
 }
 
 /// Derives the virtual "Journal Entries" tracker's values from [entries]:

@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -21,9 +24,17 @@ final _granularityProvider = StateProvider<CashFlowGranularity>(
 /// True when the spending breakdown rolls tags up into categories.
 final _groupByCategoryProvider = StateProvider<bool>((_) => true);
 
-/// How many buckets the cash-flow dashboard shows per granularity.
-int _periodsFor(CashFlowGranularity g) =>
-    g == CashFlowGranularity.yearly ? 5 : 12;
+/// How many buckets the cash-flow dashboard shows, at every granularity.
+///
+/// The same count for all three on purpose. fl_chart animates between two
+/// `BarChartData`s by lerping their group lists pairwise, and when the two
+/// lists are *different lengths* it can't: the shorter one's groups morph
+/// while the extra groups snap straight to their final values, all while the
+/// y-axis is still rescaling underneath. Yearly used to show five buckets
+/// against the others' twelve, which is why the heave was only ever visible
+/// crossing into or out of the yearly view. Equal lengths make every
+/// transition a true one-to-one morph.
+const int _kCashFlowPeriods = 12;
 
 /// The macro analytics suite: income vs. expense, spending breakdown, and the
 /// net-worth tracker.
@@ -155,7 +166,7 @@ class _CashFlowCard extends ConsumerWidget {
     final series = cashFlowSeries(
       transactions,
       granularity: granularity,
-      periods: _periodsFor(granularity),
+      periods: _kCashFlowPeriods,
       weekStartsMonday: weekStartsMonday,
     );
 
@@ -246,122 +257,287 @@ class _CashFlowCard extends ConsumerWidget {
                       ),
                     ),
                   )
-                : BarChart(
-                    BarChartData(
-                      maxY: maxY,
-                      alignment: BarChartAlignment.spaceAround,
-                      barTouchData: BarTouchData(
-                        touchTooltipData: BarTouchTooltipData(
-                          getTooltipColor: (_) =>
-                              theme.colorScheme.surfaceContainerHighest,
-                          getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                              BarTooltipItem(
-                            _compactMoney(rod.toY),
-                            TextStyle(
-                              color: rod.color,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine: (_) => FlLine(
-                          color:
-                              theme.colorScheme.outline.withValues(alpha: 0.10),
-                          strokeWidth: 1,
-                        ),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      titlesData: FlTitlesData(
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 42,
-                            getTitlesWidget: (value, _) => Text(
-                              _compactMoney(value),
-                              style: theme.textTheme.labelSmall
-                                  ?.copyWith(fontSize: 9),
-                            ),
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 22,
-                            getTitlesWidget: (value, _) {
-                              final i = value.toInt();
-                              if (i < 0 || i >= series.length) {
-                                return const SizedBox.shrink();
-                              }
-                              // Thin out labels so they never collide.
-                              final step = (series.length / 6).ceil();
-                              if (i % step != 0) return const SizedBox.shrink();
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  _periodLabel(
-                                    series[i].periodStart,
-                                    granularity,
-                                  ),
-                                  style: theme.textTheme.labelSmall
-                                      ?.copyWith(fontSize: 9),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      barGroups: [
-                        for (var i = 0; i < series.length; i++)
-                          BarChartGroupData(
-                            x: i,
-                            barsSpace: 2,
-                            barRods: [
-                              BarChartRodData(
-                                toY: series[i].incomeCents / 100,
-                                color: kIncomeGreen,
-                                width: 5,
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(2),
-                                ),
-                              ),
-                              BarChartRodData(
-                                toY: series[i].expenseCents / 100,
-                                color: accent,
-                                width: 5,
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(2),
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
+                : _CashFlowChart(
+                    series: series,
+                    granularity: granularity,
+                    maxY: maxY,
+                    accent: accent,
                   ),
           ),
         ],
       ),
     );
   }
+}
 
-  String _periodLabel(DateTime start, CashFlowGranularity granularity) {
-    switch (granularity) {
-      case CashFlowGranularity.weekly:
-        return DateFormat('MMM d').format(start);
-      case CashFlowGranularity.monthly:
-        return DateFormat('MMM').format(start);
-      case CashFlowGranularity.yearly:
-        return DateFormat('yyyy').format(start);
-    }
+/// Axis tick label for a cash-flow bucket — short, because a dozen of them
+/// share one axis.
+String _periodTickLabel(DateTime start, CashFlowGranularity granularity) {
+  switch (granularity) {
+    case CashFlowGranularity.weekly:
+      return DateFormat('MMM d').format(start);
+    case CashFlowGranularity.monthly:
+      return DateFormat('MMM').format(start);
+    case CashFlowGranularity.yearly:
+      return DateFormat('yyyy').format(start);
+  }
+}
+
+/// The same bucket spelled out for a hover bubble, which has one line to
+/// itself and should leave no doubt which week or year is being read. Matches
+/// the analytics page's tooltip wording.
+String _periodBubbleLabel(DateTime start, CashFlowGranularity granularity) {
+  switch (granularity) {
+    case CashFlowGranularity.weekly:
+      return 'Week of ${DateFormat('MMM d, yyyy').format(start)}';
+    case CashFlowGranularity.monthly:
+      return DateFormat('MMMM yyyy').format(start);
+    case CashFlowGranularity.yearly:
+      return DateFormat('yyyy').format(start);
+  }
+}
+
+/// Income vs. expense bars, sized to the card they're in and reporting through
+/// the app's shared hover bubble.
+class _CashFlowChart extends StatefulWidget {
+  const _CashFlowChart({
+    required this.series,
+    required this.granularity,
+    required this.maxY,
+    required this.accent,
+  });
+
+  final List<CashFlowPoint> series;
+  final CashFlowGranularity granularity;
+  final double maxY;
+  final Color accent;
+
+  @override
+  State<_CashFlowChart> createState() => _CashFlowChartState();
+}
+
+class _CashFlowChartState extends State<_CashFlowChart> {
+  static const double _leftReserved = 42;
+  static const double _bottomReserved = 22;
+  static const double _barsSpace = 2;
+
+  /// Share of each bucket's slot the two rods together are allowed to fill.
+  /// The remainder is the gutter that keeps one bucket legible from the next.
+  static const double _slotFill = 0.72;
+
+  static const double _minRodWidth = 5;
+  static const double _maxRodWidth = 26;
+
+  ({int group, int rod})? _touched;
+
+  void _handleTouch(FlTouchEvent event, BarTouchResponse? response) {
+    final spot = response?.spot;
+    final next = !event.isInterestedForInteractions || spot == null
+        ? null
+        : (group: spot.touchedBarGroupIndex, rod: spot.touchedRodDataIndex);
+    if (next == _touched) return;
+    setState(() => _touched = next);
+  }
+
+  /// Width of one rod, so the pair fills [_slotFill] of the bucket's share of
+  /// the plot.
+  ///
+  /// Sized from the plot rather than fixed at a handful of pixels: a dozen
+  /// 5px rods left a wide card looking like a chart of hairlines with most of
+  /// its width spent on empty gutter.
+  double _rodWidth(double plotWidth, int count) {
+    if (count == 0) return _minRodWidth;
+    final slot = plotWidth / count;
+    return (((slot * _slotFill) - _barsSpace) / 2).clamp(
+      _minRodWidth,
+      _maxRodWidth,
+    );
+  }
+
+  /// Centre of bucket [index]'s group, in plot coordinates.
+  ///
+  /// Mirrors what [BarChartAlignment.spaceAround] does inside fl_chart: the
+  /// leftover width is split into one gutter on each side of every group, so a
+  /// group sits half a gutter in from where an evenly-spaced one would.
+  double _groupCentre(
+    int index,
+    double plotWidth,
+    double groupWidth,
+    int count,
+  ) {
+    final gutter = (plotWidth - count * groupWidth) / (count * 2);
+    return (2 * index + 1) * gutter + (index + 0.5) * groupWidth;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final series = widget.series;
+    final accent = widget.accent;
+    final maxY = widget.maxY;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final plotWidth = math.max(0.0, constraints.maxWidth - _leftReserved);
+        final plotHeight = math.max(
+          0.0,
+          constraints.maxHeight - _bottomReserved,
+        );
+        final rodWidth = _rodWidth(plotWidth, series.length);
+        final groupWidth = rodWidth * 2 + _barsSpace;
+
+        final touched = _touched;
+        final valid =
+            touched != null &&
+            touched.group >= 0 &&
+            touched.group < series.length &&
+            (touched.rod == 0 || touched.rod == 1);
+
+        final chart = BarChart(
+          BarChartData(
+            maxY: maxY,
+            alignment: BarChartAlignment.spaceAround,
+            barTouchData: BarTouchData(
+              // fl_chart's own tooltip stays off — the bubble below is the
+              // analytics page's, so the two surfaces read identically.
+              handleBuiltInTouches: false,
+              touchCallback: _handleTouch,
+            ),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              getDrawingHorizontalLine: (_) => FlLine(
+                color: theme.colorScheme.outline.withValues(alpha: 0.10),
+                strokeWidth: 1,
+              ),
+            ),
+            borderData: FlBorderData(show: false),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: _leftReserved,
+                  getTitlesWidget: (value, _) => Text(
+                    _compactMoney(value),
+                    style: theme.textTheme.labelSmall?.copyWith(fontSize: 9),
+                  ),
+                ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: _bottomReserved,
+                  getTitlesWidget: (value, _) {
+                    final i = value.toInt();
+                    if (i < 0 || i >= series.length) {
+                      return const SizedBox.shrink();
+                    }
+                    // Thin out labels so they never collide.
+                    final step = (series.length / 6).ceil();
+                    if (i % step != 0) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        _periodTickLabel(
+                          series[i].periodStart,
+                          widget.granularity,
+                        ),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontSize: 9,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            barGroups: [
+              for (var i = 0; i < series.length; i++)
+                BarChartGroupData(
+                  x: i,
+                  barsSpace: _barsSpace,
+                  barRods: [
+                    BarChartRodData(
+                      toY: series[i].incomeCents / 100,
+                      color: kIncomeGreen,
+                      width: rodWidth,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(2),
+                      ),
+                    ),
+                    BarChartRodData(
+                      toY: series[i].expenseCents / 100,
+                      color: accent,
+                      width: rodWidth,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(2),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        );
+
+        final point = valid ? series[touched.group] : null;
+        final isIncome = valid && touched.rod == 0;
+        final cents = point == null
+            ? 0
+            : (isIncome ? point.incomeCents : point.expenseCents);
+        final rodCentre = point == null
+            ? 0.0
+            : _groupCentre(
+                    touched!.group,
+                    plotWidth,
+                    groupWidth,
+                    series.length,
+                  ) -
+                  groupWidth / 2 +
+                  (isIncome
+                      ? rodWidth / 2
+                      : rodWidth + _barsSpace + rodWidth / 2);
+
+        // The chart stays the Stack's first child whether or not anything is
+        // hovered: dropping back to a bare chart between hovers would rebuild
+        // its element and restart the bar animation every time the pointer
+        // left the plot.
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            chart,
+            if (point != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomSingleChildLayout(
+                    delegate: _ChartBubbleLayout(
+                      anchor: Offset(
+                        _leftReserved + rodCentre,
+                        maxY == 0
+                            ? plotHeight
+                            : plotHeight * (1 - (cents / 100) / maxY),
+                      ),
+                    ),
+                    child: ChartHoverBubble(
+                      periodLabel: _periodBubbleLabel(
+                        point.periodStart,
+                        widget.granularity,
+                      ),
+                      valueLabel: formatCents(cents),
+                      valueColor: isIncome ? kIncomeGreen : accent,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -483,42 +659,7 @@ class _BreakdownCard extends ConsumerWidget {
           else ...[
             SizedBox(
               height: 150,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  PieChart(
-                    PieChartData(
-                      sectionsSpace: 2,
-                      centerSpaceRadius: 44,
-                      sections: [
-                        for (final slice in slices)
-                          PieChartSectionData(
-                            value: slice.amountCents.toDouble(),
-                            color: Color(slice.colorValue),
-                            radius: 18,
-                            showTitle: false,
-                          ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        formatCents(total),
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        'spent',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              child: _BreakdownPie(slices: slices, total: total),
             ),
             const SizedBox(height: 12),
             for (final slice in slices.take(6))
@@ -537,7 +678,12 @@ class _BreakdownCard extends ConsumerWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        groupByCategory ? slice.label : '#${slice.label}',
+                        // No leading `#`, on a tag or a category alike. In a
+                        // legend the marker is doing no work — nothing here is
+                        // a tag *reference* the way it is in prose — and it
+                        // made the two groupings of the same chart look like
+                        // two different kinds of thing.
+                        slice.label,
                         style: theme.textTheme.labelMedium,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -577,6 +723,137 @@ class _BreakdownCard extends ConsumerWidget {
         parent: ProviderScope.containerOf(context),
         child: const _CategoryManager(),
       ),
+    );
+  }
+}
+
+/// The donut, its running total, and the hover bubble that names whichever
+/// slice the pointer is on.
+///
+/// The total in the middle is the chart's resting state; it stays put while a
+/// slice is hovered rather than being swapped out, so the share the bubble
+/// quotes can be read against the whole it is a share *of*.
+class _BreakdownPie extends StatefulWidget {
+  const _BreakdownPie({required this.slices, required this.total});
+
+  final List<BreakdownSlice> slices;
+  final int total;
+
+  @override
+  State<_BreakdownPie> createState() => _BreakdownPieState();
+}
+
+class _BreakdownPieState extends State<_BreakdownPie> {
+  static const double _centerRadius = 44;
+  static const double _sliceRadius = 18;
+
+  int? _touchedIndex;
+
+  void _handleTouch(FlTouchEvent event, PieTouchResponse? response) {
+    final section = response?.touchedSection;
+    final next = !event.isInterestedForInteractions || section == null
+        ? null
+        : section.touchedSectionIndex;
+    final resolved =
+        next != null && next >= 0 && next < widget.slices.length ? next : null;
+    if (resolved == _touchedIndex) return;
+    setState(() => _touchedIndex = resolved);
+  }
+
+  /// Midpoint of slice [index]'s arc, relative to the donut's centre.
+  ///
+  /// fl_chart lays sections out clockwise from three o'clock, so walking the
+  /// preceding slices' sweeps and stopping halfway into this one gives the
+  /// point on the ring the bubble should sit above.
+  Offset _arcMidpoint(int index) {
+    final total = widget.slices.fold<int>(0, (s, x) => s + x.amountCents);
+    if (total <= 0) return Offset.zero;
+    var sweptRadians = 0.0;
+    for (var i = 0; i < index; i++) {
+      sweptRadians += 2 * math.pi * widget.slices[i].amountCents / total;
+    }
+    final mid =
+        sweptRadians +
+        math.pi * widget.slices[index].amountCents / total;
+    const radius = _centerRadius + _sliceRadius / 2;
+    return Offset(math.cos(mid) * radius, math.sin(mid) * radius);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final slices = widget.slices;
+    final total = widget.total;
+    final touched = _touchedIndex;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        PieChart(
+          PieChartData(
+            sectionsSpace: 2,
+            centerSpaceRadius: _centerRadius,
+            pieTouchData: PieTouchData(touchCallback: _handleTouch),
+            sections: [
+              for (var i = 0; i < slices.length; i++)
+                PieChartSectionData(
+                  value: slices[i].amountCents.toDouble(),
+                  color: Color(slices[i].colorValue),
+                  // The hovered slice thickens outward a little, so the bubble
+                  // and the wedge it describes are tied together without a
+                  // second colour or a border to read.
+                  radius: i == touched ? _sliceRadius + 4 : _sliceRadius,
+                  showTitle: false,
+                ),
+            ],
+          ),
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              formatCents(total),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Text(
+              'spent',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        if (touched != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final centre = Offset(
+                    constraints.maxWidth / 2,
+                    constraints.maxHeight / 2,
+                  );
+                  final share = total == 0
+                      ? 0
+                      : ((slices[touched].amountCents / total) * 100).round();
+                  return CustomSingleChildLayout(
+                    delegate: _ChartBubbleLayout(
+                      anchor: centre + _arcMidpoint(touched),
+                    ),
+                    child: ChartHoverBubble(
+                      periodLabel: slices[touched].label,
+                      valueLabel:
+                          '${formatCents(slices[touched].amountCents)}  ·  $share%',
+                      valueColor: Color(slices[touched].colorValue),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -767,48 +1044,72 @@ class _NetWorthCard extends ConsumerWidget {
   }
 }
 
-class _NetWorthChart extends StatelessWidget {
+/// Height reserved below the net-worth curve for its month labels.
+const double _kNetWorthBottomReserved = 18;
+
+class _NetWorthChart extends StatefulWidget {
   const _NetWorthChart({required this.series, required this.color});
 
   final List<NetWorthPoint> series;
   final Color color;
 
   @override
+  State<_NetWorthChart> createState() => _NetWorthChartState();
+}
+
+class _NetWorthChartState extends State<_NetWorthChart> {
+  /// Index into the series the pointer is currently reading, or null.
+  int? _touchedIndex;
+
+  void _handleTouch(FlTouchEvent event, LineTouchResponse? response) {
+    final hits = response?.lineBarSpots;
+    final next = !event.isInterestedForInteractions || hits == null || hits.isEmpty
+        ? null
+        : hits.first.spotIndex;
+    if (next == _touchedIndex) return;
+    setState(() => _touchedIndex = next);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final series = widget.series;
+    final color = widget.color;
     final spots = [
       for (var i = 0; i < series.length; i++)
         FlSpot(i.toDouble(), series[i].totalCents / 100),
     ];
     final values = spots.map((s) => s.y).toList();
-    var minY = values.reduce((a, b) => a < b ? a : b);
-    var maxY = values.reduce((a, b) => a > b ? a : b);
-    if (minY == maxY) {
-      minY -= 1;
-      maxY += 1;
+    var minValue = values.reduce((a, b) => a < b ? a : b);
+    var maxValue = values.reduce((a, b) => a > b ? a : b);
+    if (minValue == maxValue) {
+      minValue -= 1;
+      maxValue += 1;
     }
-    final pad = (maxY - minY) * 0.15;
+    final pad = (maxValue - minValue) * 0.15;
+    final minY = minValue - pad;
+    final maxY = maxValue + pad;
 
-    return LineChart(
+    final touched =
+        _touchedIndex != null && _touchedIndex! >= 0 && _touchedIndex! < series.length
+        ? _touchedIndex
+        : null;
+
+    final chart = LineChart(
       LineChartData(
-        minY: minY - pad,
-        maxY: maxY + pad,
+        minY: minY,
+        maxY: maxY,
         lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => theme.colorScheme.surfaceContainerHighest,
-            getTooltipItems: (touched) => touched
-                .map(
-                  (spot) => LineTooltipItem(
-                    _compactMoney(spot.y),
-                    TextStyle(
-                      color: color,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
+          // The bubble below is drawn by this widget, not by fl_chart, so its
+          // own tooltip stays off; the indicator line on the touched spot is a
+          // separate setting (LineChartBarData.showingIndicators) and stays on.
+          handleBuiltInTouches: false,
+          // A threshold big enough that the pointer is always inside *some*
+          // spot's zone. At the default 10px the reading zones are islands
+          // with dead water between them, so drifting between two months —
+          // most of the chart's width — showed nothing at all.
+          touchSpotThreshold: 10000,
+          touchCallback: _handleTouch,
         ),
         gridData: const FlGridData(show: false),
         borderData: FlBorderData(show: false),
@@ -825,7 +1126,7 @@ class _NetWorthChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 18,
+              reservedSize: _kNetWorthBottomReserved,
               interval: 1,
               getTitlesWidget: (value, _) {
                 final i = value.toInt();
@@ -847,9 +1148,16 @@ class _NetWorthChart extends StatelessWidget {
             spots: spots,
             isCurved: true,
             curveSmoothness: 0.25,
+            // A cubic through the points is free to bulge past them between
+            // two of them, which on a series that steps sharply drew the line
+            // below the lowest month it contains — a net worth that visibly
+            // dips under a floor it never actually reached. This holds the
+            // curve inside its own points.
+            preventCurveOverShooting: true,
             color: color,
             barWidth: 2,
             dotData: const FlDotData(show: false),
+            showingIndicators: touched == null ? const [] : [touched],
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
@@ -865,7 +1173,87 @@ class _NetWorthChart extends StatelessWidget {
         ],
       ),
     );
+
+    // The chart is always the Stack's first child, hovered or not. Returning
+    // the bare chart when nothing is touched would move it to a different slot
+    // in the tree on every hover, rebuilding its element and restarting the
+    // implicit animation it draws itself with — a curve that redraws from
+    // scratch each time the pointer arrives.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final plotWidth = constraints.maxWidth;
+        final plotHeight = math.max(
+          0.0,
+          constraints.maxHeight - _kNetWorthBottomReserved,
+        );
+        final spanX = spots.length <= 1 ? 1.0 : (spots.length - 1).toDouble();
+        final spanY = maxY - minY;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            chart,
+            if (touched != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomSingleChildLayout(
+                    delegate: _ChartBubbleLayout(
+                      anchor: Offset(
+                        spots[touched].x / spanX * plotWidth,
+                        spanY == 0
+                            ? plotHeight
+                            : plotHeight *
+                                  (1 - (spots[touched].y - minY) / spanY),
+                      ),
+                    ),
+                    child: ChartHoverBubble(
+                      periodLabel: DateFormat(
+                        'MMMM yyyy',
+                      ).format(series[touched].date),
+                      valueLabel: formatCents(series[touched].totalCents),
+                      valueColor: color,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
+}
+
+/// Centres a [ChartHoverBubble] on the datapoint it describes, sitting it just
+/// above the point.
+///
+/// A layout delegate rather than arithmetic at the call site because both
+/// offsets need the bubble's real size, and the bubble is sized to whatever
+/// date and amount it happens to be showing.
+///
+/// Nothing clamps the result into the plot: a bubble centred near either end
+/// overhangs the edge by up to half its width, and staying glued to the point
+/// is worth that — clamping makes the bubble drift off the point exactly where
+/// the series ends.
+class _ChartBubbleLayout extends SingleChildLayoutDelegate {
+  const _ChartBubbleLayout({required this.anchor});
+
+  /// The datapoint, in the enclosing [Stack]'s coordinates.
+  final Offset anchor;
+
+  static const double _gap = 8;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    anchor.dx - childSize.width / 2,
+    anchor.dy - childSize.height - _gap,
+  );
+
+  @override
+  bool shouldRelayout(_ChartBubbleLayout oldDelegate) =>
+      anchor != oldDelegate.anchor;
 }
 
 class _AssetRow extends ConsumerWidget {

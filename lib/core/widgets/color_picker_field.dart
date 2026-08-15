@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 const _paletteAspect = 4 / 3;
@@ -35,7 +36,10 @@ double paletteViewportHeight(
   return height;
 }
 
-/// Sizes a palette grid inside a 4:3 box that grows with color count.
+/// Sizes a palette grid to its own content, picking a column count that aims
+/// for a roughly 4:3 shape without exceeding [maxWidth]. Height caps at
+/// [maxHeight] (setting `scrollable`); `contentWidth`/`contentHeight` keep the
+/// uncapped grid size for the scroll extent.
 ({
   double width,
   double height,
@@ -204,10 +208,9 @@ class ColorPaletteGrid extends StatelessWidget {
             : wrap;
 
         if (needsScroll) {
-          content = SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: content,
-          );
+          // No explicit physics: the palette rubber-bands at its edges like
+          // every other scroller, rather than opting back into a hard stop.
+          content = VoyagerScrollView(child: content);
         }
 
         return SizedBox(

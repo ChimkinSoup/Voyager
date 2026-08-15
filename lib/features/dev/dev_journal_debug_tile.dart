@@ -6,6 +6,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class DevJournalDebugSection extends ConsumerWidget {
   const DevJournalDebugSection({super.key});
@@ -116,7 +117,7 @@ class DevJournalDebugSection extends ConsumerWidget {
         title: const Text('Journal debug log'),
         content: SizedBox(
           width: 720,
-          child: SingleChildScrollView(
+          child: VoyagerScrollView(
             child: SelectableText(
               text.isEmpty ? '(empty)' : text,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),

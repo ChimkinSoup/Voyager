@@ -6,6 +6,7 @@ import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
@@ -14,7 +15,8 @@ import 'package:voyager/features/study/study_rich_text.dart';
 /// Create/edit a single card. Front/back are plain text inputs — `$...$`
 /// LaTeX source is typed as-is (no live reformatting per STUDY.md) with a
 /// small rendered preview shown underneath so the author can check it
-/// without leaving the editor.
+/// without leaving the editor. Editing an existing card also reports its SRS
+/// standing, which is otherwise only legible as a border color in the grid.
 Future<void> showStudyCardEditorModal(
   BuildContext context,
   WidgetRef ref, {
@@ -87,6 +89,9 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
     await ref.read(studyRepositoryProvider).upsertCard(card);
     ref.read(remoteSyncServiceProvider).pushStudyCard(card);
     ref.invalidate(studyCardsProvider);
+    // Also the flattened list a session works from — an edit made from inside
+    // one is invisible to it otherwise.
+    ref.invalidate(studyAllCardsProvider);
     ref.invalidate(studyDeckStatsProvider);
     ref.invalidate(studyStatsProvider);
     if (mounted) Navigator.of(context).pop();
@@ -102,9 +107,25 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
       ref.read(remoteSyncServiceProvider).pushStudyCard(tombstone);
     }
     ref.invalidate(studyCardsProvider);
+    ref.invalidate(studyAllCardsProvider);
     ref.invalidate(studyDeckStatsProvider);
     ref.invalidate(studyStatsProvider);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// e.g. "New card · due today" or "Interval 21d · ease 2.5 · 7 reviews ·
+  /// due in 3 days".
+  String _srsSummary(StudyCard card) {
+    final days = studyDaysUntilDue(card);
+    final due = switch (days) {
+      0 => 'due today',
+      1 => 'due tomorrow',
+      _ => 'due in $days days',
+    };
+    if (card.isNew) return 'Never studied · $due';
+    return 'Interval ${formatStudyInterval(card.interval)} · '
+        'ease ${card.ease.toStringAsFixed(2)} · '
+        '${card.reviewCount} review${card.reviewCount == 1 ? '' : 's'} · $due';
   }
 
   @override
@@ -114,7 +135,7 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
-      child: SingleChildScrollView(
+      child: VoyagerScrollView(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(
@@ -160,6 +181,15 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
                   ),
                 ],
               ),
+              if (widget.existing != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _srsSummary(widget.existing!),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               VoyagerTextField(
                 controller: _front,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Horizontally scrollable "Root / Math / Calculus" pill row. Used by both
 /// the Study Hub (folder drill-down) and the Deck Workbench header, which
@@ -65,7 +66,7 @@ class StudyBreadcrumbRow extends ConsumerWidget {
       segments.add(pill(trailingLabel!, current: true));
     }
 
-    return SingleChildScrollView(
+    return VoyagerScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(mainAxisSize: MainAxisSize.min, children: segments),
     );

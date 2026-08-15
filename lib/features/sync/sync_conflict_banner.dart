@@ -10,6 +10,7 @@ import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 
 /// Persistent banner shown when quarantined sync conflicts exist.
@@ -210,7 +211,7 @@ class _SyncConflictResolutionDialogState
           title: const Text('Resolve sync conflict'),
           content: SizedBox(
             width: 720,
-            child: SingleChildScrollView(
+            child: VoyagerScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

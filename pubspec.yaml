@@ -43,6 +43,9 @@ dev_dependencies:
   build_runner: ^2.4.15
   drift_dev: ^2.26.0
   fake_cloud_firestore: any
+  # Already present transitively via flutter_test; declared so the
+  # connectivity probe's timer schedule can be tested in fake time.
+  fake_async: any
 
 # firebase_auth's stock Windows plugin sends IdTokenListener/AuthStateListener
 # callbacks to the Flutter engine from whatever thread the Firebase Auth SDK

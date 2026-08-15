@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 
@@ -39,6 +40,11 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
   List<LeetCodeApiQuestion>? _results;
   bool _searching = false;
 
+  /// The query [_results] came back for, which is not the field's current
+  /// text — results only refresh on submit, so highlighting against the live
+  /// controller would mark up the showing titles for a search not yet run.
+  String _resultsQuery = '';
+
   @override
   void dispose() {
     _controller.dispose();
@@ -55,6 +61,7 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
     if (!mounted) return;
     setState(() {
       _results = results;
+      _resultsQuery = query;
       _searching = false;
     });
   }
@@ -125,8 +132,12 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
         return ListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
-          title: Text(
+          // Matching happens on LeetCode's side, so a result whose title
+          // doesn't literally contain the query simply shows no highlight.
+          title: keywordHighlightedText(
             '${q.questionFrontendId}. ${q.title}',
+            highlightColor: theme.colorScheme.onSurface.withValues(alpha: 0.18),
+            keywords: [_resultsQuery],
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

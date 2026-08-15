@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
-import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_dashboard.dart';
-import 'package:voyager/features/leetcode/leetcode_loading_toast.dart';
 import 'package:voyager/features/leetcode/leetcode_review_deck.dart';
-import 'package:voyager/features/leetcode/leetcode_track_modal.dart';
 
 enum _LeetCodeViewMode { dashboard, reviewDeck }
 
@@ -16,31 +15,6 @@ final _leetCodeViewModeProvider = StateProvider<_LeetCodeViewMode>(
 
 class LeetCodePage extends ConsumerWidget {
   const LeetCodePage({super.key});
-
-  Future<void> _handleTrackTap(BuildContext context, WidgetRef ref) async {
-    final username = ref.read(settingsProvider).value?.leetcodeUsername?.trim();
-    if (username == null || username.isEmpty) {
-      await showLeetCodeTrackModal(context, ref);
-      return;
-    }
-
-    final dismissToast = showLeetCodeLoadingToast(
-      context,
-      message: 'Fetching your latest submission…',
-    );
-    try {
-      final recent = await ref
-          .read(leetCodeApiClientProvider)
-          .fetchMostRecentAcceptedSubmission(username);
-      dismissToast();
-      if (!context.mounted) return;
-      await showLeetCodeTrackModal(context, ref, prefill: recent);
-    } catch (_) {
-      dismissToast();
-      if (!context.mounted) return;
-      await showLeetCodeTrackModal(context, ref);
-    }
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -52,7 +26,7 @@ class LeetCodePage extends ConsumerWidget {
         tooltip: 'Track a problem',
         label: 'Track',
         icon: const Icon(PhosphorIconsRegular.plus),
-        onPressed: () => _handleTrackTap(context, ref),
+        onPressed: () => startLeetCodeTrackFlow(context, ref),
       ),
       body: SafeArea(
         child: Column(
@@ -83,16 +57,24 @@ class LeetCodePage extends ConsumerWidget {
                   selected: {mode},
                   onSelectionChanged: (set) {
                     if (set.isNotEmpty) {
-                      ref.read(_leetCodeViewModeProvider.notifier).state = set.first;
+                      ref.read(_leetCodeViewModeProvider.notifier).state =
+                          set.first;
                     }
                   },
                 ),
               ),
             ),
             Expanded(
-              child: mode == _LeetCodeViewMode.dashboard
-                  ? const LeetCodeDashboard()
-                  : const LeetCodeReviewDeck(),
+              // Glass-safe: arrive stays opaque so review-deck BackdropFilter
+              // glass keeps sampling the real backdrop; depart fades + recedes.
+              child: VoyagerCrossfadeIndex(
+                index: mode.index,
+                fadeIncoming: false,
+                children: const [
+                  LeetCodeDashboard(),
+                  LeetCodeReviewDeck(),
+                ],
+              ),
             ),
           ],
         ),

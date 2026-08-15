@@ -3,6 +3,15 @@ import 'dart:convert';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/character_operation.dart';
 
+/// A parsed char-op envelope kept alongside the timestamp of the operation
+/// document it came from, so snapshot recency survives parsing.
+class _ParsedPayload {
+  const _ParsedPayload(this.payload, this.timestamp);
+
+  final CharOpsPayload payload;
+  final DateTime timestamp;
+}
+
 /// Character-level CRDT merge engine using fractional indexing.
 class CharacterSequenceCrdtMerger {
   /// Collects and merges explicit [CharOpsPayload] character operations only.
@@ -14,9 +23,13 @@ class CharacterSequenceCrdtMerger {
     List<SyncOperation> local,
     List<SyncOperation> remote,
   ) {
+    return _mergeParsed(_completeCharOpPayloads([...local, ...remote]));
+  }
+
+  List<CharacterOperation> _mergeParsed(List<_ParsedPayload> parsed) {
     final byId = <String, CharacterOperation>{};
-    for (final syncOp in [...local, ...remote]) {
-      for (final op in _extractExplicitCharOps(syncOp.payload)) {
+    for (final entry in parsed) {
+      for (final op in entry.payload.charOps) {
         final existing = byId[op.id];
         if (existing == null || _wins(op, existing)) {
           byId[op.id] = op;
@@ -24,6 +37,38 @@ class CharacterSequenceCrdtMerger {
       }
     }
     return byId.values.toList();
+  }
+
+  /// Parses every char-op envelope in [ops], dropping those that belong to a
+  /// chunk group with chunks missing.
+  ///
+  /// A write split across several documents can be interrupted partway. The
+  /// surviving chunks would otherwise reconstruct a body missing whatever the
+  /// absent chunks carried — and [_pickBody] only rejects merges that come out
+  /// *longer* than the snapshot, so a short one would be adopted as real text.
+  /// Ignoring the group until it is whole leaves the previous complete state
+  /// in place instead.
+  List<_ParsedPayload> _completeCharOpPayloads(List<SyncOperation> ops) {
+    final parsed = <_ParsedPayload>[];
+    final seenIndexes = <String, Set<int>>{};
+    final expectedCounts = <String, int>{};
+
+    for (final syncOp in ops) {
+      final payload = CharOpsPayload.tryParse(syncOp.payload);
+      if (payload == null) continue;
+      parsed.add(_ParsedPayload(payload, syncOp.timestamp));
+
+      final groupId = payload.groupId;
+      if (groupId == null || payload.chunkCount <= 1) continue;
+      (seenIndexes[groupId] ??= <int>{}).add(payload.chunkIndex);
+      expectedCounts[groupId] = payload.chunkCount;
+    }
+
+    return parsed.where((entry) {
+      final groupId = entry.payload.groupId;
+      if (groupId == null || entry.payload.chunkCount <= 1) return true;
+      return seenIndexes[groupId]!.length == expectedCounts[groupId];
+    }).toList();
   }
 
   /// Reconstructs merged plain text from character operations.
@@ -43,8 +88,9 @@ class CharacterSequenceCrdtMerger {
   String applyMergedPayload(List<SyncOperation> merged) {
     if (merged.isEmpty) return '';
 
-    final latestSnapshot = _latestSnapshot(merged);
-    final charOps = mergeOperations(const [], merged);
+    final complete = _completeCharOpPayloads(merged);
+    final latestSnapshot = _latestSnapshot(merged, complete);
+    final charOps = _mergeParsed(complete);
 
     if (charOps.isNotEmpty && latestSnapshot != null) {
       final snapshotBody = _textFromSnapshot(latestSnapshot);
@@ -102,29 +148,38 @@ class CharacterSequenceCrdtMerger {
     return incoming.clientId.compareTo(existing.clientId) > 0;
   }
 
-  List<CharacterOperation> _extractExplicitCharOps(String payload) {
-    return CharOpsPayload.tryParse(payload)?.charOps ?? const [];
-  }
-
-  Map<String, dynamic>? _latestSnapshot(List<SyncOperation> merged) {
+  /// Newest snapshot across char-op envelopes from complete groups and legacy
+  /// bare-JSON payloads alike. A snapshot from an incomplete chunk group is
+  /// skipped along with that group's character ops — it describes a write that
+  /// only partly landed.
+  Map<String, dynamic>? _latestSnapshot(
+    List<SyncOperation> merged,
+    List<_ParsedPayload> complete,
+  ) {
     Map<String, dynamic>? latestSnapshot;
     DateTime? latestSnapshotTime;
 
-    for (final syncOp in merged) {
-      final snap = _extractSnapshot(syncOp.payload);
-      if (snap != null &&
-          (latestSnapshotTime == null ||
-              !syncOp.timestamp.isBefore(latestSnapshotTime!))) {
-        latestSnapshot = snap;
-        latestSnapshotTime = syncOp.timestamp;
+    void consider(Map<String, dynamic>? snapshot, DateTime timestamp) {
+      if (snapshot == null) return;
+      if (latestSnapshotTime == null ||
+          !timestamp.isBefore(latestSnapshotTime!)) {
+        latestSnapshot = snapshot;
+        latestSnapshotTime = timestamp;
       }
+    }
+
+    for (final entry in complete) {
+      consider(entry.payload.snapshot, entry.timestamp);
+    }
+    for (final syncOp in merged) {
+      if (CharOpsPayload.tryParse(syncOp.payload) != null) continue;
+      consider(_legacySnapshot(syncOp.payload), syncOp.timestamp);
     }
     return latestSnapshot;
   }
 
-  Map<String, dynamic>? _extractSnapshot(String payload) {
-    final parsed = CharOpsPayload.tryParse(payload);
-    if (parsed?.snapshot != null) return parsed!.snapshot;
+  /// A whole-document payload written before the char-op envelope existed.
+  Map<String, dynamic>? _legacySnapshot(String payload) {
     try {
       final decoded = jsonDecode(payload);
       if (decoded is Map<String, dynamic> &&

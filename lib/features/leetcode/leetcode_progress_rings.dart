@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/constants/neetcode150.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 import 'package:voyager/features/finance/geometric_progress_ring.dart';
 
 /// The Dashboard's top section: a main "total solved" ring plus one ring per
 /// difficulty tier, each filled against that tier's total available problems.
+/// Optionally appends a smaller NeetCode 150 ring when enabled in settings.
 class LeetCodeProgressRings extends ConsumerWidget {
   const LeetCodeProgressRings({super.key});
 
@@ -17,6 +21,8 @@ class LeetCodeProgressRings extends ConsumerWidget {
     final accent = theme.colorScheme.primary;
     final problemsAsync = ref.watch(leetcodeProblemsProvider);
     final countsAsync = ref.watch(leetcodeQuestionCountsProvider);
+    final showNeetCode =
+        ref.watch(settingsProvider).valueOrNull?.showNeetCode150 ?? true;
 
     final problems = problemsAsync.valueOrNull ?? const [];
     final counts = countsAsync.valueOrNull;
@@ -28,8 +34,9 @@ class LeetCodeProgressRings extends ConsumerWidget {
       solvedByDifficulty[p.difficulty] = (solvedByDifficulty[p.difficulty] ?? 0) + 1;
     }
     final totalSolved = problems.length;
+    final neetSolved = countNeetCode150Matches(problems.map((p) => p.title));
 
-    return SingleChildScrollView(
+    return VoyagerScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -44,6 +51,8 @@ class LeetCodeProgressRings extends ConsumerWidget {
             label: counts == null
                 ? '$totalSolved solved'
                 : '$totalSolved / ${counts.total}',
+            onTap: () => launchUrl(Uri.parse(kLeetCodeProblemsetUrl)),
+            tooltip: 'Open LeetCode problemset',
           ),
           const SizedBox(width: 16),
           for (final d in LeetCodeDifficulty.values) ...[
@@ -57,6 +66,17 @@ class LeetCodeProgressRings extends ConsumerWidget {
             ),
             const SizedBox(width: 16),
           ],
+          if (showNeetCode)
+            _RingTile(
+              size: 72,
+              progress: neetSolved / kNeetCode150Count,
+              color: accent,
+              gradientColors: [accent.withValues(alpha: 0.55), accent],
+              label: '$neetSolved / $kNeetCode150Count',
+              caption: 'NeetCode',
+              onTap: () => launchUrl(Uri.parse(kNeetCodeRoadmapUrl)),
+              tooltip: 'Open NeetCode roadmap',
+            ),
         ],
       ),
     );
@@ -87,6 +107,8 @@ class _RingTile extends StatelessWidget {
     required this.label,
     this.gradientColors,
     this.caption,
+    this.onTap,
+    this.tooltip,
   });
 
   final double size;
@@ -95,28 +117,48 @@ class _RingTile extends StatelessWidget {
   final String label;
   final List<Color>? gradientColors;
   final String? caption;
+  final VoidCallback? onTap;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    Widget ring = GeometricProgressRing(
+      progress: progress,
+      color: color,
+      gradientColors: gradientColors,
+      size: size,
+      strokeWidth: size >= 120 ? 10 : (size >= 90 ? 8 : 6),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: (size >= 120
+                ? theme.textTheme.titleMedium
+                : size >= 90
+                    ? theme.textTheme.titleSmall
+                    : theme.textTheme.labelMedium)
+            ?.copyWith(fontWeight: FontWeight.w600),
+      ),
+    );
+
+    if (onTap != null) {
+      ring = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: ring,
+        ),
+      );
+      if (tooltip != null) {
+        ring = Tooltip(message: tooltip!, child: ring);
+      }
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GeometricProgressRing(
-          progress: progress,
-          color: color,
-          gradientColors: gradientColors,
-          size: size,
-          strokeWidth: size >= 120 ? 10 : 8,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: (size >= 120
-                    ? theme.textTheme.titleMedium
-                    : theme.textTheme.titleSmall)
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-        ),
+        ring,
         if (caption != null) ...[
           const SizedBox(height: 6),
           Text(

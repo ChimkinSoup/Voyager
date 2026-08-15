@@ -20,10 +20,24 @@ class JournalWriteCoordinator {
   final RemoteSyncService _remoteSync;
   final void Function()? onEntrySaved;
 
+  /// Saves a delta against the current SQLite row.
+  ///
+  /// [refreshCaches] drives [onEntrySaved], which invalidates the app-wide
+  /// journal providers. It defaults to true because a one-shot save (the search
+  /// popup, a metadata edit, a create) is the only way anything watching those
+  /// providers can learn the entry changed. The journal editor's ~400ms
+  /// autosave passes false: it fires once per typing burst, and every provider
+  /// in that set re-reads the *entire* entry table when invalidated — including
+  /// the deleted rows, through `journalAllEntryIdsProvider`, and every entry's
+  /// tags again, through `tagPoolProvider`. Nothing an autosave changes is
+  /// visible through any of them anyway; the row on screen follows the edit
+  /// live through the page's title/body preview notifiers, and the page
+  /// refreshes them properly at its commitment points.
   Future<void> saveEntry({
     required String entryId,
     required JournalEntry Function(JournalEntry baseline) applyDelta,
     bool bumpVersion = false,
+    bool refreshCaches = true,
     void Function(JournalEntry saved)? onSuccess,
   }) {
     return _remoteSync.saveJournalEntryThenScheduleUpload(
@@ -35,7 +49,7 @@ class JournalWriteCoordinator {
         }
         final updated = applyDelta(baseline).copyWith(bumpVersion: bumpVersion);
         await _journalRepository.upsertEntry(updated);
-        onEntrySaved?.call();
+        if (refreshCaches) onEntrySaved?.call();
         onSuccess?.call(updated);
       },
     );
@@ -117,18 +131,13 @@ class TodoWriteCoordinator {
     );
   }
 
-  Future<TodoTask?> _findTask(String taskId) async {
-    final lists = await _todoRepository.listLists(includeDeleted: true);
-    for (final list in lists) {
-      final tasks = await _todoRepository.listTasks(
-        list.id,
-        includeDeleted: true,
-        topLevelOnly: false,
-      );
-      for (final task in tasks) {
-        if (task.id == taskId) return task;
-      }
-    }
-    return null;
+  /// A single indexed lookup, not a walk of every task in every list.
+  ///
+  /// This runs twice per save — once for the local write, once for the remote
+  /// one — behind a 400 ms debounce, so on a list of a few thousand tasks the
+  /// old scan was the dominant cost of typing in the edit panel, on the UI
+  /// isolate.
+  Future<TodoTask?> _findTask(String taskId) {
+    return _todoRepository.getTask(taskId);
   }
 }

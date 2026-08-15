@@ -7,6 +7,9 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
@@ -293,13 +296,9 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
           ),
         );
 
-        final Widget body;
-        if (mode == _FinanceViewMode.analytics) {
-          body = const FinanceAnalyticsView();
-        } else if (mode == _FinanceViewMode.goals) {
-          body = const FinanceGoalsView();
-        } else if (wide) {
-          body = Row(
+        final Widget ledgerBody;
+        if (wide) {
+          ledgerBody = Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -319,7 +318,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
             ],
           );
         } else {
-          body = KeepAliveCustomScrollView(
+          ledgerBody = KeepAliveCustomScrollView(
             storageKey: ShellPageStorageKeys.financeLedgerNarrow,
             slivers: [
               SliverPadding(
@@ -347,7 +346,19 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             header,
-            Expanded(child: body),
+            Expanded(
+              child: VoyagerCrossfadeIndex(
+                index: mode.index,
+                children: [
+                  KeyedSubtree(
+                    key: ValueKey(wide ? 'ledger-wide' : 'ledger-narrow'),
+                    child: ledgerBody,
+                  ),
+                  const FinanceAnalyticsView(),
+                  const FinanceGoalsView(),
+                ],
+              ),
+            ),
           ],
         );
       },
@@ -446,7 +457,7 @@ class _HeroSection extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           SizedBox(
-            width: 120,
+            width: 180,
             height: 56,
             child: CustomPaint(
               painter: _SparklinePainter(values: sparkline, color: accent),
@@ -607,6 +618,55 @@ class _TransactionRow extends ConsumerWidget {
     });
   }
 
+  Future<void> _delete(WidgetRef ref) async {
+    await ref
+        .read(financeRepositoryProvider)
+        .softDeleteTransaction(transaction.id);
+    ref.invalidate(transactionsProvider);
+  }
+
+  /// Flips an expense to a deposit or back, leaving everything else alone.
+  ///
+  /// The stored amount is a magnitude and the sign lives in [type] (see
+  /// [FinancialTransaction.signedCents]), so this really is a one-field edit —
+  /// nothing about the money has to be recomputed.
+  Future<void> _convert(WidgetRef ref) async {
+    final flipped = transaction.type == TransactionType.expense
+        ? TransactionType.deposit
+        : TransactionType.expense;
+    await ref.read(financeRepositoryProvider).upsertTransaction(
+          transaction.copyWith(
+            type: flipped,
+            updatedAt: utcNow(),
+            version: transaction.version + 1,
+          ),
+        );
+    ref.invalidate(transactionsProvider);
+  }
+
+  /// Files the same transaction again under today's date.
+  ///
+  /// Today at the current time, not today at the original's time: the ledger
+  /// orders a day's transactions by [FinancialTransaction.occurredAt], so
+  /// carrying the old clock time over would drop the copy into the middle of
+  /// today's group rather than at the end of it.
+  Future<void> _duplicate(WidgetRef ref) async {
+    final now = utcNow();
+    await ref.read(financeRepositoryProvider).upsertTransaction(
+          FinancialTransaction(
+            id: newId(),
+            createdAt: now,
+            updatedAt: now,
+            type: transaction.type,
+            amountCents: transaction.amountCents,
+            occurredAt: DateTime.now(),
+            note: transaction.note,
+            tags: transaction.tags,
+          ),
+        );
+    ref.invalidate(transactionsProvider);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     _noteRowBuild();
@@ -615,71 +675,89 @@ class _TransactionRow extends ConsumerWidget {
     final isDeposit = transaction.type == TransactionType.deposit;
     final amountColor = isDeposit ? kIncomeGreen : accent;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () =>
-          showFinanceTransactionModal(context, ref, existing: transaction),
-      onLongPress: () async {
-        await ref
-            .read(financeRepositoryProvider)
-            .softDeleteTransaction(transaction.id);
-        ref.invalidate(transactionsProvider);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: amountColor.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+    return ContextMenuRegion(
+      // Built on right-click rather than eagerly: the ledger rebuilds
+      // wholesale whenever a transaction changes, and these entries are only
+      // ever looked at by the row actually being clicked.
+      itemsBuilder: () => [
+        ContextMenuItem(
+          label: isDeposit ? 'Convert to expense' : 'Convert to deposit',
+          icon: PhosphorIconsRegular.arrowsLeftRight,
+          onTap: () => _convert(ref),
+        ),
+        ContextMenuItem(
+          label: 'Duplicate',
+          icon: PhosphorIconsRegular.copy,
+          onTap: () => _duplicate(ref),
+        ),
+        ContextMenuItem(
+          label: 'Delete',
+          icon: PhosphorIconsRegular.trash,
+          isDestructive: true,
+          onTap: () => _delete(ref),
+        ),
+      ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () =>
+            showFinanceTransactionModal(context, ref, existing: transaction),
+        onLongPress: () => _delete(ref),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: amountColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isDeposit
+                      ? PhosphorIconsRegular.arrowDownLeft
+                      : PhosphorIconsRegular.arrowUpRight,
+                  size: 16,
+                  color: amountColor,
+                ),
               ),
-              child: Icon(
-                isDeposit
-                    ? PhosphorIconsRegular.arrowDownLeft
-                    : PhosphorIconsRegular.arrowUpRight,
-                size: 16,
-                color: amountColor,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    transaction.note ?? (isDeposit ? 'Deposit' : 'Expense'),
-                    style: theme.textTheme.bodyMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (transaction.tags.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        for (final tag in transaction.tags)
-                          TagChip(tag: tag, colorValue: tagColors[tag]),
-                      ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      transaction.note ?? (isDeposit ? 'Deposit' : 'Expense'),
+                      style: theme.textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    if (transaction.tags.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          for (final tag in transaction.tags)
+                            TagChip(tag: tag, colorValue: tagColors[tag]),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              formatCents(transaction.signedCents, signed: true),
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: amountColor,
-                fontWeight: FontWeight.w600,
+              const SizedBox(width: 12),
+              Text(
+                formatCents(transaction.signedCents, signed: true),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: amountColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

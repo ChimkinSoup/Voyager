@@ -12,6 +12,117 @@ import 'package:voyager/core/widgets/spell_check_popup.dart';
 bool isMultilineField({required bool expands, int? maxLines, int? minLines}) =>
     expands || minLines != null || maxLines == null || maxLines > 1;
 
+/// Padding that lines a text overlay (the squiggle layer, a tag-highlight
+/// layer) up with the glyphs of a [TextField] laid out with [contentPadding].
+///
+/// Material 3's InputDecorator insets a field's text horizontally by an extra
+/// "input gap" on top of its content padding: an [OutlineInputBorder]'s own
+/// `gapPadding` — 4.0 unless the border says otherwise — or a flat 4.0 for any
+/// other border that `isOutline` or any field with `filled: true`
+/// (`_kInputExtraPadding`, input_decorator.dart). The gap comes from the
+/// *state-resolved* border, so a field can pick it up on focus alone.
+///
+/// An overlay is just a [Padding] around a [Text]: it gets none of that, and
+/// paints [gap] pixels left of the glyphs it belongs to unless it adds the
+/// same inset here. Fields that take the zero-gap path — a borderless,
+/// unfilled field, or one whose outline sets `gapPadding: 0` — should use
+/// their content padding directly instead.
+EdgeInsets withInputGap(EdgeInsets contentPadding, {double gap = 4.0}) =>
+    contentPadding + EdgeInsets.symmetric(horizontal: gap);
+
+/// The vertical counterpart of [withInputGap].
+///
+/// InputDecorator lays its text out at `contentPadding.top +
+/// visualDensity.baseSizeAdjustment.dy / 2` (`topInputBaseline`,
+/// input_decorator.dart) and sizes the content box to
+/// `contentPadding.vertical + inputHeight + densityOffset.dy` — the full
+/// density offset, half taken off each side. Voyager leaves
+/// `decoration.visualDensity` and [ThemeData.visualDensity] unset, so both
+/// resolve to [VisualDensity.defaultDensityForPlatform]: −4px per side on
+/// desktop (`compact`), 0 on mobile (`standard`).
+///
+/// An overlay padded with the raw content padding therefore starts that many
+/// pixels *below* the glyphs it belongs to, and is that many pixels *shorter*
+/// than the content box. The shortfall clips the last line of anything the
+/// overlay paints — a Vim block caret, a squiggle, a `#tag` pill. Pass the
+/// density the field's decorator will resolve — [ThemeData.visualDensity] —
+/// not a constant, so the overlay follows the text onto a platform with a
+/// different density.
+///
+/// The shift is negative, so [contentPadding] has to be at least that deep
+/// on both sides for the result to stay a valid [Padding]; every field in
+/// the app pads by 6 or more.
+EdgeInsets withDensityShift(EdgeInsets contentPadding, VisualDensity density) {
+  final shift = density.baseSizeAdjustment.dy / 2.0;
+  return contentPadding.copyWith(
+    top: contentPadding.top + shift,
+    bottom: contentPadding.bottom + shift,
+  );
+}
+
+/// The strip [RenderEditable] keeps clear for the caret, which it takes out of
+/// the width it *wraps the text at* — not just out of where it may draw.
+///
+/// `_layoutText` lays a field's paragraph out at `constraints.maxWidth -
+/// (_kCaretGap + cursorWidth)`, a 1px gap plus the caret itself
+/// (editable.dart), so the text wraps a few pixels short of the content box.
+/// An overlay is a plain [Padding] around a paragraph of its own and gets
+/// those pixels back: wherever a word boundary happens to fall inside the
+/// strip it fits one word more on that line than the field does, and from
+/// there down every mark it paints is a word out of step with the glyphs
+/// underneath — squiggles under the wrong words, `#tag` pills and Vim search
+/// highlights beside them, and a Vim block caret that skips over a word the
+/// user can plainly see.
+///
+/// Taken off the right in either text direction, matching RenderEditable:
+/// it shrinks the layout width and paints the paragraph from the content box's
+/// left edge regardless.
+///
+/// [cursorWidth] has to be the width the field's own [TextField.cursorWidth]
+/// resolves to — Vim's block caret is several times the 2.0 default, which is
+/// why the misalignment is so much worse in Normal mode.
+EdgeInsets withCaretMargin(
+  EdgeInsets contentPadding, {
+  double cursorWidth = 2.0,
+}) => contentPadding.copyWith(right: contentPadding.right + 1.0 + cursorWidth);
+
+/// Smallest line-height multiplier that leaves room for the misspelling
+/// squiggle under a line of [AppFonts.family] text.
+///
+/// Measured on Iosevka Aile, in em (size-independent, since every term scales
+/// with `fontSize`): ascenders reach 0.769em above the baseline, and the
+/// squiggle — the font's wavy underline plus
+/// [SpellCheckSquiggleLayer.descenderClearance] — bottoms out 0.19em below
+/// it. A line has to be taller than 0.769 + 0.19 = 0.96em before one line's
+/// squiggle starts being drawn on top of the next line's letters; 1.05 clears
+/// it by 0.09em (1.5px at the 16px `bodyLarge`). There is not much room left
+/// under this — 1.0 leaves well under a pixel, close enough to touching that
+/// hinting or a fractional device pixel ratio could close it.
+///
+/// Spellchecked fields nowhere near this floor (the 1.35 of `bodyLarge`, the
+/// 1.45 of `bodySmall`) are left exactly as they were.
+const double kMinSquiggleLineHeight = 1.05;
+
+/// Raises [style]'s line height to [kMinSquiggleLineHeight] if it is set
+/// tighter than that, so a spellcheck-enabled field's squiggles stay inside
+/// their own lines.
+///
+/// Must be applied to the style *before* it is handed to both the [TextField]
+/// and its [SpellCheckSquiggleLayer] (and to any [StrutStyle] derived from
+/// it): the overlay only lines up with the real text while the two lay out
+/// identically, so this is a property of the field's text, not something the
+/// overlay could compensate for on its own.
+///
+/// A null [TextStyle.height] is left alone — that means "use the font's own
+/// line height", which is where the font's underline metrics come from in the
+/// first place, so it always has the room by construction. Only an explicit
+/// override can squeeze the line tighter than the font intended.
+TextStyle withSquiggleRoom(TextStyle style) {
+  final height = style.height;
+  if (height == null || height >= kMinSquiggleLineHeight) return style;
+  return style.copyWith(height: kMinSquiggleLineHeight);
+}
+
 VoyagerSpellCheckService readVoyagerSpellCheckService(BuildContext context) {
   return ProviderScope.containerOf(
     context,
@@ -68,7 +179,7 @@ void forceSpellCheckDisplay({
   required FocusNode focusNode,
 }) {
   if (focusNode.hasFocus) return;
-  final editableState = _editableTextStateOf(fieldKey);
+  final editableState = editableTextStateOf(fieldKey);
   if (editableState == null) return;
   paintSpellCheckResultsNow(context, editableState);
 }
@@ -104,7 +215,7 @@ void paintSpellCheckResultsNow(
 /// removes it, this fails closed (returns null, caught below) rather than
 /// crashing — the field just falls back to today's behavior of only
 /// spellchecking on the next real keystroke.
-EditableTextState? _editableTextStateOf(GlobalKey<State<TextField>> fieldKey) {
+EditableTextState? editableTextStateOf(GlobalKey<State<TextField>> fieldKey) {
   final state = fieldKey.currentState;
   if (state == null) return null;
   try {
@@ -138,17 +249,14 @@ EditableTextState? _editableTextStateOf(GlobalKey<State<TextField>> fieldKey) {
 /// Safe to call after every controller change: [EditableTextState
 /// .bringIntoView] is a no-op if the cursor is already on screen.
 void bringCursorIntoView({required GlobalKey<State<TextField>> fieldKey}) {
-  final editableState = _editableTextStateOf(fieldKey);
+  final editableState = editableTextStateOf(fieldKey);
   if (editableState == null) {
-    debugPrint('[bringCursorIntoView] no editableState');
     return;
   }
   final selection = editableState.textEditingValue.selection;
   if (!selection.isValid) {
-    debugPrint('[bringCursorIntoView] invalid selection $selection');
     return;
   }
-  debugPrint('[bringCursorIntoView] calling bringIntoView(${selection.extent})');
   editableState.bringIntoView(selection.extent);
 }
 
@@ -174,7 +282,7 @@ Widget wrapWithSecondaryTapWordSelect({
   return Listener(
     onPointerDown: (event) {
       if (event.buttons & kSecondaryMouseButton == 0) return;
-      final editableState = _editableTextStateOf(fieldKey);
+      final editableState = editableTextStateOf(fieldKey);
       if (editableState == null) return;
       editableState.renderEditable
         ..handleSecondaryTapDown(
@@ -196,5 +304,8 @@ Widget voyagerSpellCheckContextMenuBuilder(
   final cursor = editableTextState.textEditingValue.selection.extentOffset;
   final span = editableTextState.findSuggestionSpanAtCursorIndex(cursor);
   if (span == null) return const SizedBox.shrink();
-  return SpellCheckPopup(editableTextState: editableTextState, span: span);
+  final text = editableTextState.textEditingValue.text;
+  final hydrated = readVoyagerSpellCheckService(context)
+      .hydrateSuggestions(text, span);
+  return SpellCheckPopup(editableTextState: editableTextState, span: hydrated);
 }

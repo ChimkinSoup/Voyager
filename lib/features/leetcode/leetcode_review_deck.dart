@@ -1,9 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
+import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/services/leetcode_srs_engine.dart';
+import 'package:voyager/features/leetcode/leetcode_actions.dart';
+import 'package:voyager/features/leetcode/leetcode_cram_page.dart';
+import 'package:voyager/features/leetcode/leetcode_mini_flashcard.dart';
+import 'package:voyager/features/leetcode/leetcode_providers.dart';
+import 'package:voyager/features/leetcode/leetcode_session_page.dart';
 
-/// Focused flashcard mode: swipe/paginate through every tracked problem.
+const _kDeckGrid = SliverGridDelegateWithMaxCrossAxisExtent(
+  maxCrossAxisExtent: 220,
+  mainAxisSpacing: 12,
+  crossAxisSpacing: 12,
+  childAspectRatio: 0.95,
+);
+
+/// The Review Deck: the administrative view over every tracked problem —
+/// counts, Study/Cram entry points, a search + filter control bar, and the
+/// scrollable grid of miniature flashcards. The full-size card lives inside a
+/// session; this page is where you browse and pick.
 class LeetCodeReviewDeck extends ConsumerStatefulWidget {
   const LeetCodeReviewDeck({super.key});
 
@@ -12,49 +36,419 @@ class LeetCodeReviewDeck extends ConsumerStatefulWidget {
 }
 
 class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
-  late final PageController _controller = PageController(viewportFraction: 0.86);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  /// Problems whose face differs from the one the grid would show on its own
+  /// — normally the front, or the back for a problem the search only matched
+  /// there. Turning cards over is a browsing gesture, not a mode: flips pile
+  /// up as the user works through the grid and are only dropped when the page
+  /// goes away.
+  final Set<String> _flipped = {};
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final problemsAsync = ref.watch(leetcodeProblemsProvider);
-    final problems = problemsAsync.valueOrNull ?? const [];
+    final problems = problemsAsync.valueOrNull ?? const <LeetCodeProblem>[];
+    // Distinct from "tracked nothing yet": before the query resolves the deck
+    // knows nothing about the library, and saying it is empty is a claim it
+    // cannot support.
+    final loading = problemsAsync.isLoading && !problemsAsync.hasValue;
+    final query = ref.watch(leetCodeDeckSearchQueryProvider);
+    final difficulties = ref.watch(leetCodeDeckDifficultyFilterProvider);
+    final tagFilter = ref.watch(leetCodeDeckTagFilterProvider);
 
-    if (problems.isEmpty) {
-      return Center(
-        child: Text(
-          'No problems tracked yet',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
+    // Matched as one phrase, so the tiles highlight it as one phrase too.
+    final keywords = query.trim().isEmpty ? const <String>[] : [query.trim()];
+    final needle = query.trim().toLowerCase();
+    final filtered = problems.where((p) {
+      if (difficulties.isNotEmpty && !difficulties.contains(p.difficulty)) {
+        return false;
+      }
+      if (!tagFilter.every(p.tags.contains)) return false;
+      if (needle.isEmpty) return true;
+      return leetCodeFrontSearchText(p).toLowerCase().contains(needle) ||
+          leetCodeBackSearchText(p).toLowerCase().contains(needle);
+    }).toList();
+    final ordered = sortLeetCodeProblemsByMastery(filtered);
+
+    // The counts describe what a session would actually work through, so they
+    // follow the filter rather than the whole library.
+    final dueCount = filtered.where((p) => p.isDue()).length;
+    final filtering =
+        needle.isNotEmpty || difficulties.isNotEmpty || tagFilter.isNotEmpty;
+    final visibleIds = {for (final p in filtered) p.id};
 
     return Padding(
-      // Extra bottom clearance (vs. a symmetric pad) keeps the card's bottom
-      // edge clear of the page's "+ Track" FAB, which sits over the same
-      // bottom-right corner.
-      padding: const EdgeInsets.fromLTRB(0, 32, 0, 96),
-      child: PageView.builder(
-        // PageView clips each page to its own viewport slot by default
-        // (Clip.hardEdge), which was cutting the flashcard's drop shadow off
-        // entirely at every edge. Nothing overlaps behind adjacent pages
-        // here, so letting shadows bleed into the gutter is safe.
-        clipBehavior: Clip.none,
-        itemCount: problems.length,
-        controller: _controller,
-        itemBuilder: (context, index) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: LeetCodeFlashcard(problem: problems[index]),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedOpacity(
+            opacity: loading ? 0 : 1,
+            duration: VoyagerMotion.crossfade,
+            child: Text(
+              '${filtered.length} problem${filtered.length == 1 ? '' : 's'}'
+              '${filtering ? ' of ${problems.length}' : ''} · $dueCount due',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                // Legible by contrast and weight rather than a pale grey —
+                // this sits over the app's live background.
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                fontWeight: FontWeight.w500,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: GlassButton(
+                  tooltip: dueCount == 0
+                      ? 'Nothing due for review'
+                      : 'Review what is due, scheduled by SRS',
+                  onPressed: dueCount == 0
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                LeetCodeSessionPage(problemIds: visibleIds),
+                          ),
+                        ),
+                  icon: const Icon(PhosphorIconsRegular.playCircle),
+                  label: 'Study',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GlassButton(
+                  tooltip: 'Drill every problem shown, ignoring the schedule',
+                  onPressed: filtered.isEmpty
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                LeetCodeCramPage(problemIds: visibleIds),
+                          ),
+                        ),
+                  icon: const Icon(PhosphorIconsRegular.lightning),
+                  label: 'Cram',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ControlBar(problems: problems),
+          const SizedBox(height: 4),
+          Expanded(
+            child: loading
+                ? const _DeckSkeleton()
+                : ordered.isEmpty
+                ? _EmptyDeck(
+                    filtering: problems.isNotEmpty,
+                    onClearFilters: () {
+                      ref.read(leetCodeDeckSearchQueryProvider.notifier).state =
+                          '';
+                      ref
+                              .read(leetCodeDeckDifficultyFilterProvider.notifier)
+                              .state =
+                          {};
+                      ref.read(leetCodeDeckTagFilterProvider.notifier).state =
+                          {};
+                    },
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.only(top: 8, bottom: 96),
+                    gridDelegate: _kDeckGrid,
+                    itemCount: ordered.length,
+                    itemBuilder: (context, index) {
+                      final problem = ordered[index];
+                      // A back-only search hit turns its tile around, so
+                      // _flipped records the difference from that baseline
+                      // rather than the face itself — otherwise flipping such
+                      // a tile to the front would immediately snap it back.
+                      final backOnly = leetCodeMatchesBackOnly(
+                        problem,
+                        keywords,
+                      );
+                      return LeetCodeMiniFlashcard(
+                        key: ValueKey(problem.id),
+                        problem: problem,
+                        keywords: keywords,
+                        showBack: backOnly != _flipped.contains(problem.id),
+                        onFlipped: (showingBack) => setState(() {
+                          if (showingBack == backOnly) {
+                            _flipped.remove(problem.id);
+                          } else {
+                            _flipped.add(problem.id);
+                          }
+                        }),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card-shaped stand-ins for the grid while the library loads, so the deck
+/// does not claim to be empty before it has looked. Deliberately static — a
+/// looping shimmer is the slow oscillation reduced-motion guidance asks
+/// interfaces to keep off screen.
+class _DeckSkeleton extends StatelessWidget {
+  const _DeckSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final wash = theme.colorScheme.onSurface.withValues(alpha: 0.06);
+    return IgnorePointer(
+      child: GridView.builder(
+        padding: const EdgeInsets.only(top: 8, bottom: 96),
+        gridDelegate: _kDeckGrid,
+        itemCount: 6,
+        itemBuilder: (context, index) => Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: wash, width: 1.5),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(height: 10, width: 40, color: wash),
+                Container(height: 12, color: wash),
+                Container(height: 10, width: 64, color: wash),
+              ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Offers the action instead of naming the control that performs it.
+class _EmptyDeck extends ConsumerWidget {
+  const _EmptyDeck({required this.filtering, required this.onClearFilters});
+
+  /// True when problems exist but the active filters hide all of them — a
+  /// different problem from having tracked nothing, with a different way out.
+  final bool filtering;
+  final VoidCallback onClearFilters;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            filtering ? 'No matches' : 'Nothing tracked yet',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            filtering
+                ? 'No problems match the current filters.'
+                : 'Track a problem to start reviewing it on a schedule.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 20),
+          filtering
+              ? GlassButton(
+                  onPressed: onClearFilters,
+                  icon: const Icon(PhosphorIconsRegular.x),
+                  label: 'Clear filters',
+                )
+              : GlassButton(
+                  onPressed: () => startLeetCodeTrackFlow(context, ref),
+                  icon: const Icon(PhosphorIconsRegular.plus),
+                  label: 'Track a problem',
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Search field plus the two LeetCode-native narrowings: difficulty and tag.
+/// No import button — problems come from the Track flow, not a JSON blob —
+/// and no reverse/multi-select, which a deck of one-sided problems has no
+/// use for.
+class _ControlBar extends ConsumerWidget {
+  const _ControlBar({required this.problems});
+
+  final List<LeetCodeProblem> problems;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final difficulties = ref.watch(leetCodeDeckDifficultyFilterProvider);
+    final tagFilter = ref.watch(leetCodeDeckTagFilterProvider);
+
+    void toggleDifficulty(LeetCodeDifficulty difficulty) {
+      final next = {...difficulties};
+      if (!next.remove(difficulty)) next.add(difficulty);
+      ref.read(leetCodeDeckDifficultyFilterProvider.notifier).state = next;
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: VoyagerTextField(
+            onChanged: (v) =>
+                ref.read(leetCodeDeckSearchQueryProvider.notifier).state = v,
+            decoration: const InputDecoration(
+              hintText: 'Search problems',
+              prefixIcon: Icon(PhosphorIconsRegular.magnifyingGlass, size: 18),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        for (final difficulty in LeetCodeDifficulty.values) ...[
+          SelectorPill(
+            dense: true,
+            label: labelForLeetCodeDifficulty(difficulty),
+            isActive: difficulties.contains(difficulty),
+            accentColor: colorForLeetCodeDifficulty(difficulty),
+            fillWhenActive: true,
+            onTap: () => toggleDifficulty(difficulty),
+          ),
+          const SizedBox(width: 6),
+        ],
+        _TagFilterButton(problems: problems, selected: tagFilter),
+        if (tagFilter.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          Text(
+            '${tagFilter.length}',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _TagFilterButton extends ConsumerWidget {
+  const _TagFilterButton({required this.problems, required this.selected});
+
+  final List<LeetCodeProblem> problems;
+  final Set<String> selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    // Only tags that are actually on a tracked problem — a filter that can
+    // only ever return nothing isn't worth offering.
+    final tags = {for (final p in problems) ...p.tags}.toList()..sort();
+
+    return Builder(
+      builder: (buttonContext) => GlassButton(
+        dense: true,
+        tooltip: 'Filter by tag',
+        icon: const Icon(PhosphorIconsRegular.tag),
+        color: selected.isEmpty ? null : theme.colorScheme.primary,
+        onPressed: tags.isEmpty
+            ? null
+            : () => showContextualPopover<void>(
+                context: context,
+                buttonContext: buttonContext,
+                width: 240,
+                height: 320,
+                builder: (_) => _TagFilterList(tags: tags),
+              ),
+      ),
+    );
+  }
+}
+
+class _TagFilterList extends ConsumerWidget {
+  const _TagFilterList({required this.tags});
+
+  final List<String> tags;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final selected = ref.watch(leetCodeDeckTagFilterProvider);
+
+    void toggle(String tag) {
+      final next = {...selected};
+      if (!next.remove(tag)) next.add(tag);
+      ref.read(leetCodeDeckTagFilterProvider.notifier).state = next;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (selected.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: GlassButton(
+              dense: true,
+              label: 'Clear ${selected.length}',
+              icon: const Icon(PhosphorIconsRegular.x),
+              onPressed: () =>
+                  ref.read(leetCodeDeckTagFilterProvider.notifier).state = {},
+            ),
+          ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemCount: tags.length,
+            itemBuilder: (context, index) {
+              final tag = tags[index];
+              final isOn = selected.contains(tag);
+              return InkWell(
+                onTap: () => toggle(tag),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isOn
+                            ? PhosphorIconsFill.checkSquare
+                            : PhosphorIconsRegular.square,
+                        size: 16,
+                        color: isOn
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.4,
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          tag,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

@@ -19,10 +19,12 @@ import 'package:voyager/core/dev/sync_compare_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
 import 'package:voyager/core/spellcheck/dictionary_loader.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
+import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
+import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/platform_info.dart';
@@ -52,7 +54,9 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
+import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
 import 'package:voyager/features/settings/services/data_import_service.dart';
 import 'package:voyager/domain/repositories/weather_api_client.dart';
@@ -106,16 +110,35 @@ final todoRepositoryProvider = Provider<TodoRepository>((ref) {
   );
 });
 
+/// Routes local writes in the repository-driven collections to the sync layer.
+///
+/// Deliberately depends on nothing: the repositories below take it, and
+/// [remoteSyncServiceProvider] — which is built from those repositories —
+/// registers itself on it. Reaching back to the service from here instead
+/// would close the loop, and Riverpod rejects that as a circular dependency.
+final syncedWriteNotifierProvider = Provider<SyncedWriteNotifier>((ref) {
+  return SyncedWriteNotifier();
+});
+
 final calendarRepositoryProvider = Provider<CalendarRepository>((ref) {
-  return DriftCalendarRepository(ref.watch(databaseProvider));
+  return DriftCalendarRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
 });
 
 final trackerRepositoryProvider = Provider<TrackerRepository>((ref) {
-  return DriftTrackerRepository(ref.watch(databaseProvider));
+  return DriftTrackerRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
 });
 
 final financeRepositoryProvider = Provider<FinanceRepository>((ref) {
-  return DriftFinanceRepository(ref.watch(databaseProvider));
+  return DriftFinanceRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
 });
 
 final leetCodeRepositoryProvider = Provider<LeetCodeRepository>((ref) {
@@ -132,34 +155,76 @@ final studyRepositoryProvider = Provider<StudyRepository>((ref) {
   );
 });
 
+final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
+  return DriftWorkoutRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
+});
+
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
-  return DriftNotificationRepository(ref.watch(databaseProvider));
+  return DriftNotificationRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
 });
 
 final bucketListRepositoryProvider = Provider<BucketListRepository>((ref) {
-  return DriftBucketListRepository(ref.watch(databaseProvider));
+  return DriftBucketListRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
 });
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
-  return DriftSettingsRepository(ref.watch(databaseProvider));
+  return DriftSettingsRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
 });
 
 final syncConflictRepositoryProvider = Provider<SyncConflictRepository>((ref) {
   return DriftSyncConflictRepository(ref.watch(databaseProvider));
 });
 
+/// Every synced collection, in the order a restore has to write them.
+final backupCollectionsProvider = Provider<List<BackupCollection>>((ref) {
+  return buildBackupCollections(
+    journalRepository: ref.watch(journalRepositoryProvider),
+    dreamRepository: ref.watch(dreamRepositoryProvider),
+    todoRepository: ref.watch(todoRepositoryProvider),
+    leetCodeRepository: ref.watch(leetCodeRepositoryProvider),
+    studyRepository: ref.watch(studyRepositoryProvider),
+    workoutRepository: ref.watch(workoutRepositoryProvider),
+    calendarRepository: ref.watch(calendarRepositoryProvider),
+    trackerRepository: ref.watch(trackerRepositoryProvider),
+    financeRepository: ref.watch(financeRepositoryProvider),
+    notificationRepository: ref.watch(notificationRepositoryProvider),
+    bucketListRepository: ref.watch(bucketListRepositoryProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+  );
+});
+
 final dataExportServiceProvider = Provider<DataExportService>((ref) {
   return DataExportService(
-    ref.watch(journalRepositoryProvider),
-    ref.watch(todoRepositoryProvider),
+    collections: ref.watch(backupCollectionsProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
   );
 });
 
 final dataImportServiceProvider = Provider<DataImportService>((ref) {
   return DataImportService(
-    ref.watch(databaseProvider),
-    ref.watch(journalRepositoryProvider),
-    ref.watch(todoRepositoryProvider),
+    db: ref.watch(databaseProvider),
+    collections: ref.watch(backupCollectionsProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
+    // Read lazily: the restore uploads only after its transaction commits, and
+    // building the sync service before then would be work done for nothing on
+    // an import that turns out to change nothing.
+    pushRecords: (collection, records) => ref
+        .read(remoteSyncServiceProvider)
+        .pushRestoredRecords(collection, records),
+    pushSettings: (settings) =>
+        ref.read(remoteSyncServiceProvider).pushSettings(settings),
   );
 });
 
@@ -191,6 +256,30 @@ final syncRepositoryProvider = Provider<SyncRepository>((ref) {
   if (uid == null) return NoOpSyncRepository();
   return FirestoreSyncRepository(FirebaseFirestore.instance, uid);
 });
+
+/// Watches whether the sync backend is reachable, for the shell's offline
+/// badge.
+///
+/// Rebuilt with [syncRepositoryProvider], so signing in or out swaps the probe
+/// along with the repository behind it. While signed out that repository is a
+/// no-op whose ping always succeeds — a local-only session is never reported
+/// as offline, because there is nothing it is failing to reach.
+///
+/// [DevFlags.forceOffline] is read inside the probe (not watched), so flipping
+/// the Dev toggle does not rebuild this controller or reset its schedule —
+/// the next due probe fails the same way an unreachable Firestore would.
+final connectivityStatusProvider =
+    ChangeNotifierProvider<ConnectivityStatusController>((ref) {
+      final ping = ref.watch(syncRepositoryProvider).ping;
+      return ConnectivityStatusController(
+        probe: () async {
+          if (DevFlags.forceOffline) {
+            throw StateError('DevFlags.forceOffline');
+          }
+          await ping();
+        },
+      );
+    });
 
 final syncEngineProvider = Provider<SyncEngine>((ref) {
   final engine = SyncEngine(
@@ -246,6 +335,13 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     todoRepository: ref.watch(todoRepositoryProvider),
     leetCodeRepository: ref.watch(leetCodeRepositoryProvider),
     studyRepository: ref.watch(studyRepositoryProvider),
+    workoutRepository: ref.watch(workoutRepositoryProvider),
+    calendarRepository: ref.watch(calendarRepositoryProvider),
+    trackerRepository: ref.watch(trackerRepositoryProvider),
+    financeRepository: ref.watch(financeRepositoryProvider),
+    notificationRepository: ref.watch(notificationRepositoryProvider),
+    bucketListRepository: ref.watch(bucketListRepositoryProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
     weatherService: ref.watch(weatherServiceProvider),
     syncEngine: ref.watch(syncEngineProvider),
     syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
@@ -256,6 +352,17 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
   ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
     next.whenData((s) => service.forceConflictUi = s.devForceConflictUi);
   });
+  // Repository-driven uploads (calendars, trackers, finance, the notification
+  // inbox, the bucket list, tag colors, custom words, settings) reach the
+  // service through here. Anything written before this point was buffered and
+  // replays now.
+  final syncedWrites = ref.watch(syncedWriteNotifierProvider);
+  syncedWrites.onWrite = (collection, records) {
+    unawaited(service.pushRecords(collection, records));
+  };
+  // Cleared before a rebuild installs the next service's handler, so a
+  // disposed service is never the one a write is handed to.
+  ref.onDispose(() => syncedWrites.onWrite = null);
   ref.onDispose(service.dispose);
   return service;
 });
@@ -294,24 +401,7 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
   final controller = LiveSyncController(
     remoteSync: ref.watch(remoteSyncServiceProvider),
     syncRepository: ref.watch(syncRepositoryProvider),
-    onChanged: () {
-      invalidateJournalEntryProviders(ref);
-      ref.invalidate(journalsProvider);
-      ref.invalidate(todoListsProvider);
-      ref.invalidate(todoTasksProvider);
-      ref.invalidate(allTodoTasksProvider);
-      ref.invalidate(todoListStatsProvider);
-      ref.invalidate(syncConflictsProvider);
-      ref.invalidate(leetcodeProblemsProvider);
-      ref.invalidate(studyFolderByIdProvider);
-      ref.invalidate(studyFoldersProvider);
-      ref.invalidate(studyDeckByIdProvider);
-      ref.invalidate(studyDecksProvider);
-      ref.invalidate(studyCardsProvider);
-      ref.invalidate(studyStatsProvider);
-      ref.invalidate(studyDeckStatsProvider);
-      ref.invalidate(allDreamEntriesProvider);
-    },
+    onChanged: () => invalidateAllDataProviders(ref),
   );
   ref.onDispose(controller.dispose);
   return controller;
@@ -358,9 +448,29 @@ final quoteBankProvider = StateProvider<QuoteBank>(
   (ref) => QuoteBank(const []),
 );
 
+/// The user's own quotes, newest first.
+final customQuotesProvider = FutureProvider<List<CustomQuote>>((ref) {
+  return ref.watch(settingsRepositoryProvider).getCustomQuotes();
+});
+
+/// Everything a new journal entry can draw from: the bundled quotes plus the
+/// user's own. The browse-and-pick dialog lists exactly this.
+final quotePoolProvider = FutureProvider<List<Quote>>((ref) async {
+  final bundled = await ref.watch(bundledQuotesProvider.future);
+  final custom = await ref.watch(customQuotesProvider.future);
+  return [for (final q in custom) q.toQuote(), ...bundled];
+});
+
+final bundledQuotesProvider = FutureProvider<List<Quote>>((ref) {
+  ref.keepAlive();
+  return loadQuotesFromAssets();
+});
+
+/// Rebuilds [quoteBankProvider] whenever the pool changes, so a quote the user
+/// just added is immediately eligible to be drawn.
 final quotesLoadedProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
-  final quotes = await loadQuotesFromAssets();
+  final quotes = await ref.watch(quotePoolProvider.future);
   ref.read(quoteBankProvider.notifier).state = QuoteBank(quotes);
 });
 
@@ -396,13 +506,41 @@ final backgroundSyncOrchestratorProvider = Provider((ref) {
     financeRepository: ref.watch(financeRepositoryProvider),
     leetCodeRepository: ref.watch(leetCodeRepositoryProvider),
     studyRepository: ref.watch(studyRepositoryProvider),
+    workoutRepository: ref.watch(workoutRepositoryProvider),
+    notificationRepository: ref.watch(notificationRepositoryProvider),
+    bucketListRepository: ref.watch(bucketListRepositoryProvider),
+    settingsRepository: ref.watch(settingsRepositoryProvider),
   );
 });
 
-final settingsProvider = FutureProvider((ref) {
-  ref.keepAlive();
-  return ref.watch(settingsRepositoryProvider).getSettings();
-});
+/// The app's settings row.
+///
+/// A notifier rather than a plain [FutureProvider] purely so [saveSettings]
+/// exists — see its doc for what that buys.
+class SettingsNotifier extends AsyncNotifier<AppSettings> {
+  @override
+  Future<AppSettings> build() {
+    ref.keepAlive();
+    return ref.watch(settingsRepositoryProvider).getSettings();
+  }
+
+  /// Persists [settings] and publishes it in the same step.
+  ///
+  /// The alternative — write, then `ref.invalidate(settingsProvider)` — costs
+  /// every watcher *two* rebuilds for one change: one when the provider goes
+  /// into its refreshing state, and one when the re-read row comes back off
+  /// the disk a frame or more later. Every page in the shell watches this
+  /// provider and they all stay mounted behind the navigation shell, so that
+  /// second pass is a whole-app rebuild for a value this method is already
+  /// holding.
+  Future<void> saveSettings(AppSettings settings) async {
+    await ref.read(settingsRepositoryProvider).saveSettings(settings);
+    state = AsyncData(settings);
+  }
+}
+
+final settingsProvider =
+    AsyncNotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
 
 final colorPaletteProvider = Provider<List<int>>((ref) {
   return ref.watch(settingsProvider).valueOrNull?.colorPalette ??
@@ -454,12 +592,18 @@ final allJournalEntriesProvider = FutureProvider((ref) {
 /// all journals, otherwise a specific journal id for that journal's full list.
 const allJournalEntriesScope = '__all__';
 
+final _journalEntryProviders = <ProviderOrFamily>[
+  journalEntriesProvider,
+  allJournalEntriesProvider,
+  journalListEntriesProvider,
+  journalEntryCountsProvider,
+  journalAllEntryIdsProvider,
+];
+
 void invalidateJournalEntryProviders(Ref ref) {
-  ref.invalidate(journalEntriesProvider);
-  ref.invalidate(allJournalEntriesProvider);
-  ref.invalidate(journalListEntriesProvider);
-  ref.invalidate(journalEntryCountsProvider);
-  ref.invalidate(journalAllEntryIdsProvider);
+  for (final provider in _journalEntryProviders) {
+    ref.invalidate(provider);
+  }
 }
 
 final journalEntryCountsProvider = FutureProvider<Map<String, int>>((
@@ -641,6 +785,14 @@ final studyCardsProvider = FutureProvider.family<List<StudyCard>, String>((
   return ref.watch(studyRepositoryProvider).listCards(deckId);
 });
 
+/// Every live card in the library, flattened across decks and folders. Backs
+/// the Hub's "study everything due" entry point, which works from a set of
+/// card ids that can span decks rather than from one deck's roster.
+final studyAllCardsProvider = FutureProvider<List<StudyCard>>((ref) {
+  ref.keepAlive();
+  return ref.watch(studyRepositoryProvider).getAllCards(includeDeleted: false);
+});
+
 /// Global Study Hub header stats.
 final studyStatsProvider =
     FutureProvider<({int pendingToday, int reviewedToday, int reviewedTotal})>((
@@ -667,6 +819,201 @@ final studyDeckStatsProvider = FutureProvider.family<({int total, int due}), Str
   final due = await repo.countDueCardsInDeck(deckId);
   return (total: cards.length, due: due);
 });
+
+/// Creates the two plans and (once) the starter exercise library. Every
+/// workout provider below waits on this, so the planner can never render
+/// against a half-seeded database on first launch.
+final workoutSeedProvider = FutureProvider<void>((ref) async {
+  ref.keepAlive();
+  await ref.watch(workoutRepositoryProvider).ensureSeeded();
+});
+
+final exercisesProvider = FutureProvider<List<Exercise>>((ref) async {
+  ref.keepAlive();
+  await ref.watch(workoutSeedProvider.future);
+  return ref.watch(workoutRepositoryProvider).listExercises();
+});
+
+final workoutPlansProvider = FutureProvider<List<WorkoutPlan>>((ref) async {
+  ref.keepAlive();
+  await ref.watch(workoutSeedProvider.future);
+  return ref.watch(workoutRepositoryProvider).listPlans();
+});
+
+/// The plan that decides what "today's workout" is. Null only in the window
+/// before seeding completes.
+final activeWorkoutPlanProvider = Provider<WorkoutPlan?>((ref) {
+  final plans = ref.watch(workoutPlansProvider).valueOrNull;
+  if (plans == null || plans.isEmpty) return null;
+  for (final plan in plans) {
+    if (plan.isActive) return plan;
+  }
+  return plans.first;
+});
+
+final workoutPlanEntriesProvider =
+    FutureProvider.family<List<WorkoutPlanEntry>, String>((ref, planId) async {
+      ref.keepAlive();
+      await ref.watch(workoutSeedProvider.future);
+      return ref.watch(workoutRepositoryProvider).listPlanEntries(planId);
+    });
+
+final workoutSessionsProvider = FutureProvider<List<WorkoutSession>>((
+  ref,
+) async {
+  ref.keepAlive();
+  return ref.watch(workoutRepositoryProvider).listSessions();
+});
+
+/// The in-progress workout, if any. Drives the floating island's existence.
+final activeWorkoutSessionProvider = FutureProvider<WorkoutSession?>((
+  ref,
+) async {
+  ref.keepAlive();
+  return ref.watch(workoutRepositoryProvider).getActiveSession();
+});
+
+final workoutSetLogsProvider =
+    FutureProvider.family<List<WorkoutSetLog>, String>((ref, sessionId) {
+      ref.keepAlive();
+      return ref
+          .watch(workoutRepositoryProvider)
+          .listSetLogs(sessionId: sessionId);
+    });
+
+/// Every completed set of one exercise across all time, for the detail view's
+/// sparkline and volume heatmap.
+final exerciseSetLogsProvider =
+    FutureProvider.family<List<WorkoutSetLog>, String>((ref, exerciseId) {
+      ref.keepAlive();
+      return ref
+          .watch(workoutRepositoryProvider)
+          .listSetLogs(exerciseId: exerciseId);
+    });
+
+/// Local calendar days that carry at least one finished workout. Backs both
+/// the calendar day icon and the analytics "worked out" boolean, so the two
+/// can never disagree about what counts.
+final workoutDaysProvider = FutureProvider<Set<DateTime>>((ref) async {
+  ref.keepAlive();
+  final sessions = await ref.watch(workoutSessionsProvider.future);
+  return {
+    for (final session in sessions)
+      if (session.endedAt != null) workoutDayKey(session.date),
+  };
+});
+
+/// App-scoped invalidator, safe to call after the widget that captured it has
+/// been disposed — which the exercise detail view needs when it flushes a
+/// pending form-cue edit on the way out.
+final workoutCacheInvalidatorProvider = Provider<void Function()>((ref) {
+  return () => invalidateWorkoutProviders(ref);
+});
+
+/// Every read provider that a workout write can invalidate. Listed once so
+/// the [Ref] and [WidgetRef] entry points below cannot fall out of step —
+/// which they would, silently leaving one call site showing stale numbers.
+final _workoutDataProviders = <ProviderOrFamily>[
+  exercisesProvider,
+  workoutPlansProvider,
+  workoutPlanEntriesProvider,
+  workoutSessionsProvider,
+  activeWorkoutSessionProvider,
+  workoutSetLogsProvider,
+  exerciseSetLogsProvider,
+  workoutDaysProvider,
+];
+
+void invalidateWorkoutProviders(Ref ref) {
+  for (final provider in _workoutDataProviders) {
+    ref.invalidate(provider);
+  }
+}
+
+/// Widget-side counterpart of [invalidateWorkoutProviders].
+void invalidateWorkoutProvidersFrom(WidgetRef ref) {
+  for (final provider in _workoutDataProviders) {
+    ref.invalidate(provider);
+  }
+}
+
+/// Every read provider a pull of the repository-driven collections can make
+/// stale — calendars, analytics, finance, the notification inbox, the bucket
+/// list, tag colors, custom words and settings.
+final _secondaryDataProviders = <ProviderOrFamily>[
+  calendarsProvider,
+  calendarEventsProvider,
+  calendarTodoMarkersProvider,
+  trackersProvider,
+  trackerValuesProvider,
+  transactionsProvider,
+  subscriptionsProvider,
+  budgetsProvider,
+  financeCategoriesProvider,
+  assetsProvider,
+  assetValuationsProvider,
+  savingsGoalsProvider,
+  goalAllocationsProvider,
+  pinnedNotesProvider,
+  notificationDismissalsProvider,
+  notificationFeedProvider,
+  bucketListItemsProvider,
+  tagColorsProvider,
+  customWordsProvider,
+  settingsProvider,
+];
+
+void invalidateSecondaryDataProviders(Ref ref) {
+  for (final provider in _secondaryDataProviders) {
+    ref.invalidate(provider);
+  }
+}
+
+/// Every read provider in the app, for the two things that can rewrite any
+/// collection at once: a live sync tick and a backup restore.
+final _primaryDataProviders = <ProviderOrFamily>[
+  journalsProvider,
+  todoListsProvider,
+  todoTasksProvider,
+  allTodoTasksProvider,
+  todoListStatsProvider,
+  syncConflictsProvider,
+  leetcodeProblemsProvider,
+  studyFolderByIdProvider,
+  studyFoldersProvider,
+  studyDeckByIdProvider,
+  studyDecksProvider,
+  studyCardsProvider,
+  studyAllCardsProvider,
+  studyStatsProvider,
+  studyDeckStatsProvider,
+  allDreamEntriesProvider,
+];
+
+void invalidateAllDataProviders(Ref ref) {
+  invalidateJournalEntryProviders(ref);
+  for (final provider in _primaryDataProviders) {
+    ref.invalidate(provider);
+  }
+  invalidateWorkoutProviders(ref);
+  invalidateSecondaryDataProviders(ref);
+}
+
+/// Widget-side counterpart of [invalidateAllDataProviders].
+void invalidateAllDataProvidersFrom(WidgetRef ref) {
+  for (final provider in _journalEntryProviders) {
+    ref.invalidate(provider);
+  }
+  for (final provider in _primaryDataProviders) {
+    ref.invalidate(provider);
+  }
+  for (final provider in _workoutDataProviders) {
+    ref.invalidate(provider);
+  }
+  for (final provider in _secondaryDataProviders) {
+    ref.invalidate(provider);
+  }
+}
 
 /// Total published LeetCode problem counts per difficulty, used as the
 /// progress rings' denominators. Not persisted locally — on fetch failure
@@ -783,6 +1130,9 @@ final trackerValuesProvider = FutureProvider.family((
   if (trackerId == kDreamLoggedTrackerId) {
     final entries = await ref.watch(allDreamEntriesProvider.future);
     return dreamLoggedTrackerValues(entries);
+  }
+  if (trackerId == kWorkedOutTrackerId) {
+    return workedOutTrackerValues(await ref.watch(workoutDaysProvider.future));
   }
   return ref.watch(trackerRepositoryProvider).listValues(trackerId);
 });

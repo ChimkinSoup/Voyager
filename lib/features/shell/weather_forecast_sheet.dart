@@ -115,10 +115,9 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
     if (!mounted) return;
 
     final colors = weatherChartColors(ref);
-    final degreeGridColor = Theme.of(context)
-        .colorScheme
-        .outlineVariant
-        .withValues(alpha: 0.15);
+    final degreeGridColor = Theme.of(
+      context,
+    ).colorScheme.outlineVariant.withValues(alpha: 0.15);
     final now = DateTime.now();
     final days = _visibleDays(now);
 
@@ -171,8 +170,7 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
 
   void _selectDay(int index, List<DailyForecastSummary> days) {
     if (index == _selectedDayIndex) return;
-    ref.read(weatherForecastLastDayProvider.notifier).state =
-        days[index].date;
+    ref.read(weatherForecastLastDayProvider.notifier).state = days[index].date;
     setState(() {
       _transitionFromIndex = _selectedDayIndex;
       _selectedDayIndex = index;
@@ -215,8 +213,7 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
 
     final selectedDay = days[dayIndex];
     final chartSeries = _seriesForDay(days, dayIndex, now);
-    final showCurrentTimeLine =
-        isTodayForecastDay(selectedDay.date, now);
+    final showCurrentTimeLine = isTodayForecastDay(selectedDay.date, now);
     final fromShowCurrentTimeLine = _transitionFromIndex == null
         ? false
         : isTodayForecastDay(
@@ -272,7 +269,9 @@ class _ForecastBodyState extends ConsumerState<_ForecastBody> {
               for (var i = 0; i < days.length; i++)
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.only(right: i < days.length - 1 ? 8 : 0),
+                    padding: EdgeInsets.only(
+                      right: i < days.length - 1 ? 8 : 0,
+                    ),
                     child: _DailyCard(
                       day: days[i],
                       dayFormat: dayFormat,
@@ -369,7 +368,7 @@ class _DailyCard extends StatelessWidget {
                   style: theme.textTheme.labelSmall,
                 ),
                 const SizedBox(height: 4),
-                Icon(weatherIconData(day.icon), size: 22),
+                WeatherIcon(day.icon, size: 22),
                 const SizedBox(height: 4),
                 Text(
                   '${day.highC.round()}° / ${day.lowC.round()}°',

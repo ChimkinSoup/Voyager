@@ -23,6 +23,66 @@ List<TodoTask> sortTodoTasks(Iterable<TodoTask> tasks) {
   return sorted;
 }
 
+/// The group a task belongs to, numbered in display order.
+///
+/// Starred above unstarred, dated above undated within each. This is the same
+/// grammar the single-list view enforces piecemeal ([applyReorder] clamps
+/// across the starred boundary, [normalizeUnstarredSection] pushes undated back
+/// below dated) — naming it lets "All tasks" apply the same one directly.
+int todoTaskGroupIndex(TodoTask task) {
+  if (task.starred) return task.dueDate != null ? 0 : 1;
+  return task.dueDate != null ? 2 : 3;
+}
+
+bool _isDatedGroup(int group) => group == 0 || group == 2;
+
+/// The order the "All tasks" view shows: derived in full from the tasks
+/// themselves, with nothing persisted and nothing remembered.
+///
+/// [compareTodoTasks] cannot do this job, because `sortOrder` is only ever
+/// assigned *within* one list (see [_reindex], which restarts every list from
+/// the same `unstarredSortOrderBase`), so two lists both number their tasks
+/// from zero. Merging them and sorting on that field interleaves the two lists'
+/// dated and undated sections arbitrarily — dated, then undated, then dated
+/// again. The single-list case looks fine only because there is nothing to
+/// interleave with, which is why a one-undated-task list survived the merge
+/// unscathed.
+///
+/// So this view deliberately ignores `sortOrder` outright rather than trying to
+/// reconcile the lists' independent numbering. It is not reorderable: there is
+/// no drag to record and no per-list drag it should inherit, and the same set
+/// of tasks always renders in the same order regardless of what was dragged
+/// where inside any individual list.
+List<TodoTask> resolveGlobalTaskOrder(Iterable<TodoTask> tasks) {
+  return tasks.toList()..sort(compareGlobalTasks);
+}
+
+/// The total order behind [resolveGlobalTaskOrder]: [todoTaskGroupIndex] first,
+/// then due date among the dated groups and newest-created-first among the
+/// undated ones.
+///
+/// Newest first for the undated matches what the per-list view does when you
+/// add one, which is to snap it to the top of the undated run (see
+/// [buildUnstarredOrderSnapToTop]) — so a task you just made surfaces at the
+/// top of its section in both views instead of flipping between them.
+int compareGlobalTasks(TodoTask a, TodoTask b) {
+  final group = todoTaskGroupIndex(a);
+  final byGroup = group.compareTo(todoTaskGroupIndex(b));
+  if (byGroup != 0) return byGroup;
+
+  if (_isDatedGroup(group)) {
+    final byDue = compareDueDateChronological(a, b);
+    if (byDue != 0) return byDue;
+  } else {
+    final byCreated = b.createdAt.compareTo(a.createdAt);
+    if (byCreated != 0) return byCreated;
+  }
+
+  // Ids only to keep the sort total, so two tasks that tie on everything above
+  // don't swap places between rebuilds.
+  return a.id.compareTo(b.id);
+}
+
 List<TodoTask> activeTopLevelTasks(Iterable<TodoTask> tasks) {
   return tasks.where((t) => !t.completed && !t.isSubtask).toList();
 }
@@ -192,7 +252,10 @@ TodoSortBatch applyDueDateChange(
 
   final now = utcNow();
   if (clearDueDate) {
-    final cleared = task.copyWith(clearDueDate: true, clearDueDateSetAt: true);
+    final cleared = task.copyWith(
+      clearDueDate: true,
+      clearDueDateSetAt: true,
+    );
     if (task.starred) {
       return _batchFromOrder(
         activeTasks,
@@ -217,10 +280,7 @@ TodoSortBatch applyDueDateChange(
     return TodoSortBatch(tasks: [task]);
   }
 
-  final dated = task.copyWith(
-    dueDate: dueDate,
-    dueDateSetAt: now,
-  );
+  final dated = task.copyWith(dueDate: dueDate, dueDateSetAt: now);
 
   if (task.starred) {
     return _batchFromOrder(

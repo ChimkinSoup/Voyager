@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
@@ -422,28 +422,11 @@ class _AddListMenuItemState extends State<_AddListMenuItem> {
       child: SizedBox(
         height: 40,
         child: Center(
-          child: Material(
+          child: GlassButton(
+            onPressed: widget.onSelect,
+            label: widget.label,
             color: accent,
-            borderRadius: BorderRadius.circular(10),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              hoverColor: VoyagerColors.of(
-                context,
-              ).onAccent.withValues(alpha: 0.22),
-              onTap: widget.onSelect,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                child: Text(
-                  widget.label,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.onPrimary,
-                  ),
-                ),
-              ),
-            ),
+            dense: true,
           ),
         ),
       ),
@@ -514,29 +497,37 @@ class _RoundedDropdownMenuItemState<T>
             constraints.maxWidth >= 120;
         return SizedBox(
           height: widget.height,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    itemPadding.left,
-                    topInset + 4,
-                    showManage ? 2 : itemPadding.right,
-                    4,
-                  ),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: selectionBorder,
-                      borderRadius: highlightRadius,
-                    ),
-                    child: Material(
-                      type: MaterialType.transparency,
-                      clipBehavior: Clip.antiAlias,
-                      borderRadius: highlightRadius,
-                      child: InkWell(
-                        onTap: widget.onSelect,
-                        borderRadius: highlightRadius,
+          child: Padding(
+            // No vertical inset: the 4px above and below used to leave an 8px
+            // dead band between neighbouring rows where the pointer highlighted
+            // neither of them. The InkWell now spans the row's full height, so
+            // the highlight hands off from one row straight to the next.
+            padding: EdgeInsets.fromLTRB(
+              itemPadding.left,
+              topInset,
+              itemPadding.right,
+              0,
+            ),
+            // The selection border wraps the whole row — label, count and the
+            // ⋮ manage button — not just the label.
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: selectionBorder,
+                borderRadius: highlightRadius,
+              ),
+              // The select highlight fills that same box edge to edge; the ⋮
+              // keeps its own circular ink on top.
+              child: Material(
+                type: MaterialType.transparency,
+                clipBehavior: Clip.antiAlias,
+                borderRadius: highlightRadius,
+                child: InkWell(
+                  onTap: widget.onSelect,
+                  borderRadius: highlightRadius,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(
                             10,
@@ -551,42 +542,41 @@ class _RoundedDropdownMenuItemState<T>
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-              ),
-              if (showManage)
-                Padding(
-                  padding: EdgeInsets.only(
-                    right: 4,
-                    top: topInset,
-                  ),
-                  child: Builder(
-                    builder: (buttonContext) => Material(
-                      type: MaterialType.transparency,
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: () {
-                          unawaited(widget.onManagePressed!(buttonContext));
-                        },
-                        child: SizedBox(
-                          width: 32,
-                          height: 32,
-                          child: Center(
-                            child: Icon(
-                              PhosphorIconsBold.dotsThreeVertical,
-                              size: 18,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.72,
+                      if (showManage)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Builder(
+                            builder: (buttonContext) => Material(
+                              type: MaterialType.transparency,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () {
+                                  unawaited(
+                                    widget.onManagePressed!(buttonContext),
+                                  );
+                                },
+                                child: SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: Center(
+                                    child: Icon(
+                                      PhosphorIconsBold.dotsThreeVertical,
+                                      size: 18,
+                                      color:
+                                          theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.72),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
+                    ],
                   ),
                 ),
-            ],
+              ),
+            ),
           ),
         );
       },

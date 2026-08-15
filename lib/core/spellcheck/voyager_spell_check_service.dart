@@ -23,8 +23,20 @@ class VoyagerSpellCheckService implements SpellCheckService {
   /// a changed generation as "discard the cache and do a full [checkTextSync]
   /// instead" — a cached span's flagged/known status may no longer be
   /// correct once the dictionary has moved.
-  int get generation => _generation;
-  int _generation = 0;
+  int get generation => _generation.value;
+
+  /// Fires when [generation] changes, i.e. when the dictionary finishes
+  /// loading or a custom word is added.
+  ///
+  /// Checking the generation only tells a caller its cache is stale the next
+  /// time it happens to run; widgets that *paint* from that cache also need
+  /// to know to run again. SpellCheckSquiggleLayer otherwise rebuilds only
+  /// when its controller or focus node notifies, so "Add to dictionary" left
+  /// the word's squiggle on screen until some unrelated edit or caret move
+  /// woke the layer up.
+  Listenable get knownWordsChanged => _generation;
+
+  final ValueNotifier<int> _generation = ValueNotifier<int>(0);
 
   // Private incremental cache for [fetchSpellCheckSuggestions] specifically:
   // that method's signature is fixed by the [SpellCheckService] interface
@@ -38,18 +50,18 @@ class VoyagerSpellCheckService implements SpellCheckService {
     _dictionary = words;
     _known = _dictionary.union(_customWords);
     _suggestionCache.clear();
-    _generation++;
     _fetchLastText = '';
     _fetchLastSpans = const [];
+    _generation.value++;
   }
 
   void updateCustomWords(Set<String> words) {
     _customWords = words;
     _known = _dictionary.union(_customWords);
     _suggestionCache.clear();
-    _generation++;
     _fetchLastText = '';
     _fetchLastSpans = const [];
+    _generation.value++;
   }
 
   /// Full, from-scratch check: tokenizes and checks every word in [text].
@@ -63,7 +75,18 @@ class VoyagerSpellCheckService implements SpellCheckService {
   /// spell_check_field_support.dart, used when a field's text is set
   /// programmatically rather than typed, since EditableText never
   /// spellchecks on its own in that case).
-  List<SuggestionSpan> checkTextSync(String text) {
+  ///
+  /// Suggestion strings are *not* computed here by default. Flagging a word
+  /// is a set lookup; generating corrections is a Norvig edit-distance
+  /// search over a 65k dictionary and will hitch the UI isolate if it runs
+  /// on the frame that paints the squiggle (Vim `p`, a paste, Esc into
+  /// Normal). Callers that actually display corrections should pass
+  /// [includeSuggestions] or use [hydrateSuggestions] on the one span the
+  /// user clicked.
+  List<SuggestionSpan> checkTextSync(
+    String text, {
+    bool includeSuggestions = false,
+  }) {
     if (_dictionary.isEmpty) return const []; // not loaded yet: flag nothing
     final known = _known;
     final spans = <SuggestionSpan>[];
@@ -71,11 +94,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
       final word = text.substring(range.start, range.end);
       final lower = word.toLowerCase();
       if (known.contains(lower)) continue;
-      final suggestions = _suggestionCache.putIfAbsent(
-        lower,
-        () => generateSuggestions(lower, known),
-      );
-      spans.add(SuggestionSpan(range, suggestions));
+      spans.add(_spanFor(range, lower, includeSuggestions: includeSuggestions));
     }
     return spans;
   }
@@ -94,31 +113,28 @@ class VoyagerSpellCheckService implements SpellCheckService {
   /// (switching fields, loading a different entry into a reused controller),
   /// [oldSpans] is ignored and this just delegates to [checkTextSync].
   ///
-  /// [allowDeferral] additionally lets the token still being actively typed
-  /// skip straight past [generateSuggestions]: nothing paints a squiggle for
-  /// it anyway while the cursor is still inside (SpellCheckSquiggleLayer
-  /// hides its own active-edit range, and Flutter's built-in
-  /// misspelled-word style is neutralized in
-  /// buildVoyagerSpellCheckConfiguration), so computing suggestions for it
-  /// before it's finished is pure waste — thrown away and redone
-  /// differently on the very next keystroke. Skipping it means the
-  /// expensive edit-distance search runs once per finished word instead of
-  /// once per keystroke typed. Pass `false` when a guaranteed-complete
-  /// result is required (this is also used by the test suite to verify
-  /// incremental results match [checkTextSync] exactly, independent of this
-  /// deliberate divergence).
+  /// [allowDeferral] (off by default) lets the token still being typed skip
+  /// flagging entirely. Production callers must not enable this:
+  /// SpellCheckSquiggleLayer already hides the in-progress word via its own
+  /// active-edit range, and dropping the span here means a later caret move
+  /// or newline-then-retype never re-scans that token — so repeated
+  /// misspellings stay unmarked until some unrelated full recheck. Pass
+  /// `true` only in tests that specifically cover this opt-in divergence.
+  ///
+  /// See [checkTextSync] for [includeSuggestions].
   List<SuggestionSpan> checkIncremental({
     required String oldText,
     required List<SuggestionSpan> oldSpans,
     required String newText,
-    bool allowDeferral = true,
+    bool allowDeferral = false,
+    bool includeSuggestions = false,
   }) {
     if (_dictionary.isEmpty) return const [];
     if (oldText == newText) return oldSpans;
 
     final diff = _computeDiff(oldText, newText);
     if (diff == null || !_isIncrementalSafe(oldText, diff)) {
-      return checkTextSync(newText);
+      return checkTextSync(newText, includeSuggestions: includeSuggestions);
     }
     final (prefix, oldEnd, newEnd) = diff;
 
@@ -136,9 +152,14 @@ class VoyagerSpellCheckService implements SpellCheckService {
         if (span.range.end <= scanStart) span,
     ];
 
-    // Only a genuine insertion (something new appeared) can be "still being
-    // typed"; a pure deletion has nothing to defer.
-    final activeRange = (allowDeferral && newEnd > prefix)
+    // Only a genuine small insertion can be "still being typed". A paste, a
+    // Vim put, or any other bulk insert is a finished edit — check it now
+    // rather than waiting for the next keystroke that happens to land
+    // outside the token. Deletions have nothing to defer.
+    final inserted = newEnd - prefix;
+    final activeRange = (allowDeferral &&
+            inserted > 0 &&
+            inserted <= maxDeferredInsertionLength)
         ? TextRange(start: prefix, end: newEnd)
         : null;
     final known = _known;
@@ -155,11 +176,9 @@ class VoyagerSpellCheckService implements SpellCheckService {
       final word = newText.substring(absRange.start, absRange.end);
       final lower = word.toLowerCase();
       if (known.contains(lower)) continue;
-      final suggestions = _suggestionCache.putIfAbsent(
-        lower,
-        () => generateSuggestions(lower, known),
+      spans.add(
+        _spanFor(absRange, lower, includeSuggestions: includeSuggestions),
       );
-      spans.add(SuggestionSpan(absRange, suggestions));
     }
 
     for (final span in oldSpans) {
@@ -175,6 +194,41 @@ class VoyagerSpellCheckService implements SpellCheckService {
 
     return spans;
   }
+
+  /// Fills in [SuggestionSpan.suggestions] for a span that was flagged
+  /// without them. The check hot path skips generation so painting a
+  /// squiggle never blocks the UI isolate; the right-click popup is the
+  /// one place corrections are actually shown.
+  SuggestionSpan hydrateSuggestions(String text, SuggestionSpan span) {
+    if (span.suggestions.isNotEmpty) return span;
+    final start = span.range.start.clamp(0, text.length);
+    final end = span.range.end.clamp(start, text.length);
+    if (start >= end) return span;
+    final lower = text.substring(start, end).toLowerCase();
+    return SuggestionSpan(span.range, _suggestionsFor(lower));
+  }
+
+  SuggestionSpan _spanFor(
+    TextRange range,
+    String lower, {
+    required bool includeSuggestions,
+  }) {
+    return SuggestionSpan(
+      range,
+      includeSuggestions ? _suggestionsFor(lower) : const <String>[],
+    );
+  }
+
+  List<String> _suggestionsFor(String lower) {
+    return _suggestionCache.putIfAbsent(
+      lower,
+      () => generateSuggestions(lower, _known),
+    );
+  }
+
+  /// Insertions longer than this are never treated as "still being typed"
+  /// even when [allowDeferral] is true — a paste or Vim put, not a keystroke.
+  static const int maxDeferredInsertionLength = 2;
 
   /// A single keystroke's worth of edit is a handful of characters, so a
   /// large gap between [oldText] and [newText] (switching fields, loading a
@@ -223,10 +277,10 @@ class VoyagerSpellCheckService implements SpellCheckService {
   }
 
   /// Characters that can be part of a word token ([tokenizeWords]'s
-  /// `[A-Za-z']` pattern) or a `#tag` ([journalTagPattern]'s `#(\w+)`) —
-  /// used to widen a changed region out to whole-token boundaries before
-  /// re-tokenizing just that window.
-  static final _boundaryChar = RegExp(r"[A-Za-z0-9_#']");
+  /// `[A-Za-z']` pattern) or a `#tag` ([journalTagPattern], hyphens included so
+  /// a multi-word tag isn't cut at one) — used to widen a changed region out to
+  /// whole-token boundaries before re-tokenizing just that window.
+  static final _boundaryChar = RegExp(r"[A-Za-z0-9_#'-]");
 
   /// Capped so a pathological run of boundary characters with no real word
   /// break (never happens in real prose) can't make a single edit scan an
@@ -269,6 +323,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
       oldText: _fetchLastText,
       oldSpans: _fetchLastSpans,
       newText: text,
+      allowDeferral: false,
     );
     _fetchLastText = text;
     _fetchLastSpans = spans;

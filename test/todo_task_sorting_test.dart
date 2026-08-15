@@ -467,4 +467,173 @@ void main() {
     );
     expect(batch.tasks, [task]);
   });
+
+  group('resolveGlobalTaskOrder ("All tasks")', () {
+    TodoTask fromList(
+      String listId, {
+      required String id,
+      bool starred = false,
+      int sortOrder = unstarredSortOrderBase,
+      DateTime? dueDate,
+      DateTime? createdAt,
+    }) {
+      final now = createdAt ?? utcNow();
+      return TodoTask(
+        id: id,
+        listId: listId,
+        title: id,
+        starred: starred,
+        sortOrder: sortOrder,
+        dueDate: dueDate,
+        dueDateSetAt: dueDate == null ? null : now,
+        createdAt: now,
+        updatedAt: now,
+      );
+    }
+
+    test('dated and undated tasks never interleave across lists', () {
+      // The reported bug. Both lists number their own tasks from the same
+      // base, so sorting the merged set on sortOrder ran dated → undated →
+      // dated. Nothing may come between the two sections now.
+      final tasks = [
+        fromList('a', id: 'a-dated-1',
+            sortOrder: unstarredSortOrderBase,
+            dueDate: DateTime.utc(2026, 6, 1)),
+        fromList('a', id: 'a-undated',
+            sortOrder: unstarredSortOrderBase + 1),
+        fromList('b', id: 'b-dated',
+            sortOrder: unstarredSortOrderBase,
+            dueDate: DateTime.utc(2026, 6, 2)),
+        fromList('b', id: 'b-undated',
+            sortOrder: unstarredSortOrderBase + 1),
+        fromList('a', id: 'a-dated-2',
+            sortOrder: unstarredSortOrderBase + 2,
+            dueDate: DateTime.utc(2026, 6, 3)),
+      ];
+
+      final sorted = resolveGlobalTaskOrder(tasks);
+      final firstUndated = sorted.indexWhere((t) => t.dueDate == null);
+      expect(firstUndated, isNot(-1));
+      expect(
+        sorted.skip(firstUndated).every((t) => t.dueDate == null),
+        isTrue,
+        reason: 'a dated task came back after the undated section began',
+      );
+    });
+
+    test('dated tasks run chronologically regardless of their list', () {
+      final tasks = [
+        fromList('b', id: 'late', dueDate: DateTime.utc(2026, 6, 9)),
+        fromList('a', id: 'early', dueDate: DateTime.utc(2026, 6, 1)),
+        fromList('c', id: 'middle', dueDate: DateTime.utc(2026, 6, 4)),
+      ];
+      expect(
+        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
+        ['early', 'middle', 'late'],
+      );
+    });
+
+    test('starred tasks lead, and are themselves dated-then-undated', () {
+      final tasks = [
+        fromList('a', id: 'plain-dated', dueDate: DateTime.utc(2026, 6, 1)),
+        fromList('b', id: 'star-undated', starred: true),
+        fromList('a', id: 'plain-undated'),
+        fromList('c', id: 'star-dated',
+            starred: true, dueDate: DateTime.utc(2026, 6, 5)),
+      ];
+      expect(
+        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
+        ['star-dated', 'star-undated', 'plain-dated', 'plain-undated'],
+      );
+    });
+
+    test('undated tasks run newest-created first', () {
+      final tasks = [
+        fromList('a', id: 'oldest', createdAt: DateTime.utc(2026, 1, 1)),
+        fromList('b', id: 'newest', createdAt: DateTime.utc(2026, 3, 1)),
+        fromList('a', id: 'middle', createdAt: DateTime.utc(2026, 2, 1)),
+      ];
+      expect(
+        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
+        ['newest', 'middle', 'oldest'],
+      );
+    });
+
+    test('the order does not depend on the order it was handed', () {
+      // The user saw the bug appear only when switching in from certain lists
+      // — i.e. it depended on the incoming order. It must not.
+      final tasks = [
+        fromList('a', id: 'd1',
+            dueDate: DateTime.utc(2026, 6, 1),
+            createdAt: DateTime.utc(2026, 1, 1)),
+        fromList('b', id: 'u1', createdAt: DateTime.utc(2026, 1, 2)),
+        fromList('c', id: 'd2',
+            dueDate: DateTime.utc(2026, 6, 2),
+            createdAt: DateTime.utc(2026, 1, 3)),
+        fromList('a', id: 'u2', createdAt: DateTime.utc(2026, 1, 4)),
+      ];
+      final expected = resolveGlobalTaskOrder(tasks).map((t) => t.id).toList();
+      expect(expected, ['d1', 'd2', 'u2', 'u1']);
+      expect(
+        resolveGlobalTaskOrder(tasks.reversed).map((t) => t.id).toList(),
+        expected,
+      );
+    });
+
+    test('a single undated task from one list is left alone', () {
+      // The case that already looked right, and has to keep looking right.
+      final only = fromList('a', id: 'solo');
+      expect(resolveGlobalTaskOrder([only]).single.id, 'solo');
+    });
+
+    test('per-list sortOrder does not affect the order', () {
+      // The point of the view: a drag performed inside a list you cannot see
+      // from here must not move anything here. sortOrder says a1 leads; the
+      // derived order says a2 does, because it was created later.
+      final tasks = [
+        fromList('a', id: 'a1', sortOrder: unstarredSortOrderBase,
+            createdAt: DateTime.utc(2026, 1, 5)),
+        fromList('a', id: 'a2', sortOrder: unstarredSortOrderBase + 1,
+            createdAt: DateTime.utc(2026, 1, 9)),
+        fromList('b', id: 'b1', sortOrder: unstarredSortOrderBase,
+            createdAt: DateTime.utc(2026, 1, 7)),
+      ];
+      expect(
+        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
+        ['a2', 'b1', 'a1'],
+      );
+    });
+
+    test('a newly created task leads its section', () {
+      // Matches what the single-list view does on add, so the same task does
+      // not sit at opposite ends of the two views.
+      final existing = [
+        fromList('a', id: 'first', createdAt: DateTime.utc(2026, 1, 3)),
+        fromList('a', id: 'second', createdAt: DateTime.utc(2026, 1, 2)),
+        fromList('b', id: 'third', createdAt: DateTime.utc(2026, 1, 1)),
+      ];
+      final fresh = fromList('b', id: 'fresh', createdAt: DateTime.utc(2027));
+      expect(
+        resolveGlobalTaskOrder([...existing, fresh]).map((t) => t.id).toList(),
+        ['fresh', 'first', 'second', 'third'],
+      );
+    });
+
+    test('two tasks alike in every sort key still hold a stable order', () {
+      final at = DateTime.utc(2026, 5, 5);
+      final tasks = [
+        fromList('a', id: 'zzz', createdAt: at),
+        fromList('b', id: 'aaa', createdAt: at),
+      ];
+      expect(
+        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
+        ['aaa', 'zzz'],
+      );
+      expect(
+        resolveGlobalTaskOrder(tasks.reversed).map((t) => t.id).toList(),
+        ['aaa', 'zzz'],
+      );
+    });
+  });
+
 }

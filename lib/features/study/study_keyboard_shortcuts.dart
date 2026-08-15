@@ -9,7 +9,8 @@ import 'package:voyager/domain/models/study_models.dart';
 /// Keyboard shortcuts for an active Study/Cram session: Space always flips
 /// the card (hardcoded — STUDY.md: "in ANY mode they should still be able
 /// to press space to flip the card"), plus the 4 user-configurable grading
-/// keys, active only once the back is showing. Uses a [HardwareKeyboard]
+/// keys, active only once the back is showing, and U/R to step back and
+/// forward through the session's own history. Uses a [HardwareKeyboard]
 /// handler so it works with no widget in the tree holding focus, same
 /// approach as [CalendarKeyboardShortcuts].
 class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
@@ -19,6 +20,9 @@ class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
     required this.onSpace,
     required this.showingBack,
     this.onGrade,
+    this.onUndo,
+    this.onRedo,
+    this.arrowsNavigateHistory = false,
   });
 
   final Widget child;
@@ -29,11 +33,24 @@ class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
   final bool showingBack;
   final ValueChanged<StudyGrade>? onGrade;
 
+  /// Step back to the previous card, and forward again into a step that was
+  /// taken back. Null when there is nothing left in that direction, which is
+  /// also what greys out the header buttons.
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
+
+  /// Whether ←/→ step through the history alongside U/R. On for the review
+  /// sessions, where nothing else claims the arrows; off for cram, where they
+  /// already mean fail/pass and mirror the swipe.
+  final bool arrowsNavigateHistory;
+
   @override
-  ConsumerState<StudyKeyboardShortcuts> createState() => _StudyKeyboardShortcutsState();
+  ConsumerState<StudyKeyboardShortcuts> createState() =>
+      _StudyKeyboardShortcutsState();
 }
 
-class _StudyKeyboardShortcutsState extends ConsumerState<StudyKeyboardShortcuts> {
+class _StudyKeyboardShortcutsState
+    extends ConsumerState<StudyKeyboardShortcuts> {
   @override
   void initState() {
     super.initState();
@@ -64,6 +81,13 @@ class _StudyKeyboardShortcutsState extends ConsumerState<StudyKeyboardShortcuts>
       return true;
     }
 
+    if (_handleGradeKey(event)) return true;
+    return _handleHistoryKey(event);
+  }
+
+  /// The grading keys are checked before the history keys, so a user who has
+  /// bound a grade to U or R still grades with it while the answer is showing.
+  bool _handleGradeKey(KeyEvent event) {
     if (widget.onGrade == null || !widget.showingBack) return false;
     final settings = ref.read(settingsProvider).valueOrNull;
     if (settings == null) return false;
@@ -82,6 +106,35 @@ class _StudyKeyboardShortcutsState extends ConsumerState<StudyKeyboardShortcuts>
     }
     if (matchesKeyBinding(event, settings.srsEasyKey)) {
       widget.onGrade!(StudyGrade.easy);
+      return true;
+    }
+    return false;
+  }
+
+  bool _handleHistoryKey(KeyEvent event) {
+    // Bare keys only: Ctrl+R and friends belong to the platform, not here.
+    if (HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed ||
+        HardwareKeyboard.instance.isMetaPressed) {
+      return false;
+    }
+
+    final key = event.logicalKey;
+    final isUndo =
+        key == LogicalKeyboardKey.keyU ||
+        (widget.arrowsNavigateHistory && key == LogicalKeyboardKey.arrowLeft);
+    final isRedo =
+        key == LogicalKeyboardKey.keyR ||
+        (widget.arrowsNavigateHistory && key == LogicalKeyboardKey.arrowRight);
+
+    if (isUndo) {
+      widget.onUndo?.call();
+      // Swallowed either way: with nothing to undo the key does nothing, but
+      // it is still this session's key.
+      return true;
+    }
+    if (isRedo) {
+      widget.onRedo?.call();
       return true;
     }
     return false;

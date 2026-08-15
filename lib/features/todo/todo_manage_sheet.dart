@@ -5,9 +5,8 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
-import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
-import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
@@ -193,40 +192,8 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
     await _reload();
   }
 
-  Future<String?> _promptName(String title, {String? initial}) async {
-    final controller = TextEditingController(text: initial ?? '');
-    try {
-      return await showVoyagerDialog<String>(
-        context: context,
-        builder: (context) => EnterToSubmitScope(
-          onSubmit: () => Navigator.pop(context, controller.text),
-          child: AlertDialog(
-            title: Text(title),
-            content: LabeledTextField(
-              label: 'Name',
-              controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => Navigator.pop(context, controller.text),
-          ),
-          actions: [
-            GlassButton(
-              dense: true,
-              onPressed: () => Navigator.pop(context),
-              label: 'Cancel',
-            ),
-            GlassButton(
-              dense: true,
-              onPressed: () => Navigator.pop(context, controller.text),
-              label: 'OK',
-            ),
-          ],
-        ),
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
+  Future<String?> _promptName(String title, {String? initial}) {
+    return showPromptNameDialog(context, title: title, initial: initial);
   }
 
   @override

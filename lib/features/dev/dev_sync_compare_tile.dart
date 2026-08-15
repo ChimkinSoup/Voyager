@@ -8,6 +8,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class DevSyncCompareSection extends ConsumerStatefulWidget {
   const DevSyncCompareSection({super.key});
@@ -267,7 +268,7 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
         title: const Text('Sync compare log'),
         content: SizedBox(
           width: 720,
-          child: SingleChildScrollView(
+          child: VoyagerScrollView(
             child: SelectableText(
               text.isEmpty ? '(empty)' : text,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -302,7 +303,7 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
         ),
         content: SizedBox(
           width: 720,
-          child: SingleChildScrollView(
+          child: VoyagerScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -374,7 +375,7 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
         ),
         content: SizedBox(
           width: 720,
-          child: SingleChildScrollView(
+          child: VoyagerScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -450,7 +451,7 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
         ),
         content: SizedBox(
           width: 720,
-          child: SingleChildScrollView(
+          child: VoyagerScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

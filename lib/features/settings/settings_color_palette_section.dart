@@ -126,6 +126,14 @@ class _SettingsColorPaletteSectionState
                 ],
                 decoration: const InputDecoration(
                   hintText: 'Add custom color (e.g. 7C9EFF)',
+                  // Without these the field takes Flutter's outlined default of
+                  // 20px above and below a single line of text, which left the
+                  // row looming over the swatches it belongs to.
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 onSubmitted: (_) => _addColor(),
               ),

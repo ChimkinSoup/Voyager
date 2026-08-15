@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Opens a Voyager-styled popup menu with no outer padding by default.
 ///
@@ -180,9 +182,18 @@ class VoyagerPopupMenuRoute<T> extends PopupRoute<T> {
     final Widget menuContent = ConstrainedBox(
       constraints:
           constraints ?? const BoxConstraints(minWidth: 112, maxWidth: 280),
-      child: SingleChildScrollView(
-        padding: menuPadding,
-        child: ListBody(children: children),
+      // Entries built on [PopupMenuItem] carry SemanticsRole.menuItem, which
+      // asserts unless an ancestor node claims SemanticsRole.menu. Material's
+      // own popup route wraps its list the same way.
+      child: Semantics(
+        role: SemanticsRole.menu,
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        child: VoyagerScrollView(
+          padding: menuPadding,
+          child: ListBody(children: children),
+        ),
       ),
     );
 

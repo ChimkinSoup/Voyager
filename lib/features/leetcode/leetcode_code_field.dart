@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:flutter_highlight/themes/atom-one-light.dart';
@@ -13,7 +14,20 @@ import 'package:highlight/languages/rust.dart' as lang_rust;
 import 'package:highlight/languages/typescript.dart' as lang_typescript;
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
+
+/// The highlight grammar for a stored `codeLanguage` key, falling back to
+/// Python for anything unrecognised. Public because inline `` `code` `` in the
+/// prose fields is tokenized with the same grammar the code block uses.
+Mode leetCodeHighlightMode(String language) => _modeForLanguage(language);
 
 Mode _modeForLanguage(String language) => switch (language) {
   'java' => lang_java.java,
@@ -29,31 +43,77 @@ Mode _modeForLanguage(String language) => switch (language) {
 Map<String, TextStyle> _themeFor(Brightness brightness) =>
     brightness == Brightness.dark ? atomOneDarkTheme : atomOneLightTheme;
 
+/// Atom One's `root` style carries a [TextStyle.backgroundColor] meant for
+/// the editor chrome. [SpanBuilder] would otherwise paint it behind every
+/// glyph — and a second time on a selected newline, which is exactly the
+/// double-dark empty line this field was showing. The container already
+/// fills that colour; spans only need the foreground tokens.
+Map<String, TextStyle> _spanStyles(Map<String, TextStyle> theme) => {
+      for (final entry in theme.entries)
+        entry.key: entry.value.copyWith(backgroundColor: null),
+    };
+
+/// Token colours for [brightness], keyed by highlight class name — the same
+/// Atom One palette the code block paints, so an inline `` `for` `` in the
+/// prose is the colour it would be inside the code box.
+Map<String, TextStyle> leetCodeSyntaxStyles(Brightness brightness) =>
+    _spanStyles(_themeFor(brightness));
+
 /// Size and leading are pinned rather than inherited. Left unset, the two
 /// columns resolve them from different theme slots — the line numbers'
-/// [TextField] falls back to `bodyLarge`, while [CodeField] seeds its own
-/// default from `titleMedium` — so their alignment would silently depend on
-/// those slots staying identical, which they are today only by coincidence
-/// of the Material 3 scale.
+/// [TextField] falls back to `bodyLarge`, while a bare code [TextField]
+/// seeds its default from `titleMedium` — so their alignment would silently
+/// depend on those slots staying identical, which they are today only by
+/// coincidence of the Material 3 scale.
 final _codeTextStyle =
     AppFonts.style(fontSize: 16).copyWith(fontFamily: AppFonts.monoFamily);
+/// Width every language capsule takes, wide enough for the longest label
+/// ("javascript"/"typescript") so none of them has to ellipsize.
+const _kLanguagePillWidth = 84.0;
 const _lineNumberColumnWidth = 34.0;
 const _lineNumberGap = 8.0;
+const _codeGutterPad = 8.0;
+
+/// Same padding [CodeField] used on its inner [TextField], plus the 8px
+/// left inset [CodeField] put on its container when the built-in gutter is
+/// hidden. Overlay and field must share this exactly.
+const _codeContentPadding = EdgeInsets.fromLTRB(_codeGutterPad, 16, 0, 16);
+const _codeDecoration = InputDecoration(
+  isCollapsed: true,
+  contentPadding: _codeContentPadding,
+  disabledBorder: InputBorder.none,
+  border: InputBorder.none,
+  focusedBorder: InputBorder.none,
+);
+
+/// Tab inserts spaces / Shift+Tab outdents. Without these, Tab falls through to
+/// focus traversal and leaves the code box for the title field.
+class _CodeTabIntent extends Intent {
+  const _CodeTabIntent();
+}
+
+class _CodeOutdentIntent extends Intent {
+  const _CodeOutdentIntent();
+}
+
+const _codeEditorShortcuts = <ShortcutActivator, Intent>{
+  SingleActivator(LogicalKeyboardKey.tab): _CodeTabIntent(),
+  SingleActivator(LogicalKeyboardKey.tab, shift: true): _CodeOutdentIntent(),
+};
 
 /// Line numbers rendered as their own borderless [TextField], configured
-/// identically (padding, decoration, text style) to [CodeField]'s internal
-/// one, instead of using [GutterStyle]'s built-in numbers column.
+/// identically (padding, decoration, text style) to the code [TextField],
+/// instead of using [GutterStyle]'s built-in numbers column.
 ///
 /// [GutterStyle] lays its numbers out in a `Table` of single-line cells,
-/// entirely separate from the code's own multi-line paragraph inside
-/// [CodeField]'s `TextField`. The two are supposed to produce identical
-/// per-line heights for a shared [TextStyle], but in practice that depends on
-/// the exact font the platform resolves — verified to match in a test
-/// harness but to visibly drift on a real Windows build. Using the same
-/// widget with the same configuration for both columns removes the
-/// dependency on that coincidence: whatever a given platform/font does to
-/// line height, it does identically to both, since they run the exact same
-/// code path in lockstep.
+/// entirely separate from the code's own multi-line paragraph. The two are
+/// supposed to produce identical per-line heights for a shared [TextStyle],
+/// but in practice that depends on the exact font the platform resolves —
+/// verified to match in a test harness but to visibly drift on a real
+/// Windows build. Using the same widget with the same configuration for
+/// both columns removes the dependency on that coincidence: whatever a
+/// given platform/font does to line height, it does identically to both,
+/// since they run the exact same code path in lockstep.
 class _LineNumbers extends StatefulWidget {
   const _LineNumbers({required this.source, required this.color});
 
@@ -152,9 +212,14 @@ class LeetCodeCodeInput extends StatefulWidget {
 }
 
 class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
+  /// Owned here rather than inside [_LeetCodeCodeEditor] so the tap target
+  /// below can focus the field — see [_focusCodeAtEnd].
+  late final FocusNode _codeFocusNode;
+
   @override
   void initState() {
     super.initState();
+    _codeFocusNode = FocusNode();
     widget.controller.language = _modeForLanguage(widget.language);
   }
 
@@ -167,12 +232,36 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
   }
 
   @override
+  void dispose() {
+    _codeFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// The box is 160px tall from empty, but a [TextField] only occupies — and
+  /// so only hit-tests — the lines it actually holds. Everything under the
+  /// last line reads as part of the field and does nothing when clicked, so
+  /// the whole box takes taps and hands them to the editor, caret at the end
+  /// of the buffer the way clicking past the last line does in a code editor.
+  ///
+  /// [HitTestBehavior.translucent] leaves the field's own recognizer in the
+  /// arena, and hit testing enters it first, so a tap that lands on text still
+  /// places the caret where it landed rather than jumping to the end.
+  void _focusCodeAtEnd() {
+    final controller = widget.controller;
+    controller.selection = TextSelection.collapsed(
+      offset: controller.text.length,
+    );
+    _codeFocusNode.requestFocus();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final codeTheme = _themeFor(theme.brightness);
     final background = codeTheme['root']?.backgroundColor ?? theme.colorScheme.surface;
-    final lineNumberColor = (codeTheme['root']?.color ?? theme.colorScheme.onSurface)
-        .withValues(alpha: 0.5);
+    final rootColor = codeTheme['root']?.color ?? theme.colorScheme.onSurface;
+    final lineNumberColor = rootColor.withValues(alpha: 0.5);
+    final textStyle = _codeTextStyle.copyWith(color: rootColor);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -184,11 +273,20 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
             separatorBuilder: (_, _) => const SizedBox(width: 6),
             itemBuilder: (context, index) {
               final lang = leetCodeCodeLanguages[index];
-              return SelectorPill(
-                dense: true,
-                label: labelForLeetCodeLanguage(lang),
-                isActive: lang == widget.language,
-                onTap: () => widget.onLanguageChanged(lang),
+              // One width for every language, so the row reads as a set of
+              // equal choices rather than a ragged run sized by how long each
+              // language happens to be spelled ("go" next to "typescript").
+              return SizedBox(
+                width: _kLanguagePillWidth,
+                child: SelectorPill(
+                  dense: true,
+                  label: labelForLeetCodeLanguage(lang),
+                  isActive: lang == widget.language,
+                  // The whole capsule takes the accent when chosen. A border
+                  // alone is a thin cue to carry the one thing this row says.
+                  fillWhenActive: true,
+                  onTap: () => widget.onLanguageChanged(lang),
+                ),
               );
             },
           ),
@@ -196,32 +294,37 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
         const SizedBox(height: 8),
         ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 160, maxHeight: 320),
-          child: Container(
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
-            ),
-            child: CodeTheme(
-              data: CodeThemeData(styles: codeTheme),
-              child: Theme(
-                data: theme.copyWith(inputDecorationTheme: const InputDecorationTheme()),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _LineNumbers(source: widget.controller, color: lineNumberColor),
-                        const SizedBox(width: _lineNumberGap),
-                        Expanded(
-                          child: CodeField(
-                            controller: widget.controller,
-                            textStyle: _codeTextStyle,
-                            gutterStyle: GutterStyle.none,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _focusCodeAtEnd,
+            child: Container(
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
+              ),
+              child: CodeTheme(
+                data: CodeThemeData(styles: _spanStyles(codeTheme)),
+                child: Theme(
+                  data: theme.copyWith(inputDecorationTheme: const InputDecorationTheme()),
+                  child: VoyagerScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _LineNumbers(source: widget.controller, color: lineNumberColor),
+                          const SizedBox(width: _lineNumberGap),
+                          Expanded(
+                            child: _LeetCodeCodeEditor(
+                              controller: widget.controller,
+                              focusNode: _codeFocusNode,
+                              textStyle: textStyle,
+                              cursorColor: rootColor,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -251,7 +354,7 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
   @override
   void initState() {
     super.initState();
-    _controller = CodeController(
+    _controller = LeetCodeCodeController(
       text: widget.code,
       language: _modeForLanguage(widget.language),
     );
@@ -262,7 +365,7 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.code != widget.code || oldWidget.language != widget.language) {
       _controller.dispose();
-      _controller = CodeController(
+      _controller = LeetCodeCodeController(
         text: widget.code,
         language: _modeForLanguage(widget.language),
       );
@@ -280,8 +383,9 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
     final theme = Theme.of(context);
     final codeTheme = _themeFor(theme.brightness);
     final background = codeTheme['root']?.backgroundColor ?? theme.colorScheme.surface;
-    final lineNumberColor = (codeTheme['root']?.color ?? theme.colorScheme.onSurface)
-        .withValues(alpha: 0.5);
+    final rootColor = codeTheme['root']?.color ?? theme.colorScheme.onSurface;
+    final lineNumberColor = rootColor.withValues(alpha: 0.5);
+    final textStyle = _codeTextStyle.copyWith(color: rootColor);
     return Container(
       decoration: BoxDecoration(
         color: background,
@@ -289,7 +393,7 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
         border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
       ),
       child: CodeTheme(
-        data: CodeThemeData(styles: codeTheme),
+        data: CodeThemeData(styles: _spanStyles(codeTheme)),
         child: Theme(
           data: theme.copyWith(inputDecorationTheme: const InputDecorationTheme()),
           child: Padding(
@@ -300,11 +404,11 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
                 _LineNumbers(source: _controller, color: lineNumberColor),
                 const SizedBox(width: _lineNumberGap),
                 Expanded(
-                  child: CodeField(
+                  child: _LeetCodeCodeEditor(
                     controller: _controller,
                     readOnly: true,
-                    textStyle: _codeTextStyle,
-                    gutterStyle: GutterStyle.none,
+                    textStyle: textStyle,
+                    cursorColor: rootColor,
                   ),
                 ),
               ],
@@ -312,6 +416,221 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Syntax-highlighted code [TextField] that paints selection with
+/// [SelectionHighlightLayer] instead of Flutter's native highlight.
+///
+/// [CodeField] is a [TextField] that does not expose `selectionWidthStyle`,
+/// so on Windows it keeps `BoxWidthStyle.max`. That style emits two
+/// overlapping boxes on a selected empty line, and the translucent
+/// selection colour double-blends into a darker band. This widget is the
+/// same editor chrome — no wrap, longest-line intrinsic width, same
+/// padding — with the layer the rest of the app already uses for that bug.
+class _LeetCodeCodeEditor extends StatefulWidget {
+  const _LeetCodeCodeEditor({
+    required this.controller,
+    required this.textStyle,
+    required this.cursorColor,
+    this.focusNode,
+    this.readOnly = false,
+  });
+
+  final CodeController controller;
+
+  /// Supplied when the caller needs to focus the field itself; one is created
+  /// and owned here otherwise.
+  final FocusNode? focusNode;
+
+  final TextStyle textStyle;
+  final Color cursorColor;
+  final bool readOnly;
+
+  @override
+  State<_LeetCodeCodeEditor> createState() => _LeetCodeCodeEditorState();
+}
+
+class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
+  FocusNode? _ownFocusNode;
+  String _longestLine = '';
+
+  FocusNode get _focusNode => widget.focusNode ?? _ownFocusNode!;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusNode == null) _ownFocusNode = FocusNode();
+    widget.controller.addListener(_onTextChanged);
+    _longestLine = _longestLineOf(widget.controller.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LeetCodeCodeEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onTextChanged);
+      widget.controller.addListener(_onTextChanged);
+      _longestLine = _longestLineOf(widget.controller.text);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTextChanged);
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    final next = _longestLineOf(widget.controller.text);
+    if (next != _longestLine) setState(() => _longestLine = next);
+  }
+
+  static String _longestLineOf(String text) {
+    var longest = '';
+    for (final line in text.split('\n')) {
+      if (line.length > longest.length) longest = line;
+    }
+    return longest;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return VimTextScope(
+      enabled: VimEnabledScope.of(context) &&
+          vimSuitsField(readOnly: widget.readOnly),
+      controller: widget.controller,
+      multiline: true,
+      accentColor: Theme.of(context).colorScheme.primary,
+      builder: _buildEditor,
+    );
+  }
+
+  Widget _buildEditor(BuildContext context, VimFieldBinding vim) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final selectionColor = resolveSelectionColor(context);
+    final strutStyle = StrutStyle.fromTextStyle(
+      widget.textStyle,
+      forceStrutHeight: true,
+    );
+    // InputDecorator still applies visual density to a collapsed field, so
+    // the overlay has to take the same inset the other text overlays do —
+    // otherwise the highlight sits a few pixels below the glyphs.
+    final overlayPadding = withCaretMargin(
+      withDensityShift(
+        _codeContentPadding,
+        theme.visualDensity,
+      ),
+      cursorWidth: vim.overlayCaretWidth,
+    );
+
+    // [VimTextOverlay] draws the Visual selection; [SelectionHighlightLayer]
+    // the ordinary one. One layer, not two.
+    final ownSelection = !vim.overlayPaintsSelection;
+
+    final editor = FocusableActionDetector(
+      // Read-only views still need the detector so Tab doesn't get a dead
+      // binding from a parent that expects an editable code box.
+      enabled: !widget.readOnly,
+      shortcuts: _codeEditorShortcuts,
+      actions: <Type, Action<Intent>>{
+        _CodeTabIntent: CallbackAction<_CodeTabIntent>(
+          onInvoke: (_) {
+            widget.controller.onTabKeyAction();
+            return null;
+          },
+        ),
+        _CodeOutdentIntent: CallbackAction<_CodeOutdentIntent>(
+          onInvoke: (_) {
+            widget.controller.outdentSelection();
+            return null;
+          },
+        ),
+      },
+      child: TextSelectionTheme(
+        data: const TextSelectionThemeData(selectionColor: Colors.transparent),
+        child: Stack(
+          children: [
+            if (ownSelection)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Padding(
+                    padding: overlayPadding,
+                    child: SelectionHighlightLayer(
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      style: widget.textStyle,
+                      strutStyle: strutStyle,
+                      color: selectionColor,
+                    ),
+                  ),
+                ),
+              ),
+            TextField(
+              controller: widget.controller,
+              focusNode: _focusNode,
+              readOnly: widget.readOnly,
+              style: widget.textStyle,
+              strutStyle: strutStyle,
+              // Held back for [VimTextOverlay] below — see [overlayCaretColor].
+              cursorColor: vim.overlayCaretColor(widget.cursorColor),
+              cursorWidth: vim.overlayCaretWidth,
+              undoController: vim.undoController,
+              maxLines: null,
+              autocorrect: false,
+              enableSuggestions: false,
+              scrollPadding: kVoyagerFieldScrollPadding,
+              decoration: _codeDecoration,
+            ),
+            if (vim.session != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Padding(
+                    padding: overlayPadding,
+                    child: VimTextOverlay(
+                      session: vim.session!,
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      style: widget.textStyle,
+                      strutStyle: strutStyle,
+                      accentColor: accent,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return VoyagerScrollView(
+          scrollDirection: Axis.horizontal,
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: 0,
+                    minWidth: constraints.maxWidth,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Text(_longestLine, style: widget.textStyle),
+                  ),
+                ),
+                editor,
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

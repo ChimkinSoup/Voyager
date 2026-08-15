@@ -10,6 +10,7 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
+import 'package:voyager/domain/models/workout_models.dart';
 
 import 'package:voyager/domain/models/sync_conflict.dart';
 
@@ -94,7 +95,15 @@ abstract class TodoRepository {
 
 abstract class CalendarRepository {
   Future<List<Calendar>> listCalendars({bool includeDeleted = false});
-  Future<void> upsertCalendar(Calendar calendar);
+  Future<Calendar?> getCalendar(String id);
+
+  /// [recordLocalActivity] is false when the write is applying a document
+  /// pulled from Firestore. It suppresses the upload the write would otherwise
+  /// trigger, so a download can't bounce straight back up.
+  Future<void> upsertCalendar(
+    Calendar calendar, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteCalendar(String id);
   Future<void> softDeleteEventsInCalendar(String calendarId);
   Future<void> reassignEventsCalendar(String fromCalendarId, String toCalendarId);
@@ -105,7 +114,11 @@ abstract class CalendarRepository {
     DateTime? to,
     bool includeDeleted = false,
   });
-  Future<void> upsertEvent(CalendarEvent event);
+  Future<CalendarEvent?> getEvent(String id);
+  Future<void> upsertEvent(
+    CalendarEvent event, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteEvent(String id);
   Future<void> deleteAllEvents();
   Future<void> replaceGoogleEvents(List<CalendarEvent> events);
@@ -114,77 +127,122 @@ abstract class CalendarRepository {
 
 abstract class TrackerRepository {
   Future<List<StatisticTracker>> listTrackers({bool includeDeleted = false});
-  Future<void> upsertTracker(StatisticTracker tracker);
+  Future<StatisticTracker?> getTracker(String id);
+  Future<void> upsertTracker(
+    StatisticTracker tracker, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteTracker(String id);
 
-  Future<List<TrackerValue>> listValues(String trackerId);
-  Future<void> upsertValue(TrackerValue value);
+  Future<List<TrackerValue>> listValues(
+    String trackerId, {
+    bool includeDeleted = false,
+  });
+  Future<TrackerValue?> getValue(String id);
+  Future<void> upsertValue(TrackerValue value, {bool recordLocalActivity = true});
   Future<void> softDeleteValue(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
 }
 
-/// Local-only storage for the notification popover's pinned reminders and
-/// dismissed-feed-item tracking. Unlike the other repositories this has no
-/// sync/conflict story — nothing here leaves the device.
+/// The notification popover's pinned reminders and dismissed-feed-item
+/// tracking. Both sync; unpinning and un-dismissing are soft deletes, because
+/// a pull only ever sees the documents that still exist.
 abstract class NotificationRepository {
-  Future<List<PinnedNote>> listPinnedNotes();
-  Future<void> upsertPinnedNote(PinnedNote note);
+  Future<List<PinnedNote>> listPinnedNotes({bool includeDeleted = false});
+  Future<PinnedNote?> getPinnedNote(String id);
+  Future<void> upsertPinnedNote(
+    PinnedNote note, {
+    bool recordLocalActivity = true,
+  });
   Future<void> deletePinnedNote(String id);
 
   /// Dismissal keys currently recorded (see [NotificationFeedItem.dismissalKey]).
   Future<Set<String>> listDismissals();
+
+  /// Every dismissal row including tombstoned ones — what the sync layer
+  /// uploads, as distinct from [listDismissals]' "what is dismissed right now".
+  Future<List<DismissedNotification>> listDismissalRecords();
+  Future<DismissedNotification?> getDismissal(String dismissalKey);
   Future<void> dismiss(String dismissalKey);
   Future<void> undismiss(String dismissalKey);
+  Future<void> upsertDismissal(
+    DismissedNotification dismissal, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<void> purgeExpiredDeleted(DateTime now);
 }
 
-/// Local-only storage for the Life Tracker page's bucket list. Like
-/// [NotificationRepository] this has no sync/conflict story.
+/// The Life Tracker page's bucket list.
 abstract class BucketListRepository {
-  Future<List<BucketListItem>> listItems();
-  Future<void> upsertItem(BucketListItem item);
+  Future<List<BucketListItem>> listItems({bool includeDeleted = false});
+  Future<BucketListItem?> getItem(String id);
+  Future<void> upsertItem(
+    BucketListItem item, {
+    bool recordLocalActivity = true,
+  });
   Future<void> deleteItem(String id);
+  Future<void> purgeExpiredDeleted(DateTime now);
 }
 
 abstract class FinanceRepository {
   Future<List<FinancialTransaction>> listTransactions({
     bool includeDeleted = false,
   });
-  Future<void> upsertTransaction(FinancialTransaction transaction);
+  Future<void> upsertTransaction(
+    FinancialTransaction transaction, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteTransaction(String id);
 
   Future<List<Subscription>> listSubscriptions({bool includeDeleted = false});
-  Future<void> upsertSubscription(Subscription subscription);
+  Future<void> upsertSubscription(
+    Subscription subscription, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteSubscription(String id);
 
   Future<List<Budget>> listBudgets({bool includeDeleted = false});
-  Future<void> upsertBudget(Budget budget);
+  Future<void> upsertBudget(Budget budget, {bool recordLocalActivity = true});
   Future<void> softDeleteBudget(String id);
 
   Future<List<FinanceCategory>> listCategories({bool includeDeleted = false});
-  Future<void> upsertCategory(FinanceCategory category);
+  Future<void> upsertCategory(
+    FinanceCategory category, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteCategory(String id);
 
   Future<List<Asset>> listAssets({bool includeDeleted = false});
-  Future<void> upsertAsset(Asset asset);
+  Future<void> upsertAsset(Asset asset, {bool recordLocalActivity = true});
   Future<void> softDeleteAsset(String id);
 
   Future<List<AssetValuation>> listAssetValuations({
     String? assetId,
     bool includeDeleted = false,
   });
-  Future<void> upsertAssetValuation(AssetValuation valuation);
+  Future<void> upsertAssetValuation(
+    AssetValuation valuation, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteAssetValuation(String id);
 
   Future<List<SavingsGoal>> listSavingsGoals({bool includeDeleted = false});
-  Future<void> upsertSavingsGoal(SavingsGoal goal);
+  Future<void> upsertSavingsGoal(
+    SavingsGoal goal, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteSavingsGoal(String id);
 
   Future<List<GoalAllocation>> listGoalAllocations({
     String? goalId,
     bool includeDeleted = false,
   });
-  Future<void> upsertGoalAllocation(GoalAllocation allocation);
+  Future<void> upsertGoalAllocation(
+    GoalAllocation allocation, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteGoalAllocation(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
@@ -235,16 +293,135 @@ abstract class StudyRepository {
   Future<List<StudyFolder>> getAllFolders({bool includeDeleted = true});
   Future<List<StudyDeck>> getAllDecks({bool includeDeleted = true});
   Future<List<StudyCard>> getAllCards({bool includeDeleted = true});
+
+  /// The whole review history. Append-only and never tombstoned, so unlike the
+  /// other `getAll` methods there is nothing to include or exclude.
+  Future<List<StudyReviewLog>> getAllReviewLogs();
+}
+
+/// Exercises, the two plans and their day entries, plus performed sessions and
+/// their set logs. Sessions are append-only history: nothing here rewrites a
+/// past workout when the plan it came from is later edited.
+abstract class WorkoutRepository {
+  /// Creates the weekly and cycle plans if they're missing, and seeds the
+  /// starter exercise library the very first time (gated on the table being
+  /// completely empty, deleted rows included, so clearing the library out
+  /// doesn't resurrect it on next launch). Idempotent.
+  Future<void> ensureSeeded();
+
+  Future<List<Exercise>> listExercises({bool includeDeleted = false});
+  Future<Exercise?> getExercise(String id);
+  Future<void> upsertExercise(
+    Exercise exercise, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteExercise(String id);
+
+  Future<List<WorkoutPlan>> listPlans({bool includeDeleted = false});
+  Future<WorkoutPlan?> getPlan(String id);
+  Future<void> upsertPlan(WorkoutPlan plan, {bool recordLocalActivity = true});
+
+  /// Marks [planId] active and clears the flag on every other plan, so
+  /// "which plan decides today's workout" can never be ambiguous.
+  Future<void> setActivePlan(String planId);
+
+  Future<List<WorkoutPlanEntry>> listPlanEntries(
+    String planId, {
+    bool includeDeleted = false,
+  });
+  Future<WorkoutPlanEntry?> getPlanEntry(String id);
+  Future<void> upsertPlanEntry(
+    WorkoutPlanEntry entry, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeletePlanEntry(String id);
+
+  Future<List<WorkoutSession>> listSessions({bool includeDeleted = false});
+  Future<WorkoutSession?> getSession(String id);
+
+  /// The single in-progress session, if one exists. More than one would mean a
+  /// sync raced two devices; the most recently started wins.
+  Future<WorkoutSession?> getActiveSession();
+  Future<void> upsertSession(
+    WorkoutSession session, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteSession(String id);
+
+  Future<List<WorkoutSetLog>> listSetLogs({
+    String? sessionId,
+    String? exerciseId,
+    bool includeDeleted = false,
+  });
+  Future<WorkoutSetLog?> getSetLog(String id);
+  Future<void> upsertSetLog(
+    WorkoutSetLog log, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> upsertSetLogsBatch(
+    List<WorkoutSetLog> logs, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteSetLog(String id);
+
+  Future<void> purgeExpiredDeleted(DateTime now);
+  Future<List<Exercise>> getAllExercises({bool includeDeleted = true});
+  Future<List<WorkoutPlan>> getAllPlans({bool includeDeleted = true});
+  Future<List<WorkoutPlanEntry>> getAllPlanEntries({
+    bool includeDeleted = true,
+  });
+  Future<List<WorkoutSession>> getAllSessions({bool includeDeleted = true});
+  Future<List<WorkoutSetLog>> getAllSetLogs({bool includeDeleted = true});
 }
 
 abstract class SettingsRepository {
   Future<AppSettings> getSettings();
-  Future<void> saveSettings(AppSettings settings);
+
+  /// [recordLocalActivity] is false when applying settings pulled from
+  /// Firestore, which both suppresses the re-upload and leaves
+  /// [AppSettings.updatedAt] at the remote value that won.
+  Future<void> saveSettings(
+    AppSettings settings, {
+    bool recordLocalActivity = true,
+  });
+
   Future<Map<String, int>> getTagColors();
+
+  /// Tag colors with their sync metadata, as distinct from [getTagColors]'
+  /// plain tag-to-color map.
+  Future<List<TagColorRecord>> getTagColorRecords();
+  Future<TagColorRecord?> getTagColorRecord(String tag);
   Future<void> setTagColor(String tag, int colorValue);
+  Future<void> upsertTagColor(
+    TagColorRecord tagColor, {
+    bool recordLocalActivity = true,
+  });
+
+  /// The dictionary as the spell checker sees it — tombstoned words excluded.
   Future<Set<String>> getCustomWords();
+
+  /// Every custom-word row including tombstoned ones, for the sync layer.
+  Future<List<CustomWord>> getCustomWordRecords();
+  Future<CustomWord?> getCustomWordRecord(String word);
   Future<void> addCustomWord(String word);
   Future<void> removeCustomWord(String word);
+  Future<void> upsertCustomWord(
+    CustomWord word, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<void> purgeExpiredDeleted(DateTime now);
+
+  /// User-written quotes, newest first. Tombstoned rows are included only when
+  /// [includeDeleted] is set — the sync layer needs them, the quote pool
+  /// doesn't.
+  Future<List<CustomQuote>> getCustomQuotes({bool includeDeleted = false});
+  Future<CustomQuote?> getCustomQuote(String id);
+  Future<void> upsertCustomQuote(
+    CustomQuote quote, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteCustomQuote(String id);
 }
 
 abstract class AuthRepository {
@@ -273,12 +450,19 @@ abstract class SyncRepository {
   );
   Stream<Map<String, dynamic>> watchDocument(String collection, String id);
 
-  /// Emits the set of document ids that changed (added or modified) in
-  /// [collection] each time Firestore's snapshot listener fires. This
-  /// includes echoes of this device's own writes — callers that already
+  /// Emits the documents that changed (added or modified) in [collection],
+  /// keyed by id, each time the backend's snapshot listener fires.
+  ///
+  /// The payloads come with the notification because the backend has already
+  /// sent them — and already charged for them. Emitting bare ids and letting
+  /// the caller `getDocument` each one turns a single snapshot carrying forty
+  /// documents into forty more billed reads, serialised, for data that was
+  /// sitting in the snapshot all along.
+  ///
+  /// This includes echoes of this device's own writes — callers that already
   /// know they just wrote a given id should treat that as a no-op rather
-  /// than re-fetching and re-merging it.
-  Stream<Set<String>> watchCollection(String collection);
+  /// than re-merging it.
+  Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection);
   Future<Map<String, dynamic>?> getDocument(String collection, String id);
   Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
     String collection,
@@ -303,6 +487,16 @@ abstract class SyncRepository {
   /// writes was enough to starve the UI isolate and stall other Timer-driven
   /// work, like the background animation.
   Future<void> appendOperationsBatch(List<SyncOperation> operations);
+
+  /// Appends every entry in [operations] as one all-or-nothing unit.
+  ///
+  /// Used for a single logical write whose character operations had to be
+  /// split across several documents to fit the per-document size limit. Unlike
+  /// [appendOperationsBatch], which is a throughput optimisation over
+  /// independent writes, the entries here are meaningless apart: a reader that
+  /// saw some but not all of them would reconstruct text missing whatever the
+  /// absent ones carried. Implementations must commit them atomically.
+  Future<void> appendOperationGroup(List<SyncOperation> operations);
   Future<List<SyncOperation>> listOperations(String documentId);
 
   /// Batched counterpart to [upsertDocument] — see [appendOperationsBatch].
@@ -312,4 +506,20 @@ abstract class SyncRepository {
   );
   Future<void> deleteDocument(String collection, String id);
   Future<int> deleteOperationsForDocument(String documentId);
+
+  /// Deletes only the named operations of [documentId], leaving the rest of
+  /// its log intact. Used by compaction to retire the operations a freshly
+  /// written baseline supersedes.
+  Future<int> deleteOperations(String documentId, List<String> operationIds);
+
+  /// Round-trips to the backend to prove it is reachable, throwing if it is
+  /// not.
+  ///
+  /// The only way to learn this from Firestore: writes are queued silently
+  /// while offline and reads are answered from the local cache, so nothing in
+  /// the normal sync path ever fails just because the network is gone.
+  /// Implementations must therefore force a real server round-trip and treat a
+  /// cache-answered result as a failure. Backends with no network behind them
+  /// are always reachable and should return normally.
+  Future<void> ping();
 }

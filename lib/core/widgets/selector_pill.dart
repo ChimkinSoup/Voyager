@@ -66,6 +66,10 @@ class SelectorPill extends StatelessWidget {
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            // A no-op for a pill sized to its own label, which is most of
+            // them; it's what centres the label when a caller pins the pill to
+            // a fixed width to line a row of them up.
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
                 Icon(icon, size: dense ? 14 : 16, color: foregroundColor),

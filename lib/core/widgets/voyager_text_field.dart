@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/tags/tag_suggestions.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/text/newline_normalization.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
+import 'package:voyager/core/widgets/field_hint_style.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
+import 'package:voyager/core/widgets/tag_suggestion_overlay.dart';
 
 /// Text field with accent-colored caret, an animated focus border, and a
 /// Material-style floating/notched label — all drawn by [NotchedFieldBorder].
@@ -29,7 +39,20 @@ class VoyagerTextField extends StatefulWidget {
     this.inputFormatters,
     this.cursorColor,
     this.borderRadius,
-  });
+    this.tagScope,
+    this.onKeyEvent,
+    this.modeBadgeOutside = false,
+  }) : assert(
+         tagScope == null || controller != null,
+         'Tag completion reads and rewrites the field text, so it needs a '
+         'controller to work with.',
+       ),
+       assert(
+         onKeyEvent == null || tagScope != null,
+         'onKeyEvent is only installed by the completion popup, which is '
+         'only built when tagScope is set. Without a scope, keep assigning '
+         'focusNode.onKeyEvent directly.',
+       );
 
   final TextEditingController? controller;
   final FocusNode? focusNode;
@@ -52,6 +75,20 @@ class VoyagerTextField extends StatefulWidget {
   final Color? cursorColor;
   final double? borderRadius;
 
+  /// Which page's tag pool to complete `#` against. Null (the default) leaves
+  /// the field with no completion popup.
+  final TagScope? tagScope;
+
+  /// Key handler for the field's focus node. Must be passed here rather than
+  /// assigned onto [focusNode] directly whenever [tagScope] is set — the
+  /// completion popup owns that slot so it can claim the arrow keys before
+  /// they reach the caret.
+  final FocusOnKeyEventCallback? onKeyEvent;
+
+  /// See [VimTextScope.modeBadgeOutside]. Default false: keep the capsule
+  /// inside the field.
+  final bool modeBadgeOutside;
+
   @override
   State<VoyagerTextField> createState() => _VoyagerTextFieldState();
 }
@@ -67,10 +104,10 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
   bool _hasText = false;
 
   bool get _spellcheckOn => isMultilineField(
-        expands: widget.expands,
-        maxLines: widget.maxLines,
-        minLines: widget.minLines,
-      );
+    expands: widget.expands,
+    maxLines: widget.maxLines,
+    minLines: widget.minLines,
+  );
 
   @override
   void initState() {
@@ -122,19 +159,37 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
 
   @override
   Widget build(BuildContext context) {
+    return VimTextScope(
+      enabled:
+          VimEnabledScope.of(context) &&
+          vimSuitsField(
+            obscureText: widget.obscureText,
+            keyboardType: widget.keyboardType,
+            inputFormatters: widget.inputFormatters,
+          ),
+      controller: widget.controller,
+      multiline: _spellcheckOn,
+      accentColor: widget.accentColor,
+      modeBadgeOutside: widget.modeBadgeOutside,
+      builder: _buildField,
+    );
+  }
+
+  Widget _buildField(BuildContext context, VimFieldBinding vim) {
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
     final decoration = widget.decoration ?? const InputDecoration();
-    final contentPadding = decoration.contentPadding ??
+    final contentPadding =
+        decoration.contentPadding ??
         const EdgeInsets.symmetric(horizontal: 16, vertical: 18);
 
-    final double radius = widget.borderRadius ??
+    final double radius =
+        widget.borderRadius ??
         (decoration.border is OutlineInputBorder
-            ? (decoration.border as OutlineInputBorder)
-                .borderRadius
-                .resolve(Directionality.maybeOf(context) ?? TextDirection.ltr)
-                .topLeft
-                .x
+            ? (decoration.border as OutlineInputBorder).borderRadius
+                  .resolve(Directionality.maybeOf(context) ?? TextDirection.ltr)
+                  .topLeft
+                  .x
             : 18.0);
 
     final hasLabel = (decoration.labelText ?? '').isNotEmpty;
@@ -145,7 +200,25 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     // isOutline branch). The visible label is painted entirely by
     // NotchedFieldBorder below, so the real TextField's border is given an
     // invisible outline shape purely to take that zero-gap code path.
+    final spellcheckOn = isMultilineField(
+      expands: widget.expands,
+      maxLines: widget.maxLines,
+      minLines: widget.minLines,
+    );
+
+    var textStyle =
+        widget.style ??
+        theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurface);
+    if (spellcheckOn && textStyle != null) {
+      textStyle = withSquiggleRoom(textStyle);
+    }
+
     final innerDecoration = decoration.copyWith(
+      hintText: decoration.hintText,
+      // Matched to the field's own text metrics \u2014 see [fieldHintStyle] for the
+      // shrink-on-first-keystroke this avoids. A caller's explicit hintStyle
+      // still wins.
+      hintStyle: decoration.hintStyle ?? fieldHintStyle(context, textStyle),
       labelText: hasLabel ? '\u200b' : null,
       floatingLabelBehavior: FloatingLabelBehavior.never,
       filled: false,
@@ -176,76 +249,162 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       contentPadding: contentPadding,
     );
 
-    final spellcheckOn = isMultilineField(
-      expands: widget.expands,
-      maxLines: widget.maxLines,
-      minLines: widget.minLines,
-    );
-
-    final textStyle = widget.style ??
-        theme.textTheme.bodyLarge?.copyWith(
-          color: theme.colorScheme.onSurface,
-        );
-
-    final textField = TextField(
-      key: _fieldKey,
-      contextMenuBuilder: spellcheckOn
-          ? voyagerSpellCheckContextMenuBuilder
-          : (context, editableTextState) => const SizedBox.shrink(),
-      spellCheckConfiguration: spellcheckOn
-          ? buildVoyagerSpellCheckConfiguration(context)
-          : const SpellCheckConfiguration.disabled(),
-      controller: widget.controller,
-      focusNode: _focusNode,
-      scrollController: _scrollController,
-      decoration: innerDecoration,
-      style: textStyle,
-      cursorColor: widget.cursorColor ?? accent,
-      autofocus: widget.autofocus,
-      onChanged: widget.onChanged,
-      onSubmitted: widget.onSubmitted,
-      keyboardType: widget.keyboardType,
-      textInputAction: widget.textInputAction,
-      obscureText: widget.obscureText,
-      enabled: widget.enabled,
-      maxLines: widget.expands ? null : widget.maxLines,
-      minLines: widget.expands ? null : widget.minLines,
-      expands: widget.expands,
-      maxLength: widget.maxLength,
-      buildCounter: widget.buildCounter,
-      inputFormatters: widget.inputFormatters,
-      textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
-          ? TextAlignVertical.top
-          : TextAlignVertical.center,
+    final textField = ListEditingUndoGuard(
+      child: TextField(
+        key: _fieldKey,
+        contextMenuBuilder: spellcheckOn
+            ? voyagerSpellCheckContextMenuBuilder
+            : (context, editableTextState) => const SizedBox.shrink(),
+        spellCheckConfiguration: spellcheckOn
+            ? buildVoyagerSpellCheckConfiguration(context)
+            : const SpellCheckConfiguration.disabled(),
+        controller: widget.controller,
+        focusNode: _focusNode,
+        scrollController: _scrollController,
+        decoration: innerDecoration,
+        style: textStyle,
+        // Held back for [VimTextOverlay] below — see [overlayCaretColor].
+        cursorColor: vim.overlayCaretColor(widget.cursorColor ?? accent),
+        cursorWidth: vim.overlayCaretWidth,
+        undoController: vim.undoController,
+        autofocus: widget.autofocus,
+        onChanged: widget.onChanged,
+        onSubmitted: widget.onSubmitted,
+        keyboardType: widget.keyboardType,
+        textInputAction: widget.textInputAction,
+        obscureText: widget.obscureText,
+        enabled: widget.enabled,
+        maxLines: widget.expands ? null : widget.maxLines,
+        minLines: widget.expands ? null : widget.minLines,
+        expands: widget.expands,
+        maxLength: widget.maxLength,
+        buildCounter: widget.buildCounter,
+        // Prepended, not passed on: `\r` has to be gone before a caller's own
+        // formatter (or anything downstream) starts counting offsets. Note
+        // this is deliberately not folded into `vimSuitsField` above — that
+        // predicate asks whether the *caller* constrains the input, and a
+        // line-ending fixup is not that kind of constraint.
+        inputFormatters: [
+          const NormalizeNewlinesFormatter(),
+          ...?widget.inputFormatters,
+        ],
+        textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
+            ? TextAlignVertical.top
+            : TextAlignVertical.center,
+        scrollPadding: kVoyagerFieldScrollPadding,
+      ),
     );
 
     Widget field = spellcheckOn
         ? wrapWithSecondaryTapWordSelect(fieldKey: _fieldKey, child: textField)
         : textField;
 
-    if (spellcheckOn && widget.controller != null) {
+    // The inner decoration pins gapPadding to 0 and is unfilled, so there is
+    // no input gap to mirror — but the decorator's density shift and the
+    // caret strip the text wraps inside of both still apply.
+    final overlayPadding = withCaretMargin(
+      withDensityShift(
+        contentPadding.resolve(Directionality.of(context)),
+        theme.visualDensity,
+      ),
+      cursorWidth: vim.overlayCaretWidth,
+    );
+    final vimSession = vim.session;
+    final controller = widget.controller;
+
+    // Same predicate as [spellcheckOn]: only a wrapped paragraph can show the
+    // ragged block and the seam that [SelectionHighlightLayer] exists to fix,
+    // so single-line fields keep Flutter's own highlight. In Visual mode
+    // [VimTextOverlay] is already drawing the selection — one layer, not two.
+    final ownSelection =
+        controller != null && spellcheckOn && !vim.overlayPaintsSelection;
+    // Resolved here, above the TextSelectionTheme that blanks the field's own
+    // highlight, or it would come back transparent.
+    final selectionColor = resolveSelectionColor(context);
+
+    if (controller != null && (spellcheckOn || vimSession != null)) {
       field = Stack(
         fit: StackFit.passthrough,
         children: [
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Padding(
-                padding: contentPadding,
-                child: SpellCheckSquiggleLayer(
-                  controller: widget.controller!,
-                  focusNode: _focusNode,
-                  style: textStyle ?? const TextStyle(),
-                  scrollController: _scrollController,
+          if (spellcheckOn)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: SpellCheckSquiggleLayer(
+                    controller: controller,
+                    focusNode: _focusNode,
+                    style: textStyle ?? const TextStyle(),
+                    scrollController: _scrollController,
+                    suppressActiveWord: vim.suppressSpellcheckActiveWord,
+                  ),
                 ),
               ),
             ),
-          ),
+          // Directly beneath the field, where EditableText was drawing this —
+          // the fill is translucent and would wash out the glyphs from above.
+          if (ownSelection)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: SelectionHighlightLayer(
+                    controller: controller,
+                    focusNode: _focusNode,
+                    style: textStyle ?? const TextStyle(),
+                    // This field hands its TextField no strut, so the paragraph
+                    // it measures against is the one EditableText falls back to
+                    // (editable_text.dart, `strutStyle` getter) rather than the
+                    // unstrutted default a bare TextPainter would use.
+                    strutStyle: StrutStyle.fromTextStyle(
+                      textStyle ?? const TextStyle(),
+                      forceStrutHeight: true,
+                    ),
+                    color: selectionColor,
+                    scrollController: _scrollController,
+                  ),
+                ),
+              ),
+            ),
           field,
+          // Above the field, not behind it — see [VimTextOverlay].
+          if (vimSession != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: VimTextOverlay(
+                    session: vimSession,
+                    controller: controller,
+                    focusNode: _focusNode,
+                    style: textStyle ?? const TextStyle(),
+                    accentColor: accent,
+                    scrollController: _scrollController,
+                    // The hint stays up in Normal mode, so the block caret on
+                    // an empty field sits on its first letter — see
+                    // [VimTextOverlay.hintText].
+                    hintText: decoration.hintText,
+                  ),
+                ),
+              ),
+            ),
         ],
       );
     }
 
-    return NotchedFieldBorder(
+    if (vimSession != null || ownSelection) {
+      // Always wrap while Vim is on, not only in Visual: mounting this
+      // inherited widget on `V` and unmounting it on Esc rebuilt the field
+      // and killed typing on the following `i`. Multiline already kept it
+      // mounted via [ownSelection].
+      field = vimSelectionTheme(
+        context: context,
+        hideNativeSelection: vim.overlayPaintsSelection || ownSelection,
+        child: field,
+      );
+    }
+
+    final bordered = NotchedFieldBorder(
       focusNode: _focusNode,
       accentColor: accent,
       label: decoration.labelText,
@@ -255,6 +414,22 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       contentPadding: contentPadding,
       alignLabelToTop: widget.expands || (widget.maxLines ?? 1) > 1,
       child: field,
+    );
+
+    final tagScope = widget.tagScope;
+    if (tagScope == null) return bordered;
+
+    return TagSuggestionPortal(
+      scope: tagScope,
+      controller: widget.controller!,
+      focusNode: _focusNode,
+      fieldKey: _fieldKey,
+      accentColor: accent,
+      enabled: vim.completionsAllowed,
+      escapeAlsoBubbles: vim.escapeLeavesInsert,
+      onChanged: widget.onChanged,
+      onKeyEvent: widget.onKeyEvent,
+      child: bordered,
     );
   }
 }

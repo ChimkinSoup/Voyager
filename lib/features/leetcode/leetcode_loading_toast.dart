@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
 
-/// Shows a sleek, non-intrusive loading toast at the top of the screen while
-/// the Track button's public API fetch is in flight. Returns a callback that
-/// dismisses it (fades out, then removes the overlay entry).
-VoidCallback showLeetCodeLoadingToast(BuildContext context, {required String message}) {
+/// Shows a sleek, non-intrusive toast at the top of the screen — while the
+/// Track button's public API fetch is in flight, or to confirm a one-shot
+/// action. Returns a callback that dismisses it (fades out, then removes the
+/// overlay entry).
+///
+/// Leads with a spinner unless [icon] is given, which is what separates
+/// "still working" from "done".
+VoidCallback showLeetCodeToast(
+  BuildContext context, {
+  required String message,
+  IconData? icon,
+}) {
   final overlay = Overlay.of(context, rootOverlay: true);
   final dismissRequested = ValueNotifier<bool>(false);
 
@@ -12,6 +20,7 @@ VoidCallback showLeetCodeLoadingToast(BuildContext context, {required String mes
   entry = OverlayEntry(
     builder: (context) => _LeetCodeToast(
       message: message,
+      icon: icon,
       dismissRequested: dismissRequested,
       onDismissed: () => entry.remove(),
     ),
@@ -30,11 +39,13 @@ VoidCallback showLeetCodeLoadingToast(BuildContext context, {required String mes
 class _LeetCodeToast extends StatefulWidget {
   const _LeetCodeToast({
     required this.message,
+    required this.icon,
     required this.dismissRequested,
     required this.onDismissed,
   });
 
   final String message;
+  final IconData? icon;
   final ValueNotifier<bool> dismissRequested;
   final VoidCallback onDismissed;
 
@@ -100,10 +111,16 @@ class _LeetCodeToastState extends State<_LeetCodeToast>
                       SizedBox(
                         width: 14,
                         height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: theme.colorScheme.primary,
-                        ),
+                        child: widget.icon == null
+                            ? CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.primary,
+                              )
+                            : Icon(
+                                widget.icon,
+                                size: 14,
+                                color: theme.colorScheme.primary,
+                              ),
                       ),
                       const SizedBox(width: 10),
                       Text(widget.message, style: theme.textTheme.labelLarge),

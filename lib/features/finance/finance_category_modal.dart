@@ -9,6 +9,7 @@ import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Opens the add / edit category modal — a named, colored grouping of tags.
 Future<void> showCategoryModal(
@@ -110,7 +111,7 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
-      child: SingleChildScrollView(
+      child: VoyagerScrollView(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(

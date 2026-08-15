@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class DateSelectorPopover extends StatefulWidget {
   final DateTime initialStartDate;
@@ -249,7 +250,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
         children: [
           const SizedBox(height: 8),
           // Zone A: Quick Actions
-          SingleChildScrollView(
+          VoyagerScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(

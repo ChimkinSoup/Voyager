@@ -1,3 +1,6 @@
+@Tags(['manual'])
+library;
+
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -9,8 +12,10 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 
 /// Hard-deletes out-of-sync journal rows from the local SQLite database.
 ///
-/// Close Voyager before running so voyager.sqlite is not locked:
-///   flutter test test/tool/purge_out_of_sync_journal_entries_test.dart
+/// Tagged `manual` so a plain `flutter test` skips it — it mutates the real
+/// database, which no routine test run should do. Close Voyager before running
+/// so voyager.sqlite is not locked:
+///   flutter test --run-skipped test/tool/purge_out_of_sync_journal_entries_test.dart
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

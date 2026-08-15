@@ -13,6 +13,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
+import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -20,6 +21,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
+import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -41,6 +43,7 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart'
 import 'package:flutter/services.dart';
 import 'dart:ui' show lerpDouble;
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 // ---------------------------------------------------------------------------
 // Detail view state
@@ -123,6 +126,13 @@ class AnalyticsPage extends ConsumerWidget {
                     d.day == today.day;
               }) ??
               false;
+          final showWorkoutStats = settings?.showWorkoutStatistics ?? false;
+          final workoutDays = showWorkoutStats
+              ? ref.watch(workoutDaysProvider).valueOrNull
+              : null;
+          final workedOutToday =
+              workoutDays?.contains(DateTime(today.year, today.month, today.day)) ??
+              false;
           return KeepAliveScrollView(
             storageKey: ShellPageStorageKeys.analyticsList,
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
@@ -142,6 +152,10 @@ class AnalyticsPage extends ConsumerWidget {
                     ? buildDreamLoggedTracker(colorValue: accent)
                     : null,
                 dreamLoggedToday: dreamLoggedToday,
+                workedOutTracker: showWorkoutStats
+                    ? buildWorkedOutTracker(colorValue: accent)
+                    : null,
+                workedOutToday: workedOutToday,
               ),
               const SizedBox(height: 12),
               // ── Toolbar + tracker grid ────────────────────────────────
@@ -196,6 +210,8 @@ class _MacroStatsRow extends StatelessWidget {
     required this.wordCountTracker,
     this.dreamLoggedTracker,
     this.dreamLoggedToday = false,
+    this.workedOutTracker,
+    this.workedOutToday = false,
   });
 
   final int totalEntries;
@@ -213,6 +229,11 @@ class _MacroStatsRow extends StatelessWidget {
   /// which case the 4th chip isn't rendered at all.
   final StatisticTracker? dreamLoggedTracker;
   final bool dreamLoggedToday;
+
+  /// Null when the workout statistic toggle is off — same contract as
+  /// [dreamLoggedTracker].
+  final StatisticTracker? workedOutTracker;
+  final bool workedOutToday;
 
   @override
   Widget build(BuildContext context) {
@@ -265,6 +286,20 @@ class _MacroStatsRow extends StatelessWidget {
               onTap: () => _showStatisticDetail(
                 context: context,
                 tracker: dreamLoggedTracker!,
+                analytics: analytics,
+              ),
+            ),
+          ],
+          if (workedOutTracker != null) ...[
+            const SizedBox(width: 10),
+            _StatChip(
+              label: 'Workout Today',
+              value: workedOutToday ? 'Yes' : 'No',
+              icon: PhosphorIconsRegular.barbell,
+              accent: accent,
+              onTap: () => _showStatisticDetail(
+                context: context,
+                tracker: workedOutTracker!,
                 analytics: analytics,
               ),
             ),
@@ -673,6 +708,7 @@ class _SparklineStackState extends ConsumerState<_SparklineStack> {
   @override
   Widget build(BuildContext context) {
     return ReorderableListView(
+      primary: false,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       buildDefaultDragHandles: false,
@@ -738,11 +774,15 @@ class _SparklineRow extends ConsumerWidget {
         // the row. On the sparkline itself both gestures belong to the chart
         // and mean "edit this period".
         dragIndex: dragIndex,
+        // Unbordered at rest, like [_HeatmapRow]: the tint alone is enough to
+        // read the tile as a card, and the outline drew a box around the
+        // tracker's name that nothing else in the list has. It comes back on
+        // hover, where it is saying something.
         decoration: (hovered) => BoxDecoration(
           color: color.withValues(alpha: hovered ? 0.12 : 0.06),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: color.withValues(alpha: hovered ? 0.35 : 0.15),
+            color: hovered ? color.withValues(alpha: 0.35) : Colors.transparent,
           ),
         ),
         builder: (context, hovered) => Container(
@@ -767,16 +807,22 @@ class _SparklineRow extends ConsumerWidget {
                       Text(
                         tracker.name,
                         style: theme.textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
+                      // Deliberately quieter than the name above it: the
+                      // cadence is context, not the row's identity, and at
+                      // full strength it competed with the tracker's name.
                       Text(
                         tracker.cadence.name,
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 10,
+                          color: theme.colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                     ],
@@ -844,6 +890,11 @@ class _SparklineRow extends ConsumerWidget {
                       weekStartsMonday: weekStartsMonday,
                     );
                     final anchors = <FlSpot>[];
+                    // Every period boundary the window touches, including the
+                    // one period that opens before it: the window's leading
+                    // days belong to that period, and [sparklinePeriodAnchorX]
+                    // splits hover zones on these boundaries.
+                    final periodStarts = <double>[];
                     for (var i = 0; ; i++) {
                       final periodStart = switch (tracker.cadence) {
                         TrackerCadence.daily => addCalendarDays(
@@ -866,10 +917,13 @@ class _SparklineRow extends ConsumerWidget {
                         ),
                       };
                       final x = calendarDaysBetween(from, periodStart);
+                      periodStarts.add(x.toDouble());
                       if (x < 0) break;
                       anchors.add(FlSpot(x.toDouble(), 0));
                     }
                     final anchorSpots = anchors.reversed.toList();
+                    final ascendingPeriodStarts = periodStarts.reversed
+                        .toList();
                     DateTime periodStartOf(DateTime date) =>
                         promptService.periodStartFor(
                           date,
@@ -902,6 +956,16 @@ class _SparklineRow extends ConsumerWidget {
                     ];
                     final minX = xs.isEmpty ? 0.0 : xs.reduce(math.min);
                     final maxX = xs.isEmpty ? 1.0 : xs.reduce(math.max);
+                    // One reading per period, not one per day — see
+                    // [sparklinePeriodAnchorX].
+                    double snapX(double rawX) => sparklinePeriodAnchorX(
+                      rawX: rawX,
+                      from: from,
+                      values: values,
+                      periodStartOf: periodStartOf,
+                      spots: spots,
+                      periodStarts: ascendingPeriodStarts,
+                    );
                     return _SparklineTouchScope(
                       builder: (context, touch, onTouchChanged, bubbleKeys) {
                         final touchedIndex = touchedSpotIndex(spots, touch?.x);
@@ -947,6 +1011,7 @@ class _SparklineRow extends ConsumerWidget {
                                       event,
                                       response,
                                       onTouchChanged,
+                                      snapX: snapX,
                                     );
                                     _openSparklinePeriodEditor(
                                       event: event,
@@ -959,6 +1024,8 @@ class _SparklineRow extends ConsumerWidget {
                                       bubbleKeys: bubbleKeys,
                                       color: color,
                                       onTouchChanged: onTouchChanged,
+                                      series: spots,
+                                      snapX: snapX,
                                       onSaved: () => ref.invalidate(
                                         trackerValuesProvider(tracker.id),
                                       ),
@@ -1224,9 +1291,6 @@ class _HeatmapGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
-
     // Built-in default trackers (e.g. Journal Entries) are virtual and
     // read-only: they can't be starred or reordered, so they're rendered as
     // pinned rows above the reorderable buckets rather than inside one.
@@ -1270,20 +1334,15 @@ class _HeatmapGrid extends ConsumerWidget {
       sections.add(const _HeatmapGroupDivider());
     }
     if (starred.isNotEmpty) {
+      // No band behind this group: sitting at the top of the list is what
+      // marks it as starred, and the tinted panel it used to sit on shifted
+      // every square's apparent colour against the rest of the heatmap.
       sections.add(
-        Container(
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: accent.withValues(alpha: 0.6)),
-          ),
-          child: _HeatmapBucket(
-            key: const ValueKey('starred'),
-            trackers: starred,
-            analytics: analytics,
-            onToggleStar: toggleStar,
-          ),
+        _HeatmapBucket(
+          key: const ValueKey('starred'),
+          trackers: starred,
+          analytics: analytics,
+          onToggleStar: toggleStar,
         ),
       );
       if (cadenceGroups.isNotEmpty) {
@@ -1383,16 +1442,45 @@ class _HeatmapBucketState extends ConsumerState<_HeatmapBucket> {
     ref.invalidate(trackersProvider);
   }
 
+  Widget _row(int i, {required int? dragIndex}) {
+    // The drag handle is the row's chrome, not the row itself — see
+    // [_StatTile]. Wrapping the whole row in a
+    // [ReorderableDragStartListener] claimed the pointer on *down*,
+    // before the tap that opens the detail popup could ever complete,
+    // and did so over the heatmap squares too — where a press already
+    // means "edit this period".
+    return Padding(
+      key: ValueKey(_items[i].id),
+      padding: const EdgeInsets.only(bottom: 6),
+      child: _HeatmapRow(
+        tracker: _items[i],
+        analytics: widget.analytics,
+        onToggleStar: () => widget.onToggleStar(_items[i]),
+        dragIndex: dragIndex,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Keyed on this bucket's *membership* (not order), so a star toggle —
-    // which moves a tracker into or out of this bucket — tears down and
-    // remounts the list fresh with no residual animation state to carry
-    // over, while a plain in-bucket drag reorder (membership unchanged)
-    // keeps the same key and so keeps Flutter's native drag animation.
-    final membershipKey = (_items.map((t) => t.id).toList()..sort()).join('|');
+    // A solo (or empty) bucket has nothing to reorder. Using a plain [Column]
+    // avoids nesting a [ReorderableListView]/[CustomScrollView] for the
+    // star/unstar path that creates or destroys a period section around a
+    // single tracker — that remount was the teleport-up / slide-down + gap
+    // glitch after a hot restart.
+    if (_items.length <= 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < _items.length; i++) _row(i, dragIndex: null),
+        ],
+      );
+    }
     return ReorderableListView(
-      key: ValueKey(membershipKey),
+      // Nested inside [KeepAliveScrollView]'s ListView — must not claim the
+      // primary scroll controller or the first membership change after a hot
+      // restart can fight the outer scrollable and jerk the section.
+      primary: false,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       buildDefaultDragHandles: false,
@@ -1404,23 +1492,7 @@ class _HeatmapBucketState extends ConsumerState<_HeatmapBucket> {
       proxyDecorator: (child, index, animation) =>
           Material(type: MaterialType.transparency, child: child),
       children: [
-        for (var i = 0; i < _items.length; i++)
-          // The drag handle is the row's chrome, not the row itself — see
-          // [_StatTile]. Wrapping the whole row in a
-          // [ReorderableDragStartListener] claimed the pointer on *down*,
-          // before the tap that opens the detail popup could ever complete,
-          // and did so over the heatmap squares too — where a press already
-          // means "edit this period".
-          Padding(
-            key: ValueKey(_items[i].id),
-            padding: const EdgeInsets.only(bottom: 6),
-            child: _HeatmapRow(
-              tracker: _items[i],
-              analytics: widget.analytics,
-              onToggleStar: () => widget.onToggleStar(_items[i]),
-              dragIndex: i,
-            ),
-          ),
+        for (var i = 0; i < _items.length; i++) _row(i, dragIndex: i),
       ],
     );
   }
@@ -1746,6 +1818,11 @@ void _openSparklinePeriodEditor({
   required Color color,
   required ValueChanged<_SparklineTouch?> onTouchChanged,
   required VoidCallback onSaved,
+  /// The whole drawn series, not just this touch's hits — the reading below is
+  /// taken at the period's anchor spot, which is rarely the one under the
+  /// pointer.
+  required List<FlSpot> series,
+  required double Function(double rawX) snapX,
 }) {
   if (event is! FlTapUpEvent && event is! FlLongPressEnd) return;
   final spots = response?.lineBarSpots;
@@ -1758,8 +1835,14 @@ void _openSparklinePeriodEditor({
   final anchorDateRect = bubbleKeys.dateRect;
   // The data curve's hit, not `spots.first` — see [_sparklineDataBarSpot].
   final dataSpot = _sparklineDataBarSpot(spots);
+  // Snapped to the period's one anchor, exactly as [_recordSparklineTouch]
+  // does, so the editor opens on the same point — and therefore the same
+  // number — the bubble was showing when it was clicked.
+  final anchorX = snapX((dataSpot ?? spots.first).x);
+  final anchorIndex = touchedSpotIndex(series, anchorX);
+  final anchorY = anchorIndex < 0 ? dataSpot?.y : series[anchorIndex].y;
   final resolved = resolveSparklinePeriod(
-    x: (dataSpot ?? spots.first).x,
+    x: anchorX,
     from: from,
     values: values,
     periodStartOf: periodStartOf,
@@ -1772,7 +1855,7 @@ void _openSparklinePeriodEditor({
   final reading = _sparklineValueReading(
     tracker: tracker,
     value: resolved.value,
-    interpolatedY: dataSpot?.y,
+    interpolatedY: anchorY,
     onRecordedDay: resolved.onRecordedDay,
   );
   final valueLabel = reading.label;
@@ -2091,11 +2174,15 @@ class _SparklineTouchScopeState extends State<_SparklineTouchScope> {
 /// bar (barIndex 0) purely so empty regions stay tappable, and its spots sit
 /// at period starts that need not line up with the interpolated curve — so
 /// tracking its x would resolve to nothing on the series.
+/// The hit's x is snapped through [snapX] before it is recorded, so the tooltip,
+/// the touched-spot indicator and the edit popup all resolve to the one point
+/// per period [sparklinePeriodAnchorX] picks — see that function for why.
 void _recordSparklineTouch(
   FlTouchEvent event,
   LineTouchResponse? response,
-  ValueChanged<_SparklineTouch?> onTouchChanged,
-) {
+  ValueChanged<_SparklineTouch?> onTouchChanged, {
+  required double Function(double rawX) snapX,
+}) {
   final hits = response?.lineBarSpots;
   final position = event.localPosition;
   // No pointer position means there's nothing to anchor the bubble to — the
@@ -2109,7 +2196,7 @@ void _recordSparklineTouch(
   }
   for (final hit in hits) {
     if (hit.barIndex == _sparklineDataBarIndex) {
-      onTouchChanged(_SparklineTouch(hit.x, position));
+      onTouchChanged(_SparklineTouch(snapX(hit.x), position));
       return;
     }
   }
@@ -2183,6 +2270,25 @@ Border? _heatmapHotBorder(Color base, double intensity) {
     color: base.withValues(alpha: 0.55 + 0.45 * ramp),
     width: 1.5,
   );
+}
+
+/// The full border rule for a heatmap cell: the hot border once a period is
+/// active enough to earn one, a hairline when it merely holds a record, and
+/// nothing at all when it was never logged.
+///
+/// The bare cell is the point: an empty period and one recorded at the very
+/// bottom of the scale differ by a few percent of alpha, which the hairline
+/// then outlined identically — so both read as "a square with something in
+/// it". Dropping the outline on empty cells is what separates them.
+Border? _heatmapCellBorder(
+  BuildContext context,
+  Color base,
+  double intensity, {
+  required bool hasValue,
+}) {
+  if (!hasValue) return null;
+  return _heatmapHotBorder(base, intensity) ??
+      Border.all(color: VoyagerColors.of(context).hairline, width: 1);
 }
 
 /// The value line of a hover bubble, for heatmap squares and sparklines alike.
@@ -2259,17 +2365,12 @@ String? _hoverValueLabel({
 ///
 /// This used to reuse the calendar's panel tone, which is only 8% opaque —
 /// fine over a calendar's flat grid, but the analytics page paints hover
-/// rectangles and a starred-group band behind the trackers, and those showed
+/// rectangles behind the trackers, and those showed
 /// straight through the bubble and made its text hard to read. Opaque here
 /// instead, so the bubble reads as sitting above the grid rather than tinting
 /// it.
-Color _tooltipBubbleColor(BuildContext context) {
-  final theme = Theme.of(context);
-  final base = theme.inputDecorationTheme.fillColor ??
-      theme.cardTheme.color ??
-      theme.colorScheme.surface;
-  return Color.alphaBlend(base, theme.colorScheme.surface);
-}
+Color _tooltipBubbleColor(BuildContext context) =>
+    chartTooltipBubbleColor(context);
 
 /// The greyed-out shade a tooltip's value line takes when it isn't showing
 /// something the user recorded — the "–" of a never-logged period, and the
@@ -2278,7 +2379,7 @@ Color _tooltipBubbleColor(BuildContext context) {
 /// One function so the two can't drift: they mean the same thing to the
 /// reader ("this isn't your data"), so they have to look the same.
 Color _tooltipMutedValueColor(ThemeData theme) =>
-    theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5);
+    chartTooltipMutedValueColor(theme);
 
 /// The colour a sparkline bubble's value line takes for a given reading: the
 /// tracker's own [color] for a record, and the muted grey for an interpolated
@@ -2338,9 +2439,7 @@ String? _tooltipValueLabel(TrackerType type, TrackerValue? value) {
 /// there's one definition, used for the real hover tooltip's date text,
 /// the placeholder that reserves its layout space, and the lerp's t=0
 /// endpoint alike, so all three are pixel-identical by construction.
-TextStyle _tooltipDateStyle(ThemeData theme) {
-  return _editorDateStyle(theme).copyWith(fontSize: 10);
-}
+TextStyle _tooltipDateStyle(ThemeData theme) => chartTooltipDateStyle(theme);
 
 TextStyle _editorDateStyle(ThemeData theme) {
   return (theme.textTheme.bodySmall ?? const TextStyle()).copyWith(
@@ -2381,64 +2480,17 @@ Widget _tooltipDateValueColumn({
   double dateOpacity = 1,
   Color? valueColor,
 }) {
-  return Material(
-    type: MaterialType.transparency,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Both lines are held to a single line: the bubble sizes itself with
-        // [IntrinsicWidth], so letting them wrap would break a long value
-        // ("12000", or a wordy enum option) across two lines mid-number
-        // instead of widening the bubble to fit it.
-        // Centred, and shrink-wrapped by the [Align] rather than stretched to
-        // the column's width.
-        //
-        // Both matter for short labels — a yearly tracker's "2026", or
-        // anything narrower than the bubble's 64px minimum. Stretched, the
-        // date's box spans the full width and its glyphs sat at the right
-        // edge while the value below them sat centred, so the two lines
-        // visibly disagreed. Longer labels are the widest line in the bubble
-        // and so fill it either way, which is why this only ever showed up on
-        // yearly.
-        //
-        // Shrink-wrapping also keeps [dateKey]'s measured rect on the glyphs
-        // instead of on the full-width box. The morph popover positions its
-        // sliding date layer from that rect's topLeft
-        // ([_MorphPopoverState.build]) and draws the text unaligned, so a
-        // stretched box handed it a start position to the left of where the
-        // glyphs actually were — the same short labels would jump sideways
-        // the instant the editor opened.
-        Opacity(
-          opacity: dateOpacity,
-          child: Align(
-            child: Text(
-              periodLabel,
-              key: dateKey,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: _tooltipDateStyle(theme),
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          valueLabel ?? '–',
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: valueLabel == null
-                ? _tooltipMutedValueColor(theme)
-                : (valueColor ?? theme.colorScheme.onSurface),
-            fontWeight: FontWeight.normal,
-            fontSize: 14,
-          ),
-        ),
-      ],
-    ),
+  // Body lives in core/widgets/chart_hover_bubble.dart, because the finance
+  // charts print the same two lines and drawing them from a second copy is
+  // exactly how the two pages would drift apart. Every note above still
+  // applies — it is written on the shared function too.
+  return chartTooltipDateValueColumn(
+    periodLabel: periodLabel,
+    valueLabel: valueLabel,
+    theme: theme,
+    dateKey: dateKey,
+    dateOpacity: dateOpacity,
+    valueColor: valueColor,
   );
 }
 
@@ -3287,7 +3339,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                 contentPadding: EdgeInsets.only(
                   left: 16,
                   right: 16,
-                  top: 10,
+                  top: 14,
                   bottom: 14,
                 ),
               ),
@@ -3481,11 +3533,12 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(5),
-          border: _heatmapHotBorder(color, intensity) ??
-              Border.all(
-                color: VoyagerColors.of(context).hairline,
-                width: 1,
-              ),
+          border: _heatmapCellBorder(
+            context,
+            color,
+            intensity,
+            hasValue: value != null,
+          ),
         ),
       ),
     );
@@ -4038,7 +4091,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
                 const SizedBox(height: 16),
                 // ── Body ──────────────────────────────────────────────
                 Flexible(
-                  child: SingleChildScrollView(
+                  child: VoyagerScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -4149,6 +4202,10 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
         // resolve to — letting the user click the chart to enter data even
         // when it's otherwise empty ("just axes"), without drawing a baseline.
         final anchors = <FlSpot>[];
+        // Every period boundary the window touches, including the one period
+        // that opens before it: the window's leading days belong to that
+        // period, and [sparklinePeriodAnchorX] splits hover zones on these.
+        final periodStarts = <double>[];
         for (var i = 0; ; i++) {
           final periodStart = switch (tracker.cadence) {
             TrackerCadence.daily => addCalendarDays(todayPeriod, -i),
@@ -4161,10 +4218,12 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
             TrackerCadence.yearly => DateTime(todayPeriod.year - i, 1, 1),
           };
           final x = calendarDaysBetween(from, periodStart);
+          periodStarts.add(x.toDouble());
           if (x < 0) break;
           anchors.add(FlSpot(x.toDouble(), 0));
         }
         final anchorSpots = anchors.reversed.toList();
+        final ascendingPeriodStarts = periodStarts.reversed.toList();
 
         DateTime periodStartOf(DateTime date) => promptService.periodStartFor(
           date,
@@ -4183,6 +4242,17 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
         // bubble maps spots to pixels with these same numbers.
         final leftReserved = axisReservedSize(maxY, 12, 10);
         const bottomReserved = 32.0;
+
+        // One reading per period, not one per day — see
+        // [sparklinePeriodAnchorX].
+        double snapX(double rawX) => sparklinePeriodAnchorX(
+          rawX: rawX,
+          from: from,
+          values: values,
+          periodStartOf: periodStartOf,
+          spots: spots,
+          periodStarts: ascendingPeriodStarts,
+        );
 
         return SizedBox(
           height: 380,
@@ -4225,6 +4295,7 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                             event,
                             response,
                             onTouchChanged,
+                            snapX: snapX,
                           );
                           _openSparklinePeriodEditor(
                             event: event,
@@ -4237,6 +4308,8 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                             bubbleKeys: bubbleKeys,
                             color: color,
                             onTouchChanged: onTouchChanged,
+                            series: spots,
+                            snapX: snapX,
                             onSaved: () => ref.invalidate(
                               trackerValuesProvider(tracker.id),
                             ),
@@ -4969,10 +5042,12 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
-                border: (value == null
-                        ? null
-                        : _heatmapHotBorder(color, intensity)) ??
-                    Border.all(color: VoyagerColors.of(context).hairline),
+                border: _heatmapCellBorder(
+                  context,
+                  color,
+                  intensity,
+                  hasValue: value != null,
+                ),
               ),
             ),
           ),
@@ -5158,10 +5233,12 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(8),
-                border: (value == null
-                        ? null
-                        : _heatmapHotBorder(color, intensity)) ??
-                    Border.all(color: VoyagerColors.of(context).hairline),
+                border: _heatmapCellBorder(
+                  context,
+                  color,
+                  intensity,
+                  hasValue: value != null,
+                ),
               ),
             ),
           ),
@@ -5191,6 +5268,11 @@ const _kTrackerFieldPadding = EdgeInsets.symmetric(
   horizontal: 16,
   vertical: 12,
 );
+
+/// Gap between the dialog's type-dependent option rows ("Show on calendar",
+/// "Default value", "Use limit", "Default checked", "Add option"), which
+/// otherwise sit flush against one another with nothing to group them.
+const _kTrackerOptionGap = 8.0;
 
 class _TrackerDialog extends ConsumerStatefulWidget {
   const _TrackerDialog({this.tracker});
@@ -5299,7 +5381,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
       ),
       content: SizedBox(
         width: 420,
-        child: SingleChildScrollView(
+        child: VoyagerScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -5408,6 +5490,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 onChanged: (value) => setState(() => _showOnCalendar = value),
               ),
               if (_type == TrackerType.integer) ...[
+                const SizedBox(height: _kTrackerOptionGap),
                 if (!_hasCap) ...[
                   VoyagerTextField(
                     controller: _defaultIntController,
@@ -5420,6 +5503,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                       contentPadding: _kTrackerFieldPadding,
                     ),
                   ),
+                  const SizedBox(height: _kTrackerOptionGap),
                 ],
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -5436,6 +5520,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   },
                 ),
                 if (_hasCap) ...[
+                  const SizedBox(height: _kTrackerOptionGap),
                   Row(
                     children: [
                       Expanded(
@@ -5483,7 +5568,8 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   ),
                 ],
               ],
-              if (_type == TrackerType.boolean)
+              if (_type == TrackerType.boolean) ...[
+                const SizedBox(height: _kTrackerOptionGap),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Default checked'),
@@ -5491,13 +5577,17 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   activeColor: accent,
                   onChanged: (value) => setState(() => _defaultBool = value),
                 ),
+              ],
               if (_type == TrackerType.enumType) ...[
+                const SizedBox(height: _kTrackerOptionGap),
                 if (_optionControllers.isNotEmpty) ...[
                   ReorderableListView(
+                    primary: false,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     buildDefaultDragHandles: false,
                     onReorderItem: _reorderOptions,
+                    proxyDecorator: roundedDragProxy,
                     children: [
                       for (var i = 0; i < _optionControllers.length; i++)
                         Padding(

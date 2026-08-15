@@ -188,9 +188,18 @@ class VoyagerTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
     );
-    final textTheme = AppFonts.applyTo(base.textTheme, colorScheme.onSurface);
+    // A raw ThemeData's text themes carry colour but no geometry — every slot's
+    // fontSize is null until the Theme widget merges the typography in. Folding
+    // it in here is what lets AppFonts see the real sizes; tuning the bare theme
+    // sizes every slot as if it were 14px, and since that merge keeps whatever
+    // is already non-null, the wrong leading would then outlive it.
+    final geometry = base.typography.englishLike;
+    final textTheme = AppFonts.applyTo(
+      geometry.merge(base.textTheme),
+      colorScheme.onSurface,
+    );
     final primaryTextTheme = AppFonts.applyTo(
-      base.primaryTextTheme,
+      geometry.merge(base.primaryTextTheme),
       colorScheme.onPrimary,
     );
 

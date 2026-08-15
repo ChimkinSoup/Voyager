@@ -27,6 +27,11 @@ import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// The notification bell's popover content: pinned quick-reminders, the
 /// unified urgency-sorted feed, a hidden/dismissed browser, and an embedded
@@ -41,7 +46,7 @@ class NotificationInboxPopover extends ConsumerWidget {
       type: MaterialType.transparency,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
-        child: SingleChildScrollView(
+        child: VoyagerScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -164,7 +169,12 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
   Future<void> _addNote() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    final note = PinnedNote(id: newId(), text: text, createdAt: utcNow());
+    final note = PinnedNote(
+      id: newId(),
+      text: text,
+      createdAt: utcNow(),
+      updatedAt: utcNow(),
+    );
     await ref.read(notificationRepositoryProvider).upsertPinnedNote(note);
     ref.invalidate(pinnedNotesProvider);
     _controller.clear();
@@ -177,10 +187,10 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
       return;
     }
     if (trimmed == note.text) return;
-    final updated = PinnedNote(
-      id: note.id,
+    final updated = note.copyWith(
       text: trimmed,
-      createdAt: note.createdAt,
+      updatedAt: utcNow(),
+      version: note.version + 1,
     );
     await ref.read(notificationRepositoryProvider).upsertPinnedNote(updated);
     ref.invalidate(pinnedNotesProvider);
@@ -200,75 +210,101 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
       horizontal: 8,
       vertical: 8,
     );
-    final textStyle =
-        theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle();
+    final textStyle = withSquiggleRoom(
+      theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle(),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Stack(
-            children: [
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Padding(
-                    padding: fieldContentPadding,
-                    child: SpellCheckSquiggleLayer(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      style: textStyle,
-                    ),
-                  ),
-                ),
-              ),
-              wrapWithSecondaryTapWordSelect(
-                fieldKey: _fieldKey,
-                child: TextField(
-                  key: _fieldKey,
+          VimTextScope(
+            enabled:
+                VimEnabledScope.of(context) &&
+                vimSuitsField(keyboardType: TextInputType.multiline),
+            controller: _controller,
+            multiline: true,
+            modeBadgeOutside: true,
+            builder: (context, vim) {
+              const hintText = 'Type a quick reminder...';
+              final overlayPadding = vimOverlayPadding(
+                contentPadding: fieldContentPadding,
+                density: theme.visualDensity,
+                cursorWidth: vim.overlayCaretWidth,
+                outlineGap: true,
+                outlineCenter: true,
+              );
+              return VimOverlayHost(
+                session: vim.session,
+                overlayPaintsSelection: vim.overlayPaintsSelection,
+                controller: _controller,
+                focusNode: _focusNode,
+                style: textStyle,
+                accentColor: theme.colorScheme.primary,
+                overlayPadding: overlayPadding,
+                hintText: hintText,
+                underlay: SpellCheckSquiggleLayer(
                   controller: _controller,
                   focusNode: _focusNode,
-                  maxLines: null,
-                  minLines: 1,
-                  contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
-                  spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
-                    context,
-                  ),
-                  keyboardType: TextInputType.multiline,
-                  onSubmitted: (_) => unawaited(_addNote()),
                   style: textStyle,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: fieldContentPadding,
-                    filled: true,
-                    fillColor: theme.colorScheme.onSurface.withValues(
-                      alpha: 0.04,
+                  suppressActiveWord: vim.suppressSpellcheckActiveWord,
+                ),
+                child: wrapWithSecondaryTapWordSelect(
+                  fieldKey: _fieldKey,
+                  child: TextField(
+                    key: _fieldKey,
+                    controller: _controller,
+                    cursorColor: vim.overlayCaretColor(
+                      theme.colorScheme.primary,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                        width: 1.2,
+                    cursorWidth: vim.overlayCaretWidth,
+                    undoController: vim.undoController,
+                    focusNode: _focusNode,
+                    maxLines: null,
+                    minLines: 1,
+                    scrollPadding: kVoyagerFieldScrollPadding,
+                    contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                    spellCheckConfiguration:
+                        buildVoyagerSpellCheckConfiguration(context),
+                    keyboardType: TextInputType.multiline,
+                    onSubmitted: (_) => unawaited(_addNote()),
+                    style: textStyle,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: fieldContentPadding,
+                      filled: true,
+                      fillColor: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.04,
                       ),
-                    ),
-                    hintText: 'Type a quick reminder...',
-                    hintStyle: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: 10,
-                      color: theme.colorScheme.onSurfaceVariant.withValues(
-                        alpha: 0.6,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.6,
+                          ),
+                          width: 1.2,
+                        ),
+                      ),
+                      hintText: hintText,
+                      hintStyle: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              );
+            },
           ),
           for (final note in notes)
             _PinnedNoteRow(
@@ -403,9 +439,10 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
 
   @override
   Widget build(BuildContext context) {
-    final size = Tween<double>(begin: 1, end: 0).animate(
-      CurvedAnimation(parent: _exit, curve: Curves.easeInCubic),
-    );
+    final size = Tween<double>(
+      begin: 1,
+      end: 0,
+    ).animate(CurvedAnimation(parent: _exit, curve: Curves.easeInCubic));
     final theme = Theme.of(context);
 
     Widget content;
@@ -414,69 +451,92 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
         horizontal: 8,
         vertical: 6,
       );
-      final textStyle =
-          theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle();
+      final textStyle = withSquiggleRoom(
+        theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle(),
+      );
       content = Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Padding(
-                  padding: fieldContentPadding,
-                  child: SpellCheckSquiggleLayer(
-                    controller: _editController,
-                    focusNode: _editFocusNode,
-                    style: textStyle,
-                  ),
-                ),
-              ),
-            ),
-            wrapWithSecondaryTapWordSelect(
-              fieldKey: _fieldKey,
-              child: TextField(
-                key: _fieldKey,
+        child: VimTextScope(
+          enabled:
+              VimEnabledScope.of(context) &&
+              vimSuitsField(keyboardType: TextInputType.multiline),
+          controller: _editController,
+          multiline: true,
+          modeBadgeOutside: true,
+          builder: (context, vim) {
+            final overlayPadding = vimOverlayPadding(
+              contentPadding: fieldContentPadding,
+              density: theme.visualDensity,
+              cursorWidth: vim.overlayCaretWidth,
+              outlineGap: true,
+              outlineCenter: true,
+            );
+            return VimOverlayHost(
+              session: vim.session,
+              overlayPaintsSelection: vim.overlayPaintsSelection,
+              controller: _editController,
+              focusNode: _editFocusNode,
+              style: textStyle,
+              accentColor: theme.colorScheme.primary,
+              overlayPadding: overlayPadding,
+              underlay: SpellCheckSquiggleLayer(
                 controller: _editController,
                 focusNode: _editFocusNode,
-                maxLines: null,
-                minLines: 1,
-                contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
-                spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
-                  context,
-                ),
-                keyboardType: TextInputType.multiline,
-                onSubmitted: (_) => unawaited(_submitEdit()),
                 style: textStyle,
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: fieldContentPadding,
-                  filled: true,
-                  fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                      width: 1.2,
-                    ),
+                suppressActiveWord: vim.suppressSpellcheckActiveWord,
+              ),
+              child: wrapWithSecondaryTapWordSelect(
+                fieldKey: _fieldKey,
+                child: TextField(
+                  key: _fieldKey,
+                  controller: _editController,
+                  cursorColor: vim.overlayCaretColor(theme.colorScheme.primary),
+                  cursorWidth: vim.overlayCaretWidth,
+                  undoController: vim.undoController,
+                  focusNode: _editFocusNode,
+                  maxLines: null,
+                  minLines: 1,
+                  scrollPadding: kVoyagerFieldScrollPadding,
+                  contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                  spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
+                    context,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                      width: 1.2,
+                  keyboardType: TextInputType.multiline,
+                  onSubmitted: (_) => unawaited(_submitEdit()),
+                  style: textStyle,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: fieldContentPadding,
+                    filled: true,
+                    fillColor: theme.colorScheme.onSurface.withValues(
+                      alpha: 0.05,
                     ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                      width: 1.2,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                        width: 1.2,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                        width: 1.2,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                        width: 1.2,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            );
+          },
         ),
       );
     } else {
@@ -649,7 +709,18 @@ class _FeedRowState extends ConsumerState<_FeedRow>
     if (!confirmed || !mounted) return;
     await _exit.forward();
     if (!mounted) return;
-    await ref.read(todoRepositoryProvider).softDeleteTask(task.id);
+    final todoRepository = ref.read(todoRepositoryProvider);
+    await todoRepository.softDeleteTask(task.id);
+    // The tombstone has to be pushed explicitly, the way every other
+    // soft-delete site in the app does it. `DriftTodoRepository` is not wired
+    // to `SyncedWriteNotifier` — todo tasks upload through explicit pushes —
+    // so without this the task disappeared here and stayed live in Firestore:
+    // every other device kept showing it, and once the local tombstone aged
+    // out of the retention window the next pull brought it back here too.
+    final tombstone = await todoRepository.getTask(task.id);
+    if (tombstone != null) {
+      unawaited(ref.read(remoteSyncServiceProvider).pushTodoTaskNow(tombstone));
+    }
     ref.invalidate(todoTasksProvider(task.listId));
     ref.invalidate(allTodoTasksProvider);
   }
@@ -730,8 +801,7 @@ class _FeedRowState extends ConsumerState<_FeedRow>
   void _revealEvent() {
     final event = widget.item.event!;
     final router = GoRouter.of(context);
-    ref.read(revealRequestProvider.notifier).state =
-        RevealRequest.event(event);
+    ref.read(revealRequestProvider.notifier).state = RevealRequest.event(event);
     Navigator.of(context).pop();
     router.go('/calendar');
   }
@@ -796,9 +866,10 @@ class _FeedRowState extends ConsumerState<_FeedRow>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final size = Tween<double>(begin: 1, end: 0).animate(
-      CurvedAnimation(parent: _exit, curve: Curves.easeInCubic),
-    );
+    final size = Tween<double>(
+      begin: 1,
+      end: 0,
+    ).animate(CurvedAnimation(parent: _exit, curve: Curves.easeInCubic));
     return SizeTransition(
       sizeFactor: size,
       alignment: AlignmentDirectional.topStart,
@@ -1296,95 +1367,98 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
         _flushAndClose();
       },
       child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(
-                PhosphorIconsRegular.chartBar,
-                size: 16,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Log Stats',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  PhosphorIconsRegular.chartBar,
+                  size: 16,
+                  color: theme.colorScheme.primary,
                 ),
-              ),
-              const Spacer(),
-              if (!isToday) ...[
+                const SizedBox(width: 8),
+                Text(
+                  'Log Stats',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                if (!isToday) ...[
+                  GlassButton(
+                    onPressed: _resetToToday,
+                    icon: const Icon(PhosphorIconsRegular.target, size: 14),
+                    tooltip: 'Jump to today',
+                    dense: true,
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 GlassButton(
-                  onPressed: _resetToToday,
-                  icon: const Icon(PhosphorIconsRegular.target, size: 14),
-                  tooltip: 'Jump to today',
+                  onPressed: _pickDate,
+                  icon: const Icon(PhosphorIconsRegular.calendar, size: 14),
+                  label: _formatDate(_selectedDate),
                   dense: true,
                 ),
-                const SizedBox(width: 6),
               ],
-              GlassButton(
-                onPressed: _pickDate,
-                icon: const Icon(PhosphorIconsRegular.calendar, size: 14),
-                label: _formatDate(_selectedDate),
-                dense: true,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          trackersAsync.when(
-            data: (trackers) {
-              final daily = trackers
-                  .where(
-                    (t) =>
-                        t.cadence == TrackerCadence.daily &&
-                        t.deletedAt == null,
-                  )
-                  .toList();
-              if (daily.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'No daily trackers yet.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                );
-              }
-              return Column(
-                children: [
-                  for (final tracker in daily)
-                    TrackerEntryRow(
-                      key: _keyFor(tracker.id),
-                      tracker: tracker,
-                      date: _selectedDate,
-                      onDirtyChanged: (dirty) =>
-                          _onDirtyChanged(tracker.id, dirty),
-                    ),
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: GlassButton(
-                      onPressed: _dirtyTrackerIds.isEmpty ? null : _saveAll,
-                      icon: const Icon(PhosphorIconsRegular.checkCircle, size: 14),
-                      label: 'Save',
-                      dense: true,
-                    ),
-                  ),
-                ],
-              );
-            },
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: LinearProgressIndicator(),
             ),
-            error: (e, _) => Text('$e'),
-          ),
-        ],
-      ),
+            const SizedBox(height: 8),
+            trackersAsync.when(
+              data: (trackers) {
+                final daily = trackers
+                    .where(
+                      (t) =>
+                          t.cadence == TrackerCadence.daily &&
+                          t.deletedAt == null,
+                    )
+                    .toList();
+                if (daily.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'No daily trackers yet.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final tracker in daily)
+                      TrackerEntryRow(
+                        key: _keyFor(tracker.id),
+                        tracker: tracker,
+                        date: _selectedDate,
+                        onDirtyChanged: (dirty) =>
+                            _onDirtyChanged(tracker.id, dirty),
+                      ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: GlassButton(
+                        onPressed: _dirtyTrackerIds.isEmpty ? null : _saveAll,
+                        icon: const Icon(
+                          PhosphorIconsRegular.checkCircle,
+                          size: 14,
+                        ),
+                        label: 'Save',
+                        dense: true,
+                      ),
+                    ),
+                  ],
+                );
+              },
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: LinearProgressIndicator(),
+              ),
+              error: (e, _) => Text('$e'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1447,7 +1521,6 @@ class _NotificationPopoverWarmupState extends State<NotificationPopoverWarmup> {
     );
   }
 }
-
 
 /// Reveals a control on pointer hover, and unconditionally where there is no
 /// hover to enter.

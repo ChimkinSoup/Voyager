@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -249,6 +250,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.left,
                 textAlignVertical: TextAlignVertical.center,
+                scrollPadding: kVoyagerFieldScrollPadding,
                 style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
                 decoration: InputDecoration(
                   isDense: true,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 
 /// Paints the misspelled-word wavy underline for a field, entirely
@@ -24,6 +25,12 @@ import 'package:voyager/core/widgets/spell_check_field_support.dart';
 /// with identical [style]/[strutStyle]/padding so line-wrapping matches
 /// exactly (the same technique `_TagHighlightLayer` in
 /// tag_highlighted_text_field.dart uses for `#tag` pill highlighting).
+///
+/// Callers own the padding that lines this up with where InputDecorator
+/// actually put the text — see `withInputGap` and `withDensityShift` in
+/// spell_check_field_support.dart. The one place it departs from the field's
+/// own geometry is [descenderClearance], applied here rather than by every
+/// caller because it belongs to the wavy decoration, not to the field.
 class SpellCheckSquiggleLayer extends StatefulWidget {
   const SpellCheckSquiggleLayer({
     super.key,
@@ -33,6 +40,7 @@ class SpellCheckSquiggleLayer extends StatefulWidget {
     this.strutStyle,
     this.textAlign = TextAlign.start,
     this.scrollController,
+    this.suppressActiveWord = true,
   });
 
   final TextEditingController controller;
@@ -41,10 +49,33 @@ class SpellCheckSquiggleLayer extends StatefulWidget {
   final StrutStyle? strutStyle;
   final TextAlign textAlign;
 
+  /// Whether the word the caret is inside stays unmarked while it is being
+  /// typed (see the class doc).
+  ///
+  /// False in Vim's Normal mode, where no typing is happening: yanking and
+  /// putting a misspelled word leaves the caret sitting inside it, and the
+  /// mid-word rule then hid the squiggle for the one word the user had just
+  /// introduced — until they dropped back into Insert and moved off it.
+  final bool suppressActiveWord;
+
   /// When the wrapped field can scroll internally (overflowing multi-line
   /// content), pass the same [ScrollController] given to its [TextField] so
   /// this layer's text scrolls in lockstep.
   final ScrollController? scrollController;
+
+  /// How far below the font's own underline position the squiggle is dropped,
+  /// in em.
+  ///
+  /// Iosevka Aile puts its underline unusually high — the wave spans 0 to
+  /// 0.09em under the baseline — while its descenders reach 0.184em down, so
+  /// the decoration as the font specifies it strikes straight through the
+  /// tails of g, y, p and q. 0.1em drops the wave's underside to the
+  /// descender terminals, where it reads as an underline of the word rather
+  /// than a strikethrough of half its letters.
+  ///
+  /// Deliberately in em, not pixels: the underline offset it is correcting
+  /// scales with the font size, so this has to as well.
+  static const double descenderClearance = 0.1;
 
   @override
   State<SpellCheckSquiggleLayer> createState() =>
@@ -78,12 +109,25 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
   List<SuggestionSpan> _cachedSpans = const [];
   int? _spansGeneration;
 
+  VoyagerSpellCheckService? _service;
+
   @override
   void initState() {
     super.initState();
     _lastText = widget.controller.text;
     widget.controller.addListener(_handleControllerChanged);
     widget.focusNode.addListener(_handleFocusChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final service = readVoyagerSpellCheckService(context);
+    if (service != _service) {
+      _service?.knownWordsChanged.removeListener(_handleKnownWordsChanged);
+      service.knownWordsChanged.addListener(_handleKnownWordsChanged);
+      _service = service;
+    }
   }
 
   @override
@@ -100,13 +144,31 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
       oldWidget.focusNode.removeListener(_handleFocusChanged);
       widget.focusNode.addListener(_handleFocusChanged);
     }
+    if (oldWidget.suppressActiveWord != widget.suppressActiveWord) {
+      // Leaving typing mode (Insert → Normal): recheck without deferral so a
+      // just-typed or just-put misspelling is flagged immediately. Entering
+      // typing mode clears the active-edit hide so a finished word under the
+      // caret keeps its squiggle until the next real keystroke inside it.
+      if (!widget.suppressActiveWord) _spansForText = null;
+      _activeEditRange = null;
+    }
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_handleControllerChanged);
     widget.focusNode.removeListener(_handleFocusChanged);
+    _service?.knownWordsChanged.removeListener(_handleKnownWordsChanged);
     super.dispose();
+  }
+
+  /// A word was added to the dictionary (or the bundled dictionary finished
+  /// loading). [_spansFor] discards its cache on the generation change by
+  /// itself; this just makes sure the layer actually runs again now, rather
+  /// than whenever the controller next happens to notify. Without it, "Add to
+  /// dictionary" left the squiggle painted until the caret moved off the word.
+  void _handleKnownWordsChanged() {
+    if (mounted) setState(() {});
   }
 
   void _handleFocusChanged() {
@@ -125,6 +187,11 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
             oldText: _spansForText!,
             oldSpans: _cachedSpans,
             newText: text,
+            // Never omit the in-progress token from the span list: hide it
+            // with [_activeEditRange] instead. Deferral dropped finished
+            // copies of the same misspelling after a newline, and they then
+            // stayed unmarked until a later full recheck.
+            allowDeferral: false,
           )
         : service.checkTextSync(text);
     _spansForText = text;
@@ -135,10 +202,18 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
   void _handleControllerChanged() {
     final text = widget.controller.text;
     if (text != _lastText) {
+      final inserted = text.length - _lastText.length;
       _lastText = text;
       final spans = _spansFor(text);
       final selection = widget.controller.selection;
-      _activeEditRange = selection.isValid && selection.isCollapsed
+      // A paste / Vim put is a finished edit, even if the caret lands inside
+      // the new word. Only a keystroke-sized change hides the active token.
+      final looksLikeTyping = inserted > 0 &&
+          inserted <= VoyagerSpellCheckService.maxDeferredInsertionLength;
+      _activeEditRange = widget.suppressActiveWord &&
+              looksLikeTyping &&
+              selection.isValid &&
+              selection.isCollapsed
           ? _rangeContaining(spans, selection.baseOffset)
           : null;
     } else if (_activeEditRange != null) {
@@ -173,7 +248,8 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
       if (start > pointer) {
         children.add(TextSpan(text: text.substring(pointer, start), style: _transparent));
       }
-      final isActive = _activeEditRange != null &&
+      final isActive = widget.suppressActiveWord &&
+          _activeEditRange != null &&
           span.range.start == _activeEditRange!.start &&
           span.range.end == _activeEditRange!.end;
       children.add(
@@ -188,11 +264,18 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
       children.add(TextSpan(text: text.substring(pointer), style: _transparent));
     }
 
+    final textScaler = MediaQuery.textScalerOf(context);
+    // Applied to the rendered size, not widget.style.fontSize: the decoration
+    // this offsets is drawn at the scaled size too.
+    final clearance =
+        textScaler.scale(widget.style.fontSize ?? 14.0) *
+        SpellCheckSquiggleLayer.descenderClearance;
+
     final richText = RichText(
       text: TextSpan(style: widget.style, children: children),
       textAlign: widget.textAlign,
       strutStyle: widget.strutStyle,
-      textScaler: MediaQuery.textScalerOf(context),
+      textScaler: textScaler,
       textHeightBehavior: DefaultTextHeightBehavior.maybeOf(context),
       textDirection: Directionality.of(context),
       // Positioned.fill constrains this layer's height to the field's
@@ -211,7 +294,14 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
     );
 
     final scrollController = widget.scrollController;
-    if (scrollController == null) return ClipRect(child: richText);
+    if (scrollController == null) {
+      return ClipRect(
+        child: Transform.translate(
+          offset: Offset(0, clearance),
+          child: richText,
+        ),
+      );
+    }
 
     return ClipRect(
       child: ListenableBuilder(
@@ -219,7 +309,7 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
         builder: (context, _) {
           final offset = scrollController.hasClients ? scrollController.offset : 0.0;
           return Transform.translate(
-            offset: Offset(0, -offset),
+            offset: Offset(0, clearance - offset),
             child: richText,
           );
         },

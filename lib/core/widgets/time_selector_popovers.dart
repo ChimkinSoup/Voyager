@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'voyager_time_picker_spinner.dart';
 
 
@@ -299,6 +300,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,
+            scrollPadding: kVoyagerFieldScrollPadding,
             style: theme.textTheme.titleMedium?.copyWith(
               color: isActive
                   ? accent
@@ -723,6 +725,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,
+            scrollPadding: kVoyagerFieldScrollPadding,
             style: theme.textTheme.titleMedium?.copyWith(
               color: accent,
             ),

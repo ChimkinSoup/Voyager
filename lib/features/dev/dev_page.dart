@@ -22,8 +22,12 @@ import 'package:voyager/features/dev/dev_leaf_gallery_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/study/study_debug_generator.dart';
 
 final devVerboseSyncProvider = StateProvider<bool>((ref) => false);
+final devForceOfflineProvider = StateProvider<bool>(
+  (ref) => DevFlags.forceOffline,
+);
 final devShowTimeSelectorHitboxesProvider = StateProvider<bool>(
   (ref) => DevFlags.showTimeSelectorHitboxes,
 );
@@ -61,6 +65,14 @@ class DevPage extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
         ListTile(
+          leading: const Icon(PhosphorIconsRegular.bug),
+          title: const Text('Populate Study Page debug deck'),
+          subtitle: const Text(
+            'Generate a randomized test deck with simple/complex LaTeX, long text, short text, and SRS states',
+          ),
+          onTap: () => populateDebugStudyDeck(context, ref),
+        ),
+        ListTile(
           title: const Text('Device ID'),
           subtitle: Text(ref.watch(deviceIdProvider)),
         ),
@@ -71,6 +83,19 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.verboseSync = v;
             ref.read(devVerboseSyncProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Force offline'),
+          subtitle: const Text(
+            'Make the Firestore connectivity probe fail so the shell offline '
+            'badge (and reconnect sync) follow the real failure streak. Takes '
+            'two failed probes — up to a minute for the next one, then ~10s.',
+          ),
+          value: ref.watch(devForceOfflineProvider),
+          onChanged: (v) {
+            DevFlags.forceOffline = v;
+            ref.read(devForceOfflineProvider.notifier).state = v;
           },
         ),
         SwitchListTile(

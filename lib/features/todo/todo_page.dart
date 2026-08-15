@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -16,6 +17,7 @@ import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/all_view_destination.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
@@ -57,10 +59,12 @@ typedef _RowSignature = ({
   bool completed,
   bool starred,
   bool isSelected,
-  bool hovered,
   int? listColor,
   bool animateIn,
   bool forceCollapsed,
+  // Drops a context-menu entry when false, so a cached row built in one view
+  // isn't reused in the other.
+  bool canMoveToBottom,
   String listsKey,
   int subtaskEpoch,
   ({int completed, int total})? subtaskStatsData,
@@ -214,18 +218,26 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // stationary cursor. Clearing hover is deferred a frame (see
   // _setRowHovered) so that detach/reattach pair cancels out before either
   // side ever paints, instead of flashing.
-  String? _hoveredTaskId;
+  //
+  // A ValueNotifier rather than plain state + setState: hover changes far more
+  // often than anything else on this page — every row the pointer crosses
+  // while skimming, and (because rows slide under a stationary cursor) once
+  // per frame all the way through a scroll — and rebuilding the whole page for
+  // it meant repaying the page's entire fixed cost (the "Add task" field's
+  // TextField/EditableText subtree, the list dropdown, and re-running every
+  // mounted sliver child's builder) for a change that only ever alters one
+  // row's background colour. Only [_RowHoverSurface] listens, and only the two
+  // rows whose hovered-ness actually flipped rebuild — see its doc comment.
+  final ValueNotifier<String?> _hoveredTaskId = ValueNotifier(null);
   String? _pendingUnhoverTaskId;
 
   void _setRowHovered(String taskId, bool hovered) {
     if (hovered) {
       _pendingUnhoverTaskId = null;
-      if (_hoveredTaskId != taskId) {
-        setState(() => _hoveredTaskId = taskId);
-      }
+      _hoveredTaskId.value = taskId;
       return;
     }
-    if (_hoveredTaskId != taskId) return;
+    if (_hoveredTaskId.value != taskId) return;
     _pendingUnhoverTaskId = taskId;
     // A genuine mouse-leave doesn't otherwise need a new frame — nothing else
     // is dirty — so without this the callback below could sit pending
@@ -234,8 +246,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _pendingUnhoverTaskId != taskId) return;
       _pendingUnhoverTaskId = null;
-      if (_hoveredTaskId == taskId) {
-        setState(() => _hoveredTaskId = null);
+      if (_hoveredTaskId.value == taskId) {
+        _hoveredTaskId.value = null;
       }
     });
   }
@@ -271,6 +283,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Timer? _coalescedRefreshTimer;
   bool _taskRefreshPending = false;
   static const _scrollIdleGrace = Duration(milliseconds: 200);
+  /// Forced order for the single-list view, held until the write it belongs to
+  /// comes back. The "All tasks" view never uses one — its order is derived
+  /// from task fields, and [_taskOverrides] already carries those optimistically
+  /// (see [_applyOptimisticActiveOrder]).
   List<String>? _optimisticActiveTaskOrder;
   // Ids that just completed but are still counted in the active list's
   // rendering for one extra frame (see the SliverReorderableList item-count
@@ -293,6 +309,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // value lives device-locally in settings (see [_persistCompletedExpanded]).
   bool? _completedExpandedOverride;
   var _showAllTasks = false;
+  // settingsProvider can still be loading when initState reads it, so the
+  // restore of _showAllTasks is retried once from build (see
+  // _applySavedShowAllTasks) — the same late recovery _resolveListId performs
+  // for the selected list id.
+  var _appliedSavedShowAllTasks = false;
   // Cache subtask stats futures by task ID to avoid re-querying the DB on
   // every rebuild (e.g. during drag-to-scroll), which would cause
   // FutureBuilder to restart and create visible jank.
@@ -371,13 +392,25 @@ class _TodoPageState extends ConsumerState<TodoPage>
         }
       }
     });
-    final savedId = ref
-        .read(settingsProvider)
-        .valueOrNull
-        ?.lastViewedTodoListId;
+    final savedSettings = ref.read(settingsProvider).valueOrNull;
+    final savedId = savedSettings?.lastViewedTodoListId;
     if (savedId != null) {
       _selectedListId = savedId;
     }
+    // Both, not one or the other: reopening into the all-view still needs the
+    // concrete list, since that is where new tasks are filed.
+    _showAllTasks = savedSettings?.todoShowAllTasks ?? false;
+    _appliedSavedShowAllTasks = savedSettings != null;
+  }
+
+  void _applySavedShowAllTasks(AppSettings? settings) {
+    if (_appliedSavedShowAllTasks || settings == null) return;
+    _appliedSavedShowAllTasks = true;
+    if (settings.todoShowAllTasks == _showAllTasks) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _showAllTasks = settings.todoShowAllTasks);
+    });
   }
 
   @override
@@ -404,6 +437,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   void _markListViewed(String listId) {
     unawaited(_persistLastViewedList(listId));
+  }
+
+  Future<void> _persistShowAllTasks(bool showAll) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.todoShowAllTasks == showAll) return;
+    await settingsRepo.saveSettings(
+      settings.copyWith(todoShowAllTasks: showAll),
+    );
   }
 
   Future<void> _persistCompletedExpanded(bool expanded) async {
@@ -458,22 +500,18 @@ class _TodoPageState extends ConsumerState<TodoPage>
     _panelController.reverse();
   }
 
+  /// The list being viewed, and — while "All tasks" is on, where there is no
+  /// single list on screen — the list a new task belongs to. Shares
+  /// [resolveNewItemTarget] with the journal page's `_journalIdForNewEntry` so
+  /// the two views answer this the same way.
   String _resolveListId(List<TodoListModel> lists, AppSettings? settings) {
-    if (_selectedListId != null &&
-        lists.any((list) => list.id == _selectedListId)) {
-      return _selectedListId!;
-    }
-    final savedId = settings?.lastViewedTodoListId;
-    if (savedId != null && lists.any((list) => list.id == savedId)) {
-      return savedId;
-    }
-    return lists
-        .cast<TodoListModel?>()
-        .firstWhere(
-          (l) => l!.id == legacyTodoListId,
-          orElse: () => lists.first,
-        )!
-        .id;
+    return resolveNewItemTarget(
+          currentId: _selectedListId,
+          lastViewedId: settings?.lastViewedTodoListId,
+          legacyId: legacyTodoListId,
+          availableIds: [for (final list in lists) list.id],
+        ) ??
+        legacyTodoListId;
   }
 
   @override
@@ -486,6 +524,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     _scrollIdleTimer?.cancel();
     _coalescedRefreshTimer?.cancel();
     _taskScrollController.removeListener(_onTaskScrollActivity);
+    _hoveredTaskId.dispose();
     _panelAnimation.dispose();
     _panelController.dispose();
     _taskController.dispose();
@@ -494,7 +533,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
     super.dispose();
   }
 
-  Future<void> _ensureDefaultList() async {
+  /// Creates the built-in list if it is missing, and returns the current lists
+  /// straight from the repository — the caller needs a set that is guaranteed
+  /// to include anything just created, which the provider may not have yet.
+  Future<List<TodoListModel>> _ensureDefaultList() async {
     final repo = ref.read(todoRepositoryProvider);
     var lists = await repo.listLists();
     if (!lists.any((list) => list.id == legacyTodoListId)) {
@@ -516,22 +558,40 @@ class _TodoPageState extends ConsumerState<TodoPage>
           orElse: () => lists.isNotEmpty ? lists.first : null,
         )
         ?.id;
+    return lists;
+  }
+
+  /// The list a new task belongs to. While "All tasks" is on this is the list
+  /// last actually opened — see [resolveNewItemTarget], which the journal
+  /// page's `_journalIdForNewEntry` also calls so the two views agree.
+  String _listIdForNewTask(List<TodoListModel> lists) {
+    return resolveNewItemTarget(
+          currentId: _selectedListId,
+          lastViewedId: ref
+              .read(settingsProvider)
+              .valueOrNull
+              ?.lastViewedTodoListId,
+          legacyId: legacyTodoListId,
+          availableIds: [for (final list in lists) list.id],
+        ) ??
+        legacyTodoListId;
   }
 
   Future<void> _addTask() async {
     if (_taskController.text.trim().isEmpty) return;
-    await _ensureDefaultList();
+    final lists = await _ensureDefaultList();
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
     final now = utcNow();
+    final listId = _listIdForNewTask(lists);
     final task = TodoTask(
       id: newId(),
-      listId: _selectedListId!,
+      listId: listId,
       title: _taskController.text.trim(),
       createdAt: now,
       updatedAt: now,
     );
-    final siblings = await repo.listTasks(_selectedListId!);
+    final siblings = await repo.listTasks(listId);
     final active = activeTopLevelTasks(siblings);
     final batch = applyNewUndatedTask(task, active);
     for (final updated in batch.tasks) {
@@ -1273,6 +1333,35 @@ class _TodoPageState extends ConsumerState<TodoPage>
     return null;
   }
 
+  /// Canonical rendering key for [lists], used in every row's [_RowSignature].
+  ///
+  /// `lists` is a fresh List instance (new identity, same content) any time
+  /// todoListsProvider re-fetches — including on every remote sync landing,
+  /// which invalidates it unconditionally even when only tasks changed (see
+  /// liveSyncProvider.onChanged). Comparing it by reference in the signature
+  /// would bust every row's cache on every sync round-trip; reducing it to the
+  /// fields that actually affect rendering (name/color, not the List object)
+  /// means the cache only busts when a list actually changed.
+  ///
+  /// Memoized on the List's identity so this is built once per build rather
+  /// than once per row, and — more importantly — so consecutive builds share
+  /// one String instance, which lets the signature's `==` settle on identity
+  /// instead of comparing the characters for every mounted row.
+  String _listsKeyFor(List<TodoListModel> lists) {
+    if (identical(lists, _listsKeySource)) return _listsKey!;
+    final key = lists
+        .map((l) => '${l.id}:${l.name}:${l.colorValue}')
+        .join(String.fromCharCode(0));
+    _listsKeySource = lists;
+    // Reuse the previous instance when the content is unchanged, so a
+    // re-fetch that didn't actually alter any list can't bust the row cache.
+    _listsKey = key == _listsKey ? _listsKey : key;
+    return _listsKey!;
+  }
+
+  List<TodoListModel>? _listsKeySource;
+  String? _listsKey;
+
   List<TodoTask> _activeInList(List<TodoTask> active, String listId) {
     return active.where((task) => task.listId == listId).toList();
   }
@@ -1376,17 +1465,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     bool forceCollapsed = false,
   }) {
     final animateIn = task.id == _enteringTaskId;
-    final hovered = task.id == _hoveredTaskId;
-    // `lists` is a fresh List instance (new identity, same content) any time
-    // todoListsProvider re-fetches — including on every remote sync landing,
-    // which invalidates it unconditionally even when only tasks changed (see
-    // liveSyncProvider.onChanged). Comparing it by reference in the signature
-    // would bust every row's cache on every sync round-trip; canonicalizing
-    // to the fields that actually affect rendering (name/color, not the List
-    // object) means the cache only busts when a list actually changed.
-    final listsKey = lists
-        .map((l) => '${l.id}:${l.name}:${l.colorValue}')
-        .join(String.fromCharCode(0));
+    final listsKey = _listsKeyFor(lists);
     final subtaskStatsData = _subtaskStatsData(task.id);
     final signature = (
       listId: task.listId,
@@ -1396,10 +1475,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
       completed: task.completed,
       starred: task.starred,
       isSelected: isSelected,
-      hovered: hovered,
       listColor: listColor,
       animateIn: animateIn,
       forceCollapsed: forceCollapsed,
+      canMoveToBottom: !_showAllTasks,
       listsKey: listsKey,
       subtaskEpoch: _subtaskCacheEpoch,
       // Without this, a row built before its subtask query resolves keeps
@@ -1427,7 +1506,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       animateIn: animateIn,
       forceCollapsed: forceCollapsed,
       isSelected: isSelected,
-      hovered: hovered,
+      hoveredTaskId: _hoveredTaskId,
       listColor: listColor,
       lists: lists,
       subtaskStats: _subtaskStats(task.id),
@@ -1435,7 +1514,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
       onToggle: (v) => _toggleTask(task, v),
       onHoverChanged: (h) => _setRowHovered(task.id, h),
       onStar: () => _toggleStar(task),
-      onMoveToBottom: () => _moveTaskToBottom(task),
+      // "Send to bottom" writes the task's per-list `sortOrder`, which the
+      // "All tasks" view ignores entirely — offering it there would look like
+      // it silently did nothing. See [resolveGlobalTaskOrder].
+      onMoveToBottom: _showAllTasks ? null : () => _moveTaskToBottom(task),
       onSetDueDate: (due) => _setTaskDueDate(task, due),
       onClearDueDate: () => _clearTaskDueDate(task),
       onMoveToList: (destId) => _moveTaskToList(task, destId),
@@ -1454,6 +1536,60 @@ class _TodoPageState extends ConsumerState<TodoPage>
     }
     return row;
   }
+
+  /// The "Add task" field and its button, cached on the one thing they
+  /// actually depend on.
+  ///
+  /// Same reasoning as `_rowFor`'s widget cache, for the other end of the
+  /// page: a `LabeledTextField` expands to a TextField/EditableText subtree of
+  /// well over a hundred widgets — on its own the single most expensive thing
+  /// in this build — and none of it has anything to say about the task list.
+  /// Returning the identical instance lets the framework skip the whole
+  /// subtree (`Element.updateChild` reuses a child outright when the new
+  /// widget is `identical` to the old one), so a rebuild triggered by task
+  /// data stops paying for the composer.
+  Widget _composerBar(Color accent, String hintText) {
+    final cached = _composerBarCache;
+    if (cached != null &&
+        _composerBarColor == accent &&
+        _composerBarHint == hintText) {
+      return cached;
+    }
+    final bar = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: LabeledTextField(
+            label: '',
+            showLabel: false,
+            hintText: hintText,
+            controller: _taskController,
+            focusNode: _taskFocusNode,
+            accentColor: accent,
+            onSubmitted: (_) => _addTask(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 48,
+          child: GlassButton(
+            onPressed: _addTask,
+            label: 'Add',
+            height: 48,
+            color: accent,
+          ),
+        ),
+      ],
+    );
+    _composerBarCache = bar;
+    _composerBarColor = accent;
+    _composerBarHint = hintText;
+    return bar;
+  }
+
+  Widget? _composerBarCache;
+  Color? _composerBarColor;
+  String? _composerBarHint;
 
   ({int active, int completed}) _statsForList(
     String listId,
@@ -1478,6 +1614,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     });
     _closeEditPanel();
     _markListViewed(created.id);
+    unawaited(_persistShowAllTasks(false));
   }
 
   Future<void> _handleListManage(
@@ -1515,6 +1652,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
                 ?.id;
             _optimisticActiveTaskOrder = null;
           });
+          // The all-tasks view is left as it was; only the list that new tasks
+          // land in has moved, so record it (matching the journal page).
+          final fallbackId = _selectedListId;
+          if (fallbackId != null) {
+            _markListViewed(fallbackId);
+          }
           _closeEditPanel();
         }
       default:
@@ -1567,6 +1710,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
     });
   }
 
+  /// Reorders the single-list view. Only ever reached from there: "All tasks"
+  /// derives its order and renders a plain, non-reorderable list.
   Future<void> _reorderActiveTasks(
     List<TodoTask> active,
     int oldIndex,
@@ -1603,6 +1748,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
   List<TodoTask> _applyOptimisticActiveOrder(List<TodoTask> active) {
     final order = _optimisticActiveTaskOrder;
     if (order == null) return active;
+    // A forced order is only ever built for the single-list view: it sorts on
+    // `sortOrder`, which says nothing about where a task belongs among another
+    // list's. "All tasks" doesn't want one anyway — it derives its order from
+    // fields that `_taskOverrides` has already updated optimistically, so it
+    // repositions a starred or newly-dated task without any help here.
+    if (_showAllTasks) return active;
     if (order.length != active.length) {
       logTodoSortDebug(
         ref.read(todoSortDebugLoggerProvider),
@@ -1692,6 +1843,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.valueOrNull;
+    _applySavedShowAllTasks(settings);
     final hideCompleted = settingsAsync.maybeWhen(
       data: (settings) => settings.hideCompletedTasks,
       orElse: () => false,
@@ -1713,6 +1865,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
       final task = next.task!;
       ref.read(revealRequestProvider.notifier).state = null;
       setState(() => _selectedListId = task.listId);
+      // Recorded, not just set: this moves the list new tasks are filed under
+      // while the all-tasks view stays on, and the persisted id has to agree
+      // with that or a restart would silently move it back.
+      _markListViewed(task.listId);
       _openEditPanel(task);
     });
     final statsAsync = ref.read(todoListStatsProvider);
@@ -1735,12 +1891,28 @@ class _TodoPageState extends ConsumerState<TodoPage>
         final currentList = _selectedList(lists);
         // The shade the task bar is keyed to: the list being viewed, or the
         // plain accent while "All tasks" is on — that view spans every list
-        // and so has no colour of its own. Shared by the list dropdown and
-        // the "Add" button so neither keeps showing the last list's colour.
+        // and so has no colour of its own. Worn by the list dropdown.
         final taskBarColor = Color(
           (_showAllTasks ? null : currentList?.colorValue) ??
               Theme.of(context).colorScheme.primary.toARGB32(),
         );
+        // The composer at the other end of the page answers a different
+        // question — not "what am I looking at?" but "where does this go?" —
+        // and in the all-tasks view those diverge. It names and wears the
+        // destination list so the answer isn't invisible as you type.
+        final destinationList = lists.cast<TodoListModel?>().firstWhere(
+          (l) => l!.id == _listIdForNewTask(lists),
+          orElse: () => null,
+        );
+        final composerColor = _showAllTasks && destinationList != null
+            ? Color(
+                destinationList.colorValue ??
+                    Theme.of(context).colorScheme.primary.toARGB32(),
+              )
+            : taskBarColor;
+        final composerHint = _showAllTasks && destinationList != null
+            ? 'Add task to ${shortDestinationName(destinationList.name)}'
+            : 'Add task';
         final stats = statsAsync.valueOrNull;
 
         ref.listen<AsyncValue<List<TodoTask>>>(
@@ -1757,13 +1929,17 @@ class _TodoPageState extends ConsumerState<TodoPage>
             _reconcileCompletionOverrides(tasks);
             _reconcileTaskOverrides(tasks);
             _maybeNormalizeListSort(tasks, listId);
-            final sorted = sortTodoTasks(
-              _tasksWithOverrides(
-                tasks,
-                viewingListId: listId,
-                showAllTasks: _showAllTasks,
-              ),
+            final withOverrides = _tasksWithOverrides(
+              tasks,
+              viewingListId: listId,
+              showAllTasks: _showAllTasks,
             );
+            // "All tasks" merges lists whose sortOrders are independent of one
+            // another, so it ignores that field and derives an order from the
+            // tasks themselves instead — see [resolveGlobalTaskOrder].
+            final sorted = _showAllTasks
+                ? resolveGlobalTaskOrder(withOverrides)
+                : sortTodoTasks(withOverrides);
             final active = _applyOptimisticActiveOrder(
               sorted.where((t) => !t.completed).toList(),
             );
@@ -1831,6 +2007,25 @@ class _TodoPageState extends ConsumerState<TodoPage>
             };
             _rowWidgetCache.removeWhere((id, _) => !liveRowIds.contains(id));
             _rowSignatureCache.removeWhere((id, _) => !liveRowIds.contains(id));
+            // Id → index for each section, so the findChildIndexCallbacks
+            // below are a map lookup rather than a linear scan. The framework
+            // calls those once per mounted child whenever indices shift — a
+            // scan made that quadratic in the section's length, which is the
+            // one part of reconciling a completion that got worse the longer
+            // the list got.
+            final activeIndexById = {
+              for (var i = 0; i < active.length; i++) active[i].id: i,
+            };
+            final reorderableIndexById = identical(reorderableActive, active)
+                ? activeIndexById
+                : {
+                    for (var i = 0; i < reorderableActive.length; i++)
+                      reorderableActive[i].id: i,
+                  };
+            final completedIndexById = {
+              for (var i = 0; i < completedForDisplay.length; i++)
+                completedForDisplay[i].id: i,
+            };
             final selectedTask = _selectedTaskId == null
                 ? null
                 : sorted.cast<TodoTask?>().firstWhere(
@@ -1950,6 +2145,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                         });
                                         _closeEditPanel();
                                         _markListViewed(v);
+                                        unawaited(_persistShowAllTasks(false));
                                       },
                                     ),
                                   ),
@@ -1973,8 +2169,17 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                         if (listId != null) {
                                           _markListViewed(listId);
                                         }
+                                        unawaited(
+                                          _persistShowAllTasks(false),
+                                        );
                                       } else {
                                         setState(() => _showAllTasks = true);
+                                        // Only the view flag is written here:
+                                        // _selectedListId deliberately stays
+                                        // on the list that was open, and it is
+                                        // what new tasks created from this
+                                        // view are filed under.
+                                        unawaited(_persistShowAllTasks(true));
                                       }
                                     },
                                     icon: Icon(
@@ -2004,6 +2209,18 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                   cacheExtent: 2000.0,
                                   slivers: [
                                     if (active.isNotEmpty)
+                                      // Deliberately a plain SliverList: "All
+                                      // tasks" is not reorderable. Its order is
+                                      // derived from the tasks themselves (see
+                                      // resolveGlobalTaskOrder), so there is no
+                                      // manual order for a drag to write to —
+                                      // one would either be discarded on the
+                                      // next rebuild or have to invent a
+                                      // cross-list ordering key that every
+                                      // per-list drag then had to keep in sync.
+                                      // "Send to bottom" is dropped from the
+                                      // row context menu here for the same
+                                      // reason (see _rowFor).
                                       if (_showAllTasks)
                                         SliverList(
                                           // A list delegate here (instead of a
@@ -2047,15 +2264,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                             // callback lets the framework
                                             // find and reuse the existing
                                             // Element by key instead.
-                                            findChildIndexCallback: (key) {
-                                              final id =
-                                                  (key as ValueKey<String>)
-                                                      .value;
-                                              final index = active.indexWhere(
-                                                (t) => t.id == id,
-                                              );
-                                              return index == -1 ? null : index;
-                                            },
+                                            findChildIndexCallback: (key) =>
+                                                activeIndexById[(key
+                                                        as ValueKey<String>)
+                                                    .value],
                                           ),
                                         )
                                       else
@@ -2184,9 +2396,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                                 (wrapped.value
                                                         as ValueKey<String>)
                                                     .value;
-                                            final index = reorderableActive
-                                                .indexWhere((t) => t.id == id);
-                                            return index == -1 ? null : index;
+                                            return reorderableIndexById[id];
                                           },
                                         ),
                                     if (!effectiveHideCompleted)
@@ -2302,45 +2512,17 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                           // destroys and recreates every one
                                           // of them instead of reusing
                                           // `_rowFor`'s cached widget.
-                                          findChildIndexCallback: (key) {
-                                            final id =
-                                                (key as ValueKey<String>).value;
-                                            final index = completedForDisplay
-                                                .indexWhere((t) => t.id == id);
-                                            return index == -1 ? null : index;
-                                          },
+                                          findChildIndexCallback: (key) =>
+                                              completedIndexById[(key
+                                                      as ValueKey<String>)
+                                                  .value],
                                         ),
                                       ),
                                   ],
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: LabeledTextField(
-                                      label: '',
-                                      showLabel: false,
-                                      hintText: 'Add task',
-                                      controller: _taskController,
-                                      focusNode: _taskFocusNode,
-                                      accentColor: taskBarColor,
-                                      onSubmitted: (_) => _addTask(),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  SizedBox(
-                                    height: 48,
-                                    child: GlassButton(
-                                      onPressed: _addTask,
-                                      label: 'Add',
-                                      height: 48,
-                                      color: taskBarColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _composerBar(composerColor, composerHint),
                             ],
                           ),
                         ),
@@ -2504,7 +2686,7 @@ class _TaskRow extends StatefulWidget {
     super.key,
     required this.task,
     required this.isSelected,
-    required this.hovered,
+    required this.hoveredTaskId,
     required this.onToggle,
     required this.onHoverChanged,
     required this.onStar,
@@ -2526,12 +2708,15 @@ class _TaskRow extends StatefulWidget {
   final TodoTask task;
   final bool isSelected;
 
-  /// Whether the pointer is currently over this row. Tracked in
-  /// _TodoPageState (see _setRowHovered) rather than locally, so the
-  /// highlight survives this row's Element being torn down and recreated
-  /// when a completion shifts its index in the active list's
-  /// SliverReorderableList.
-  final bool hovered;
+  /// Which row the pointer is currently over, if any. Owned by _TodoPageState
+  /// (see _setRowHovered) rather than tracked locally, so the highlight
+  /// survives this row's Element being torn down and recreated when a
+  /// completion shifts its index in the active list's SliverReorderableList.
+  ///
+  /// Held as a notifier rather than a resolved bool so a hover change doesn't
+  /// have to travel back through the page's build to reach the one row it
+  /// affects — see [_RowHoverSurface], the only thing that reads it.
+  final ValueListenable<String?> hoveredTaskId;
   final Future<void> Function(bool?) onToggle;
 
   /// Reports this row's own hover-enter/exit up to _TodoPageState.
@@ -2539,8 +2724,10 @@ class _TaskRow extends StatefulWidget {
   final VoidCallback onStar;
 
   /// Sends the task to the bottom of its own category (see
-  /// [applyMoveToBottomOfCategory]).
-  final VoidCallback onMoveToBottom;
+  /// [applyMoveToBottomOfCategory]). Null in the "All tasks" view, which has no
+  /// manual order to send it to the bottom of — the entry is then left out of
+  /// the context menu entirely.
+  final VoidCallback? onMoveToBottom;
   final VoidCallback onEdit;
 
   /// Applies a due date picked from the right-click menu. The value is a local
@@ -2980,11 +3167,12 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
             : PhosphorIconsRegular.checkCircle,
         onTap: () => unawaited(_handleToggle(!task.completed)),
       ),
-      ContextMenuItem(
-        label: 'Send to bottom',
-        icon: PhosphorIconsRegular.arrowDown,
-        onTap: widget.onMoveToBottom,
-      ),
+      if (widget.onMoveToBottom case final onMoveToBottom?)
+        ContextMenuItem(
+          label: 'Send to bottom',
+          icon: PhosphorIconsRegular.arrowDown,
+          onTap: onMoveToBottom,
+        ),
       ContextMenuItem(
         label: 'Due today',
         icon: PhosphorIconsRegular.calendarDot,
@@ -3093,20 +3281,15 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
             onEnter: (_) => widget.onHoverChanged(true),
             onExit: (_) => widget.onHoverChanged(false),
             child: ContextMenuRegion(
-              items: _buildContextMenuItems(listColor),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                curve: Curves.easeOut,
-                decoration: VoyagerListItemSurface.decoration(
-                  context,
-                  selected: widget.isSelected,
-                  hovered: widget.hovered,
-                  borderRadius: 14,
-                ),
+              itemsBuilder: () => _buildContextMenuItems(listColor),
+              child: _RowHoverSurface(
+                taskId: widget.task.id,
+                hoveredTaskId: widget.hoveredTaskId,
+                selected: widget.isSelected,
                 child: InkWell(
                   onTap: widget.onEdit,
                   borderRadius: BorderRadius.circular(14),
-                  // The hover tint is painted from widget.hovered (driven by
+                  // The hover tint is painted by _RowHoverSurface above (from
                   // _TodoPageState._setRowHovered) instead of this InkWell's
                   // own ephemeral hover state, so it survives this row's
                   // Element being torn down and recreated whenever a
@@ -3299,6 +3482,90 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The rounded surface a task row sits on, and the only part of the row whose
+/// appearance depends on hover.
+///
+/// It listens to the page-wide "which row is hovered" notifier directly and
+/// rebuilds itself only when *this* row's answer flips, so crossing a row
+/// costs two of these tiny rebuilds instead of one rebuild of the whole page.
+/// [child] is passed in already-built and handed straight back through, so the
+/// row's actual contents — checkbox, title, metadata, star — are never
+/// rebuilt by a hover at all.
+///
+/// A ValueListenableBuilder would be the obvious spelling, but it rebuilds on
+/// every notification, which here means every mounted row reacting to a change
+/// that concerns two of them.
+class _RowHoverSurface extends StatefulWidget {
+  const _RowHoverSurface({
+    required this.taskId,
+    required this.hoveredTaskId,
+    required this.selected,
+    required this.child,
+  });
+
+  final String taskId;
+  final ValueListenable<String?> hoveredTaskId;
+  final bool selected;
+  final Widget child;
+
+  @override
+  State<_RowHoverSurface> createState() => _RowHoverSurfaceState();
+}
+
+class _RowHoverSurfaceState extends State<_RowHoverSurface> {
+  late bool _hovered;
+
+  @override
+  void initState() {
+    super.initState();
+    // Read rather than assume false: this row's Element may have just been
+    // recreated under a stationary cursor (see _TaskRow.hoveredTaskId), in
+    // which case it is already the hovered one and must paint that way on its
+    // very first frame.
+    _hovered = widget.hoveredTaskId.value == widget.taskId;
+    widget.hoveredTaskId.addListener(_onHoverChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RowHoverSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hoveredTaskId != widget.hoveredTaskId) {
+      oldWidget.hoveredTaskId.removeListener(_onHoverChanged);
+      widget.hoveredTaskId.addListener(_onHoverChanged);
+    }
+    if (oldWidget.taskId != widget.taskId) {
+      _hovered = widget.hoveredTaskId.value == widget.taskId;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.hoveredTaskId.removeListener(_onHoverChanged);
+    super.dispose();
+  }
+
+  void _onHoverChanged() {
+    final hovered = widget.hoveredTaskId.value == widget.taskId;
+    if (hovered == _hovered) return;
+    setState(() => _hovered = hovered);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      decoration: VoyagerListItemSurface.decoration(
+        context,
+        selected: widget.selected,
+        hovered: _hovered,
+        borderRadius: 14,
+      ),
+      child: widget.child,
     );
   }
 }

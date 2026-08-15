@@ -16,6 +16,8 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/tags/tag_suggestions.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// The green used for money flowing in, across the finance feature. Chosen to
 /// stay legible on both the light and dark surfaces.
@@ -221,7 +223,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
-      child: SingleChildScrollView(
+      child: VoyagerScrollView(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(
@@ -313,6 +315,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
               VoyagerTextField(
                 controller: _tagsController,
                 accentColor: accent,
+                tagScope: TagScope.finance,
                 decoration: const InputDecoration(
                   labelText: 'Tags',
                   hintText: '#groceries #travel',

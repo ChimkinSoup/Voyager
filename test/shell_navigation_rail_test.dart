@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
@@ -70,11 +72,7 @@ void main() {
           authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
           syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
           weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
-          settingsProvider.overrideWith(
-            (ref) async => AppSettings(
-              navPageOrder: shellDestinations.map((d) => d.path).toList(),
-            ),
-          ),
+          settingsProvider.overrideWith(_FixedSettings.new),
         ],
         child: MaterialApp(
           home: AppShell(
@@ -93,4 +91,64 @@ void main() {
     // Verify no rendering overflow assertion was thrown
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'rail carries an offline badge only once the backend stops answering',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
+            syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+            weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+            settingsProvider.overrideWith(_FixedSettings.new),
+            // A backend that never answers, on a clock short enough to reach
+            // the offline verdict inside a handful of pumped frames.
+            connectivityStatusProvider.overrideWith(
+              (ref) => ConnectivityStatusController(
+                probe: () async => throw StateError('unreachable'),
+                startDelay: const Duration(milliseconds: 10),
+                offlineInterval: const Duration(milliseconds: 10),
+              ),
+            ),
+          ],
+          child: MaterialApp(home: AppShell(child: _FakeNavigationShell())),
+        ),
+      );
+
+      final badge = find.byWidgetPredicate(
+        (widget) =>
+            widget is PhosphorIcon &&
+            widget.icon == PhosphorIconsDuotone.wifiSlash,
+      );
+      expect(
+        badge,
+        findsNothing,
+        reason: 'nothing is shown until the connection is proven gone',
+      );
+
+      // Two failed probes to declare it offline, then the fade in.
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(badge, findsOneWidget);
+    },
+  );
+}
+
+/// Settings with every shell destination in the rail, so the test exercises
+/// the longest list the rail can be asked to lay out.
+class _FixedSettings extends SettingsNotifier {
+  @override
+  Future<AppSettings> build() async => AppSettings(
+    navPageOrder: shellDestinations.map((d) => d.path).toList(),
+  );
 }

@@ -8,7 +8,16 @@ import 'package:voyager/features/shell/app_shell.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
 
-const _preloadedShellPaths = {'/todo', '/calendar', '/analytics', '/settings'};
+const _preloadedShellPaths = {
+  '/journal',
+  '/dream-journal',
+  '/todo',
+  '/calendar',
+  '/analytics',
+  '/finance',
+  '/life-tracker',
+  '/study',
+};
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authNotifierProvider);

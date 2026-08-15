@@ -126,6 +126,30 @@ class CharacterOpSession {
     return pending;
   }
 
+  /// Puts operations from a failed upload back in the pending set.
+  ///
+  /// [takePendingOps] clears unconditionally, so an upload that then throws
+  /// used to lose those operations for good: they stay in [_opsById], which
+  /// means [text] already accounts for them and no later [recordTextChange]
+  /// will ever emit them again. The paragraph typed offline would simply never
+  /// reach `sync_operations`, and any device resolving the document from the
+  /// log would render it missing.
+  ///
+  /// Restored at the front, because the user may have kept typing while the
+  /// upload was in flight and those newer operations must still follow these.
+  /// Ids already pending are left alone rather than duplicated — an operation
+  /// tombstoned after it was taken is back in the list under its own id.
+  void restorePendingOps(List<CharacterOperation> operations) {
+    if (operations.isEmpty) return;
+    final alreadyPending = _pendingOpIds.toSet();
+    final restored = [
+      for (final op in operations)
+        if (_opsById.containsKey(op.id) && alreadyPending.add(op.id)) op.id,
+    ];
+    if (restored.isEmpty) return;
+    _pendingOpIds.insertAll(0, restored);
+  }
+
   void _seedFromText(String text, {bool markAsPending = false}) {
     var prevPos = '';
     for (var i = 0; i < text.length; i++) {
@@ -251,6 +275,16 @@ class CharacterOpRegistry {
   List<CharacterOperation> takePendingOps(String collection, String documentId) {
     return _sessions[key(collection, documentId)]?.takePendingOps() ??
         const [];
+  }
+
+  /// Returns operations to the pending set after their upload failed — see
+  /// [CharacterOpSession.restorePendingOps].
+  void restorePendingOps(
+    String collection,
+    String documentId,
+    List<CharacterOperation> operations,
+  ) {
+    _sessions[key(collection, documentId)]?.restorePendingOps(operations);
   }
 
   void resetSession({

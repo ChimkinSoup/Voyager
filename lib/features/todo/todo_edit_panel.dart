@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
@@ -21,13 +23,12 @@ import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
-import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
-import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -41,7 +42,7 @@ class TodoEditPanel extends ConsumerStatefulWidget {
     required this.onClose,
     required this.onChanged,
     required this.onDeleted,
-    required     this.onToggleStar,
+    required this.onToggleStar,
     this.onTaskOptimistic,
     this.onSortBatchApplied,
     this.listColor,
@@ -123,8 +124,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             initialText: _notesController.text,
           )
           .catchError((Object error) {
-        debugPrint('Todo notes editing session failed to prepare: $error');
-      }),
+            debugPrint('Todo notes editing session failed to prepare: $error');
+          }),
     );
   }
 
@@ -294,7 +295,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
           ? widget.task.copyWith(clearNotes: true)
           : widget.task.copyWith(notes: notes),
     );
-    ref.read(remoteSyncServiceProvider).recordTodoNotesChange(
+    ref
+        .read(remoteSyncServiceProvider)
+        .recordTodoNotesChange(
           taskId: widget.task.id,
           before: _lastNotesText,
           after: updated,
@@ -320,7 +323,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         _subtaskFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
-      return KeyEventResult.ignored;
+      // Nothing left to outdent. Swallow it rather than letting default
+      // traversal run — backwards from here is whatever widget happens to sit
+      // above the field, so Shift+Tab would kick the caret out of the notes
+      // and onto the "Reset due date" button mid-edit.
+      return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
       if (handleListBackspace(controller: _notesController)) {
@@ -385,10 +392,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
     final effectiveDue = clearDueDate ? null : (dueDate ?? _dueDate);
     final listMoved = listId != null && listId != widget.task.listId;
-    final dueSortChanged = !widget.task.isSubtask &&
-        (reorderDueDate ||
-            clearDueDate ||
-            effectiveDue != widget.task.dueDate);
+    final dueSortChanged =
+        !widget.task.isSubtask &&
+        (reorderDueDate || clearDueDate || effectiveDue != widget.task.dueDate);
 
     final baseUpdate = widget.task.copyWith(
       title: titleText,
@@ -480,7 +486,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       // at it) — without this check that unconditionally cost a local DB
       // write plus a Firestore push, right as the close animation started
       // playing, on every single close.
-      final unchanged = titleText == widget.task.title &&
+      final unchanged =
+          titleText == widget.task.title &&
           (notesText.isEmpty
               ? widget.task.notes == null
               : notesText == widget.task.notes) &&
@@ -599,9 +606,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   Future<void> _clearDueDate() async {
     final hadDueDate = widget.task.dueDate != null;
     setState(() => _dueDate = null);
-    widget.onTaskOptimistic?.call(
-      widget.task.copyWith(clearDueDate: true),
-    );
+    widget.onTaskOptimistic?.call(widget.task.copyWith(clearDueDate: true));
     unawaited(_save(clearDueDate: true, reorderDueDate: hadDueDate));
   }
 
@@ -615,9 +620,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _subtaskFocusNode.requestFocus();
     });
-    
-    final minSortOrder = _subtasks.isEmpty 
-        ? 0 
+
+    final minSortOrder = _subtasks.isEmpty
+        ? 0
         : _subtasks.map((e) => e.sortOrder).reduce(math.min);
 
     final now = utcNow();
@@ -695,18 +700,20 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     }
 
     setState(() => _subtasks = subtasks);
-    
+
     // Yield to the event loop so the UI updates immediately before we do
     // potentially blocking database operations.
-    unawaited(Future.delayed(Duration.zero, () async {
-      final repo = ref.read(todoRepositoryProvider);
-      final remoteSync = ref.read(remoteSyncServiceProvider);
-      for (final task in updates) {
-        await repo.upsertTask(task);
-        remoteSync.pushTodoTaskNow(task);
-      }
-      widget.onChanged();
-    }));
+    unawaited(
+      Future.delayed(Duration.zero, () async {
+        final repo = ref.read(todoRepositoryProvider);
+        final remoteSync = ref.read(remoteSyncServiceProvider);
+        for (final task in updates) {
+          await repo.upsertTask(task);
+          remoteSync.pushTodoTaskNow(task);
+        }
+        widget.onChanged();
+      }),
+    );
   }
 
   Future<void> _promoteSubtask(TodoTask subtask) async {
@@ -795,10 +802,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
     Widget deleteButton() => IconButton(
       onPressed: _deleteTask,
-      icon: Icon(
-        PhosphorIconsRegular.trash,
-        color: theme.colorScheme.error,
-      ),
+      icon: Icon(PhosphorIconsRegular.trash, color: theme.colorScheme.error),
       tooltip: 'Delete task',
     );
 
@@ -876,249 +880,280 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     return EnterToSubmitScope(
       onSubmit: () => unawaited(_close()),
       child: Material(
-      elevation: 0,
-      color: theme.colorScheme.surface,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: theme.dividerColor)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildHeader(context, theme, listColor),
-            const SizedBox(height: 12),
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                LabeledTextField(
-                  label: 'Title',
-                  controller: _titleController,
-                  focusNode: _titleFocusNode,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: _onTitleSubmitted,
-                  onChanged: _scheduleTitleSave,
-                  accentColor: listColor,
-                  dense: true,
-                  borderRadius: 12,
-                  contentPadding: const EdgeInsets.fromLTRB(14, 15, 40, 15),
-                ),
-                if (widget.lists.isNotEmpty)
-                  Positioned(
-                    top: 0,
-                    right: 10,
-                    child: JournalTitleCornerFlag(
-                      colorValue: widget.listColor ??
-                          theme.colorScheme.primary.toARGB32(),
-                      onSelected: _moveToList,
-                      menuEntries: (_) => [
-                        for (var i = 0; i < widget.lists.length; i++)
-                          VoyagerPopupMenuItem<String>(
-                            value: widget.lists[i].id,
-                            position: VoyagerMenuTheme.positionFor(
-                              i,
-                              widget.lists.length,
-                            ),
-                            child: Row(
-                              children: [
-                                JournalBookmarkFlag(
-                                  colorValue: _listFlagColor(widget.lists[i]),
-                                  size: 12,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(widget.lists[i].name)),
-                                if (widget.lists[i].id == widget.task.listId)
-                                  Icon(
-                                    PhosphorIconsRegular.check,
-                                    size: 18,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Builder(builder: (context) {
-                  final localDue = _dueDate?.toLocal();
-                  final hasTime = localDue != null && (localDue.hour != 0 || localDue.minute != 0);
-                  final label = localDue == null 
-                      ? 'Set date & time'
-                      : DateFormat('EEE, MMM d').format(_dueDate!.toLocal()) + (hasTime ? ' at ${formatTime12Hour(_dueDate!.toLocal())}' : '');
-                  
-                  return SelectorPill(
-                    dense: false,
-                    ellipsize: false,
-                    isActive: _isDatePickerOpen,
-                    label: label,
-                    accentColor: listColor,
-                    onTap: () async {
-                      setState(() => _isDatePickerOpen = true);
-                      
-                      final initialDt = _dueDate != null && hasTime
-                          ? _dueDate!.toLocal()
-                          : (_dueDate != null 
-                              ? _dueDate!.toLocal().copyWith(hour: 12, minute: 0) // default time 12:00 PM if none
-                              : DateTime.now().toLocal());
-
-                      final pickedDt = await showContextualPopover<DateTime>(
-                        context: context,
-                        buttonContext: context,
-                        width: 500,
-                        height: 380,
-                        accentColor: listColor,
-                        builder: (ctx) => DateTimeSelectorPopover(
-                          initialDateTime: initialDt,
-                          accentColor: listColor,
-                          optionalTime: true,
-                          initialHasTime: hasTime,
-                        ),
-                      );
-                      
-                      if (mounted) setState(() => _isDatePickerOpen = false);
-                      
-                      if (pickedDt != null) {
-                        final newDue = pickedDt.toUtc();
-                        final previousDue = widget.task.dueDate;
-                        setState(() => _dueDate = newDue);
-                        widget.onTaskOptimistic?.call(
-                          widget.task.copyWith(dueDate: newDue, dueDateSetAt: utcNow()),
-                        );
-                        unawaited(_save(dueDate: newDue, reorderDueDate: previousDue != newDue));
-                      }
-                    },
-                  );
-                }),
-                if (_dueDate != null) ...[
-                  GlassButton(
-                    dense: true,
-                    onPressed: _clearDueDate,
-                    label: 'Reset due date',
-                    textColor: listColor,
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 120,
-              child: Listener(
-                onPointerDown: (_) => _setNotesEditingFlag(true),
-                child: LabeledTextField(
-                label: 'Notes',
-                controller: _notesController,
-                focusNode: _notesFocusNode,
-                expands: true,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                accentColor: listColor,
-                dense: true,
-                borderRadius: 12,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
-                onChanged: _handleNotesChanged,
-              ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Subtasks',
-              style: theme.textTheme.titleSmall?.copyWith(color: listColor),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: LabeledTextField(
-                    label: '',
-                    showLabel: false,
-                    hintText: 'Add subtask',
-                    controller: _subtaskController,
-                    focusNode: _subtaskFocusNode,
+        elevation: 0,
+        color: theme.colorScheme.surface,
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: theme.dividerColor)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(context, theme, listColor),
+              const SizedBox(height: 12),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  LabeledTextField(
+                    label: 'Title',
+                    controller: _titleController,
+                    focusNode: _titleFocusNode,
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: _onTitleSubmitted,
+                    onChanged: _scheduleTitleSave,
                     accentColor: listColor,
                     dense: true,
                     borderRadius: 12,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
-                    onSubmitted: (_) => _addSubtask(),
+                    contentPadding: const EdgeInsets.fromLTRB(15, 15, 40, 15),
                   ),
-                ),
-                GlassButton(
-                  dense: true,
-                  onPressed: _addSubtask,
-                  icon: const Icon(PhosphorIconsRegular.plus),
-                  tooltip: 'Add subtask',
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Expanded(
-              child: ReorderableListView(
-                key: _subtaskListKey,
-                cacheExtent: 10000.0,
-                buildDefaultDragHandles: false,
-                proxyDecorator: (child, index, animation) {
-                  return ClampToTargetBounds(
-                    targetKey: _subtaskListKey,
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
-                      clipBehavior: Clip.antiAlias,
-                      child: child,
-                    ),
-                  );
-                },
-                onReorderItem: _reorderSubtasks,
-                children: [
-                  for (var i = 0; i < _subtasks.length; i++)
-                    ReorderableDragStartListener(
-                      key: ValueKey(_subtasks[i].id),
-                      index: i,
-                      child: _SubtaskRow(
-                        subtask: _subtasks[i],
-                        listColor: listColor,
-                        onToggle: (completed) =>
-                            _toggleSubtask(_subtasks[i], completed),
-                        onRename: (title) => _renameSubtask(_subtasks[i], title),
-                        onDelete: () => _deleteSubtask(_subtasks[i]),
-                        onPromote: () => _promoteSubtask(_subtasks[i]),
-                        onSubmitRename: () {
-                          _subtaskFocusNode.requestFocus();
-                        },
+                  if (widget.lists.isNotEmpty)
+                    Positioned(
+                      top: 0,
+                      right: 10,
+                      child: JournalTitleCornerFlag(
+                        colorValue:
+                            widget.listColor ??
+                            theme.colorScheme.primary.toARGB32(),
+                        onSelected: _moveToList,
+                        menuEntries: (_) => [
+                          for (var i = 0; i < widget.lists.length; i++)
+                            VoyagerPopupMenuItem<String>(
+                              value: widget.lists[i].id,
+                              position: VoyagerMenuTheme.positionFor(
+                                i,
+                                widget.lists.length,
+                              ),
+                              child: Row(
+                                children: [
+                                  JournalBookmarkFlag(
+                                    colorValue: _listFlagColor(widget.lists[i]),
+                                    size: 12,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(widget.lists[i].name)),
+                                  if (widget.lists[i].id == widget.task.listId)
+                                    Icon(
+                                      PhosphorIconsRegular.check,
+                                      size: 18,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                 ],
               ),
-            ),
-            const Divider(height: 24),
-            Text(
-              'Created ${DateFormat.yMMMd().add_jm().format(widget.task.createdAt.toLocal())}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Builder(
+                    builder: (context) {
+                      final localDue = _dueDate?.toLocal();
+                      final hasTime =
+                          localDue != null &&
+                          (localDue.hour != 0 || localDue.minute != 0);
+                      final label = localDue == null
+                          ? 'Set date & time'
+                          : DateFormat(
+                                  'EEE, MMM d',
+                                ).format(_dueDate!.toLocal()) +
+                                (hasTime
+                                    ? ' at ${formatTime12Hour(_dueDate!.toLocal())}'
+                                    : '');
+
+                      return SelectorPill(
+                        dense: false,
+                        ellipsize: false,
+                        isActive: _isDatePickerOpen,
+                        label: label,
+                        accentColor: listColor,
+                        onTap: () async {
+                          setState(() => _isDatePickerOpen = true);
+
+                          final initialDt = _dueDate != null && hasTime
+                              ? _dueDate!.toLocal()
+                              : (_dueDate != null
+                                    ? _dueDate!.toLocal().copyWith(
+                                        hour: 12,
+                                        minute: 0,
+                                      ) // default time 12:00 PM if none
+                                    : DateTime.now().toLocal());
+
+                          final pickedDt =
+                              await showContextualPopover<DateTime>(
+                                context: context,
+                                buttonContext: context,
+                                width: 500,
+                                height: 380,
+                                accentColor: listColor,
+                                builder: (ctx) => DateTimeSelectorPopover(
+                                  initialDateTime: initialDt,
+                                  accentColor: listColor,
+                                  optionalTime: true,
+                                  initialHasTime: hasTime,
+                                ),
+                              );
+
+                          if (mounted)
+                            setState(() => _isDatePickerOpen = false);
+
+                          if (pickedDt != null) {
+                            final newDue = pickedDt.toUtc();
+                            final previousDue = widget.task.dueDate;
+                            setState(() => _dueDate = newDue);
+                            widget.onTaskOptimistic?.call(
+                              widget.task.copyWith(
+                                dueDate: newDue,
+                                dueDateSetAt: utcNow(),
+                              ),
+                            );
+                            unawaited(
+                              _save(
+                                dueDate: newDue,
+                                reorderDueDate: previousDue != newDue,
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                  if (_dueDate != null) ...[
+                    GlassButton(
+                      dense: true,
+                      onPressed: _clearDueDate,
+                      label: 'Reset due date',
+                      textColor: listColor,
+                    ),
+                  ],
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
-            GlassButton(
-              onPressed: _close,
-              label: 'Save',
-              color: listColor,
-              textColor:
-                  ThemeData.estimateBrightnessForColor(listColor) ==
-                      Brightness.dark
-                  ? Colors.white
-                  : Colors.black,
-            ),
-          ],
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 120,
+                child: Listener(
+                  onPointerDown: (_) => _setNotesEditingFlag(true),
+                  child: LabeledTextField(
+                    label: 'Notes',
+                    controller: _notesController,
+                    focusNode: _notesFocusNode,
+                    expands: true,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    accentColor: listColor,
+                    dense: true,
+                    borderRadius: 12,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 15,
+                    ),
+                    onChanged: _handleNotesChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Subtasks',
+                style: theme.textTheme.titleSmall?.copyWith(color: listColor),
+              ),
+              const SizedBox(height: 8),
+              // IntrinsicHeight so the "+" is exactly as tall as the field
+              // rather than approximately so: the two have unrelated padding
+              // rules, and stretch makes the shorter one follow the taller.
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: LabeledTextField(
+                        label: '',
+                        showLabel: false,
+                        hintText: 'Add subtask',
+                        controller: _subtaskController,
+                        focusNode: _subtaskFocusNode,
+                        modeBadgeOutside: true,
+                        accentColor: listColor,
+                        dense: true,
+                        borderRadius: 12,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 8,
+                        ),
+                        onSubmitted: (_) => _addSubtask(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GlassButton(
+                      dense: true,
+                      onPressed: _addSubtask,
+                      color: listColor,
+                      iconColor: listColor,
+                      icon: const Icon(PhosphorIconsRegular.plus),
+                      tooltip: 'Add subtask',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: ReorderableListView(
+                  key: _subtaskListKey,
+                  cacheExtent: 10000.0,
+                  buildDefaultDragHandles: false,
+                  proxyDecorator: (child, index, animation) {
+                    return ClampToTargetBounds(
+                      targetKey: _subtaskListKey,
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        clipBehavior: Clip.antiAlias,
+                        child: child,
+                      ),
+                    );
+                  },
+                  onReorderItem: _reorderSubtasks,
+                  children: [
+                    for (var i = 0; i < _subtasks.length; i++)
+                      ReorderableDragStartListener(
+                        key: ValueKey(_subtasks[i].id),
+                        index: i,
+                        child: _SubtaskRow(
+                          subtask: _subtasks[i],
+                          listColor: listColor,
+                          onToggle: (completed) =>
+                              _toggleSubtask(_subtasks[i], completed),
+                          onRename: (title) =>
+                              _renameSubtask(_subtasks[i], title),
+                          onDelete: () => _deleteSubtask(_subtasks[i]),
+                          onPromote: () => _promoteSubtask(_subtasks[i]),
+                          onSubmitRename: () {
+                            _subtaskFocusNode.requestFocus();
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(height: 24),
+              Text(
+                'Created ${DateFormat.yMMMd().add_jm().format(widget.task.createdAt.toLocal())}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(height: 8),
+              GlassButton(onPressed: _close, label: 'Save', color: listColor),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -1280,30 +1315,64 @@ class _SubtaskRowState extends State<_SubtaskRow>
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final hoverColor = Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.06);
+                final hoverColor = Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.06);
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
                     if (_editing)
-                      TextField(
-                        contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
+                      VimTextScope(
+                        enabled: VimEnabledScope.of(context) && vimSuitsField(),
                         controller: _editController,
-                        focusNode: _editFocusNode,
-                        autofocus: true,
-                        style: textStyle,
-                        textInputAction: TextInputAction.done,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
+                        multiline: false,
+                        modeBadgeOutside: true,
+                        builder: (context, vim) {
+                          final theme = Theme.of(context);
+                          final fieldStyle = textStyle ?? const TextStyle();
+                          const contentPadding = EdgeInsets.symmetric(
                             vertical: 12,
                             horizontal: 12,
-                          ),
-                          border: InputBorder.none,
-                        ),
-                        onSubmitted: (_) => _finishEditing(focusNext: true),
+                          );
+                          return VimOverlayHost(
+                            session: vim.session,
+                            overlayPaintsSelection: vim.overlayPaintsSelection,
+                            controller: _editController,
+                            focusNode: _editFocusNode,
+                            style: fieldStyle,
+                            accentColor: theme.colorScheme.primary,
+                            overlayPadding: vimOverlayPadding(
+                              contentPadding: contentPadding,
+                              density: theme.visualDensity,
+                              cursorWidth: vim.overlayCaretWidth,
+                              outlineGap: true,
+                              outlineCenter: true,
+                            ),
+                            child: TextField(
+                              contextMenuBuilder:
+                                  (context, editableTextState) =>
+                                      const SizedBox.shrink(),
+                              controller: _editController,
+                              focusNode: _editFocusNode,
+                              autofocus: true,
+                              style: fieldStyle,
+                              cursorColor: vim.overlayCaretColor(
+                                theme.colorScheme.primary,
+                              ),
+                              cursorWidth: vim.overlayCaretWidth,
+                              undoController: vim.undoController,
+                              textInputAction: TextInputAction.done,
+                              scrollPadding: kVoyagerFieldScrollPadding,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                contentPadding: contentPadding,
+                                border: InputBorder.none,
+                              ),
+                              onSubmitted: (_) =>
+                                  _finishEditing(focusNext: true),
+                            ),
+                          );
+                        },
                       )
                     else
                       Material(
@@ -1337,8 +1406,10 @@ class _SubtaskRowState extends State<_SubtaskRow>
                                 painter: _MultilineStrikePainter(
                                   text: widget.subtask.title,
                                   style: textStyle ?? const TextStyle(),
-                                  progress:
-                                      _strikeProgress.value.clamp(0.0, 1.0),
+                                  progress: _strikeProgress.value.clamp(
+                                    0.0,
+                                    1.0,
+                                  ),
                                   color: strikeColor,
                                   textDirection: Directionality.of(context),
                                   maxWidth: constraints.maxWidth,
@@ -1362,10 +1433,9 @@ class _SubtaskRowState extends State<_SubtaskRow>
             icon: Icon(
               PhosphorIconsBold.dotsThreeVertical,
               size: 18,
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurface
-                  .withValues(alpha: 0.72),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.72),
             ),
             onSelected: (action) {
               switch (action) {
@@ -1418,7 +1488,7 @@ class _MultilineStrikePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (progress <= 0) return;
-    
+
     final layoutWidth = maxWidth - textPadding.horizontal;
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
@@ -1441,10 +1511,7 @@ class _MultilineStrikePainter extends CustomPainter {
     for (final line in metrics) {
       if (remaining <= 0) break;
       final drawWidth = remaining < line.width ? remaining : line.width;
-      final y = textPadding.top +
-          line.baseline -
-          line.ascent +
-          line.height / 2;
+      final y = textPadding.top + line.baseline - line.ascent + line.height / 2;
       canvas.drawLine(
         Offset(line.left + textPadding.left, y),
         Offset(line.left + textPadding.left + drawWidth, y),

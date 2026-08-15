@@ -40,6 +40,8 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/search/search_entry_save_helper.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
+import 'package:voyager/core/tags/tag_suggestions.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
@@ -135,6 +137,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           TagHighlightedTextField(
             controller: _queryController,
             focusNode: _queryFocusNode,
+            // Search only ever looks at journal entries (see
+            // SearchService.searchEntries), so it completes against theirs.
+            tagScope: TagScope.journal,
             cursorColor: accentColor,
             hintText: 'Search keywords or #tag',
             onChanged: (_) => setState(() {}),
@@ -217,7 +222,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: searchHighlightedText(
-                            entry.body,
+                            searchSnippet(entry.body, keywords: keywords),
                             style: bodyStyle,
                             keywords: keywords,
                             maxLines: 2,
@@ -330,19 +335,24 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       return KeyEventResult.ignored;
     };
 
+    // _handleBodyKey is installed by TagHighlightedTextField (see its
+    // onKeyEvent param) rather than assigned here: the tag completion popup
+    // owns focusNode.onKeyEvent so it can take Enter while it's open, and
+    // chains through to this handler otherwise.
     _bodyFocusNode = FocusNode();
-    _bodyFocusNode.onKeyEvent = (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      if (event.logicalKey == LogicalKeyboardKey.enter &&
-          !HardwareKeyboard.instance.isShiftPressed) {
-        _saveAndClose();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    };
 
     _mood = _entry.mood;
     _weatherIcon = _entry.weatherIcon ?? 'sunny';
+  }
+
+  KeyEventResult _handleBodyKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _saveAndClose();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   JournalWriteCoordinator? _coordinator;
@@ -501,7 +511,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
         title: const Text('Journal entry'),
         content: SizedBox(
           width: dialogWidth,
-          child: SingleChildScrollView(
+          child: VoyagerScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -605,6 +615,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                   child: TagHighlightedTextField(
                     controller: _bodyController,
                     focusNode: _bodyFocusNode,
+                    tagScope: TagScope.journal,
+                    onKeyEvent: _handleBodyKey,
                     cursorColor: _accentColor,
                     expands: true,
                     hintText: 'Start writing...',
