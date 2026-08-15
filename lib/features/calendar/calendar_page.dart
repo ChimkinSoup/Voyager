@@ -1824,6 +1824,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   // Calendar area
   // ---------------------------------------------------------------------------
 
+  /// Days to mark as worked out, refreshed in [build] and read by every
+  /// `_calendarGrid` call. Held as a field rather than threaded through as a
+  /// parameter because `_calendarGrid` is invoked from a dozen places in this
+  /// file (including mid-morph overlays), and every one of them wants the
+  /// same value.
+  Set<DateTime> _workoutDays = const {};
+
   Widget _calendarGrid({
     required List<CalendarEvent> events,
     required List<CalendarDayIndicator> indicators,
@@ -1851,6 +1858,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       events: events,
       indicators: indicators,
       todoMarkers: mode == CalendarViewMode.year ? const [] : todoMarkers,
+      // Never in the year view: its cells are a few pixels tall and the spec
+      // asks for the marker only on month and week.
+      workoutDays: mode == CalendarViewMode.year ? const {} : _workoutDays,
       showTodoIcons: mode == CalendarViewMode.year ? false : showTodoIcons,
       weekStartsMonday: weekStartsMonday,
       onDayTap: (day) => _openEventSidebar(day: day),
@@ -2286,6 +2296,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final calendars = calendarsAsync.valueOrNull ?? const <Calendar>[];
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
     final weekStartsMonday = settings.weekStartsOnMonday;
+    _workoutDays = settings.showWorkoutsOnCalendar
+        ? (ref.watch(workoutDaysProvider).valueOrNull ?? const {})
+        : const {};
 
     final selectedCalendar = _selectedCalendarId == null
         ? null

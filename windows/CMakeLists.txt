@@ -57,6 +57,30 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# Make `flutter build/run windows --profile` link.
+#
+# firebase_core's CMakeLists sets IMPORTED_LOCATION_DEBUG and
+# IMPORTED_LOCATION_RELEASE on the prebuilt Firebase libs, but not
+# IMPORTED_LOCATION_PROFILE. Flutter declares three configurations
+# (Debug;Profile;Release above), so for Profile builds CMake finds no
+# per-config path and falls back to the plain IMPORTED_LOCATION — which the
+# Firebase SDK's own CMakeLists points at the *Debug* libs, because it
+# selects on CMAKE_BUILD_TYPE and that is always empty under the multi-config
+# Visual Studio generator Flutter uses.
+#
+# Profile otherwise compiles and links with the Release CRT flags set above,
+# so those Debug libs drag in debug-CRT symbols (_calloc_dbg, _CrtDbgReport,
+# std::_Crt_new_delete) that aren't there, and the link fails with LNK2001.
+# Mapping Profile onto the Release imported location fixes it.
+foreach(firebase_lib
+  firebase_app firebase_auth firebase_remote_config firebase_storage
+  firebase_firestore firebase_database firebase_app_check)
+  if(TARGET ${firebase_lib})
+    set_target_properties(${firebase_lib} PROPERTIES
+      MAP_IMPORTED_CONFIG_PROFILE Release)
+  endif()
+endforeach()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

@@ -10,6 +10,8 @@ import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/tags/tag_suggestions.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Opens the add / edit tag-budget modal.
 Future<void> showBudgetModal(
@@ -121,18 +123,17 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// Tags worth suggesting: everything already used on a transaction, plus any
-  /// tag that has a stored color.
-  List<String> _knownTags() {
+  /// Tags worth suggesting: everything already used on a transaction, most-used
+  /// first, then any tag that only has a stored color. Narrowed to what's been
+  /// typed so far, so the chip row completes like the `#` popup does elsewhere.
+  List<String> _suggestedTags() {
     final transactions = ref.watch(transactionsProvider).valueOrNull ?? const [];
     final colors = ref.watch(tagColorsProvider).valueOrNull ?? const {};
-    final tags = <String>{
-      for (final t in transactions) ...t.tags,
-      ...colors.keys,
-    };
-    final sorted = tags.toList()
+    final used = rankTagsByUsage(transactions.map((t) => t.tags));
+    final usedSet = used.toSet();
+    final colorOnly = colors.keys.where((t) => !usedSet.contains(t)).toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return sorted;
+    return filterTagSuggestions([...used, ...colorOnly], _tag, limit: 12);
   }
 
   @override
@@ -140,12 +141,12 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final limit = _parsedLimit;
-    final suggestions = _knownTags();
+    final suggestions = _suggestedTags();
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
-      child: SingleChildScrollView(
+      child: VoyagerScrollView(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(
@@ -209,7 +210,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    for (final tag in suggestions.take(12))
+                    for (final tag in suggestions)
                       ActionChip(
                         label: Text('#$tag',
                             style: const TextStyle(fontSize: 12)),

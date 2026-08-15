@@ -27,6 +27,38 @@ void main() {
       final service = VoyagerSpellCheckService();
       expect(service.checkTextSync('anything gzqx'), isEmpty);
     });
+
+    test('does not generate suggestions unless asked', () {
+      final service = _serviceWith({'the', 'quick', 'fox'});
+      final flagged = service.checkTextSync('the quikc fox');
+      expect(flagged, hasLength(1));
+      expect(flagged.single.suggestions, isEmpty);
+
+      final withSuggestions = service.checkTextSync(
+        'the quikc fox',
+        includeSuggestions: true,
+      );
+      expect(withSuggestions.single.suggestions, isNotEmpty);
+    });
+  });
+
+  group('hydrateSuggestions', () {
+    test('fills in corrections for a flagged span', () {
+      final service = _serviceWith({'world', 'word'});
+      final spans = service.checkTextSync('wrold');
+      expect(spans.single.suggestions, isEmpty);
+
+      final hydrated = service.hydrateSuggestions('wrold', spans.single);
+      expect(hydrated.suggestions, contains('world'));
+      expect(hydrated.range, spans.single.range);
+    });
+
+    test('is a no-op when suggestions are already present', () {
+      final service = _serviceWith({'world'});
+      final spans = service.checkTextSync('wrold', includeSuggestions: true);
+      final hydrated = service.hydrateSuggestions('wrold', spans.single);
+      expect(hydrated.suggestions, spans.single.suggestions);
+    });
   });
 
   group('checkIncremental — deferral', () {
@@ -37,7 +69,12 @@ void main() {
 
       for (final ch in 'xqz'.split('')) {
         final newText = text + ch;
-        spans = service.checkIncremental(oldText: text, oldSpans: spans, newText: newText);
+        spans = service.checkIncremental(
+          oldText: text,
+          oldSpans: spans,
+          newText: newText,
+          allowDeferral: true,
+        );
         text = newText;
         expect(spans, isEmpty, reason: 'mid-word "$text" should not be flagged yet');
       }
@@ -45,7 +82,12 @@ void main() {
       // Same call repeated with identical text (mirrors the two real call
       // sites — EditableText's own pass and SpellCheckSquiggleLayer's
       // listener — invoking this within one keystroke) must agree.
-      final again = service.checkIncremental(oldText: text, oldSpans: spans, newText: text);
+      final again = service.checkIncremental(
+        oldText: text,
+        oldSpans: spans,
+        newText: text,
+        allowDeferral: true,
+      );
       expect(again, isEmpty);
 
       // Finishing the word (space appended, "xqz" no longer the active
@@ -55,8 +97,25 @@ void main() {
         oldText: text,
         oldSpans: spans,
         newText: finishedText,
+        allowDeferral: true,
       );
       expect(_flaggedWords(finishedText, finished), ['xqz']);
+    });
+
+    test('repeated misspellings separated by newlines are all flagged', () {
+      final service = _serviceWith({'hello'});
+      var text = '';
+      var spans = <SuggestionSpan>[];
+      for (final ch in 'xqz\nxqz\nxqz'.split('')) {
+        final newText = text + ch;
+        spans = service.checkIncremental(
+          oldText: text,
+          oldSpans: spans,
+          newText: newText,
+        );
+        text = newText;
+      }
+      expect(_flaggedWords(text, spans), ['xqz', 'xqz', 'xqz']);
     });
 
     test('allowDeferral: false always returns the complete result, even mid-edit', () {
@@ -68,6 +127,17 @@ void main() {
         allowDeferral: false,
       );
       expect(_flaggedWords('xq', forced), ['xq']);
+    });
+
+    test('a bulk insertion (paste / Vim put) is not deferred', () {
+      final service = _serviceWith({'hello'});
+      final result = service.checkIncremental(
+        oldText: 'hello ',
+        oldSpans: const [],
+        newText: 'hello xqzzy',
+        allowDeferral: true,
+      );
+      expect(_flaggedWords('hello xqzzy', result), ['xqzzy']);
     });
 
     test('a pure deletion has nothing to defer and checks the result normally', () {
@@ -186,10 +256,11 @@ void main() {
   group('checkIncremental — fuzz equivalence to checkTextSync', () {
     // The strongest guarantee for offset-shifting logic like this: after any
     // sequence of random edits, the incrementally-maintained result must be
-    // byte-for-byte identical (ranges + suggestions) to a fresh, from-scratch
-    // check of the final text. allowDeferral: false is used throughout so
-    // this isolates the splicing/shifting logic from the (separately tested)
-    // deferral behavior, which is a deliberate divergence from a full check.
+    // byte-for-byte identical (ranges + suggestion lists) to a fresh,
+    // from-scratch check of the final text. allowDeferral: false is used
+    // throughout so this isolates the splicing/shifting logic from the
+    // (separately tested) deferral behavior. Suggestions stay empty on the
+    // hot path; both sides must agree on that too.
     const words = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog'];
     const misspellings = ['teh', 'qwik', 'brwon', 'foxx', 'jmups', 'ovr', 'lasy', 'dogg'];
 

@@ -34,12 +34,21 @@ bool _wordHasSquiggle(WidgetTester tester, String word) {
   return false;
 }
 
+int _squiggleCountForWord(WidgetTester tester, String word) {
+  var count = 0;
+  for (final (text, squiggle) in _leafSpans(tester)) {
+    if (text == word && squiggle) count++;
+  }
+  return count;
+}
+
 void main() {
   Future<void> pumpLayer(
     WidgetTester tester, {
     required VoyagerSpellCheckService service,
     required TextEditingController controller,
     required FocusNode focusNode,
+    bool suppressActiveWord = true,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -50,6 +59,7 @@ void main() {
               controller: controller,
               focusNode: focusNode,
               style: const TextStyle(fontSize: 16),
+              suppressActiveWord: suppressActiveWord,
             ),
           ),
         ),
@@ -64,6 +74,50 @@ void main() {
       selection: TextSelection.collapsed(offset: newText.length),
     );
   }
+
+  testWidgets('repeated misspellings on new lines are all underlined',
+      (tester) async {
+    final service = VoyagerSpellCheckService()..updateDictionary({'hello'});
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await pumpLayer(tester, service: service, controller: controller, focusNode: focusNode);
+
+    for (final ch in 'xqz'.split('')) {
+      typeChar(controller, ch);
+      await tester.pump();
+    }
+    expect(_squiggleCountForWord(tester, 'xqz'), 0);
+
+    typeChar(controller, '\n');
+    await tester.pump();
+    expect(_squiggleCountForWord(tester, 'xqz'), 1);
+
+    for (final ch in 'xqz'.split('')) {
+      typeChar(controller, ch);
+      await tester.pump();
+    }
+    // Previous line stays marked; the copy still under the caret is hidden.
+    expect(_squiggleCountForWord(tester, 'xqz'), 1);
+
+    typeChar(controller, '\n');
+    await tester.pump();
+    expect(_squiggleCountForWord(tester, 'xqz'), 2);
+
+    // Leaving the last copy by moving the caret (no extra delimiter) must
+    // still reveal it — the old deferral path dropped it from the span list
+    // entirely, so a selection-only change never brought it back.
+    for (final ch in 'xqz'.split('')) {
+      typeChar(controller, ch);
+      await tester.pump();
+    }
+    expect(_squiggleCountForWord(tester, 'xqz'), 2);
+    controller.selection = const TextSelection.collapsed(offset: 0);
+    await tester.pump();
+    expect(_squiggleCountForWord(tester, 'xqz'), 3);
+  });
 
   testWidgets('hides the squiggle for a word while it is still being typed, '
       'then shows it once finished', (tester) async {
@@ -149,6 +203,109 @@ void main() {
     await tester.pump();
     expect(_wordHasSquiggle(tester, 'qqzzxx'), isTrue);
     expect(_wordHasSquiggle(tester, 'unrelated'), isTrue);
+  });
+
+  testWidgets('pasting a misspelled word in Normal mode underlines it immediately',
+      (tester) async {
+    final service = VoyagerSpellCheckService()..updateDictionary({'hello'});
+    final controller = TextEditingController(text: 'hello ');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await pumpLayer(
+      tester,
+      service: service,
+      controller: controller,
+      focusNode: focusNode,
+      suppressActiveWord: false,
+    );
+    await tester.pump();
+
+    // Vim `p`: whole word lands with the caret sitting on its last character.
+    controller.value = const TextEditingValue(
+      text: 'hello xqzzy',
+      selection: TextSelection.collapsed(offset: 10),
+    );
+    await tester.pump();
+    expect(_wordHasSquiggle(tester, 'xqzzy'), isTrue);
+  });
+
+  testWidgets('pasting a misspelled word in Insert mode still underlines it',
+      (tester) async {
+    final service = VoyagerSpellCheckService()..updateDictionary({'hello'});
+    final controller = TextEditingController(text: 'hello ');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await pumpLayer(
+      tester,
+      service: service,
+      controller: controller,
+      focusNode: focusNode,
+    );
+    await tester.pump();
+
+    controller.value = const TextEditingValue(
+      text: 'hello xqzzy',
+      selection: TextSelection.collapsed(offset: 10),
+    );
+    await tester.pump();
+    expect(_wordHasSquiggle(tester, 'xqzzy'), isTrue);
+  });
+
+  testWidgets('leaving Insert rechecks a just-typed misspelling', (tester) async {
+    final service = VoyagerSpellCheckService()..updateDictionary({'hello'});
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await pumpLayer(
+      tester,
+      service: service,
+      controller: controller,
+      focusNode: focusNode,
+    );
+
+    for (final ch in 'xqz'.split('')) {
+      typeChar(controller, ch);
+      await tester.pump();
+    }
+    expect(_wordHasSquiggle(tester, 'xqz'), isFalse);
+
+    await pumpLayer(
+      tester,
+      service: service,
+      controller: controller,
+      focusNode: focusNode,
+      suppressActiveWord: false,
+    );
+    await tester.pump();
+    expect(_wordHasSquiggle(tester, 'xqz'), isTrue);
+  });
+
+  testWidgets('adding a custom word clears every occurrence immediately, without any edit', (tester) async {
+    final service = VoyagerSpellCheckService()..updateDictionary({'hello'});
+    final controller = TextEditingController(text: 'voyager hello Voyager voyager');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await pumpLayer(tester, service: service, controller: controller, focusNode: focusNode);
+    await tester.pump();
+    expect(_squiggleCountForWord(tester, 'voyager'), 2);
+    expect(_squiggleCountForWord(tester, 'Voyager'), 1);
+
+    // Exactly what "Add to dictionary" does — and nothing else. No text
+    // change, no selection change, so the controller never notifies: the
+    // layer has to rebuild off the service's own notification.
+    service.updateCustomWords({'voyager'});
+    await tester.pump();
+
+    expect(_wordHasSquiggle(tester, 'voyager'), isFalse);
+    expect(_wordHasSquiggle(tester, 'Voyager'), isFalse);
   });
 
   testWidgets('picks up a dictionary change on the next real edit via the generation check', (tester) async {

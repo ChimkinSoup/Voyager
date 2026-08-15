@@ -2,6 +2,7 @@ import 'dart:convert';
 
 // ignore_for_file: prefer_initializing_formals
 import 'package:http/http.dart' as http;
+import 'package:voyager/data/remote/leetcode_content.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 
@@ -57,6 +58,7 @@ class LeetCodeApiClient {
       query recentAcSubmissions(\$username: String!, \$limit: Int!) {
         recentAcSubmissionList(username: \$username, limit: \$limit) {
           titleSlug
+          lang
         }
       }
       ''',
@@ -64,10 +66,14 @@ class LeetCodeApiClient {
     );
     final submissions = data['recentAcSubmissionList'] as List<dynamic>?;
     if (submissions == null || submissions.isEmpty) return null;
-    final titleSlug =
-        (submissions.first as Map<String, dynamic>)['titleSlug'] as String?;
+    final submission = submissions.first as Map<String, dynamic>;
+    final titleSlug = submission['titleSlug'] as String?;
     if (titleSlug == null || titleSlug.isEmpty) return null;
-    return fetchBySlug(titleSlug);
+    final question = await fetchBySlug(titleSlug);
+    // The question lookup knows nothing about how it was reached, so the
+    // submission's own language is carried across here — it's what the Track
+    // modal preselects in its language row.
+    return question.withSubmissionLanguage(submission['lang'] as String?);
   }
 
   Future<LeetCodeApiQuestion> fetchBySlug(String titleSlug) async {
@@ -80,6 +86,7 @@ class LeetCodeApiClient {
           title
           titleSlug
           difficulty
+          content
           topicTags { name }
         }
       }
@@ -90,7 +97,7 @@ class LeetCodeApiClient {
     if (question == null) {
       throw Exception('No LeetCode problem found for "$titleSlug".');
     }
-    return _questionFromJson(question);
+    return _questionFromJson(question, includeContent: true);
   }
 
   /// Searches by title. LeetCode's search query shape has shifted across API
@@ -151,7 +158,10 @@ class LeetCodeApiClient {
     return stripped.trim().replaceAll(RegExp(r'\s+'), '-');
   }
 
-  LeetCodeApiQuestion _questionFromJson(Map<String, dynamic> json) {
+  LeetCodeApiQuestion _questionFromJson(
+    Map<String, dynamic> json, {
+    bool includeContent = false,
+  }) {
     final topicTags = (json['topicTags'] as List<dynamic>? ?? const [])
         .map((t) => (t as Map<String, dynamic>)['name'] as String? ?? '')
         .where((name) => name.isNotEmpty)
@@ -163,6 +173,12 @@ class LeetCodeApiClient {
       titleSlug: json['titleSlug'] as String? ?? '',
       difficulty: _parseDifficulty(json['difficulty'] as String?),
       topicTags: topicTags,
+      description: includeContent
+          ? leetCodeContentToDescription(json['content'] as String?)
+          : null,
+      examples: includeContent
+          ? leetCodeContentToExamples(json['content'] as String?)
+          : const [],
     );
   }
 

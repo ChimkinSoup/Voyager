@@ -13,6 +13,7 @@ import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
@@ -33,7 +34,8 @@ import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/dream_models.dart';
-import 'package:voyager/domain/models/journal_models.dart' show firstSentencePreview;
+import 'package:voyager/domain/models/journal_models.dart'
+    show firstSentencePreview;
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/dream_journal/dream_branch_painter.dart';
 import 'package:voyager/features/dream_journal/dream_sticky_note.dart';
@@ -88,6 +90,15 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
 
   String? _selectedEntryId;
   DreamEntry? _selectedEntry;
+
+  /// Dreams deleted here that the entries provider may still be handing back.
+  ///
+  /// A soft delete doesn't reach [allDreamEntriesProvider] until its refresh
+  /// lands, so without this the auto-select in [build] sees the entry still
+  /// sitting at the head of the list and re-opens it — putting the title and
+  /// body you just deleted straight back on screen, where they stick, because
+  /// `_selectedEntryId` is no longer null for auto-select to try again.
+  final _deletedEntryIds = <String>{};
   final _titleController = TextEditingController();
   final _titleFocusNode = FocusNode();
   final _bodyFocusNode = FocusNode();
@@ -121,6 +132,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       _handleSystemBack,
     );
     _titleFocusNode.addListener(_handleTitleFocusChanged);
+    _bodyFocusNode.addListener(_handleBodyFocusChanged);
     _notesFocusNode.onKeyEvent = _handleNotesKey;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(ref.read(allDreamEntriesProvider.future));
@@ -128,7 +140,8 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   }
 
   Future<void> _lifecycleFlush() async {
-    await _flushActiveEdits();
+    // Nothing is left on screen to refresh for; just get the bytes down.
+    await _flushActiveEdits(refreshList: false);
     await _flushNotes();
   }
 
@@ -138,11 +151,22 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     }
   }
 
+  /// Leaving the body is a commitment point, the same as it is on the journal
+  /// page. Without this the dream list — and the tag pool and "dream logged"
+  /// tracker built off it — would stay stale until the user happened to switch
+  /// dreams, since the autosave deliberately no longer reloads them.
+  void _handleBodyFocusChanged() {
+    if (!_bodyFocusNode.hasFocus) {
+      unawaited(_flushActiveEdits());
+    }
+  }
+
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
     _removeBackInterceptor?.call();
     _titleFocusNode.removeListener(_handleTitleFocusChanged);
+    _bodyFocusNode.removeListener(_handleBodyFocusChanged);
     _saveTimer?.cancel();
     _notesSaveTimer?.cancel();
     _titleController.dispose();
@@ -181,6 +205,22 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     );
   }
 
+  /// Writes the editor's current text, or does nothing if it already matches
+  /// disk.
+  ///
+  /// Deliberately has no say in reloading [allDreamEntriesProvider]: it is
+  /// reached both from the ~400ms autosave, which must not reload at all, and
+  /// from [_flushActiveEdits], which must reload whether or not this found
+  /// anything to write. By the time a flush runs the autosave has usually
+  /// already persisted the same text, so hanging the reload off a successful
+  /// write here would silently skip it and leave the list stale for good.
+  ///
+  /// The reload is worth avoiding per keystroke burst because that provider
+  /// re-reads and re-maps every dream row, and fans out further —
+  /// `tagPoolProvider` re-ranks every dream's tags off it, and so does the
+  /// "dream logged" tracker. None of that can change from editing one dream's
+  /// text, and the list row on screen is updated directly below through
+  /// [_listTitlePreview]/[_listBodyPreview].
   Future<void> _persistEntryEdits({
     required DreamEntry entry,
     required String title,
@@ -216,7 +256,6 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
             _listBodyPreview.value = updated.body;
             if (mounted) setState(() => _selectedEntry = updated);
           }
-          if (mounted) ref.invalidate(allDreamEntriesProvider);
         },
       );
     } catch (error, stackTrace) {
@@ -231,7 +270,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     }
   }
 
-  Future<void> _flushActiveEdits() async {
+  Future<void> _flushActiveEdits({bool refreshList = true}) async {
     _saveTimer?.cancel();
     final entryId = _selectedEntryId;
     final entry = _selectedEntry;
@@ -239,7 +278,8 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     final remoteSync = _syncOrNull();
     if (remoteSync == null) return;
 
-    final currentBody = _bodyEditorKey.currentState?.currentBodyText ?? entry.body;
+    final currentBody =
+        _bodyEditorKey.currentState?.currentBodyText ?? entry.body;
     final pendingApplied = await remoteSync.applyPendingDreamEntryTextMerge(
       entryId: entryId,
       currentLocalText: currentBody,
@@ -251,13 +291,17 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     await _persistEntryEdits(
       entry: entry,
       title: _titleController.text,
-      body: _bodyEditorKey.currentState?.currentBodyText ??
+      body:
+          _bodyEditorKey.currentState?.currentBodyText ??
           pendingApplied?.body ??
           entry.body,
       bumpVersion: true,
     );
 
     await remoteSync.flushDocument(FirestoreCollections.dreamEntries, entryId);
+
+    // Unconditional, not hung off the write above — see [_persistEntryEdits].
+    if (refreshList && mounted) ref.invalidate(allDreamEntriesProvider);
   }
 
   void _scheduleNotesSave() {
@@ -268,7 +312,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   }
 
   void _handleNotesChanged(String value) {
-    applyListEditing(controller: _notesController, previousText: _lastNotesText);
+    applyListEditing(
+      controller: _notesController,
+      previousText: _lastNotesText,
+    );
     _lastNotesText = _notesController.text;
     _scheduleNotesSave();
   }
@@ -390,7 +437,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       await _flushActiveEdits();
       await _flushNotes();
       if (!mounted) return;
-      setState(() {
+    }
+    setState(() {
+      _deletedEntryIds.add(entry.id);
+      if (_selectedEntryId == entry.id) {
         _selectedEntryId = null;
         _selectedEntry = null;
         _titleController.clear();
@@ -398,8 +448,8 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         _lastNotesText = '';
         _listTitlePreview.value = '';
         _listBodyPreview.value = '';
-      });
-    }
+      }
+    });
 
     final repo = _repoOrNull();
     if (repo == null) return;
@@ -443,15 +493,25 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     ref.invalidate(allDreamEntriesProvider);
   }
 
-  void _showEntryStatistics(DreamEntry entry) {
-    final wordCount = ref.read(analyticsServiceProvider).countWords(entry.body);
+  Future<void> _showEntryStatistics(DreamEntry entry) async {
+    // The row hands over whatever the list last loaded, and the title, body
+    // and notes boxes all save on a debounce — so opening statistics straight
+    // after typing showed the previous text. Flush what is on screen, then
+    // re-read the stored entry, and the dialog reports what the user sees.
+    if (_selectedEntryId == entry.id) {
+      await _flushNotes();
+      await _flushActiveEdits();
+      if (!mounted) return;
+    }
+    final fresh = await _repoOrNull()?.getEntry(entry.id) ?? entry;
+    if (!mounted) return;
+
+    final wordCount = ref.read(analyticsServiceProvider).countWords(fresh.body);
     unawaited(
       showVoyagerDialog<void>(
         context: context,
-        builder: (context) => DreamStatisticsDialog(
-          entry: entry,
-          wordCount: wordCount,
-        ),
+        builder: (context) =>
+            DreamStatisticsDialog(entry: fresh, wordCount: wordCount),
       ),
     );
   }
@@ -492,7 +552,19 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         ),
         entriesAsync.when(
           data: (entries) {
-            final sorted = sortDreamEntriesNewestFirst(entries);
+            // Drop anything deleted here that the provider hasn't caught up
+            // with yet, and let go of ids it already has — see
+            // [_deletedEntryIds].
+            _deletedEntryIds.removeWhere(
+              (id) => !entries.any((entry) => entry.id == id),
+            );
+            final sorted = sortDreamEntriesNewestFirst(
+              _deletedEntryIds.isEmpty
+                  ? entries
+                  : entries
+                        .where((entry) => !_deletedEntryIds.contains(entry.id))
+                        .toList(),
+            );
             if (_selectedEntryId == null && sorted.isNotEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted && _selectedEntryId == null) {
@@ -504,7 +576,8 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
               builder: (context, constraints) {
                 final totalWidth = constraints.maxWidth;
                 final storedListWidth =
-                    _splitWidth ?? DreamSplitLayout.defaultListWidth(totalWidth);
+                    _splitWidth ??
+                    DreamSplitLayout.defaultListWidth(totalWidth);
                 // While dragging, storedListWidth is already soft-bounded
                 // (see onDragUpdate below) — re-clamping here would cancel
                 // the rubber-band out before it ever reaches the screen.
@@ -536,52 +609,57 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                         child: _buildEntryList(sorted),
                       ),
                     if (!compact)
-                    ResizablePaneDivider(
-                      onDragStart: () {
-                        _dragStartWidth = _splitWidth ??
-                            DreamSplitLayout.defaultListWidth(totalWidth);
-                        setState(() => _splitDragging = true);
-                      },
-                      onDragUpdate: (totalDelta) {
-                        final start = _dragStartWidth ??
-                            DreamSplitLayout.defaultListWidth(totalWidth);
-                        setState(() {
-                          // Soft-bounded while the drag is live — tracks the
-                          // pointer 1:1 but resists past the real bounds
-                          // instead of stopping dead.
-                          _splitWidth = DreamSplitLayout.dragClampListWidth(
-                            start + totalDelta,
-                            totalWidth,
-                          );
-                        });
-                      },
-                      onDragEnd: () {
-                        // Hard-clamp back to the real bound now that the drag
-                        // has ended; the spring-curved AnimatedContainer
-                        // around the pane carries the visual snap-back from
-                        // wherever the rubber-band left it.
-                        final width = _splitWidth;
-                        final settled = width == null
-                            ? null
-                            : DreamSplitLayout.clampListWidth(width, totalWidth);
-                        setState(() {
-                          _splitWidth = settled;
-                          _splitDragging = false;
-                        });
-                        unawaited(_persistSplitWidth(settled));
-                      },
-                      onDoubleTapReset: () {
-                        setState(() => _splitWidth = null);
-                        unawaited(_persistSplitWidth(null));
-                      },
-                    ),
-                    if (showEditor)
-                    Expanded(
-                      child: _buildEditorArea(
-                        accent: accent,
-                        compact: compact,
+                      ResizablePaneDivider(
+                        onDragStart: () {
+                          _dragStartWidth =
+                              _splitWidth ??
+                              DreamSplitLayout.defaultListWidth(totalWidth);
+                          setState(() => _splitDragging = true);
+                        },
+                        onDragUpdate: (totalDelta) {
+                          final start =
+                              _dragStartWidth ??
+                              DreamSplitLayout.defaultListWidth(totalWidth);
+                          setState(() {
+                            // Soft-bounded while the drag is live — tracks the
+                            // pointer 1:1 but resists past the real bounds
+                            // instead of stopping dead.
+                            _splitWidth = DreamSplitLayout.dragClampListWidth(
+                              start + totalDelta,
+                              totalWidth,
+                            );
+                          });
+                        },
+                        onDragEnd: () {
+                          // Hard-clamp back to the real bound now that the drag
+                          // has ended; the spring-curved AnimatedContainer
+                          // around the pane carries the visual snap-back from
+                          // wherever the rubber-band left it.
+                          final width = _splitWidth;
+                          final settled = width == null
+                              ? null
+                              : DreamSplitLayout.clampListWidth(
+                                  width,
+                                  totalWidth,
+                                );
+                          setState(() {
+                            _splitWidth = settled;
+                            _splitDragging = false;
+                          });
+                          unawaited(_persistSplitWidth(settled));
+                        },
+                        onDoubleTapReset: () {
+                          setState(() => _splitWidth = null);
+                          unawaited(_persistSplitWidth(null));
+                        },
                       ),
-                    ),
+                    if (showEditor)
+                      Expanded(
+                        child: _buildEditorArea(
+                          accent: accent,
+                          compact: compact,
+                        ),
+                      ),
                   ],
                 );
               },
@@ -658,7 +736,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                         ContextMenuItem(
                           label: 'See statistics',
                           icon: PhosphorIconsRegular.chartBar,
-                          onTap: () => _showEntryStatistics(entry),
+                          onTap: () => unawaited(_showEntryStatistics(entry)),
                         ),
                         ContextMenuItem(
                           label: 'Delete',
@@ -721,12 +799,24 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
               label: 'Dreams',
               onBack: () => unawaited(_closeCompactEditor()),
             ),
-          LabeledTextField(
-            label: 'Title',
-            controller: _titleController,
-            focusNode: _titleFocusNode,
-            accentColor: accent,
-            onChanged: (_) => _scheduleBodySave(),
+          Focus(
+            onKeyEvent: (node, event) {
+              if (event is! KeyDownEvent) return KeyEventResult.ignored;
+              if (event.logicalKey == LogicalKeyboardKey.tab &&
+                  !HardwareKeyboard.instance.isShiftPressed) {
+                _bodyFocusNode.requestFocus();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: LabeledTextField(
+              label: 'Title',
+              controller: _titleController,
+              focusNode: _titleFocusNode,
+              textInputAction: TextInputAction.next,
+              accentColor: accent,
+              onChanged: (_) => _scheduleBodySave(),
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -810,89 +900,75 @@ class _DreamEntryListTile extends StatelessWidget {
     final dateStyle = theme.textTheme.labelSmall?.copyWith(
       color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
     );
-    // A faint border flags entries with only a title and no detailed log yet.
-    final isDraft = entry.body.trim().isEmpty;
-
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: VoyagerSpacing.sm,
         vertical: VoyagerSpacing.xxs,
       ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: isDraft
-              ? Border.all(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.35),
-                )
-              : null,
+      child: ListTile(
+        dense: true,
+        // Outlines the dream currently open in the reading pane.
+        shape: VoyagerListItemSurface.focusShape(context, focused: isSelected),
+        visualDensity: const VisualDensity(
+          vertical: VoyagerSpacing.compactListVerticalDensity,
         ),
-        child: ListTile(
-          dense: true,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          visualDensity: const VisualDensity(
-            vertical: VoyagerSpacing.compactListVerticalDensity,
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: VoyagerSpacing.md,
-            vertical: VoyagerSpacing.xs,
-          ),
-          tileColor: VoyagerListItemSurface.restingColor(context),
-          selectedTileColor: VoyagerListItemSurface.selectedColor(context),
-          selected: isSelected,
-          title: isSelected
-              ? ValueListenableBuilder<String>(
-                  valueListenable: titlePreview,
-                  builder: (context, title, _) => Text(
-                    title.isEmpty ? 'Untitled' : title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: titleStyle,
-                  ),
-                )
-              : Text(
-                  entry.title.isEmpty ? 'Untitled' : entry.title,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: VoyagerSpacing.md,
+          vertical: VoyagerSpacing.xs,
+        ),
+        tileColor: VoyagerListItemSurface.restingColor(context),
+        selectedTileColor: VoyagerListItemSurface.selectedColor(context),
+        selected: isSelected,
+        title: isSelected
+            ? ValueListenableBuilder<String>(
+                valueListenable: titlePreview,
+                builder: (context, title, _) => Text(
+                  title.isEmpty ? 'Untitled' : title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: titleStyle,
                 ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isSelected)
-                ValueListenableBuilder<String>(
-                  valueListenable: bodyPreview,
-                  builder: (context, body, _) {
-                    final preview = firstSentencePreview(body);
-                    if (preview.isEmpty) return const SizedBox.shrink();
-                    return Text(
-                      preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: previewStyle,
-                    );
-                  },
-                )
-              else
-                Builder(
-                  builder: (context) {
-                    final preview = firstSentencePreview(entry.body);
-                    if (preview.isEmpty) return const SizedBox.shrink();
-                    return Text(
-                      preview,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: previewStyle,
-                    );
-                  },
-                ),
-              Text('$dateLabel · $timeLabel', style: dateStyle),
-            ],
-          ),
-          onTap: onTap,
+              )
+            : Text(
+                entry.title.isEmpty ? 'Untitled' : entry.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isSelected)
+              ValueListenableBuilder<String>(
+                valueListenable: bodyPreview,
+                builder: (context, body, _) {
+                  final preview = firstSentencePreview(body);
+                  if (preview.isEmpty) return const SizedBox.shrink();
+                  return Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: previewStyle,
+                  );
+                },
+              )
+            else
+              Builder(
+                builder: (context) {
+                  final preview = firstSentencePreview(entry.body);
+                  if (preview.isEmpty) return const SizedBox.shrink();
+                  return Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: previewStyle,
+                  );
+                },
+              ),
+            Text('$dateLabel · $timeLabel', style: dateStyle),
+          ],
         ),
+        onTap: onTap,
       ),
     );
   }
@@ -935,7 +1011,10 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     _controller = TextEditingController(text: widget.entry.body);
     _lastText = _controller.text;
     widget.focusNode.addListener(_handleFocusChanged);
-    widget.focusNode.onKeyEvent = _handleKey;
+    // _handleKey is installed by TagHighlightedTextField (see its onKeyEvent
+    // param) rather than assigned here: the tag completion popup owns
+    // focusNode.onKeyEvent so it can claim the arrow keys, and chains through
+    // to this handler for everything it doesn't use.
     final remoteSync = ref.read(remoteSyncServiceProvider);
     _remoteSync = remoteSync;
     remoteSync.prepareEditingSession(
@@ -1047,7 +1126,6 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
       );
     }
     widget.focusNode.removeListener(_handleFocusChanged);
-    widget.focusNode.onKeyEvent = null;
     _controller.dispose();
     super.dispose();
   }
@@ -1103,6 +1181,8 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     return TagHighlightedTextField(
       controller: _controller,
       focusNode: widget.focusNode,
+      tagScope: TagScope.dream,
+      onKeyEvent: _handleKey,
       expands: true,
       keyboardType: TextInputType.multiline,
       cursorColor: widget.accentColor,
@@ -1154,7 +1234,9 @@ class DreamStatisticsDialog extends StatelessWidget {
             ),
             _StatLine(
               label: 'Notes',
-              value: (entry.notes ?? '').trim().isEmpty ? 'None' : 'Written',
+              value: (entry.notes ?? '').trim().isEmpty
+                  ? 'None'
+                  : entry.notes!.trim(),
             ),
             const SizedBox(height: 12),
             Text('Themes', style: theme.textTheme.labelMedium),
@@ -1170,9 +1252,7 @@ class DreamStatisticsDialog extends StatelessWidget {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: [
-                  for (final tag in entry.tags) TagChip(tag: tag),
-                ],
+                children: [for (final tag in entry.tags) TagChip(tag: tag)],
               ),
           ],
         ),

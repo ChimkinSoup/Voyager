@@ -218,9 +218,31 @@ class ShellNavItem extends StatefulWidget {
 class _ShellNavItemState extends State<ShellNavItem> {
   var _hovered = false;
 
+  /// One [AnimatedContainer] carries both fills, but they want different
+  /// clocks — selection settles with the page it summons, hover has to answer
+  /// the pointer immediately. Whichever changed last sets the duration.
+  Duration _fillDuration = shellNavHoverDuration;
+
+  @override
+  void didUpdateWidget(covariant ShellNavItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) {
+      _fillDuration = shellNavSelectionDuration(context);
+    }
+  }
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() {
+      _hovered = hovered;
+      _fillDuration = shellNavHoverDuration;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final selectionDuration = shellNavSelectionDuration(context);
     final foreground = widget.selected
         ? widget.accent
         : theme.colorScheme.onSurface;
@@ -240,17 +262,13 @@ class _ShellNavItemState extends State<ShellNavItem> {
           borderRadius: BorderRadius.circular(18),
           child: InkWell(
             onTap: widget.onTap,
-            onHover: (hovered) {
-              if (_hovered != hovered) {
-                setState(() => _hovered = hovered);
-              }
-            },
+            onHover: _setHovered,
             borderRadius: BorderRadius.circular(18),
             hoverColor: Colors.transparent,
             splashColor: Colors.transparent,
             highlightColor: Colors.transparent,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 100),
+              duration: _fillDuration,
               curve: Curves.easeOut,
               width: shellNavItemWidth,
               height: shellNavItemHeight,
@@ -269,10 +287,18 @@ class _ShellNavItemState extends State<ShellNavItem> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(widget.icon, size: 24, color: foreground),
+                  // Icon and label carry the accent, so they are as much the
+                  // selection indicator as the fill is and settle on its clock.
+                  TweenAnimationBuilder<Color?>(
+                    tween: ColorTween(end: foreground),
+                    duration: selectionDuration,
+                    curve: Curves.easeOut,
+                    builder: (context, color, _) =>
+                        Icon(widget.icon, size: 24, color: color),
+                  ),
                   const SizedBox(height: 3),
                   AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 150),
+                    duration: selectionDuration,
                     curve: Curves.easeOut,
                     style:
                         theme.textTheme.labelSmall?.copyWith(

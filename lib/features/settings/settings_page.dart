@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -11,14 +14,17 @@ import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/petal_field.dart' show petalColorWeights;
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
+import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
+import 'package:voyager/features/settings/custom_quotes_dialog.dart';
 import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
 import 'package:voyager/features/settings/weather_location_tile.dart';
@@ -149,6 +155,14 @@ class SettingsPage extends ConsumerWidget {
             value: settings.showQuotes,
             onChanged: (v) => _save(ref, settings.copyWith(showQuotes: v)),
           ),
+          ListTile(
+            title: const Text('Custom quotes'),
+            subtitle: const Text(
+              'Add your own quotes to the pool a new entry picks from',
+            ),
+            trailing: const Icon(PhosphorIconsRegular.quotes),
+            onTap: () => showCustomQuotesDialog(context),
+          ),
           SwitchListTile(
             title: const Text('Week starts on Monday'),
             value: settings.weekStartsOnMonday,
@@ -200,6 +214,16 @@ class SettingsPage extends ConsumerWidget {
             onChanged: (v) =>
                 _save(ref, settings.copyWith(hideCompletedTasks: v)),
           ),
+          SwitchListTile(
+            title: const Text('Vim keybindings'),
+            subtitle: const Text(
+              'Press Esc in any text box for Normal mode: motions, operators, '
+              'text objects, visual mode and / search. Fields still start in '
+              'Insert, so typing works as usual until you ask for Vim',
+            ),
+            value: settings.vimModeEnabled,
+            onChanged: (v) => _save(ref, settings.copyWith(vimModeEnabled: v)),
+          ),
           WeatherLocationTile(settings: settings),
           const SizedBox(height: 16),
           Text('Finance', style: Theme.of(context).textTheme.titleMedium),
@@ -229,6 +253,15 @@ class SettingsPage extends ConsumerWidget {
             ),
             trailing: const Icon(PhosphorIconsRegular.caretRight),
             onTap: () => _showLeetCodeUsernameDialog(context, ref, settings),
+          ),
+          SwitchListTile(
+            title: const Text('View NeetCode 150'),
+            subtitle: const Text(
+              'Show a progress ring for NeetCode 150 problems on the '
+              'LeetCode dashboard',
+            ),
+            value: settings.showNeetCode150,
+            onChanged: (v) => _save(ref, settings.copyWith(showNeetCode150: v)),
           ),
           const SizedBox(height: 16),
           Text('Study', style: Theme.of(context).textTheme.titleMedium),
@@ -291,10 +324,71 @@ class SettingsPage extends ConsumerWidget {
               'a dream each day',
             ),
             value: settings.showDreamStatistics,
-            onChanged: (v) => _save(
-              ref,
-              settings.copyWith(showDreamStatistics: v),
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(showDreamStatistics: v)),
+          ),
+          const SizedBox(height: 16),
+          Text('Workout', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Weight unit'),
+            subtitle: Text(
+              settings.weightUnit == WeightUnit.kg ? 'Kilograms' : 'Pounds',
             ),
+            trailing: SegmentedButton<WeightUnit>(
+              segments: const [
+                ButtonSegment(value: WeightUnit.lb, label: Text('lb')),
+                ButtonSegment(value: WeightUnit.kg, label: Text('kg')),
+              ],
+              selected: {settings.weightUnit},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) =>
+                  _save(ref, settings.copyWith(weightUnit: selection.first)),
+            ),
+          ),
+          SwitchListTile(
+            title: const Text('Rest timer between sets'),
+            subtitle: Text(
+              'Starts a ${settings.workoutRestSeconds}s countdown when you '
+              'complete a set',
+            ),
+            value: settings.workoutRestTimerEnabled,
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(workoutRestTimerEnabled: v)),
+          ),
+          if (settings.workoutRestTimerEnabled)
+            ListTile(
+              title: const Text('Rest length'),
+              subtitle: Slider(
+                value: settings.workoutRestSeconds.toDouble().clamp(15, 300),
+                min: 15,
+                max: 300,
+                divisions: 19,
+                label: '${settings.workoutRestSeconds}s',
+                onChanged: (v) => _save(
+                  ref,
+                  settings.copyWith(workoutRestSeconds: v.round()),
+                ),
+              ),
+            ),
+          SwitchListTile(
+            title: const Text('Show workouts on the calendar'),
+            subtitle: const Text(
+              'Adds a small icon to month and week days you worked out on',
+            ),
+            value: settings.showWorkoutsOnCalendar,
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(showWorkoutsOnCalendar: v)),
+          ),
+          SwitchListTile(
+            title: const Text('Show workout statistics in analytics'),
+            subtitle: const Text(
+              'Adds a stat to the analytics page showing whether you worked '
+              'out each day',
+            ),
+            value: settings.showWorkoutStatistics,
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(showWorkoutStatistics: v)),
           ),
           const SizedBox(height: 16),
           Text('Navigation', style: Theme.of(context).textTheme.titleMedium),
@@ -319,7 +413,8 @@ class SettingsPage extends ConsumerWidget {
           ListTile(
             title: const Text('Export Backup'),
             subtitle: const Text(
-              'Export all journal entries and tasks to a ZIP file',
+              'Export everything — journal, tasks, calendar, trackers, '
+              'finance, study, workouts and settings — to a ZIP file',
             ),
             leading: const Icon(PhosphorIconsRegular.downloadSimple),
             onTap: () async {
@@ -363,7 +458,8 @@ class SettingsPage extends ConsumerWidget {
           ListTile(
             title: const Text('Import Backup'),
             subtitle: const Text(
-              'Restore journal entries and tasks from a ZIP file',
+              'Restore everything from a ZIP file. Records the backup and this '
+              'device already agree on are left untouched',
             ),
             leading: const Icon(PhosphorIconsRegular.uploadSimple),
             onTap: () async {
@@ -381,26 +477,26 @@ class SettingsPage extends ConsumerWidget {
                 }
 
                 final file = File(result.files.single.path!);
-                await ref.read(dataImportServiceProvider).importFromZip(file);
+                final summary = await ref
+                    .read(dataImportServiceProvider)
+                    .importFromZip(file);
 
-                // Refresh UI caches immediately
-                ref.invalidate(journalsProvider);
-                ref.invalidate(journalEntriesProvider);
-                ref.invalidate(journalListEntriesProvider);
-                ref.invalidate(journalEntryCountsProvider);
-                ref.invalidate(journalAllEntryIdsProvider);
-                ref.invalidate(todoListsProvider);
-                ref.invalidate(todoTasksProvider);
-                ref.invalidate(allTodoTasksProvider);
-                ref.invalidate(todoListStatsProvider);
+                // A restore can rewrite any collection, so nothing on screen
+                // can be assumed still current.
+                invalidateAllDataProvidersFrom(ref);
 
                 if (context.mounted) {
+                  final restored = summary.restoredTotal;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text(
-                        'Backup imported successfully! Draining sync queue...',
+                        restored == 0 && !summary.settingsRestored
+                            ? 'Backup imported — everything in it was already '
+                                  'up to date.'
+                            : 'Backup imported: $restored record(s) restored, '
+                                  '${summary.skipped} already up to date.',
                       ),
-                      duration: Duration(seconds: 4),
+                      duration: const Duration(seconds: 4),
                     ),
                   );
                 }
@@ -458,9 +554,11 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _save(WidgetRef ref, AppSettings settings) async {
-    await ref.read(settingsRepositoryProvider).saveSettings(settings);
-    ref.invalidate(settingsProvider);
+  /// Writes through [SettingsNotifier], which publishes the new value itself
+  /// — invalidating instead would re-read the row and rebuild every page in
+  /// the shell a second time for a value we already have.
+  Future<void> _save(WidgetRef ref, AppSettings settings) {
+    return ref.read(settingsProvider.notifier).saveSettings(settings);
   }
 
   /// Weekly tracker values are stored on their week's start day, which depends
@@ -568,6 +666,7 @@ class SettingsPage extends ConsumerWidget {
                   // draggable; wrapping each row ourselves makes the whole
                   // option — icon, label and handle — the grab area.
                   buildDefaultDragHandles: false,
+                  proxyDecorator: roundedDragProxy,
                   onReorder: (oldIndex, newIndex) {
                     if (oldIndex < newIndex) {
                       newIndex -= 1;
@@ -618,45 +717,23 @@ class SettingsPage extends ConsumerWidget {
     WidgetRef ref,
     AppSettings settings,
   ) async {
-    final controller = TextEditingController(
-      text: settings.leetcodeUsername ?? '',
-    );
-    await showDialog(
+    // Controller/FocusNode live on the dialog State — disposing them here after
+    // showDialog returns races the dismiss animation (TextField still listening).
+    await showDialog<void>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('LeetCode username'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'e.g. johndoe123'),
-          ),
-          actions: [
-            GlassButton(
-              onPressed: () => Navigator.of(context).pop(),
-              label: 'Cancel',
-              dense: true,
+      builder: (context) => _LeetCodeUsernameDialog(
+        initialUsername: settings.leetcodeUsername ?? '',
+        onSave: (value) {
+          _save(
+            ref,
+            settings.copyWith(
+              leetcodeUsername: value.isEmpty ? null : value,
+              clearLeetcodeUsername: value.isEmpty,
             ),
-            GlassButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                _save(
-                  ref,
-                  settings.copyWith(
-                    leetcodeUsername: value.isEmpty ? null : value,
-                    clearLeetcodeUsername: value.isEmpty,
-                  ),
-                );
-                Navigator.of(context).pop();
-              },
-              label: 'Save',
-              dense: true,
-            ),
-          ],
-        );
-      },
+          );
+        },
+      ),
     );
-    controller.dispose();
   }
 
   Future<void> _showStartupPageDialog(
@@ -786,8 +863,7 @@ class _PetalSettings extends ConsumerWidget {
           max: 200,
           divisions: 40,
           valueLabel: settings.petalMaxCount.toString(),
-          onChanged: (v) =>
-              onSave(settings.copyWith(petalMaxCount: v.round())),
+          onChanged: (v) => onSave(settings.copyWith(petalMaxCount: v.round())),
         ),
         _PetalSlider(
           label: 'Fall speed',
@@ -822,9 +898,7 @@ class _PetalSettings extends ConsumerWidget {
     // one of the palette swatches (the default rose usually isn't).
     final palette = <int>[
       settings.petalColor,
-      ...ref
-          .read(colorPaletteProvider)
-          .where((c) => c != settings.petalColor),
+      ...ref.read(colorPaletteProvider).where((c) => c != settings.petalColor),
     ];
     final picked = await pickColorFromPalette(
       context,
@@ -907,8 +981,7 @@ class _PetalSettings extends ConsumerWidget {
   }
 
   Future<void> _removeMinorPetalColor(int index) async {
-    final updated = List<int>.from(settings.minorPetalColors)
-      ..removeAt(index);
+    final updated = List<int>.from(settings.minorPetalColors)..removeAt(index);
     await onSave(settings.copyWith(minorPetalColors: updated));
   }
 }
@@ -946,9 +1019,9 @@ class _PetalSlider extends StatelessWidget {
               Text(
                 valueLabel,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withValues(
-                    alpha: 0.7,
-                  ),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -962,6 +1035,100 @@ class _PetalSlider extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Owns the username field's controller and focus node so Enter-to-save cannot
+/// dispose them while the dialog's dismiss animation still rebuilds the field.
+class _LeetCodeUsernameDialog extends StatefulWidget {
+  const _LeetCodeUsernameDialog({
+    required this.initialUsername,
+    required this.onSave,
+  });
+
+  final String initialUsername;
+  final ValueChanged<String> onSave;
+
+  @override
+  State<_LeetCodeUsernameDialog> createState() =>
+      _LeetCodeUsernameDialogState();
+}
+
+class _LeetCodeUsernameDialogState extends State<_LeetCodeUsernameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialUsername,
+  );
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    // Enter does exactly what Save does. A one-field dialog that makes you
+    // reach for the mouse to commit a name you just finished typing is
+    // asking for a step the keyboard already offered.
+    widget.onSave(_controller.text.trim());
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('LeetCode username'),
+      content: VimTextScope(
+        enabled: VimEnabledScope.of(context) && vimSuitsField(),
+        controller: _controller,
+        multiline: false,
+        builder: (context, vim) {
+          final theme = Theme.of(context);
+          final textStyle = theme.textTheme.bodyLarge ?? const TextStyle();
+          const hintText = 'e.g. johndoe123';
+          return VimOverlayHost(
+            session: vim.session,
+            overlayPaintsSelection: vim.overlayPaintsSelection,
+            controller: _controller,
+            focusNode: _focusNode,
+            style: textStyle,
+            accentColor: theme.colorScheme.primary,
+            overlayPadding: vimOverlayPadding(
+              contentPadding: kM3OutlinedContentPadding,
+              density: theme.visualDensity,
+              cursorWidth: vim.overlayCaretWidth,
+              outlineGap: true,
+              outlineCenter: true,
+            ),
+            hintText: hintText,
+            child: TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              autofocus: true,
+              style: textStyle,
+              cursorColor: vim.overlayCaretColor(theme.colorScheme.primary),
+              cursorWidth: vim.overlayCaretWidth,
+              undoController: vim.undoController,
+              scrollPadding: kVoyagerFieldScrollPadding,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(
+                hintText: hintText,
+                contentPadding: kM3OutlinedContentPadding,
+              ),
+            ),
+          );
+        },
+      ),
+      actions: [
+        GlassButton(
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+          dense: true,
+        ),
+        GlassButton(onPressed: _submit, label: 'Save', dense: true),
+      ],
     );
   }
 }

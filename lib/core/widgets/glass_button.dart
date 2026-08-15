@@ -35,6 +35,9 @@ class GlassButton extends StatefulWidget {
     this.dense = false,
     this.tooltip,
     this.alignment = Alignment.center,
+    this.focusNode,
+    this.autofocus = false,
+    this.canRequestFocus = false,
   }) : assert(
           label != null || child != null || icon != null,
           'GlassButton must have either a label, child, or icon',
@@ -107,6 +110,16 @@ class GlassButton extends StatefulWidget {
   /// Alignment of internal content.
   final Alignment alignment;
 
+  /// Optional [FocusNode] to control keyboard focus.
+  final FocusNode? focusNode;
+
+  /// Whether this button should autofocus on mount. Defaults to `false`.
+  final bool autofocus;
+
+  /// Whether this button can request keyboard focus automatically. Defaults to `false`
+  /// so buttons don't steal focus and flash focus highlights during page transitions.
+  final bool canRequestFocus;
+
   @override
   State<GlassButton> createState() => _GlassButtonState();
 }
@@ -119,6 +132,11 @@ class _GlassButtonState extends State<GlassButton>
 
   late final AnimationController _scaleController;
   late Animation<double> _scaleAnimation;
+  FocusNode? _internalFocusNode;
+
+  FocusNode get _effectiveFocusNode =>
+      widget.focusNode ??
+      (_internalFocusNode ??= FocusNode(canRequestFocus: widget.canRequestFocus));
 
   @override
   void initState() {
@@ -151,6 +169,7 @@ class _GlassButtonState extends State<GlassButton>
   @override
   void dispose() {
     _scaleController.dispose();
+    _internalFocusNode?.dispose();
     super.dispose();
   }
 
@@ -186,18 +205,19 @@ class _GlassButtonState extends State<GlassButton>
     final baseColor = widget.color ?? theme.colorScheme.primary;
 
     // Determine text and icon foreground colors
-    final defaultFg = widget.textColor ??
-        (widget.color != null
-            ? (ThemeData.estimateBrightnessForColor(widget.color!) == Brightness.dark
-                ? Colors.white
-                : Colors.black87)
-            : theme.colorScheme.onSurface);
+    final defaultFg = widget.textColor ?? Colors.black87;
 
     final fgColor = isInteractive
         ? defaultFg
         : defaultFg.withValues(alpha: 0.4);
 
     final iconColor = widget.iconColor ?? fgColor;
+
+    // Flutter has no cross-platform "prefers-reduced-transparency" signal;
+    // `highContrast` is the closest accessibility proxy it exposes. Read here
+    // for the same reason [GlassSurface] reads it — otherwise a button stays
+    // blurred and translucent on top of a surface that has gone near-solid.
+    final nearSolid = MediaQuery.maybeOf(context)?.highContrast ?? false;
 
     // Calculate dynamic glass opacity based on interaction state
     double opacityMultiplier = 1.0;
@@ -216,12 +236,20 @@ class _GlassButtonState extends State<GlassButton>
     final glassFillGradient = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [
-        (isDark ? Colors.white : baseColor)
-            .withValues(alpha: (currentGlassOpacity + (isDark ? 0.03 : 0.01)).clamp(0.0, 1.0)),
-        baseColor.withValues(alpha: currentGlassOpacity),
-        baseColor.withValues(alpha: (currentGlassOpacity * 0.5).clamp(0.01, 0.7)),
-      ],
+      colors: nearSolid
+          // Near-solid and flat: the gradient's whole job is to read as
+          // translucent material, which is exactly what is being opted out of.
+          ? [
+              baseColor.withValues(alpha: 0.97),
+              baseColor.withValues(alpha: 0.97),
+              baseColor.withValues(alpha: 0.97),
+            ]
+          : [
+              (isDark ? Colors.white : baseColor)
+                  .withValues(alpha: (currentGlassOpacity + (isDark ? 0.03 : 0.01)).clamp(0.0, 1.0)),
+              baseColor.withValues(alpha: currentGlassOpacity),
+              baseColor.withValues(alpha: (currentGlassOpacity * 0.5).clamp(0.01, 0.7)),
+            ],
       stops: const [0.0, 0.5, 1.0],
     );
 
@@ -320,11 +348,15 @@ class _GlassButtonState extends State<GlassButton>
                 blurRadius: widget.elevation * (_isHovered ? 6.0 : 4.0) * vc.shadowBlurScale,
                 offset: Offset(0, _isHovered ? 4.0 : 2.0),
               ),
+            // A crisp ring, not a glow: `shadowBlurScale` widens shadows so a
+            // 3–5% alpha still separates a surface, but at this ring's alpha
+            // that same widening reads as an accent-colored bloom around the
+            // button when keyboard focus lands on it.
             if (_isFocused)
               BoxShadow(
                 color: baseColor.withValues(alpha: 0.5),
-                blurRadius: 8.0 * vc.shadowBlurScale,
-                spreadRadius: 1.0,
+                blurRadius: 0.0,
+                spreadRadius: 2.0,
               ),
           ],
         ),
@@ -332,8 +364,8 @@ class _GlassButtonState extends State<GlassButton>
           borderRadius: effectiveRadius,
           child: BackdropFilter(
             filter: ImageFilter.blur(
-              sigmaX: widget.blurSigma,
-              sigmaY: widget.blurSigma,
+              sigmaX: nearSolid ? 0 : widget.blurSigma,
+              sigmaY: nearSolid ? 0 : widget.blurSigma,
             ),
             child: CustomPaint(
               foregroundPainter: _GlassBorderPainter(
@@ -420,6 +452,8 @@ class _GlassButtonState extends State<GlassButton>
       behavior: HitTestBehavior.opaque,
       child: FocusableActionDetector(
         enabled: isInteractive,
+        focusNode: _effectiveFocusNode,
+        autofocus: widget.autofocus,
         mouseCursor: isInteractive
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,

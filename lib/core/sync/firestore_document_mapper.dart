@@ -1,21 +1,47 @@
+import 'dart:convert';
+
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/analytics_models.dart';
+import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/life_tracker_models.dart';
+import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
-/// Firestore document id for a locally stored document (handles legacy id mapping).
+/// Collections whose document id is user text — a tag, a dictionary word, a
+/// dismissal key — and so has to be encoded to be legal as a Firestore id.
+const encodedIdCollections = {
+  FirestoreCollections.tagColors,
+  FirestoreCollections.customWords,
+  FirestoreCollections.dismissedNotifications,
+};
+
+/// Firestore document id for a locally stored document.
+///
+/// The one place the local → remote id mapping lives, so the outbox, the
+/// pulls and the deletes cannot disagree about where a document lives. Handles
+/// both legacy id mapping and the text-keyed collections; everything else is
+/// its own id.
 String firestoreDocumentIdForLocal(String collection, String localDocumentId) {
   if (collection == FirestoreCollections.journals) {
     return journalDocumentIdForFirestore(localDocumentId);
   }
   if (collection == FirestoreCollections.todoLists) {
     return todoListDocumentIdForFirestore(localDocumentId);
+  }
+  if (encodedIdCollections.contains(collection)) {
+    return encodeDocumentId(localDocumentId);
   }
   return localDocumentId;
 }
@@ -177,14 +203,18 @@ Map<String, dynamic> leetCodeProblemToFirestore(LeetCodeProblem problem) => {
   'titleSlug': problem.titleSlug,
   'difficulty': problem.difficulty.name,
   'tags': problem.tags,
-  'algorithm': problem.algorithm,
-  'timeComplexity': problem.timeComplexity,
-  'spaceComplexity': problem.spaceComplexity,
-  'explanation': problem.explanation,
-  'codeLanguage': problem.codeLanguage,
-  'code': problem.code,
-  'notes': problem.notes,
+  'description': problem.description,
+  'examples': problem.examples,
+  'solutions': [for (final s in problem.solutions) s.toJson()],
+  // Solution 1 also goes out in the flat keys a device on an older build
+  // reads, so it shows the primary write-up instead of a blank card. That
+  // device writing back is handled on the way in.
+  ...leetCodeLegacySolutionFields(problem.primarySolution),
   'solvedAt': _dateToFirestoreRequired(problem.solvedAt),
+  'interval': problem.interval,
+  'ease': problem.ease,
+  'dueAt': _dateToFirestore(problem.dueAt),
+  'reviewCount': problem.reviewCount,
   'createdAt': _dateToFirestoreRequired(problem.createdAt),
   'updatedAt': _dateToFirestoreRequired(problem.updatedAt),
   'version': problem.version,
@@ -198,6 +228,38 @@ LeetCodeDifficulty _parseLeetCodeDifficulty(dynamic value) {
     }
   }
   return LeetCodeDifficulty.medium;
+}
+
+const _legacyLeetCodeSolutionKeys = [
+  'algorithm',
+  'timeComplexity',
+  'spaceComplexity',
+  'explanation',
+  'code',
+  'notes',
+];
+
+List<LeetCodeSolution> _mergeLeetCodeSolutions(
+  Map<String, dynamic> data,
+  LeetCodeProblem? local,
+) {
+  if (data['solutions'] != null) {
+    return LeetCodeSolution.listFromJson(data['solutions'] as List);
+  }
+  // `codeLanguage` is deliberately not on its own a sign of an edit: it has a
+  // default, so a document can carry one with nothing else written down.
+  if (_legacyLeetCodeSolutionKeys.any(data.containsKey)) {
+    return leetCodeSolutionsFromLegacyFields(
+      algorithm: data['algorithm'] as String?,
+      timeComplexity: data['timeComplexity'] as String?,
+      spaceComplexity: data['spaceComplexity'] as String?,
+      explanation: data['explanation'] as String?,
+      codeLanguage: data['codeLanguage'] as String?,
+      code: data['code'] as String?,
+      notes: data['notes'] as String?,
+    );
+  }
+  return local?.solutions ?? const [];
 }
 
 LeetCodeProblem mergeLeetCodeProblemFromRemote(
@@ -235,23 +297,72 @@ LeetCodeProblem mergeLeetCodeProblemFromRemote(
     tags: data['tags'] != null
         ? List<String>.from(data['tags'] as List)
         : local?.tags ?? const [],
-    algorithm: data['algorithm'] as String? ?? local?.algorithm ?? '',
-    timeComplexity: data.containsKey('timeComplexity')
-        ? data['timeComplexity'] as String?
-        : local?.timeComplexity,
-    spaceComplexity: data.containsKey('spaceComplexity')
-        ? data['spaceComplexity'] as String?
-        : local?.spaceComplexity,
-    explanation: data['explanation'] as String? ?? local?.explanation ?? '',
-    codeLanguage: data['codeLanguage'] as String? ??
-        local?.codeLanguage ??
-        'python',
-    code: data['code'] as String? ?? local?.code ?? '',
-    notes: data.containsKey('notes') ? data['notes'] as String? : local?.notes,
+    description: data.containsKey('description')
+        ? data['description'] as String?
+        : local?.description,
+    // A device on the pre-examples build writes no key at all, so an absent
+    // one keeps what this device has rather than clearing the list.
+    examples: data['examples'] != null
+        ? List<String>.from(data['examples'] as List)
+        : local?.examples ?? const [],
+    // Three shapes to tell apart. A current device writes the list. A device
+    // on a build that predates alternatives writes only the flat fields, and
+    // its edit is a real edit — read the solution out of those. A document
+    // written before either existed has neither key, and keeps what this
+    // device already has rather than being blanked.
+    solutions: _mergeLeetCodeSolutions(data, local),
     solvedAt: parseFirestoreDate(data['solvedAt']) ??
         local?.solvedAt ??
         remoteUpdated,
+    interval: (data['interval'] as num?)?.toDouble() ?? local?.interval ?? 0,
+    ease: (data['ease'] as num?)?.toDouble() ?? local?.ease ?? 2.5,
+    // A device still running the pre-SRS build writes no dueAt at all, so an
+    // absent key falls back to what this device knows rather than clearing
+    // the schedule; an explicit null is that device's own "due now".
+    dueAt: data.containsKey('dueAt')
+        ? parseFirestoreDate(data['dueAt'])
+        : local?.dueAt,
+    reviewCount: data['reviewCount'] as int? ?? local?.reviewCount ?? 0,
     createdAt: parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> customQuoteToFirestore(CustomQuote quote) => {
+  'id': quote.id,
+  'text': quote.text,
+  'createdAt': _dateToFirestoreRequired(quote.createdAt),
+  'updatedAt': _dateToFirestoreRequired(quote.updatedAt),
+  'version': quote.version,
+  'deletedAt': _dateToFirestore(quote.deletedAt),
+};
+
+CustomQuote mergeCustomQuoteFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  CustomQuote? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return CustomQuote(
+    id: id,
+    text: data['text'] as String? ?? local?.text ?? '',
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -418,6 +529,289 @@ StudyReviewLog mergeStudyReviewLogFromRemote(
     cardId: data['cardId'] as String? ?? '',
     grade: StudyGrade.values.byName(data['grade'] as String? ?? 'good'),
     reviewedAt: parseFirestoreDate(data['reviewedAt']) ?? utcNow(),
+  );
+}
+
+Map<String, dynamic> exerciseToFirestore(Exercise exercise) => {
+  'id': exercise.id,
+  'name': exercise.name,
+  'formCues': exercise.formCues,
+  'colorValue': exercise.colorValue,
+  'sortOrder': exercise.sortOrder,
+  'targetSets': exercise.targetSets,
+  'targetReps': exercise.targetReps,
+  'targetWeightKg': exercise.targetWeightKg,
+  'createdAt': _dateToFirestoreRequired(exercise.createdAt),
+  'updatedAt': _dateToFirestoreRequired(exercise.updatedAt),
+  'version': exercise.version,
+  'deletedAt': _dateToFirestore(exercise.deletedAt),
+};
+
+Exercise mergeExerciseFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  Exercise? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return Exercise(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? 'Exercise',
+    formCues: data['formCues'] as String? ?? local?.formCues ?? '',
+    colorValue: data.containsKey('colorValue')
+        ? data['colorValue'] as int?
+        : local?.colorValue,
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    targetSets:
+        (data['targetSets'] as num?)?.toInt() ??
+        local?.targetSets ??
+        kDefaultTargetSets,
+    targetReps:
+        (data['targetReps'] as num?)?.toInt() ??
+        local?.targetReps ??
+        kDefaultTargetReps,
+    targetWeightKg:
+        (data['targetWeightKg'] as num?)?.toDouble() ??
+        local?.targetWeightKg ??
+        0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> workoutPlanToFirestore(WorkoutPlan plan) => {
+  'id': plan.id,
+  'name': plan.name,
+  'mode': plan.mode.name,
+  'cycleLength': plan.cycleLength,
+  'cycleAnchor': _dateToFirestoreRequired(plan.cycleAnchor),
+  'isActive': plan.isActive,
+  'createdAt': _dateToFirestoreRequired(plan.createdAt),
+  'updatedAt': _dateToFirestoreRequired(plan.updatedAt),
+  'version': plan.version,
+  'deletedAt': _dateToFirestore(plan.deletedAt),
+};
+
+WorkoutPlan mergeWorkoutPlanFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  WorkoutPlan? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  final rawMode = data['mode'] as String?;
+  return WorkoutPlan(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? 'Plan',
+    mode:
+        (rawMode != null && WorkoutPlanMode.values.any((m) => m.name == rawMode)
+            ? WorkoutPlanMode.values.byName(rawMode)
+            : null) ??
+        local?.mode ??
+        WorkoutPlanMode.weekly,
+    cycleLength:
+        (data['cycleLength'] as num?)?.toInt() ?? local?.cycleLength ?? 4,
+    cycleAnchor:
+        parseFirestoreDate(data['cycleAnchor']) ??
+        local?.cycleAnchor ??
+        remoteUpdated,
+    isActive: data['isActive'] as bool? ?? local?.isActive ?? false,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> workoutPlanEntryToFirestore(WorkoutPlanEntry entry) => {
+  'id': entry.id,
+  'planId': entry.planId,
+  'dayIndex': entry.dayIndex,
+  'exerciseId': entry.exerciseId,
+  'sortOrder': entry.sortOrder,
+  'createdAt': _dateToFirestoreRequired(entry.createdAt),
+  'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
+  'version': entry.version,
+  'deletedAt': _dateToFirestore(entry.deletedAt),
+};
+
+WorkoutPlanEntry mergeWorkoutPlanEntryFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  WorkoutPlanEntry? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return WorkoutPlanEntry(
+    id: id,
+    planId: data['planId'] as String? ?? local?.planId ?? '',
+    dayIndex: (data['dayIndex'] as num?)?.toInt() ?? local?.dayIndex ?? 0,
+    exerciseId: data['exerciseId'] as String? ?? local?.exerciseId ?? '',
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> workoutSessionToFirestore(WorkoutSession session) => {
+  'id': session.id,
+  'planId': session.planId,
+  'dayIndex': session.dayIndex,
+  'date': _dateToFirestoreRequired(session.date),
+  'startedAt': _dateToFirestoreRequired(session.startedAt),
+  'endedAt': _dateToFirestore(session.endedAt),
+  'createdAt': _dateToFirestoreRequired(session.createdAt),
+  'updatedAt': _dateToFirestoreRequired(session.updatedAt),
+  'version': session.version,
+  'deletedAt': _dateToFirestore(session.deletedAt),
+};
+
+WorkoutSession mergeWorkoutSessionFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  WorkoutSession? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return WorkoutSession(
+    id: id,
+    planId: data.containsKey('planId')
+        ? data['planId'] as String?
+        : local?.planId,
+    dayIndex: data.containsKey('dayIndex')
+        ? (data['dayIndex'] as num?)?.toInt()
+        : local?.dayIndex,
+    date: parseFirestoreDate(data['date']) ?? local?.date ?? remoteUpdated,
+    startedAt:
+        parseFirestoreDate(data['startedAt']) ??
+        local?.startedAt ??
+        remoteUpdated,
+    // Never falls back to the local value: a session finished on another
+    // device has to be able to close this one, or the island would stay live
+    // here forever.
+    endedAt: parseFirestoreDate(data['endedAt']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> workoutSetLogToFirestore(WorkoutSetLog log) => {
+  'id': log.id,
+  'sessionId': log.sessionId,
+  'exerciseId': log.exerciseId,
+  'exerciseOrder': log.exerciseOrder,
+  'setIndex': log.setIndex,
+  'weightKg': log.weightKg,
+  'reps': log.reps,
+  'plannedWeightKg': log.plannedWeightKg,
+  'plannedReps': log.plannedReps,
+  'completed': log.completed,
+  'completedAt': _dateToFirestore(log.completedAt),
+  'createdAt': _dateToFirestoreRequired(log.createdAt),
+  'updatedAt': _dateToFirestoreRequired(log.updatedAt),
+  'version': log.version,
+  'deletedAt': _dateToFirestore(log.deletedAt),
+};
+
+WorkoutSetLog mergeWorkoutSetLogFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  WorkoutSetLog? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return WorkoutSetLog(
+    id: id,
+    sessionId: data['sessionId'] as String? ?? local?.sessionId ?? '',
+    exerciseId: data['exerciseId'] as String? ?? local?.exerciseId ?? '',
+    exerciseOrder:
+        (data['exerciseOrder'] as num?)?.toInt() ?? local?.exerciseOrder ?? 0,
+    setIndex: (data['setIndex'] as num?)?.toInt() ?? local?.setIndex ?? 0,
+    weightKg: (data['weightKg'] as num?)?.toDouble() ?? local?.weightKg ?? 0,
+    reps: (data['reps'] as num?)?.toInt() ?? local?.reps ?? 0,
+    plannedWeightKg:
+        (data['plannedWeightKg'] as num?)?.toDouble() ??
+        local?.plannedWeightKg ??
+        0,
+    plannedReps:
+        (data['plannedReps'] as num?)?.toInt() ?? local?.plannedReps ?? 0,
+    completed: data['completed'] as bool? ?? local?.completed ?? false,
+    completedAt: parseFirestoreDate(data['completedAt']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
 }
 
@@ -759,4 +1153,1156 @@ DreamEntry mergeDreamEntryFromRemote(
     version: resolvedVersion,
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt, remoteWins: metadataRemoteWins),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Calendars, analytics, finance, the notification inbox, the bucket list and
+// the settings document.
+//
+// These are plain records: no collaborative text, so nothing here writes to
+// the character-level operation log (see [FirestoreCollections.snapshotOnly])
+// and every merge resolves by version-then-updatedAt.
+// ---------------------------------------------------------------------------
+
+/// Firestore document id for a record keyed by arbitrary user text — a tag, a
+/// dictionary word, a dismissal key.
+///
+/// Firestore rejects `/` in a document id and treats `.`, `..` and `__…__`
+/// specially, while these keys are whatever the user typed. base64url is
+/// reversible and collision-free, so the key survives the round trip intact.
+String encodeDocumentId(String key) => base64Url.encode(utf8.encode(key));
+
+/// Inverse of [encodeDocumentId]. Returns null for an id that isn't one of
+/// ours, so a stray document can be skipped rather than failing the pull.
+String? decodeDocumentId(String documentId) {
+  try {
+    return utf8.decode(base64Url.decode(documentId));
+  } catch (_) {
+    return null;
+  }
+}
+
+T _enumFromName<T extends Enum>(List<T> values, Object? name, T fallback) {
+  if (name is! String) return fallback;
+  for (final value in values) {
+    if (value.name == name) return value;
+  }
+  return fallback;
+}
+
+List<String> _stringListFromRemote(Object? value, List<String> fallback) {
+  if (value is! List) return fallback;
+  return [
+    for (final item in value)
+      if (item is String) item,
+  ];
+}
+
+/// Whether the remote document should replace the local record under
+/// version-first conflict resolution. A record we've never seen wins by
+/// default — there is nothing local for it to lose to.
+bool _remoteRecordWins(
+  Map<String, dynamic> data, {
+  required int? localVersion,
+  required DateTime? localUpdatedAt,
+}) {
+  if (localVersion == null) return true;
+  return remoteVersionWins(
+    remoteVersion: parseVersion(data),
+    localVersion: localVersion,
+    remoteUpdated: parseFirestoreDate(data['updatedAt']),
+    localUpdated: localUpdatedAt,
+  );
+}
+
+Map<String, dynamic> calendarToFirestore(Calendar calendar) => {
+  'id': calendar.id,
+  'name': calendar.name,
+  'colorValue': calendar.colorValue,
+  'createdAt': _dateToFirestoreRequired(calendar.createdAt),
+  'updatedAt': _dateToFirestoreRequired(calendar.updatedAt),
+  'version': calendar.version,
+  'deletedAt': _dateToFirestore(calendar.deletedAt),
+};
+
+Calendar mergeCalendarFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  Calendar? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return Calendar(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    colorValue: (data['colorValue'] as num?)?.toInt() ?? local?.colorValue,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> calendarEventToFirestore(CalendarEvent event) => {
+  'id': event.id,
+  'calendarId': event.calendarId,
+  'title': event.title,
+  'start': _dateToFirestoreRequired(event.start),
+  'end': _dateToFirestoreRequired(event.end),
+  'isFullDay': event.isFullDay,
+  'colorValue': event.colorValue,
+  'notes': event.notes,
+  'source': event.source.name,
+  'externalId': event.externalId,
+  'recurrence': event.recurrence.name,
+  'createdAt': _dateToFirestoreRequired(event.createdAt),
+  'updatedAt': _dateToFirestoreRequired(event.updatedAt),
+  'version': event.version,
+  'deletedAt': _dateToFirestore(event.deletedAt),
+};
+
+CalendarEvent mergeCalendarEventFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  CalendarEvent? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return CalendarEvent(
+    id: id,
+    calendarId:
+        data['calendarId'] as String? ?? local?.calendarId ?? legacyCalendarId,
+    title: data['title'] as String? ?? local?.title ?? '',
+    start: parseFirestoreDate(data['start']) ?? local?.start ?? remoteUpdated,
+    end: parseFirestoreDate(data['end']) ?? local?.end ?? remoteUpdated,
+    isFullDay: data['isFullDay'] as bool? ?? local?.isFullDay ?? true,
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        0xFF7C9EFF,
+    notes: data['notes'] as String? ?? local?.notes ?? '',
+    source: _enumFromName(
+      EventSource.values,
+      data['source'],
+      local?.source ?? EventSource.local,
+    ),
+    externalId: data['externalId'] as String? ?? local?.externalId,
+    recurrence: _enumFromName(
+      EventRecurrence.values,
+      data['recurrence'],
+      local?.recurrence ?? EventRecurrence.none,
+    ),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> trackerToFirestore(StatisticTracker tracker) => {
+  'id': tracker.id,
+  'name': tracker.name,
+  'type': tracker.type.name,
+  'cadence': tracker.cadence.name,
+  'colorValue': tracker.colorValue,
+  'showOnCalendar': tracker.showOnCalendar,
+  'integerCap': tracker.integerCap,
+  'defaultInt': tracker.defaultInt,
+  'defaultBool': tracker.defaultBool,
+  'enumOptions': tracker.enumOptions,
+  'defaultEnumOption': tracker.defaultEnumOption,
+  'trackingStyle': tracker.trackingStyle?.name,
+  'starred': tracker.starred,
+  'sortOrder': tracker.sortOrder,
+  'createdAt': _dateToFirestoreRequired(tracker.createdAt),
+  'updatedAt': _dateToFirestoreRequired(tracker.updatedAt),
+  'version': tracker.version,
+  'deletedAt': _dateToFirestore(tracker.deletedAt),
+};
+
+StatisticTracker mergeTrackerFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  StatisticTracker? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteStyle = data['trackingStyle'];
+  return StatisticTracker(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    type: _enumFromName(
+      TrackerType.values,
+      data['type'],
+      local?.type ?? TrackerType.integer,
+    ),
+    cadence: _enumFromName(
+      TrackerCadence.values,
+      data['cadence'],
+      local?.cadence ?? TrackerCadence.daily,
+    ),
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        0xFF7C9EFF,
+    showOnCalendar:
+        data['showOnCalendar'] as bool? ?? local?.showOnCalendar ?? false,
+    integerCap: (data['integerCap'] as num?)?.toInt() ?? local?.integerCap,
+    defaultInt: (data['defaultInt'] as num?)?.toInt() ?? local?.defaultInt ?? 0,
+    defaultBool: data['defaultBool'] as bool? ?? local?.defaultBool ?? false,
+    enumOptions: _stringListFromRemote(
+      data['enumOptions'],
+      local?.enumOptions ?? const [],
+    ),
+    defaultEnumOption:
+        data['defaultEnumOption'] as String? ?? local?.defaultEnumOption,
+    // Null is meaningful here — boolean and enum trackers have no style — so
+    // an explicit remote null clears the local value rather than falling back.
+    trackingStyle: remoteStyle == null
+        ? null
+        : _enumFromName(
+            TrackerStyle.values,
+            remoteStyle,
+            local?.trackingStyle ?? TrackerStyle.independent,
+          ),
+    starred: data['starred'] as bool? ?? local?.starred ?? false,
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> trackerValueToFirestore(TrackerValue value) => {
+  'id': value.id,
+  'trackerId': value.trackerId,
+  'periodStart': _dateToFirestoreRequired(value.periodStart),
+  'intValue': value.intValue,
+  'boolValue': value.boolValue,
+  'enumValue': value.enumValue,
+  'createdAt': _dateToFirestoreRequired(value.createdAt),
+  'updatedAt': _dateToFirestoreRequired(value.updatedAt),
+  'version': value.version,
+  'deletedAt': _dateToFirestore(value.deletedAt),
+};
+
+TrackerValue mergeTrackerValueFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  TrackerValue? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  // A value is exactly one of int/bool/enum and clearing one is a real edit,
+  // so each takes the remote value verbatim instead of falling back to local.
+  return TrackerValue(
+    id: id,
+    trackerId: data['trackerId'] as String? ?? local?.trackerId ?? '',
+    periodStart:
+        parseFirestoreDate(data['periodStart']) ??
+        local?.periodStart ??
+        remoteUpdated,
+    intValue: (data['intValue'] as num?)?.toInt(),
+    boolValue: data['boolValue'] as bool?,
+    enumValue: data['enumValue'] as String?,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> transactionToFirestore(FinancialTransaction tx) => {
+  'id': tx.id,
+  'type': tx.type.name,
+  'amountCents': tx.amountCents,
+  'occurredAt': _dateToFirestoreRequired(tx.occurredAt),
+  'note': tx.note,
+  'tags': tx.tags,
+  'createdAt': _dateToFirestoreRequired(tx.createdAt),
+  'updatedAt': _dateToFirestoreRequired(tx.updatedAt),
+  'version': tx.version,
+  'deletedAt': _dateToFirestore(tx.deletedAt),
+};
+
+FinancialTransaction mergeTransactionFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  FinancialTransaction? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return FinancialTransaction(
+    id: id,
+    type: _enumFromName(
+      TransactionType.values,
+      data['type'],
+      local?.type ?? TransactionType.expense,
+    ),
+    amountCents:
+        (data['amountCents'] as num?)?.toInt() ?? local?.amountCents ?? 0,
+    occurredAt:
+        parseFirestoreDate(data['occurredAt']) ??
+        local?.occurredAt ??
+        remoteUpdated,
+    note: data['note'] as String?,
+    tags: _stringListFromRemote(data['tags'], local?.tags ?? const []),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> subscriptionToFirestore(Subscription subscription) => {
+  'id': subscription.id,
+  'name': subscription.name,
+  'amountCents': subscription.amountCents,
+  'period': subscription.period.name,
+  'anchorDueDate': _dateToFirestoreRequired(subscription.anchorDueDate),
+  'colorValue': subscription.colorValue,
+  'note': subscription.note,
+  'createdAt': _dateToFirestoreRequired(subscription.createdAt),
+  'updatedAt': _dateToFirestoreRequired(subscription.updatedAt),
+  'version': subscription.version,
+  'deletedAt': _dateToFirestore(subscription.deletedAt),
+};
+
+Subscription mergeSubscriptionFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  Subscription? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return Subscription(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    amountCents:
+        (data['amountCents'] as num?)?.toInt() ?? local?.amountCents ?? 0,
+    period: _enumFromName(
+      BillingPeriod.values,
+      data['period'],
+      local?.period ?? BillingPeriod.monthly,
+    ),
+    anchorDueDate:
+        parseFirestoreDate(data['anchorDueDate']) ??
+        local?.anchorDueDate ??
+        remoteUpdated,
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        0xFF7C9EFF,
+    note: data['note'] as String?,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> budgetToFirestore(Budget budget) => {
+  'id': budget.id,
+  'tag': budget.tag,
+  'limitCents': budget.limitCents,
+  'createdAt': _dateToFirestoreRequired(budget.createdAt),
+  'updatedAt': _dateToFirestoreRequired(budget.updatedAt),
+  'version': budget.version,
+  'deletedAt': _dateToFirestore(budget.deletedAt),
+};
+
+Budget mergeBudgetFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  Budget? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return Budget(
+    id: id,
+    tag: data['tag'] as String? ?? local?.tag ?? '',
+    limitCents: (data['limitCents'] as num?)?.toInt() ?? local?.limitCents ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> financeCategoryToFirestore(FinanceCategory category) => {
+  'id': category.id,
+  'name': category.name,
+  'colorValue': category.colorValue,
+  'tags': category.tags,
+  'createdAt': _dateToFirestoreRequired(category.createdAt),
+  'updatedAt': _dateToFirestoreRequired(category.updatedAt),
+  'version': category.version,
+  'deletedAt': _dateToFirestore(category.deletedAt),
+};
+
+FinanceCategory mergeFinanceCategoryFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  FinanceCategory? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return FinanceCategory(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        0xFF7C9EFF,
+    tags: _stringListFromRemote(data['tags'], local?.tags ?? const []),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> assetToFirestore(Asset asset) => {
+  'id': asset.id,
+  'name': asset.name,
+  'note': asset.note,
+  'colorValue': asset.colorValue,
+  'createdAt': _dateToFirestoreRequired(asset.createdAt),
+  'updatedAt': _dateToFirestoreRequired(asset.updatedAt),
+  'version': asset.version,
+  'deletedAt': _dateToFirestore(asset.deletedAt),
+};
+
+Asset mergeAssetFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  Asset? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return Asset(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    note: data['note'] as String?,
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        0xFF7C9EFF,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> assetValuationToFirestore(AssetValuation valuation) => {
+  'id': valuation.id,
+  'assetId': valuation.assetId,
+  'valueCents': valuation.valueCents,
+  'asOf': _dateToFirestoreRequired(valuation.asOf),
+  'createdAt': _dateToFirestoreRequired(valuation.createdAt),
+  'updatedAt': _dateToFirestoreRequired(valuation.updatedAt),
+  'version': valuation.version,
+  'deletedAt': _dateToFirestore(valuation.deletedAt),
+};
+
+AssetValuation mergeAssetValuationFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  AssetValuation? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return AssetValuation(
+    id: id,
+    assetId: data['assetId'] as String? ?? local?.assetId ?? '',
+    valueCents: (data['valueCents'] as num?)?.toInt() ?? local?.valueCents ?? 0,
+    asOf: parseFirestoreDate(data['asOf']) ?? local?.asOf ?? remoteUpdated,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> savingsGoalToFirestore(SavingsGoal goal) => {
+  'id': goal.id,
+  'name': goal.name,
+  'targetCents': goal.targetCents,
+  'colorValue': goal.colorValue,
+  'note': goal.note,
+  'targetDate': _dateToFirestore(goal.targetDate),
+  'createdAt': _dateToFirestoreRequired(goal.createdAt),
+  'updatedAt': _dateToFirestoreRequired(goal.updatedAt),
+  'version': goal.version,
+  'deletedAt': _dateToFirestore(goal.deletedAt),
+};
+
+SavingsGoal mergeSavingsGoalFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  SavingsGoal? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return SavingsGoal(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    targetCents:
+        (data['targetCents'] as num?)?.toInt() ?? local?.targetCents ?? 0,
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        0xFF7C9EFF,
+    note: data['note'] as String?,
+    targetDate: parseFirestoreDate(data['targetDate']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> goalAllocationToFirestore(GoalAllocation allocation) => {
+  'id': allocation.id,
+  'goalId': allocation.goalId,
+  'amountCents': allocation.amountCents,
+  'allocatedAt': _dateToFirestoreRequired(allocation.allocatedAt),
+  'note': allocation.note,
+  'createdAt': _dateToFirestoreRequired(allocation.createdAt),
+  'updatedAt': _dateToFirestoreRequired(allocation.updatedAt),
+  'version': allocation.version,
+  'deletedAt': _dateToFirestore(allocation.deletedAt),
+};
+
+GoalAllocation mergeGoalAllocationFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GoalAllocation? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return GoalAllocation(
+    id: id,
+    goalId: data['goalId'] as String? ?? local?.goalId ?? '',
+    amountCents:
+        (data['amountCents'] as num?)?.toInt() ?? local?.amountCents ?? 0,
+    allocatedAt:
+        parseFirestoreDate(data['allocatedAt']) ??
+        local?.allocatedAt ??
+        remoteUpdated,
+    note: data['note'] as String?,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> pinnedNoteToFirestore(PinnedNote note) => {
+  'id': note.id,
+  'text': note.text,
+  'createdAt': _dateToFirestoreRequired(note.createdAt),
+  'updatedAt': _dateToFirestoreRequired(note.updatedAt),
+  'version': note.version,
+  'deletedAt': _dateToFirestore(note.deletedAt),
+};
+
+PinnedNote mergePinnedNoteFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  PinnedNote? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return PinnedNote(
+    id: id,
+    text: data['text'] as String? ?? local?.text ?? '',
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> dismissedNotificationToFirestore(
+  DismissedNotification dismissal,
+) => {
+  'key': dismissal.key,
+  'dismissedAt': _dateToFirestoreRequired(dismissal.dismissedAt),
+  'updatedAt': _dateToFirestoreRequired(dismissal.updatedAt),
+  'version': dismissal.version,
+  'deletedAt': _dateToFirestore(dismissal.deletedAt),
+};
+
+DismissedNotification mergeDismissedNotificationFromRemote(
+  Map<String, dynamic> data,
+  String key, {
+  DismissedNotification? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return DismissedNotification(
+    key: key,
+    dismissedAt:
+        parseFirestoreDate(data['dismissedAt']) ??
+        local?.dismissedAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    // Unlike the other records here a tombstone must be undoable: the same key
+    // cycles between dismissed and un-dismissed as the item comes back.
+    deletedAt: parseFirestoreDate(data['deletedAt']),
+  );
+}
+
+Map<String, dynamic> bucketListItemToFirestore(BucketListItem item) => {
+  'id': item.id,
+  'title': item.title,
+  'note': item.note,
+  'completed': item.completed,
+  'completedAt': _dateToFirestore(item.completedAt),
+  'sortOrder': item.sortOrder,
+  'createdAt': _dateToFirestoreRequired(item.createdAt),
+  'updatedAt': _dateToFirestoreRequired(item.updatedAt),
+  'version': item.version,
+  'deletedAt': _dateToFirestore(item.deletedAt),
+};
+
+BucketListItem mergeBucketListItemFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  BucketListItem? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return BucketListItem(
+    id: id,
+    title: data['title'] as String? ?? local?.title ?? '',
+    note: data['note'] as String?,
+    completed: data['completed'] as bool? ?? local?.completed ?? false,
+    // Un-completing an item clears this, so the remote value is taken as-is.
+    completedAt: parseFirestoreDate(data['completedAt']),
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> tagColorToFirestore(TagColorRecord tagColor) => {
+  'tag': tagColor.tag,
+  'colorValue': tagColor.colorValue,
+  'updatedAt': _dateToFirestoreRequired(tagColor.updatedAt),
+  'version': tagColor.version,
+};
+
+TagColorRecord mergeTagColorFromRemote(
+  Map<String, dynamic> data,
+  String tag, {
+  TagColorRecord? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  return TagColorRecord(
+    tag: tag,
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        0xFF7C9EFF,
+    updatedAt: parseFirestoreDate(data['updatedAt']) ?? utcNow(),
+    version: parseVersion(data),
+  );
+}
+
+Map<String, dynamic> customWordToFirestore(CustomWord word) => {
+  'word': word.word,
+  'createdAt': _dateToFirestoreRequired(word.createdAt),
+  'updatedAt': _dateToFirestoreRequired(word.updatedAt),
+  'version': word.version,
+  'deletedAt': _dateToFirestore(word.deletedAt),
+};
+
+CustomWord mergeCustomWordFromRemote(
+  Map<String, dynamic> data,
+  String word, {
+  CustomWord? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return CustomWord(
+    word: word,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    // Re-adding a removed word clears its tombstone, so the remote value is
+    // taken verbatim rather than falling back to the local one.
+    deletedAt: parseFirestoreDate(data['deletedAt']),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The settings document (`users/{uid}/settings/app`, alongside the weather
+// location the weather service already keeps there).
+// ---------------------------------------------------------------------------
+
+int? _remoteInt(Map<String, dynamic> data, String key) =>
+    (data[key] as num?)?.toInt();
+
+double? _remoteDouble(Map<String, dynamic> data, String key) =>
+    (data[key] as num?)?.toDouble();
+
+List<int>? _remoteIntList(Map<String, dynamic> data, String key) {
+  final value = data[key];
+  if (value is! List) return null;
+  return [
+    for (final item in value)
+      if (item is num) item.toInt(),
+  ];
+}
+
+/// True when the remote document says this field is now empty, as opposed to
+/// not mentioning it at all. Only the first case should clear the local value.
+bool _remoteClears(Map<String, dynamic> data, String key) =>
+    data.containsKey(key) && data[key] == null;
+
+/// The settings that follow the user between devices.
+///
+/// Deliberately excluded, because they describe *this* device rather than the
+/// user's preferences:
+///  - `deviceId`, which identifies the installation;
+///  - the whole weather cache, which the weather service already syncs through
+///    its own keys in this same document;
+///  - every `dev*` debugging flag;
+///  - `journalEntryListWidth` and `dreamSplitWidth`, which are sized for the
+///    screen they were dragged on.
+///
+/// This map is also the single definition of "did a synced setting change" —
+/// see `DriftSettingsRepository.saveSettings`, which compares two of them to
+/// decide whether to move the last-write-wins clock. Adding a field here is
+/// therefore all that syncing a new setting takes.
+Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
+  'accentColor': s.accentColor,
+  'themeMode': s.themeMode.name,
+  'petalColor': s.petalColor,
+  'minorPetalColors': s.minorPetalColors,
+  'petalMaxCount': s.petalMaxCount,
+  'petalFallSpeed': s.petalFallSpeed,
+  'petalWindFrequency': s.petalWindFrequency,
+  'petalWindStrength': s.petalWindStrength,
+  'weekStartsOnMonday': s.weekStartsOnMonday,
+  'showQuotes': s.showQuotes,
+  'showDefaultTrackersInGrid': s.showDefaultTrackersInGrid,
+  'showDefaultTrackersInCalendar': s.showDefaultTrackersInCalendar,
+  'journalHotkey': s.journalHotkey,
+  'todoHotkey': s.todoHotkey,
+  'calendarNavigateLeftKey': s.calendarNavigateLeftKey,
+  'calendarNavigateRightKey': s.calendarNavigateRightKey,
+  'srsFailKey': s.srsFailKey,
+  'srsHardKey': s.srsHardKey,
+  'srsGoodKey': s.srsGoodKey,
+  'srsEasyKey': s.srsEasyKey,
+  'timelineModeYearZero': s.timelineModeYearZero,
+  'birthYear': s.birthYear,
+  'birthDate': _dateToFirestore(s.birthDate),
+  'alertOnPeriodicPrompts': s.alertOnPeriodicPrompts,
+  'alertTimeHour': s.alertTimeHour,
+  'hideCompletedTasks': s.hideCompletedTasks,
+  'vimModeEnabled': s.vimModeEnabled,
+  'lastViewedJournalId': s.lastViewedJournalId,
+  'lastViewedTodoListId': s.lastViewedTodoListId,
+  'journalShowAllEntries': s.journalShowAllEntries,
+  'todoShowAllTasks': s.todoShowAllTasks,
+  'geometricTextureScale': s.geometricTextureScale,
+  'geometricTextureIntensity': s.geometricTextureIntensity,
+  'geometricTextureFocalSpread': s.geometricTextureFocalSpread,
+  'geometricTextureFocalPointX': s.geometricTextureFocalPointX,
+  'geometricTextureFocalPointY': s.geometricTextureFocalPointY,
+  'geometricTextureVariationFloor': s.geometricTextureVariationFloor,
+  'geometricWaveEnabled': s.geometricWaveEnabled,
+  'geometricWaveShape': s.geometricWaveShape.name,
+  'geometricWaveDirectionDegrees': s.geometricWaveDirectionDegrees,
+  'geometricWaveSpeed': s.geometricWaveSpeed,
+  'geometricWaveWidth': s.geometricWaveWidth,
+  'geometricWavePeriod': s.geometricWavePeriod,
+  'geometricWavePopHoldSeconds': s.geometricWavePopHoldSeconds,
+  'geometricWavePopScale': s.geometricWavePopScale,
+  'geometricWavePopBrightness': s.geometricWavePopBrightness,
+  'geometricWaveMaskDensity': s.geometricWaveMaskDensity,
+  'geometricWaveMaskClusterScale': s.geometricWaveMaskClusterScale,
+  'geometricWaveTwinkleSparsity': s.geometricWaveTwinkleSparsity,
+  'geometricWaveShadowLightDegrees': s.geometricWaveShadowLightDegrees,
+  'geometricWaveShadowOffset': s.geometricWaveShadowOffset,
+  'geometricWaveShadowSoftness': s.geometricWaveShadowSoftness,
+  'geometricWaveShadowStrength': s.geometricWaveShadowStrength,
+  'geometricWavePopBrightnessVariance': s.geometricWavePopBrightnessVariance,
+  'geometricWaveTiltAmount': s.geometricWaveTiltAmount,
+  'geometricWaveTiltShading': s.geometricWaveTiltShading,
+  'geometricWaveMassLagSeconds': s.geometricWaveMassLagSeconds,
+  'geometricWaveMassSpring': s.geometricWaveMassSpring,
+  'geometricWaveScatterMode': s.geometricWaveScatterMode,
+  'geometricWaveScatterLitAmount': s.geometricWaveScatterLitAmount,
+  'weatherChartTempColor': s.weatherChartTempColor,
+  'weatherChartRainColor': s.weatherChartRainColor,
+  'weatherChartCurveTension': s.weatherChartCurveTension,
+  'colorPalette': s.colorPalette,
+  'navPageOrder': s.navPageOrder,
+  'startupPageMode': s.startupPageMode.name,
+  'customStartupPage': s.customStartupPage,
+  'lastSeenNavPage': s.lastSeenNavPage,
+  'todoCompletedSectionExpanded': s.todoCompletedSectionExpanded,
+  'showAnnualizedSubscriptionCost': s.showAnnualizedSubscriptionCost,
+  'showDreamStatistics': s.showDreamStatistics,
+  'dreamNotesPinned': s.dreamNotesPinned,
+  'leetcodeUsername': s.leetcodeUsername,
+  'showNeetCode150': s.showNeetCode150,
+  'weightUnit': s.weightUnit.name,
+  'workoutRestTimerEnabled': s.workoutRestTimerEnabled,
+  'workoutRestSeconds': s.workoutRestSeconds,
+  'showWorkoutsOnCalendar': s.showWorkoutsOnCalendar,
+  'showWorkoutStatistics': s.showWorkoutStatistics,
+};
+
+/// [settingsSyncPayload] plus the clock the merge compares. Written with
+/// `SetOptions(merge: true)`, so the weather keys sharing this document are
+/// left untouched.
+Map<String, dynamic> settingsToFirestore(AppSettings settings) => {
+  ...settingsSyncPayload(settings),
+  'settingsUpdatedAt': _dateToFirestore(settings.updatedAt ?? utcNow()),
+};
+
+/// Applies a remote settings document to [local], whole-document
+/// last-write-wins: the device that most recently changed a synced setting
+/// wins for all of them at once.
+///
+/// Returns [local] unchanged when it is the newer of the two, so a pull that
+/// finds nothing newer costs no write.
+AppSettings mergeSettingsFromRemote(
+  Map<String, dynamic> data,
+  AppSettings local,
+) {
+  final remoteUpdated = parseFirestoreDate(data['settingsUpdatedAt']);
+  // A document with no clock predates settings syncing (the weather service
+  // has been writing this document all along) and has nothing to apply.
+  if (remoteUpdated == null) return local;
+  // Strictly newer, unlike the record merges: an equal clock means this is the
+  // document *we* just wrote. Firestore echoes our own writes back through the
+  // snapshot listener, and re-applying one would rewrite the settings row and
+  // invalidate every provider in the app on every save.
+  final localUpdated = local.updatedAt;
+  if (localUpdated != null && !remoteUpdated.isAfter(localUpdated)) {
+    return local;
+  }
+
+  return local.copyWith(
+    accentColor: _remoteInt(data, 'accentColor'),
+    themeMode: _enumFromName(
+      AppThemeMode.values,
+      data['themeMode'],
+      local.themeMode,
+    ),
+    petalColor: _remoteInt(data, 'petalColor'),
+    minorPetalColors: _remoteIntList(data, 'minorPetalColors'),
+    petalMaxCount: _remoteInt(data, 'petalMaxCount'),
+    petalFallSpeed: _remoteDouble(data, 'petalFallSpeed'),
+    petalWindFrequency: _remoteDouble(data, 'petalWindFrequency'),
+    petalWindStrength: _remoteDouble(data, 'petalWindStrength'),
+    weekStartsOnMonday: data['weekStartsOnMonday'] as bool?,
+    showQuotes: data['showQuotes'] as bool?,
+    showDefaultTrackersInGrid: data['showDefaultTrackersInGrid'] as bool?,
+    showDefaultTrackersInCalendar:
+        data['showDefaultTrackersInCalendar'] as bool?,
+    journalHotkey: data['journalHotkey'] as String?,
+    todoHotkey: data['todoHotkey'] as String?,
+    calendarNavigateLeftKey: data['calendarNavigateLeftKey'] as String?,
+    calendarNavigateRightKey: data['calendarNavigateRightKey'] as String?,
+    srsFailKey: data['srsFailKey'] as String?,
+    srsHardKey: data['srsHardKey'] as String?,
+    srsGoodKey: data['srsGoodKey'] as String?,
+    srsEasyKey: data['srsEasyKey'] as String?,
+    timelineModeYearZero: data['timelineModeYearZero'] as bool?,
+    birthYear: _remoteInt(data, 'birthYear'),
+    clearBirthYear: _remoteClears(data, 'birthYear'),
+    birthDate: parseFirestoreDate(data['birthDate']),
+    clearBirthDate: _remoteClears(data, 'birthDate'),
+    alertOnPeriodicPrompts: data['alertOnPeriodicPrompts'] as bool?,
+    alertTimeHour: _remoteInt(data, 'alertTimeHour'),
+    hideCompletedTasks: data['hideCompletedTasks'] as bool?,
+    vimModeEnabled: data['vimModeEnabled'] as bool?,
+    lastViewedJournalId: data['lastViewedJournalId'] as String?,
+    clearLastViewedJournalId: _remoteClears(data, 'lastViewedJournalId'),
+    lastViewedTodoListId: data['lastViewedTodoListId'] as String?,
+    clearLastViewedTodoListId: _remoteClears(data, 'lastViewedTodoListId'),
+    journalShowAllEntries: data['journalShowAllEntries'] as bool?,
+    todoShowAllTasks: data['todoShowAllTasks'] as bool?,
+    geometricTextureScale: _remoteDouble(data, 'geometricTextureScale'),
+    geometricTextureIntensity: _remoteDouble(data, 'geometricTextureIntensity'),
+    geometricTextureFocalSpread: _remoteDouble(
+      data,
+      'geometricTextureFocalSpread',
+    ),
+    geometricTextureFocalPointX: _remoteDouble(
+      data,
+      'geometricTextureFocalPointX',
+    ),
+    geometricTextureFocalPointY: _remoteDouble(
+      data,
+      'geometricTextureFocalPointY',
+    ),
+    geometricTextureVariationFloor: _remoteDouble(
+      data,
+      'geometricTextureVariationFloor',
+    ),
+    geometricWaveEnabled: data['geometricWaveEnabled'] as bool?,
+    geometricWaveShape: _enumFromName(
+      GeometricWaveShape.values,
+      data['geometricWaveShape'],
+      local.geometricWaveShape,
+    ),
+    geometricWaveDirectionDegrees: _remoteDouble(
+      data,
+      'geometricWaveDirectionDegrees',
+    ),
+    geometricWaveSpeed: _remoteDouble(data, 'geometricWaveSpeed'),
+    geometricWaveWidth: _remoteDouble(data, 'geometricWaveWidth'),
+    geometricWavePeriod: _remoteDouble(data, 'geometricWavePeriod'),
+    geometricWavePopHoldSeconds: _remoteDouble(
+      data,
+      'geometricWavePopHoldSeconds',
+    ),
+    geometricWavePopScale: _remoteDouble(data, 'geometricWavePopScale'),
+    geometricWavePopBrightness: _remoteDouble(
+      data,
+      'geometricWavePopBrightness',
+    ),
+    geometricWaveMaskDensity: _remoteDouble(data, 'geometricWaveMaskDensity'),
+    geometricWaveMaskClusterScale: _remoteDouble(
+      data,
+      'geometricWaveMaskClusterScale',
+    ),
+    geometricWaveTwinkleSparsity: _remoteDouble(
+      data,
+      'geometricWaveTwinkleSparsity',
+    ),
+    geometricWaveShadowLightDegrees: _remoteDouble(
+      data,
+      'geometricWaveShadowLightDegrees',
+    ),
+    geometricWaveShadowOffset: _remoteDouble(data, 'geometricWaveShadowOffset'),
+    geometricWaveShadowSoftness: _remoteDouble(
+      data,
+      'geometricWaveShadowSoftness',
+    ),
+    geometricWaveShadowStrength: _remoteDouble(
+      data,
+      'geometricWaveShadowStrength',
+    ),
+    geometricWavePopBrightnessVariance: _remoteDouble(
+      data,
+      'geometricWavePopBrightnessVariance',
+    ),
+    geometricWaveTiltAmount: _remoteDouble(data, 'geometricWaveTiltAmount'),
+    geometricWaveTiltShading: _remoteDouble(data, 'geometricWaveTiltShading'),
+    geometricWaveMassLagSeconds: _remoteDouble(
+      data,
+      'geometricWaveMassLagSeconds',
+    ),
+    geometricWaveMassSpring: _remoteDouble(data, 'geometricWaveMassSpring'),
+    geometricWaveScatterMode: data['geometricWaveScatterMode'] as bool?,
+    geometricWaveScatterLitAmount: _remoteDouble(
+      data,
+      'geometricWaveScatterLitAmount',
+    ),
+    weatherChartTempColor: _remoteInt(data, 'weatherChartTempColor'),
+    clearWeatherChartTempColor: _remoteClears(data, 'weatherChartTempColor'),
+    weatherChartRainColor: _remoteInt(data, 'weatherChartRainColor'),
+    clearWeatherChartRainColor: _remoteClears(data, 'weatherChartRainColor'),
+    weatherChartCurveTension: _remoteDouble(data, 'weatherChartCurveTension'),
+    colorPalette: _remoteIntList(data, 'colorPalette'),
+    navPageOrder: _stringListOrNull(data['navPageOrder']),
+    clearNavPageOrder: _remoteClears(data, 'navPageOrder'),
+    startupPageMode: _enumFromName(
+      StartupPageMode.values,
+      data['startupPageMode'],
+      local.startupPageMode,
+    ),
+    customStartupPage: data['customStartupPage'] as String?,
+    clearCustomStartupPage: _remoteClears(data, 'customStartupPage'),
+    lastSeenNavPage: data['lastSeenNavPage'] as String?,
+    clearLastSeenNavPage: _remoteClears(data, 'lastSeenNavPage'),
+    todoCompletedSectionExpanded: data['todoCompletedSectionExpanded'] as bool?,
+    showAnnualizedSubscriptionCost:
+        data['showAnnualizedSubscriptionCost'] as bool?,
+    showDreamStatistics: data['showDreamStatistics'] as bool?,
+    dreamNotesPinned: data['dreamNotesPinned'] as bool?,
+    leetcodeUsername: data['leetcodeUsername'] as String?,
+    clearLeetcodeUsername: _remoteClears(data, 'leetcodeUsername'),
+    showNeetCode150: data['showNeetCode150'] as bool?,
+    weightUnit: _enumFromName(
+      WeightUnit.values,
+      data['weightUnit'],
+      local.weightUnit,
+    ),
+    workoutRestTimerEnabled: data['workoutRestTimerEnabled'] as bool?,
+    workoutRestSeconds: _remoteInt(data, 'workoutRestSeconds'),
+    showWorkoutsOnCalendar: data['showWorkoutsOnCalendar'] as bool?,
+    showWorkoutStatistics: data['showWorkoutStatistics'] as bool?,
+    updatedAt: remoteUpdated,
+  );
+}
+
+List<String>? _stringListOrNull(Object? value) {
+  if (value is! List) return null;
+  return [
+    for (final item in value)
+      if (item is String) item,
+  ];
 }

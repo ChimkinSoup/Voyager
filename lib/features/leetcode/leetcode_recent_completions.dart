@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 
 /// Chronological feed of tracked problems. Tapping a row opens the detail
@@ -33,16 +36,16 @@ class LeetCodeRecentCompletions extends StatelessWidget {
   }
 }
 
-class _CompletionRow extends StatefulWidget {
+class _CompletionRow extends ConsumerStatefulWidget {
   const _CompletionRow({required this.problem});
 
   final LeetCodeProblem problem;
 
   @override
-  State<_CompletionRow> createState() => _CompletionRowState();
+  ConsumerState<_CompletionRow> createState() => _CompletionRowState();
 }
 
-class _CompletionRowState extends State<_CompletionRow> {
+class _CompletionRowState extends ConsumerState<_CompletionRow> {
   final _key = GlobalKey();
 
   void _openDetail() {
@@ -56,65 +59,80 @@ class _CompletionRowState extends State<_CompletionRow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final problem = widget.problem;
-    return Material(
-      key: _key,
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _openDetail,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            problem.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyLarge,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorForLeetCodeDifficulty(problem.difficulty)
-                                .withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            labelForLeetCodeDifficulty(problem.difficulty),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorForLeetCodeDifficulty(problem.difficulty),
+    return ContextMenuRegion(
+      // The review deck's card menu, verbatim — see
+      // [leetCodeProblemMenuItems]. Built on right-click, since a feed can be
+      // hundreds of rows long and none of these entries is looked at until one
+      // of them is clicked.
+      itemsBuilder: () => leetCodeProblemMenuItems(
+        context: context,
+        ref: ref,
+        problem: problem,
+        onOpenDetail: _openDetail,
+      ),
+      child: Material(
+        key: _key,
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openDetail,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              problem.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyLarge,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    if (problem.tags.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final tag in problem.tags) TagChip(tag: tag),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorForLeetCodeDifficulty(
+                                problem.difficulty,
+                              ).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              labelForLeetCodeDifficulty(problem.difficulty),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: colorForLeetCodeDifficulty(
+                                  problem.difficulty,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
+                      if (problem.tags.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final tag in problem.tags) TagChip(tag: tag),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -1,0 +1,6 @@
+tags:
+  # Destructive maintenance scripts that operate on the real local database.
+  # Skipped by a plain `flutter test`; run one deliberately by path, e.g.
+  #   flutter test --run-skipped test/tool/purge_out_of_sync_journal_entries_test.dart
+  manual:
+    skip: "manual tool — run explicitly with --run-skipped"

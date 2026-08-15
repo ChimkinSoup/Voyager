@@ -27,6 +27,77 @@ int touchedSpotIndex(List<FlSpot> spots, double? touchedX) {
   return -1;
 }
 
+/// The single x on the curve that every hover inside [rawX]'s period resolves
+/// to, given the [spots] currently drawn.
+///
+/// `interpolateConsecutive` emits a spot for *every day* in the window, so one
+/// weekly/monthly/yearly period spans dozens of them, each carrying its own
+/// interpolated y. Read literally that meant a period had as many readings as
+/// it had days: sweeping across an unlogged February printed a different number
+/// every few pixels, and drifting a little off a logged January's knot swapped
+/// its record out for a nearby interpolated value. Collapsing the period onto
+/// one x gives it one reading. The curve keeps all of its spots and stays
+/// exactly as smooth — this only decides which of them a pointer lands on.
+///
+/// Which period [rawX] belongs to is decided by proximity, not containment:
+/// each period owns the span reaching halfway to the period on either side of
+/// it, so two neighbours' zones meet exactly midway between them and a period
+/// has as much room on its left as on its right. Containment — "which period
+/// is this day inside?" — gave a period the whole of its own span to the right
+/// and nothing at all to the left, so a pointer a pixel short of February's
+/// first day still read January. [periodStarts] supplies those boundaries: the
+/// x of the first day of every period the window covers, ascending. It should
+/// include the period that opens *before* the window as well, since the
+/// window's leading days belong to it.
+///
+/// The chosen x is the record's own knot day when the period was logged, so a
+/// logged period reads as the number you entered; otherwise the period's first
+/// day, the same day a record filed under it would occupy.
+///
+/// Result is clamped into [spots]' own range: the window's first period usually
+/// starts before the window does, and there is no spot out there to land on.
+double sparklinePeriodAnchorX({
+  required double rawX,
+  required DateTime from,
+  required List<TrackerValue> values,
+  required DateTime Function(DateTime) periodStartOf,
+  required List<FlSpot> spots,
+  required List<double> periodStarts,
+}) {
+  if (spots.isEmpty) return rawX;
+  // The nearest period start *is* the period whose centred zone holds rawX:
+  // zones split midway between starts, so the nearer start always wins. Dead
+  // on a boundary the later period takes it (`<=`, over an ascending list),
+  // the way `.round()` sends a half upwards.
+  var startX = rawX;
+  var bestDistance = double.infinity;
+  for (final start in periodStarts) {
+    final distance = (start - rawX).abs();
+    if (distance <= bestDistance) {
+      bestDistance = distance;
+      startX = start;
+    }
+  }
+  // Calendar days, not a 24h-per-day [Duration] — see [resolveSparklinePeriod]
+  // for why that distinction matters here.
+  final period = periodStartOf(addCalendarDays(from, startX.round()));
+  var day = calendarDaysBetween(from, period).toDouble();
+  for (final value in values) {
+    if (periodStartOf(value.periodStart) == period) {
+      // The knot `interpolateConsecutive` pinned this record to. Landing on it
+      // is what makes [resolveSparklinePeriod] report `onRecordedDay`, and so
+      // what makes the bubble print the record rather than the curve.
+      day = calendarDaysBetween(from, value.periodStart).toDouble();
+      break;
+    }
+  }
+  final first = spots.first.x;
+  final last = spots.last.x;
+  if (day < first) return first;
+  if (day > last) return last;
+  return day;
+}
+
 /// The period a sparkline interaction at [x] refers to, and the record stored
 /// for it (null when that period was never logged).
 ///

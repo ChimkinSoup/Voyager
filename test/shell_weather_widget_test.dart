@@ -6,9 +6,7 @@ import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 
 class _WeatherRailProbe extends ConsumerWidget {
-  const _WeatherRailProbe({required this.accent});
-
-  final Color accent;
+  const _WeatherRailProbe();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -16,7 +14,7 @@ class _WeatherRailProbe extends ConsumerWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(weatherIconData(weather.value?.icon), color: accent),
+        WeatherIcon(weather.value?.icon),
         if (weather.value?.tempC != null)
           Text('${weather.value!.tempC!.round()}°'),
       ],
@@ -42,16 +40,12 @@ void main() {
         overrides: [
           currentWeatherProvider.overrideWith((ref) async => snapshot),
         ],
-        child: const MaterialApp(
-          home: Scaffold(
-            body: _WeatherRailProbe(accent: Colors.blue),
-          ),
-        ),
+        child: const MaterialApp(home: Scaffold(body: _WeatherRailProbe())),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(weatherIconData('rain')), findsOneWidget);
+    expect(find.byType(WeatherIcon), findsOneWidget);
     expect(find.text('12°'), findsOneWidget);
   });
 }

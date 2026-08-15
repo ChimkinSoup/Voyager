@@ -14,6 +14,7 @@ import 'package:voyager/features/search/search_page.dart';
 import 'package:voyager/features/settings/settings_page.dart';
 import 'package:voyager/features/study/study_page.dart';
 import 'package:voyager/features/todo/todo_page.dart';
+import 'package:voyager/features/workout/workout_page.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 
 /// A destination paired with its index in [shellDestinations], which is what
@@ -96,6 +97,12 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.cardsThree,
     label: 'Study',
     page: StudyPage(),
+  ),
+  ShellDestination(
+    path: '/workout',
+    icon: PhosphorIconsRegular.barbell,
+    label: 'Workout',
+    page: WorkoutPage(),
   ),
   ShellDestination(
     path: '/demo',

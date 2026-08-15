@@ -23,6 +23,16 @@ enum LeetCodeDifficulty { easy, medium, hard }
 
 enum HeatmapMode { defaultAll, mood, studying, writing, custom }
 
+/// How a workout plan's day slots repeat.
+/// - [weekly]: seven fixed slots tied to weekdays (Mon → Sun).
+/// - [cycle]: N slots that repeat every N days regardless of weekday, so a
+///   4-day split stays a 4-day split rather than drifting against the week.
+enum WorkoutPlanMode { weekly, cycle }
+
+/// Display unit for weights. Storage is always kilograms — see
+/// `kPoundsPerKilogram` in workout_models.dart.
+enum WeightUnit { kg, lb }
+
 enum StartupPageMode { first, custom, lastSeen }
 
 /// Which of the two hand-built app themes is active.

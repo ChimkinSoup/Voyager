@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -7,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/settings_models.dart' show defaultPetalColor;
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
@@ -75,6 +77,22 @@ class LeetCodeProblemsTable extends Table {
   TextColumn get titleSlug => text().nullable()();
   TextColumn get difficulty => text()();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+  /// Problem statement for the flashcard front. Nullable so existing rows
+  /// stay null until the user edits or re-fetches from LeetCode.
+  TextColumn get description => text().nullable()();
+  /// JSON array of worked examples, one string each. Existing rows default to
+  /// an empty array — "no examples" — until the user adds some by hand.
+  TextColumn get examplesJson => text().withDefault(const Constant('[]'))();
+
+  /// JSON array of solutions, one object each — the write-up (approach,
+  /// complexity, explanation, code, notes) for every way the user has solved
+  /// this problem. The source of truth for all of them.
+  TextColumn get solutionsJson => text().withDefault(const Constant('[]'))();
+
+  /// The single solution a problem could hold before this table learned about
+  /// alternatives. Migration 77 folded these into [solutionsJson], which is
+  /// what every read goes through now; writes keep mirroring solution 1 here
+  /// so the columns stay truthful rather than frozen at their last value.
   TextColumn get algorithm => text().withDefault(const Constant(''))();
   TextColumn get timeComplexity => text().nullable()();
   TextColumn get spaceComplexity => text().nullable()();
@@ -84,6 +102,15 @@ class LeetCodeProblemsTable extends Table {
   TextColumn get code => text().withDefault(const Constant(''))();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get solvedAt => dateTime()();
+
+  /// SRS review state for the Review Deck, mirroring [StudyCardsTable]'s.
+  /// `dueAt` is nullable rather than backfilled: a null reads as "due now",
+  /// which is exactly right both for a freshly tracked problem and for every
+  /// problem tracked before the deck learned to schedule.
+  RealColumn get interval => real().withDefault(const Constant(0))();
+  RealColumn get ease => real().withDefault(const Constant(2.5))();
+  DateTimeColumn get dueAt => dateTime().nullable()();
+  IntColumn get reviewCount => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -116,6 +143,7 @@ class TodoTasksTable extends Table {
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
   IntColumn get preStarSortOrder => integer().nullable()();
   DateTimeColumn get dueDateSetAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
@@ -157,6 +185,7 @@ class CalendarEventsTable extends Table {
       text().withDefault(const Constant('none'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -182,6 +211,7 @@ class TrackersTable extends Table {
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -197,6 +227,7 @@ class TrackerValuesTable extends Table {
   TextColumn get enumValue => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -330,6 +361,9 @@ class PinnedNotesTable extends Table {
   TextColumn get id => text()();
   TextColumn get body => text()();
   DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -339,13 +373,19 @@ class DismissedNotificationsTable extends Table {
   /// `'$itemId|$urgencyTierName'` — see [NotificationFeedItem.dismissalKey].
   TextColumn get id => text()();
   DateTimeColumn get dismissedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+
+  /// Set when the row is un-dismissed. A dismissal has to be able to travel to
+  /// another device as "no longer dismissed", and a pull only ever sees the
+  /// documents that exist — a hard delete would simply never arrive.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-/// Local-only storage for the Life Tracker bubble's bucket list. Like
-/// [PinnedNotesTable], nothing here leaves the device.
+/// The Life Tracker bubble's bucket list.
 class BucketListItemsTable extends Table {
   TextColumn get id => text()();
   TextColumn get title => text()();
@@ -355,6 +395,8 @@ class BucketListItemsTable extends Table {
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -398,9 +440,19 @@ class SettingsTable extends Table {
   IntColumn get alertTimeHour => integer().withDefault(const Constant(9))();
   BoolColumn get hideCompletedTasks =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get vimModeEnabled =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get deviceId => text().nullable()();
   TextColumn get lastViewedJournalId => text().nullable()();
   TextColumn get lastViewedTodoListId => text().nullable()();
+  // Kept separate from the lastViewed* ids above rather than folded into them
+  // as a sentinel: the all-view and "which one was I actually in" are two
+  // independent facts, and storing them in one column loses the second, which
+  // is what decides where a new entry/task created from the all-view lands.
+  BoolColumn get journalShowAllEntries =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get todoShowAllTasks =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get weatherLocationLabel => text().nullable()();
   RealColumn get weatherLat => real().nullable()();
   RealColumn get weatherLon => real().nullable()();
@@ -519,6 +571,8 @@ class SettingsTable extends Table {
   BoolColumn get dreamNotesPinned =>
       boolean().withDefault(const Constant(false))();
   TextColumn get leetcodeUsername => text().nullable()();
+  BoolColumn get showNeetCode150 =>
+      boolean().withDefault(const Constant(true))();
   TextColumn get srsFailKey =>
       text().withDefault(const Constant(defaultStudyFailKey))();
   TextColumn get srsHardKey =>
@@ -528,6 +582,34 @@ class SettingsTable extends Table {
   TextColumn get srsEasyKey =>
       text().withDefault(const Constant(defaultStudyEasyKey))();
 
+  /// [WeightUnit] name — 'kg' or 'lb'. Display only; storage is kilograms.
+  TextColumn get weightUnit => text().withDefault(const Constant('lb'))();
+  BoolColumn get workoutRestTimerEnabled =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get workoutRestSeconds =>
+      integer().withDefault(const Constant(90))();
+  BoolColumn get showWorkoutsOnCalendar =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get showWorkoutStatistics =>
+      boolean().withDefault(const Constant(false))();
+
+  /// When a *synced* setting last changed on some device — the whole-document
+  /// last-write-wins clock for [settingsSyncPayload]. Device-local writes
+  /// (weather cache, dev flags, window state) deliberately leave it alone, so
+  /// merely opening the app can't overwrite a preference another device
+  /// changed more recently.
+  ///
+  /// Null until a synced setting is actually changed. That matters on a fresh
+  /// install: stamping the default row with "now" would make untouched
+  /// defaults the newest settings in the account and overwrite the real ones
+  /// before the first pull ever ran.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  /// Which one-time upload of the newly synced collections this device has
+  /// run — see `RemoteSyncService.syncBackfillVersion`. Device-local, so it
+  /// stays out of [settingsSyncPayload].
+  IntColumn get syncBackfillVersion => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -536,15 +618,45 @@ class TagColorsTable extends Table {
   TextColumn get tag => text()();
   IntColumn get colorValue => integer()();
 
+  /// Carries no `deletedAt`: a tag's color can be re-picked but never removed,
+  /// so there is no deletion for another device to hear about.
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {tag};
 }
 
 class CustomWordsTable extends Table {
   TextColumn get word => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+
+  /// Set when the word is removed from the dictionary, so the removal reaches
+  /// other devices instead of the word reappearing on their next pull.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {word};
+}
+
+/// Quotes the user wrote, added to the pool a new journal entry draws from.
+///
+/// Unlike [CustomWordsTable] this is a synced collection, so it carries the
+/// id/timestamps/version/deletedAt shape every synced table has rather than
+/// keying on its own content — the text is editable, and a device that renamed
+/// a quote has to be able to say *which* quote it renamed.
+class CustomQuotesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get quote => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 
 class SyncConflictsTable extends Table {
@@ -568,6 +680,14 @@ class PendingUploadsTable extends Table {
   TextColumn get documentId => text()();
   TextColumn get collectionName => text()();
   DateTimeColumn get addedAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Null while the upload is still queued for retry.
+  ///
+  /// Set once the failure is known to be unfixable by retrying — the row then
+  /// stays as a durable record that this document never reached the server,
+  /// and the drain skips it so one rejected document can't stall the queue
+  /// behind it.
+  TextColumn get failureReason => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {documentId, collectionName};
@@ -619,6 +739,135 @@ class StudyCardsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// The exercise library. Every set ever logged points back at one of these
+/// rows, which is what makes a movement's whole history queryable from the
+/// detail view regardless of which plan or day it was performed under.
+class ExercisesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get formCues => text().withDefault(const Constant(''))();
+  IntColumn get colorValue => integer().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// The movement's target, shared by every day it is planned on. Held here
+  /// rather than on the placement so editing it once changes it everywhere.
+  IntColumn get targetSets => integer().withDefault(const Constant(3))();
+  IntColumn get targetReps => integer().withDefault(const Constant(8))();
+  RealColumn get targetWeightKg => real().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class WorkoutPlansTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+
+  /// [WorkoutPlanMode] name — 'weekly' or 'cycle'.
+  TextColumn get mode => text().withDefault(const Constant('weekly'))();
+  IntColumn get cycleLength => integer().withDefault(const Constant(4))();
+  DateTimeColumn get cycleAnchor => dateTime()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Lifts the pre-v68 per-placement targets up onto the movement they belong
+/// to, so an existing split doesn't reset to 3 × 8 the moment targets go
+/// global.
+///
+/// Most recently edited placement wins: several days planning the same lift at
+/// different weights cannot all survive the collapse to one global number, and
+/// the newest is the likeliest intent. Named rather than inlined so
+/// `workout_test.dart` can run the real statement against a legacy-shaped
+/// table — a typo'd column here throws on app start, after the point where the
+/// user could do anything about it.
+const String kWorkoutTargetBackfillSql = '''
+UPDATE exercises_table SET
+  target_sets = COALESCE((
+    SELECT e.sets FROM workout_plan_entries_table e
+    WHERE e.exercise_id = exercises_table.id AND e.deleted_at IS NULL
+    ORDER BY e.updated_at DESC LIMIT 1
+  ), target_sets),
+  target_reps = COALESCE((
+    SELECT e.reps FROM workout_plan_entries_table e
+    WHERE e.exercise_id = exercises_table.id AND e.deleted_at IS NULL
+    ORDER BY e.updated_at DESC LIMIT 1
+  ), target_reps),
+  target_weight_kg = COALESCE((
+    SELECT e.weight_kg FROM workout_plan_entries_table e
+    WHERE e.exercise_id = exercises_table.id AND e.deleted_at IS NULL
+    ORDER BY e.updated_at DESC LIMIT 1
+  ), target_weight_kg)
+''';
+
+/// A placement only — which movement sits on which day, in what order. The
+/// sets/reps/weight it used to carry moved to [ExercisesTable] so they are
+/// global to the movement; see the v68 migration.
+class WorkoutPlanEntriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get planId => text()();
+  IntColumn get dayIndex => integer()();
+  TextColumn get exerciseId => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class WorkoutSessionsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get planId => text().nullable()();
+  IntColumn get dayIndex => integer().nullable()();
+  DateTimeColumn get date => dateTime()();
+  DateTimeColumn get startedAt => dateTime()();
+
+  /// Null while the workout is live. The active session lives in the database
+  /// rather than in memory so the floating island survives an app restart.
+  DateTimeColumn get endedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class WorkoutSetLogsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get sessionId => text()();
+  TextColumn get exerciseId => text()();
+  IntColumn get exerciseOrder => integer().withDefault(const Constant(0))();
+  IntColumn get setIndex => integer().withDefault(const Constant(0))();
+  RealColumn get weightKg => real().withDefault(const Constant(0))();
+  IntColumn get reps => integer().withDefault(const Constant(0))();
+  RealColumn get plannedWeightKg => real().withDefault(const Constant(0))();
+  IntColumn get plannedReps => integer().withDefault(const Constant(0))();
+  BoolColumn get completed => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class StudyReviewLogTable extends Table {
   TextColumn get id => text()();
   TextColumn get cardId => text()();
@@ -655,19 +904,25 @@ class StudyReviewLogTable extends Table {
     PinnedNotesTable,
     DismissedNotificationsTable,
     CustomWordsTable,
+    CustomQuotesTable,
     BucketListItemsTable,
     LeetCodeProblemsTable,
     StudyFoldersTable,
     StudyDecksTable,
     StudyCardsTable,
     StudyReviewLogTable,
+    ExercisesTable,
+    WorkoutPlansTable,
+    WorkoutPlanEntriesTable,
+    WorkoutSessionsTable,
+    WorkoutSetLogsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 64;
+  int get schemaVersion => 77;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1271,8 +1526,304 @@ class AppDatabase extends _$AppDatabase {
           studyDecksTable.colorValue,
         );
       }
+      if (from < 65) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.journalShowAllEntries,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.todoShowAllTasks,
+        );
+        // The journal page used to record the all-journals view by writing the
+        // sentinel 'ALL_JOURNALS' into last_viewed_journal_id, which overwrote
+        // the id of the journal actually last open. Split the two facts apart;
+        // the concrete id is unrecoverable for these rows, so it goes null and
+        // the page falls back to the default journal exactly once.
+        await customStatement(
+          "UPDATE settings_table SET journal_show_all_entries = 1, "
+          "last_viewed_journal_id = NULL "
+          "WHERE last_viewed_journal_id = 'ALL_JOURNALS'",
+        );
+      }
+      // No step 66: it added a `global_sort_order` column to todo_tasks_table
+      // to remember drags in the "All tasks" view. That view derives its order
+      // instead (see `resolveGlobalTaskOrder`) and is not reorderable, so the
+      // column is gone. Databases that already took step 66 keep the unused
+      // column — Drift names columns explicitly, so a stray nullable one is
+      // inert, and dropping it would cost a table rebuild for nothing.
+      if (from < 67) {
+        await migrator.createTable(exercisesTable);
+        await migrator.createTable(workoutPlansTable);
+        await migrator.createTable(workoutPlanEntriesTable);
+        await migrator.createTable(workoutSessionsTable);
+        await migrator.createTable(workoutSetLogsTable);
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.weightUnit,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.workoutRestTimerEnabled,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.workoutRestSeconds,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.showWorkoutsOnCalendar,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.showWorkoutStatistics,
+        );
+      }
+      if (from < 68) {
+        // Targets moved off the placement and onto the movement, so editing
+        // a lift's weight changes it on every day of every plan at once.
+        await _addColumnIfNotExists(
+          migrator,
+          'exercises_table',
+          exercisesTable,
+          exercisesTable.targetSets,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'exercises_table',
+          exercisesTable,
+          exercisesTable.targetReps,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'exercises_table',
+          exercisesTable,
+          exercisesTable.targetWeightKg,
+        );
+        // Only a database that actually reached v67 has the old per-entry
+        // columns to carry over; one upgrading from further back had its
+        // plan-entry table created above from the current (column-less)
+        // schema, and reading them would be a SQL error.
+        if (from >= 67) {
+          await customStatement(kWorkoutTargetBackfillSql);
+          // Rebuilds the table from its current schema, dropping the three
+          // columns that no longer exist in Dart.
+          await migrator.alterTable(
+            TableMigration(workoutPlanEntriesTable),
+          );
+        }
+      }
+      if (from < 69) {
+        await _addColumnIfNotExists(
+          migrator,
+          'settings_table',
+          settingsTable,
+          settingsTable.vimModeEnabled,
+        );
+      }
+      if (from < 70) {
+        await migrator.createTable(customQuotesTable);
+      }
+      if (from < 71) {
+        await _addColumnIfNotExists(
+          migrator,
+          'pending_uploads_table',
+          pendingUploadsTable,
+          pendingUploadsTable.failureReason,
+        );
+      }
+      if (from < 72) {
+        for (final column in [
+          leetCodeProblemsTable.interval,
+          leetCodeProblemsTable.ease,
+          leetCodeProblemsTable.dueAt,
+          leetCodeProblemsTable.reviewCount,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'leet_code_problems_table',
+            leetCodeProblemsTable,
+            column,
+          );
+        }
+      }
+      if (from < 73) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.showNeetCode150,
+        );
+      }
+      if (from < 74) {
+        await _addColumnIfNotExists(
+          migrator,
+          'leet_code_problems_table',
+          leetCodeProblemsTable,
+          leetCodeProblemsTable.description,
+        );
+      }
+      if (from < 75) {
+        await _addColumnIfNotExists(
+          migrator,
+          'leet_code_problems_table',
+          leetCodeProblemsTable,
+          leetCodeProblemsTable.examplesJson,
+        );
+      }
+      // Everything the sync layer needs from the collections that used to be
+      // local-only: a version/updatedAt pair to order two devices' edits, and
+      // a deletedAt so a removal can travel instead of the row reappearing on
+      // the next pull.
+      if (from < 76) {
+        await _addColumnIfNotExists(
+          migrator,
+          'calendar_events_table',
+          calendarEventsTable,
+          calendarEventsTable.version,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'trackers_table',
+          trackersTable,
+          trackersTable.version,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'tracker_values_table',
+          trackerValuesTable,
+          trackerValuesTable.version,
+        );
+        // The non-null `updatedAt` columns can't go through addColumn: their
+        // schema default is CURRENT_TIMESTAMP, and SQLite rejects ADD COLUMN
+        // with a non-constant default outright. They're added with a constant
+        // instead and then seeded from the timestamp each table already has,
+        // so a migrated row's "last changed" is its real age rather than the
+        // moment of the upgrade.
+        await _addTimestampColumnIfNotExists(
+          'pinned_notes_table',
+          'updated_at',
+          seedFrom: 'created_at',
+        );
+        for (final column in [
+          pinnedNotesTable.version,
+          pinnedNotesTable.deletedAt,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'pinned_notes_table',
+            pinnedNotesTable,
+            column,
+          );
+        }
+        await _addTimestampColumnIfNotExists(
+          'dismissed_notifications_table',
+          'updated_at',
+          seedFrom: 'dismissed_at',
+        );
+        for (final column in [
+          dismissedNotificationsTable.version,
+          dismissedNotificationsTable.deletedAt,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'dismissed_notifications_table',
+            dismissedNotificationsTable,
+            column,
+          );
+        }
+        for (final column in [
+          bucketListItemsTable.version,
+          bucketListItemsTable.deletedAt,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'bucket_list_items_table',
+            bucketListItemsTable,
+            column,
+          );
+        }
+        // Tag colors and custom words have no timestamp of their own to seed
+        // from, so migrated rows start at the epoch: the oldest possible
+        // edit, which any real change on any device then wins against.
+        await _addTimestampColumnIfNotExists('tag_colors_table', 'updated_at');
+        await _addColumnIfNotExists(
+          migrator,
+          'tag_colors_table',
+          tagColorsTable,
+          tagColorsTable.version,
+        );
+        await _addTimestampColumnIfNotExists(
+          'custom_words_table',
+          'created_at',
+        );
+        await _addTimestampColumnIfNotExists(
+          'custom_words_table',
+          'updated_at',
+        );
+        for (final column in [
+          customWordsTable.version,
+          customWordsTable.deletedAt,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'custom_words_table',
+            customWordsTable,
+            column,
+          );
+        }
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.updatedAt);
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.syncBackfillVersion,
+        );
+      }
+      if (from < 77) {
+        await _addColumnIfNotExists(
+          migrator,
+          'leet_code_problems_table',
+          leetCodeProblemsTable,
+          leetCodeProblemsTable.solutionsJson,
+        );
+        await _foldLeetCodeSolutionColumns();
+      }
     },
   );
+
+  /// Rewrites every problem's one-and-only solution — the flat columns it was
+  /// stored in before problems could hold alternatives — into the
+  /// `solutions_json` list that reads go through now.
+  ///
+  /// Done in Dart rather than in SQL: the shape has to match exactly what
+  /// [LeetCodeSolution.fromJson] expects, and building it from the same
+  /// helper the importer and the sync merge use is what guarantees that.
+  /// A problem with every field blank gets an empty list — it had no solution
+  /// to carry over.
+  Future<void> _foldLeetCodeSolutionColumns() async {
+    final rows = await customSelect(
+      'SELECT id, algorithm, time_complexity, space_complexity, explanation, '
+      'code_language, code, notes FROM leet_code_problems_table',
+    ).get();
+    for (final row in rows) {
+      final solutions = leetCodeSolutionsFromLegacyFields(
+        algorithm: row.read<String?>('algorithm'),
+        timeComplexity: row.read<String?>('time_complexity'),
+        spaceComplexity: row.read<String?>('space_complexity'),
+        explanation: row.read<String?>('explanation'),
+        codeLanguage: row.read<String?>('code_language'),
+        code: row.read<String?>('code'),
+        notes: row.read<String?>('notes'),
+      );
+      await customUpdate(
+        'UPDATE leet_code_problems_table SET solutions_json = ? WHERE id = ?',
+        variables: [
+          Variable.withString(
+            jsonEncode([for (final s in solutions) s.toJson()]),
+          ),
+          Variable.withString(row.read<String>('id')),
+        ],
+        updates: {leetCodeProblemsTable},
+      );
+    }
+  }
 
   /// Skips ADD COLUMN when the local DB already has it (e.g. after branch churn,
   /// or because an earlier createTable step in the same upgrade run already
@@ -1289,6 +1840,40 @@ class AppDatabase extends _$AppDatabase {
     ).get();
     if (exists.isEmpty) {
       await migrator.addColumn(table, column);
+    }
+  }
+
+  /// Adds a non-nullable `DateTime` column to an existing table.
+  ///
+  /// [Migrator.addColumn] can't: these columns declare `CURRENT_TIMESTAMP` as
+  /// their schema default so that freshly created rows get a real timestamp,
+  /// and SQLite rejects `ALTER TABLE … ADD COLUMN` with a non-constant
+  /// default. The column is added with the epoch as a constant default and
+  /// then seeded from [seedFrom] — another timestamp column on the same
+  /// table — where the table has one to seed from.
+  ///
+  /// The literal matches how drift stores date times in this database
+  /// (`storeDateTimeAsText`): an ISO-8601 string in UTC.
+  Future<void> _addTimestampColumnIfNotExists(
+    String tableName,
+    String columnName, {
+    String? seedFrom,
+  }) async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('$tableName') WHERE name = ?",
+      variables: [Variable.withString(columnName)],
+    ).get();
+    if (exists.isNotEmpty) return;
+
+    await customStatement(
+      "ALTER TABLE $tableName ADD COLUMN $columnName TEXT NOT NULL "
+      "DEFAULT '1970-01-01T00:00:00.000Z'",
+    );
+    if (seedFrom != null) {
+      await customStatement(
+        'UPDATE $tableName SET $columnName = $seedFrom '
+        'WHERE $seedFrom IS NOT NULL',
+      );
     }
   }
 
@@ -1340,6 +1925,12 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'UPDATE settings_table SET dev_show_journal_remote_pull_button = 0 WHERE dev_show_journal_remote_pull_button IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET journal_show_all_entries = 0 WHERE journal_show_all_entries IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET todo_show_all_tasks = 0 WHERE todo_show_all_tasks IS NULL',
     );
     await customStatement(
       'UPDATE settings_table SET dev_show_fps_counter = 0 WHERE dev_show_fps_counter IS NULL',
@@ -1406,6 +1997,21 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'UPDATE settings_table SET show_annualized_subscription_cost = 0 WHERE show_annualized_subscription_cost IS NULL',
+    );
+    await customStatement(
+      "UPDATE settings_table SET weight_unit = 'lb' WHERE weight_unit IS NULL",
+    );
+    await customStatement(
+      'UPDATE settings_table SET workout_rest_timer_enabled = 0 WHERE workout_rest_timer_enabled IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET workout_rest_seconds = 90 WHERE workout_rest_seconds IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET show_workouts_on_calendar = 0 WHERE show_workouts_on_calendar IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET show_workout_statistics = 0 WHERE show_workout_statistics IS NULL',
     );
   }
 

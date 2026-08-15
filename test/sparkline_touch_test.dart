@@ -225,4 +225,142 @@ void _readingTests() {
       );
     });
   });
+
+  group('sparklinePeriodAnchorX', () {
+    final from = DateTime(2026, 1, 1);
+
+    TrackerValue value(DateTime periodStart, int intValue) => TrackerValue(
+      id: 'v${periodStart.toIso8601String()}',
+      createdAt: from,
+      updatedAt: from,
+      trackerId: 't',
+      periodStart: periodStart,
+      intValue: intValue,
+    );
+
+    DateTime monthly(DateTime d) => DateTime(d.year, d.month, 1);
+
+    // A day per x, as `interpolateConsecutive` emits: Jan 1 2026 through the
+    // end of March.
+    final spots = [for (var day = 0; day <= 89; day++) FlSpot(day.toDouble(), 0)];
+
+    // Jan 1 is day 0, Feb 1 is day 31, Mar 1 is day 59.
+    final janAndMar = [
+      value(DateTime(2026, 1, 1), 4),
+      value(DateTime(2026, 3, 1), 9),
+    ];
+
+    // Dec 1 2025 (day -31) is included the way the page includes it: the
+    // window's leading days belong to the period that opened before it.
+    const monthStarts = <double>[-31, 0, 31, 59];
+
+    double anchor(
+      double rawX, {
+      List<TrackerValue>? values,
+      List<double> periodStarts = monthStarts,
+    }) => sparklinePeriodAnchorX(
+      rawX: rawX,
+      from: from,
+      values: values ?? janAndMar,
+      periodStartOf: monthly,
+      spots: spots,
+      periodStarts: periodStarts,
+    );
+
+    test('every day of an unlogged period collapses to one x', () {
+      // The reported bug: February has no record, so each of its 28 days
+      // carried its own interpolated reading. They must all land on one.
+      // February's zone runs 16..44 — midway to January on one side, midway
+      // to March on the other.
+      final febDays = [for (var day = 16; day <= 44; day++) anchor(day.toDouble())];
+      expect(febDays.toSet(), {31.0});
+    });
+
+    test('an unlogged period anchors on its first day', () {
+      expect(anchor(40), 31.0);
+    });
+
+    test('every day of a logged period collapses onto its record', () {
+      // The other half: drifting a little off January used to swap its stored
+      // value for a nearby interpolated one.
+      final janDays = [for (var day = 0; day <= 15; day++) anchor(day.toDouble())];
+      expect(janDays.toSet(), {0.0});
+      expect(anchor(70), 59.0);
+    });
+
+    test('a hover zone splits midway between two periods', () {
+      // The reported bug: a pointer a day short of February still read
+      // January, because a period owned all of its own span to the right and
+      // none of the space to its left. The split now sits at day 15.5, the
+      // midpoint between Jan 1 (day 0) and Feb 1 (day 31).
+      expect(anchor(15), 0.0);
+      expect(anchor(16), 31.0);
+    });
+
+    test('a period reaches as far left as it reaches right', () {
+      // February's zone is 15 days either side of day 31, and a hover landing
+      // exactly on a boundary goes to the later period.
+      expect(anchor(16), 31.0);
+      expect(anchor(44), 31.0);
+      expect(anchor(45), 59.0);
+    });
+
+    test('a record filed mid-period anchors on its own knot, not day one', () {
+      // Non-daily records need not sit on the period's first day; the curve is
+      // pinned to the day they were filed under, so the anchor has to be too.
+      final values = [value(DateTime(2026, 2, 10), 7)];
+      expect(anchor(16, values: values), 40.0);
+      expect(anchor(44, values: values), 40.0);
+    });
+
+    test('clamps a period that starts before the window', () {
+      // The window opens mid-period more often than not, and there is no spot
+      // out to the left to land on. From Jan 5, Jan 1 is day -4 and Feb 1 is
+      // day 27, so days 0..11 still belong to January.
+      final late = DateTime(2026, 1, 5);
+      expect(
+        sparklinePeriodAnchorX(
+          rawX: 3,
+          from: late,
+          values: const [],
+          periodStartOf: monthly,
+          spots: [for (var day = 0; day <= 40; day++) FlSpot(day.toDouble(), 0)],
+          periodStarts: const [-4, 27],
+        ),
+        0.0,
+      );
+    });
+
+    test('leaves the x alone when there is no series to land on', () {
+      expect(
+        sparklinePeriodAnchorX(
+          rawX: 7,
+          from: from,
+          values: janAndMar,
+          periodStartOf: monthly,
+          spots: const [],
+          periodStarts: monthStarts,
+        ),
+        7,
+      );
+    });
+
+    test('a daily tracker is unaffected — each period is already one day', () {
+      DateTime daily(DateTime d) => DateTime(d.year, d.month, d.day);
+      final dayStarts = [for (var day = -1; day <= 89; day++) day.toDouble()];
+      for (final day in [0, 5, 31, 60]) {
+        expect(
+          sparklinePeriodAnchorX(
+            rawX: day.toDouble(),
+            from: from,
+            values: janAndMar,
+            periodStartOf: daily,
+            spots: spots,
+            periodStarts: dayStarts,
+          ),
+          day.toDouble(),
+        );
+      }
+    });
+  });
 }

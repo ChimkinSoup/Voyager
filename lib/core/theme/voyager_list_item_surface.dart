@@ -29,6 +29,35 @@ abstract final class VoyagerListItemSurface {
     )!.withValues(alpha: 0.75);
   }
 
+  /// Outline for the row whose content is open in the page's editor or detail
+  /// pane — the entry you are reading, the task you are editing.
+  static Color focusBorderColor(BuildContext context) =>
+      Theme.of(context).colorScheme.outline.withValues(alpha: 0.35);
+
+  static Color _restingBorderColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06);
+
+  /// [ListTile.shape] for sidebar rows, outlined while [focused].
+  ///
+  /// The unfocused side is transparent rather than [BorderSide.none]: a
+  /// [ShapeDecoration] pads its child by `shape.dimensions`, which is the
+  /// side's width — so a border that appears out of nothing makes the row two
+  /// pixels taller, and every row below it jumps as the selection moves. A
+  /// side that is always one pixel wide and only changes colour holds the
+  /// geometry still.
+  static RoundedRectangleBorder focusShape(
+    BuildContext context, {
+    required bool focused,
+    double borderRadius = 12,
+  }) {
+    return RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(borderRadius),
+      side: BorderSide(
+        color: focused ? focusBorderColor(context) : Colors.transparent,
+      ),
+    );
+  }
+
   static BoxDecoration decoration(
     BuildContext context, {
     required bool selected,
@@ -44,7 +73,9 @@ abstract final class VoyagerListItemSurface {
       color: color,
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06),
+        color: selected
+            ? focusBorderColor(context)
+            : _restingBorderColor(context),
       ),
     );
   }

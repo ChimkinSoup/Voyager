@@ -81,27 +81,51 @@ class ContextMenuRegion extends StatefulWidget {
   const ContextMenuRegion({
     super.key,
     required this.child,
-    required this.items,
+    this.items,
+    this.itemsBuilder,
     this.dismissDistance = 220.0,
-  });
+  }) : assert(
+         (items == null) != (itemsBuilder == null),
+         'Provide exactly one of items or itemsBuilder',
+       );
 
   final Widget child;
-  final List<ContextMenuItem> items;
+
+  /// The menu's entries, built eagerly by the caller.
+  final List<ContextMenuItem>? items;
+
+  /// Builds the menu's entries when it is actually opened, instead of on
+  /// every rebuild of the widget wrapping [child]. Worth preferring for rows
+  /// in a long list: the entries are only ever looked at on right-click, but
+  /// building them eagerly allocates the whole menu — icons, submenu children,
+  /// one entry per move-to-list target — for every row on screen every time
+  /// that list rebuilds.
+  final ValueGetter<List<ContextMenuItem>>? itemsBuilder;
+
   final double dismissDistance;
 
   @override
-  State<ContextMenuRegion> createState() => _ContextMenuRegionState();
+  ContextMenuRegionState createState() => ContextMenuRegionState();
 }
 
-class _ContextMenuRegionState extends State<ContextMenuRegion> {
+/// Public so a region can also be opened by something other than a
+/// right-click — a hover-revealed "⋯" affordance, say, which needs the same
+/// menu the right-click gives rather than a lookalike built somewhere else.
+/// Reach it with a `GlobalKey<ContextMenuRegionState>` on the region.
+class ContextMenuRegionState extends State<ContextMenuRegion> {
   OverlayEntry? _menuEntry;
+
+  /// Opens this region's menu anchored to [globalPosition], exactly as a
+  /// right-click at that point would.
+  void openMenuAt(Offset globalPosition) => _openMenu(globalPosition);
 
   void _openMenu(Offset globalPosition) {
     _closeMenu();
+    final items = widget.items ?? widget.itemsBuilder!();
     final entry = OverlayEntry(
       builder: (ctx) => _ContextMenuOverlay(
         anchor: globalPosition,
-        items: widget.items,
+        items: items,
         dismissDistance: widget.dismissDistance,
         onDismiss: _closeMenu,
         capturedThemes: InheritedTheme.capture(

@@ -40,7 +40,7 @@ class WeatherService {
     final remote = await _syncRepository.getCurrentWeather();
     if (remote != null && remote.isNewerThan(snapshot)) {
       snapshot = remote;
-      await _persistCache(settings, remote);
+      await _persistCache(remote);
     }
 
     final now = DateTime.now().toUtc();
@@ -61,7 +61,7 @@ class WeatherService {
     if (!claimed) {
       final latest = await _syncRepository.getCurrentWeather();
       if (latest != null) {
-        await _persistCache(settings, latest);
+        await _persistCache(latest);
         return latest;
       }
       return snapshot;
@@ -74,7 +74,7 @@ class WeatherService {
         deviceId: _deviceId,
         locationLabel: settings.weatherLocationLabel,
       );
-      await _persistCache(settings, refreshed);
+      await _persistCache(refreshed);
       return refreshed;
     } finally {
       await _syncRepository.releaseWeatherFetchLock(_deviceId);
@@ -150,7 +150,7 @@ class WeatherService {
 
       final local = readCachedForecast(settings);
       if (local == null || remote.fetchedAt.isAfter(local.fetchedAt)) {
-        await _persistForecast(settings, remote);
+        await _persistForecast(remote);
       }
     } catch (_) {
       // Ignore malformed or unreadable remote forecast archives.
@@ -228,7 +228,7 @@ class WeatherService {
         : apiForecast;
 
     final pruned = prunePastForecast(merged);
-    await _persistForecast(settings, pruned);
+    await _persistForecast(pruned);
     return pruned;
   }
 
@@ -244,7 +244,7 @@ class WeatherService {
     final pruned = prunePastForecast(forecast);
     if (pruned.periods.length == forecast.periods.length) return false;
 
-    await _persistForecast(settings, pruned);
+    await _persistForecast(pruned);
     return true;
   }
 
@@ -284,33 +284,46 @@ class WeatherService {
     );
   }
 
-  Future<void> _persistCache(
-    AppSettings settings,
-    WeatherSnapshot snapshot,
-  ) async {
+  /// Writes the weather fields onto the settings row *as it stands now*.
+  ///
+  /// Deliberately re-reads rather than editing the snapshot the caller took
+  /// before its network round-trip. `saveSettings` writes the whole row, so
+  /// persisting a copy of a snapshot taken seconds ago reverts every field the
+  /// user changed in the meantime — and worse, `saveSettings` then notices a
+  /// synced field differs, bumps the clock, and pushes the revert to Firestore
+  /// as an authoritative new preference. Changing the accent colour while a
+  /// weather refresh was in flight — which happens on launch and every minute
+  /// after — used to snap it back on every device.
+  ///
+  /// [recordLocalActivity] is false because these fields are a device-local
+  /// cache: they must not move the last-write-wins clock at all.
+  Future<void> _persistCache(WeatherSnapshot snapshot) async {
+    final current = await _settingsRepository.getSettings();
     await _settingsRepository.saveSettings(
-      settings.copyWith(
+      current.copyWith(
         weatherIcon: snapshot.icon,
         weatherFetchedAt: snapshot.fetchedAt,
         weatherConditionCode: snapshot.conditionCode,
         weatherTempC: snapshot.tempC,
         weatherLocationLabel:
-            snapshot.locationLabel ?? settings.weatherLocationLabel,
+            snapshot.locationLabel ?? current.weatherLocationLabel,
         weatherLat: snapshot.lat,
         weatherLon: snapshot.lon,
       ),
+      recordLocalActivity: false,
     );
   }
 
-  Future<void> _persistForecast(
-    AppSettings settings,
-    WeatherForecast forecast,
-  ) async {
+  /// See [_persistCache] for why this re-reads instead of using the snapshot
+  /// the caller was holding.
+  Future<void> _persistForecast(WeatherForecast forecast) async {
     final pruned = prunePastForecast(forecast);
+    final current = await _settingsRepository.getSettings();
     await _settingsRepository.saveSettings(
-      settings.copyWith(
+      current.copyWith(
         weatherForecastJson: jsonEncode(pruned.toJson()),
       ),
+      recordLocalActivity: false,
     );
   }
 }

@@ -15,6 +15,67 @@ import 'package:flutter/widgets.dart';
 
 const String listIndentUnit = '  ';
 
+/// Depth of undo/redo restores currently applying a historical
+/// [TextEditingValue]. While > 0, list helpers must not rewrite the
+/// controller — Flutter's [UndoHistory] asserts the restored value sticks
+/// (`widget.value.value == nextValue` in `undo_history.dart`).
+///
+/// Set via [suppressListEditingWrites] (Vim `u` / `<C-r>`) or
+/// [ListEditingUndoGuard] (Ctrl+Z / Ctrl+Y and platform undo).
+int _suppressListEditingWrites = 0;
+
+/// Runs [body] with list-editing controller writes suppressed.
+///
+/// Use around any call that drives [UndoHistoryController.undo] /
+/// [UndoHistoryController.redo] (or the matching intents), so an `onChanged`
+/// that calls [applyListEditing] cannot desync UndoHistory mid-restore.
+T suppressListEditingWrites<T>(T Function() body) {
+  _suppressListEditingWrites++;
+  try {
+    return body();
+  } finally {
+    _suppressListEditingWrites--;
+  }
+}
+
+bool get _listEditingWritesSuppressed => _suppressListEditingWrites > 0;
+
+/// Ancestor [Actions] override so Ctrl+Z / Ctrl+Y (and other
+/// [UndoTextIntent] / [RedoTextIntent] sources) suspend list rewriting for
+/// the same reason as [suppressListEditingWrites].
+///
+/// Wrap every [TextField] whose `onChanged` may call [applyListEditing].
+class ListEditingUndoGuard extends StatelessWidget {
+  const ListEditingUndoGuard({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Actions(
+      actions: <Type, Action<Intent>>{
+        UndoTextIntent: _SuspendingUndoAction(),
+        RedoTextIntent: _SuspendingRedoAction(),
+      },
+      child: child,
+    );
+  }
+}
+
+final class _SuspendingUndoAction extends Action<UndoTextIntent> {
+  @override
+  Object? invoke(UndoTextIntent intent) {
+    return suppressListEditingWrites(() => callingAction?.invoke(intent));
+  }
+}
+
+final class _SuspendingRedoAction extends Action<RedoTextIntent> {
+  @override
+  Object? invoke(RedoTextIntent intent) {
+    return suppressListEditingWrites(() => callingAction?.invoke(intent));
+  }
+}
+
 final RegExp _bulletPattern = RegExp(r'^(\s*)([-*])( +)(.*)$');
 final RegExp _numberPattern = RegExp(r'^(\s*)(\d+)\.( +)(.*)$');
 // Cheap single-pass check used to skip the full renumbering machinery
@@ -72,6 +133,10 @@ bool applyListEditing({
   required TextEditingController controller,
   required String previousText,
 }) {
+  // See [_suppressListEditingWrites] — mutating here during an undo restore
+  // trips UndoHistory's post-onTriggered assert.
+  if (_listEditingWritesSuppressed) return false;
+
   var text = controller.text;
   var selection = controller.selection;
 
@@ -274,6 +339,8 @@ bool handleListTab({
   required TextEditingController controller,
   required bool outdent,
 }) {
+  if (_listEditingWritesSuppressed) return false;
+
   final text = controller.text;
   final selection = controller.selection;
   if (!selection.isValid) return false;
@@ -375,6 +442,8 @@ bool isOnListLine(TextEditingController controller) {
 /// Renumbers afterward. Returns true if it handled the key; false means the
 /// caller should fall through to normal Backspace behavior.
 bool handleListBackspace({required TextEditingController controller}) {
+  if (_listEditingWritesSuppressed) return false;
+
   final text = controller.text;
   final selection = controller.selection;
   if (!selection.isCollapsed) return false;

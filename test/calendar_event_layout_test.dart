@@ -3,10 +3,6 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart';
 
 void main() {
   group('Calendar event layout and styling', () {
-    test('calendarEventCornerRadius is 3.0', () {
-      expect(calendarEventCornerRadius, equals(3.0));
-    });
-
     test('calendarMonthEventBarHeight expands for 4 events to reach bottom padding', () {
       const style = MonthDayCellStyle.full;
       const cellHeight = 100.0;

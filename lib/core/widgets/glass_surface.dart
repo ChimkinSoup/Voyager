@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// How much a [GlassSurface] separates itself from what's behind it.
@@ -66,39 +67,60 @@ class GlassSurface extends StatelessWidget {
           decoration: BoxDecoration(
             color: baseTint.withValues(alpha: fillAlpha),
             borderRadius: borderRadius,
-            border: Border.all(
-              color: accentBorder?.withValues(alpha: 0.85) ?? vc.strongHairline,
-              width: accentBorder != null ? 2.0 : 1.0,
-            ),
           ),
-          child: Stack(
-            children: [
-              // Top gloss: a light material catches more light than a heavy one.
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: isHeavy ? 12 : 20,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.vertical(
-                        top: borderRadius.topLeft,
-                      ),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          vc.highlightWash.withValues(alpha: isHeavy ? 0.05 : 0.08),
-                          vc.highlightWash.withValues(alpha: 0.0),
-                        ],
+          // The border is drawn *over* the content, not behind it.
+          //
+          // A [DecoratedBox] does not inset its child by the border it paints,
+          // so a full-bleed child — a dropdown whose first and last rows run
+          // edge to edge, a list with a selected row at either end — lands on
+          // top of the border and swallows it: the surface loses its outline
+          // for exactly the rows a user is most likely to be looking at.
+          // Insetting the child instead would leave those same rows short of
+          // the edge, with a strip of the fill showing through between the
+          // highlight and the border. Painting the border last is what lets
+          // the content run all the way out *and* keeps the outline crisp.
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              borderRadius: borderRadius,
+              border: Border.all(
+                color:
+                    accentBorder?.withValues(alpha: 0.85) ?? vc.strongHairline,
+                width: accentBorder != null ? 2.0 : 1.0,
+              ),
+            ),
+            child: Stack(
+              children: [
+                // Top gloss: a light material catches more light than a heavy
+                // one.
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: isHeavy ? 12 : 20,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.vertical(
+                          top: borderRadius.topLeft,
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            vc.highlightWash.withValues(
+                              alpha: isHeavy ? 0.05 : 0.08,
+                            ),
+                            vc.highlightWash.withValues(alpha: 0.0),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              child,
-            ],
+                child,
+              ],
+            ),
           ),
         ),
       ),
@@ -149,35 +171,73 @@ Future<T?> showVoyagerSheet<T>({
   );
 }
 
+/// Progress at which the surface is fully opaque — early enough that the scale
+/// and the arriving blur are still running when the opacity layer drops out.
+const double _kOpaqueAt = 0.45;
+
 /// Animates a [GlassSurface]'s entrance/exit as a material arriving, not a
 /// plain fade: blur radius and scale move together. Drive [t] (0 = hidden,
 /// 1 = shown) from a spring, not a curve, so it stays interruptible.
+///
+/// The blur ramps what is *behind* the surface, so the backdrop frosts over as
+/// the surface arrives instead of the surface simply fading in over a sharp
+/// background. That is a second [BackdropFilter] stacked on the one the
+/// [GlassSurface] already owns, and it is only paid for while [t] is in
+/// flight — it collapses to nothing at rest, and is skipped entirely under
+/// reduced motion, where a surface materializing is the effect being opted
+/// out of.
 class MaterializeTransition extends StatelessWidget {
   const MaterializeTransition({
     super.key,
     required this.t,
     required this.child,
     this.alignment = Alignment.center,
+    this.blurSigma = 12.0,
   });
 
   final Animation<double> t;
   final Widget child;
   final Alignment alignment;
 
+  /// Peak sigma of the arriving blur, reached at `t == 0` and falling to zero
+  /// once the surface has fully materialized.
+  final double blurSigma;
+
   @override
   Widget build(BuildContext context) {
+    final reduced = VoyagerMotion.reduced(context);
     return AnimatedBuilder(
       animation: t,
       child: child,
       builder: (context, child) {
         final v = t.value.clamp(0.0, 1.5);
+        final shown = v.clamp(0.0, 1.0);
+        Widget surface = Transform.scale(
+          scale: 0.92 + 0.08 * v,
+          alignment: alignment,
+          child: child,
+        );
+        // At rest there is no filter in the tree at all, so a settled surface
+        // costs exactly what it did before.
+        final sigma = reduced ? 0.0 : blurSigma * (1 - shown);
+        if (sigma > 0.01) {
+          surface = BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+            child: surface,
+          );
+        }
+        // Opaque well before the scale and the arriving blur have finished.
+        // While opacity is fractional the surface is inside an opacity layer,
+        // and a layer confines what the [GlassSurface]'s own BackdropFilter
+        // can sample — it frosts an empty backdrop until the layer goes away.
+        // Reaching 1.0 early hands that transition back to the eye while the
+        // surface is still visibly moving, instead of letting it land as a
+        // snap on an otherwise settled popover. Kept in the tree rather than
+        // dropped at 1.0 so the child never changes depth mid-animation;
+        // `Opacity` skips the layer on its own at full opacity.
         return Opacity(
-          opacity: v.clamp(0.0, 1.0),
-          child: Transform.scale(
-            scale: 0.92 + 0.08 * v,
-            alignment: alignment,
-            child: child,
-          ),
+          opacity: (shown / _kOpaqueAt).clamp(0.0, 1.0),
+          child: surface,
         );
       },
     );

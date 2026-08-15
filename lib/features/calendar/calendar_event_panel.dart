@@ -18,6 +18,7 @@ import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Inline event add/edit panel for the calendar sidebar (no dialog).
 class CalendarEventPanel extends ConsumerStatefulWidget {
@@ -360,7 +361,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                           dense: true,
                           borderRadius: 12,
                           contentPadding: const EdgeInsets.fromLTRB(
-                            14,
+                            15,
                             15,
                             40,
                             15,
@@ -464,7 +465,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
               ],
               const SizedBox(height: 10),
               // ── Row 2: date/time pills (full width) ───────────────────
-              SingleChildScrollView(
+              VoyagerScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

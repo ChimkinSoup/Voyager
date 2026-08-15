@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/domain/services/study_srs_engine.dart';
 import 'package:voyager/features/study/study_move_destination_modal.dart';
 import 'package:voyager/features/study/study_name_modal.dart';
 
@@ -146,6 +149,105 @@ Future<void> moveStudyDeck(
       _invalidateStudyLibrary(ref);
     },
   );
+}
+
+/// The right-click menu for a single card, wherever one is shown — the deck
+/// grid's tile and the full-size card inside a study or cram session.
+///
+/// Items only; every action is the caller's, because "what happens next"
+/// differs by surface: resetting from the grid leaves the tile where it is,
+/// while resetting mid-session also moves the session on.
+List<ContextMenuItem> studyCardMenuItems({
+  required StudyCard card,
+  required VoidCallback onEdit,
+  required VoidCallback onReverse,
+  required VoidCallback onResetProgress,
+  required VoidCallback onDelete,
+}) {
+  return [
+    ContextMenuItem(
+      label: 'Edit…',
+      icon: PhosphorIconsRegular.pencilSimple,
+      onTap: onEdit,
+    ),
+    ContextMenuItem(
+      label: 'Reverse',
+      icon: PhosphorIconsRegular.swap,
+      onTap: onReverse,
+    ),
+    ContextMenuItem(
+      label: 'Reset progress',
+      icon: PhosphorIconsRegular.arrowCounterClockwise,
+      // Nothing to forget on a card that has never been reviewed.
+      enabled: !card.isNew,
+      onTap: card.isNew ? null : onResetProgress,
+    ),
+    ContextMenuItem(
+      label: 'Delete',
+      icon: PhosphorIconsRegular.trash,
+      isDestructive: true,
+      onTap: onDelete,
+    ),
+  ];
+}
+
+/// Swaps a card's two faces. SRS state is deliberately left alone: the card
+/// is still the same memory item to the scheduler, so its interval and due
+/// date carry over to the reversed version.
+Future<void> reverseStudyCard(WidgetRef ref, StudyCard card) async {
+  final updated = card.copyWith(
+    frontText: card.backText,
+    backText: card.frontText,
+  );
+  await ref.read(studyRepositoryProvider).upsertCard(updated);
+  ref.read(remoteSyncServiceProvider).pushStudyCard(updated);
+  _invalidateStudyCards(ref);
+}
+
+/// Forgets how well the user knows [card] — its text is untouched. Returns
+/// the reset card so a session can put the same copy back in its queue.
+Future<StudyCard> resetStudyCardProgress(WidgetRef ref, StudyCard card) async {
+  final reset = resetStudyCardSrs(card);
+  await ref.read(studyRepositoryProvider).upsertCard(reset);
+  ref.read(remoteSyncServiceProvider).pushStudyCard(reset);
+  _invalidateStudyCards(ref);
+  ref.invalidate(studyDeckStatsProvider);
+  ref.invalidate(studyStatsProvider);
+  return reset;
+}
+
+/// Returns whether the card was actually deleted, so a session that was
+/// showing it knows whether to move on.
+Future<bool> deleteStudyCard(
+  BuildContext context,
+  WidgetRef ref,
+  StudyCard card,
+) async {
+  final confirmed = await showConfirmDialog(
+    context,
+    title: 'Delete this card?',
+    message: 'The card and its review history will be removed.',
+  );
+  if (!confirmed) return false;
+
+  final repo = ref.read(studyRepositoryProvider);
+  await repo.softDeleteCard(card.id);
+  final tombstone = await repo.getCard(card.id);
+  if (tombstone != null) {
+    ref.read(remoteSyncServiceProvider).pushStudyCard(tombstone);
+  }
+  _invalidateStudyCards(ref);
+  ref.invalidate(studyDeckStatsProvider);
+  ref.invalidate(studyStatsProvider);
+  return true;
+}
+
+/// Both card lists: the per-deck roster the workbench reads and the flattened
+/// one a Hub-wide session works from. A card changed from inside a session is
+/// only visible to it through the latter.
+void _invalidateStudyCards(WidgetRef ref) {
+  ref.invalidate(studyCardsProvider);
+  ref.invalidate(studyAllCardsProvider);
 }
 
 /// Deletes [deck] and every card inside it (decks never leave orphaned

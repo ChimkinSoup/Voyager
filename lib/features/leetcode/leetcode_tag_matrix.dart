@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 
 /// A visually dense cluster of tag pills sized by how often each tag appears
@@ -32,7 +33,7 @@ class LeetCodeTagMatrix extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
     final maxCount = entries.first.value;
 
-    return SingleChildScrollView(
+    return VoyagerScrollView(
       padding: const EdgeInsets.all(12),
       child: Wrap(
         spacing: 8,

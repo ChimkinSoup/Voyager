@@ -232,11 +232,20 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
   @override
   Widget buildPage(BuildContext context, Animation<double> animation,
       Animation<double> secondaryAnimation) {
-    Widget popover = ContextualPopoverAccentHost(
-      width: width,
-      height: height,
-      accentColor: accentColor,
-      child: builder(context),
+    // The entrance below fades and scales this subtree. Both are layer
+    // effects, and without a boundary of its own the popover's whole content —
+    // a form's worth of fields, the glass gradient, the specular border — is
+    // re-rasterized on every frame of the transition instead of being drawn
+    // once and re-composited. That is what made opening the calendar's event
+    // editor drop frames: the panel is not cheap to paint, and it was being
+    // painted sixteen times on the way in.
+    Widget popover = RepaintBoundary(
+      child: ContextualPopoverAccentHost(
+        width: width,
+        height: height,
+        accentColor: accentColor,
+        child: builder(context),
+      ),
     );
     final reduced = VoyagerMotion.reduced(context);
     final curved = CurvedAnimation(

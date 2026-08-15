@@ -5,6 +5,7 @@ import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
@@ -81,13 +82,22 @@ double calendarWeekDayDateLabelRowTopInArea(
 
 /// "MMM d" label pinned below a week day column (today gets a primary circle).
 class CalendarWeekDayDateLabel extends StatelessWidget {
-  const CalendarWeekDayDateLabel({super.key, required this.date, this.accentColor});
+  const CalendarWeekDayDateLabel({
+    super.key,
+    required this.date,
+    this.accentColor,
+    this.hasWorkout = false,
+  });
 
   final DateTime date;
 
   /// Selected calendar's color; fills the "today" circle. Falls back to the
   /// theme accent when null.
   final Color? accentColor;
+
+  /// Whether a workout was completed on this day — already gated by the
+  /// "show workouts on the calendar" setting upstream.
+  final bool hasWorkout;
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +129,22 @@ class CalendarWeekDayDateLabel extends StatelessWidget {
       ),
     );
 
-    if (!isToday) return label;
+    // Sits outside the "today" circle rather than inside it: the circle is
+    // sized to the text, and squeezing an icon in would either overflow it or
+    // force it wider than the column.
+    Widget withMarker(Widget child) {
+      if (!hasWorkout) return child;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CalendarWorkoutIcon(fontSize: fontSize, color: accentColor),
+          const SizedBox(width: 2),
+          child,
+        ],
+      );
+    }
+
+    if (!isToday) return withMarker(label);
 
     final textStyle = AppFonts.style(
       fontSize: fontSize,
@@ -137,12 +162,14 @@ class CalendarWeekDayDateLabel extends StatelessWidget {
       painter.height + _weekDayDateLabelPaddingV,
     );
 
-    return Container(
-      width: diameter,
-      height: diameter,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-      child: label,
+    return withMarker(
+      Container(
+        width: diameter,
+        height: diameter,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+        child: label,
+      ),
     );
   }
 }
@@ -275,6 +302,7 @@ class CalendarWeekTimeline extends StatefulWidget {
     this.entryFadeEnabled = true,
     this.editingEventId,
     this.weekdayAccentColor,
+    this.workoutDays = const {},
   });
 
   final DateTime weekStart;
@@ -298,6 +326,10 @@ class CalendarWeekTimeline extends StatefulWidget {
   /// Selected calendar's color; the weekday header renders a fainter tint of
   /// it. Falls back to the theme accent when null.
   final Color? weekdayAccentColor;
+
+  /// Local calendar days with a completed workout. Empty when the calendar
+  /// workout setting is off.
+  final Set<DateTime> workoutDays;
 
   @override
   State<CalendarWeekTimeline> createState() => _CalendarWeekTimelineState();
@@ -585,7 +617,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                     columnRects: timedViewportColumnRects,
                                     borderRadius: borderRadius,
                                   ),
-                                  child: SingleChildScrollView(
+                                  child: VoyagerScrollView(
                                     controller: _scrollController,
                                     child: SizedBox(
                                       height: scrollContentHeight,
@@ -640,6 +672,11 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                 child: CalendarWeekDayDateLabel(
                                   date: weekDays[i],
                                   accentColor: widget.weekdayAccentColor,
+                                  hasWorkout: widget.workoutDays.contains(
+                                    DateUtils.dateOnly(
+                                      weekDays[i].toLocal(),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

@@ -37,11 +37,13 @@ class FirestoreSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<Set<String>> watchCollection(String collection) {
+  Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection) {
     return _collection(collection).snapshots().map(
       (snap) => {
         for (final change in snap.docChanges)
-          if (change.type != DocumentChangeType.removed) change.doc.id,
+          if (change.type != DocumentChangeType.removed &&
+              change.doc.data() != null)
+            change.doc.id: Map<String, dynamic>.from(change.doc.data()!),
       },
     );
   }
@@ -76,6 +78,26 @@ class FirestoreSyncRepository implements SyncRepository {
   @override
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {
     await _settingsDoc.set(data, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> ping() async {
+    // A document that is never written: the read costs the same whether it
+    // exists or not, and a missing one can't be answered from a warm cache by
+    // accident. Source.server is the request for a real round-trip, and the
+    // isFromCache check is what enforces it — a platform that quietly ignores
+    // the option would otherwise report a cached miss as a healthy connection.
+    final snap = await _doc(
+      'meta',
+      'ping',
+    ).get(const GetOptions(source: Source.server));
+    if (snap.metadata.isFromCache) {
+      throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'unavailable',
+        message: 'Ping was answered from the local cache.',
+      );
+    }
   }
 
   @override
@@ -213,16 +235,18 @@ class FirestoreSyncRepository implements SyncRepository {
     }
   }
 
+  Map<String, dynamic> _operationData(SyncOperation operation) => {
+    'id': operation.id,
+    'documentId': operation.documentId,
+    'sequence': operation.sequence,
+    'payload': operation.payload,
+    'deviceId': operation.deviceId,
+    'timestamp': operation.timestamp.toUtc().toIso8601String(),
+  };
+
   @override
   Future<void> appendOperation(SyncOperation operation) async {
-    await _doc('sync_operations', operation.id).set({
-      'id': operation.id,
-      'documentId': operation.documentId,
-      'sequence': operation.sequence,
-      'payload': operation.payload,
-      'deviceId': operation.deviceId,
-      'timestamp': operation.timestamp.toUtc().toIso8601String(),
-    });
+    await _doc('sync_operations', operation.id).set(_operationData(operation));
   }
 
   @override
@@ -230,17 +254,28 @@ class FirestoreSyncRepository implements SyncRepository {
     for (final chunk in _chunked(operations, 500)) {
       final batch = _firestore.batch();
       for (final operation in chunk) {
-        batch.set(_doc('sync_operations', operation.id), {
-          'id': operation.id,
-          'documentId': operation.documentId,
-          'sequence': operation.sequence,
-          'payload': operation.payload,
-          'deviceId': operation.deviceId,
-          'timestamp': operation.timestamp.toUtc().toIso8601String(),
-        });
+        batch.set(_doc('sync_operations', operation.id), _operationData(operation));
       }
       await batch.commit();
     }
+  }
+
+  @override
+  Future<void> appendOperationGroup(List<SyncOperation> operations) async {
+    if (operations.isEmpty) return;
+    if (operations.length == 1) {
+      await appendOperation(operations.single);
+      return;
+    }
+    // One batch, so the group lands whole or not at all. Splitting at 500 the
+    // way [appendOperationsBatch] does would break that guarantee, but a group
+    // never approaches 500 chunks: each one holds close to a megabyte of
+    // character operations.
+    final batch = _firestore.batch();
+    for (final operation in operations) {
+      batch.set(_doc('sync_operations', operation.id), _operationData(operation));
+    }
+    await batch.commit();
   }
 
   @override
@@ -315,6 +350,26 @@ class FirestoreSyncRepository implements SyncRepository {
     }
     return deleted;
   }
+
+  @override
+  Future<int> deleteOperations(
+    String documentId,
+    List<String> operationIds,
+  ) async {
+    if (operationIds.isEmpty) return 0;
+    var deleted = 0;
+    // The operation id is the document name (see [appendOperation]), so these
+    // delete without a query.
+    for (final chunk in _chunked(operationIds, 500)) {
+      final batch = _firestore.batch();
+      for (final id in chunk) {
+        batch.delete(_doc('sync_operations', id));
+        deleted++;
+      }
+      await batch.commit();
+    }
+    return deleted;
+  }
 }
 
 class NoOpSyncRepository implements SyncRepository {
@@ -323,6 +378,9 @@ class NoOpSyncRepository implements SyncRepository {
 
   @override
   Future<void> appendOperationsBatch(List<SyncOperation> operations) async {}
+
+  @override
+  Future<void> appendOperationGroup(List<SyncOperation> operations) async {}
 
   @override
   Future<void> upsertDocumentsBatch(
@@ -374,7 +432,7 @@ class NoOpSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<Set<String>> watchCollection(String collection) {
+  Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection) {
     return const Stream.empty();
   }
 
@@ -394,8 +452,17 @@ class NoOpSyncRepository implements SyncRepository {
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {}
 
   @override
+  Future<void> ping() async {}
+
+  @override
   Future<void> deleteDocument(String collection, String id) async {}
 
   @override
   Future<int> deleteOperationsForDocument(String documentId) async => 0;
+
+  @override
+  Future<int> deleteOperations(
+    String documentId,
+    List<String> operationIds,
+  ) async => 0;
 }

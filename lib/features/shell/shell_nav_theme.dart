@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 
 /// Shared visual tokens for the two shell navigations.
 ///
@@ -25,3 +27,16 @@ Color shellNavSelectedFill(ThemeData theme) => Color.lerp(
 /// to enter — the selected fill is what marks position there.
 Color shellNavHoverFill(ThemeData theme) =>
     theme.colorScheme.onSurface.withValues(alpha: 0.10);
+
+/// How long the selected-destination treatment — fill, accent border, accent
+/// icon and label — takes to settle: the same clock as the branch switch the
+/// tap triggers, so the indicator and the page arrive together. Shortens under
+/// reduced motion exactly as the branch switch does, so the two stay paired.
+Duration shellNavSelectionDuration(BuildContext context) =>
+    VoyagerMotion.reduced(context)
+    ? VoyagerMotion.crossfade
+    : kShellBranchSwitchDuration;
+
+/// Pointer-hover feedback stays fast whatever the selection does — hover is
+/// about pointer latency, not about a section arriving.
+const Duration shellNavHoverDuration = Duration(milliseconds: 100);

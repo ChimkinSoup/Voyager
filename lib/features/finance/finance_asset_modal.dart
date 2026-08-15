@@ -15,6 +15,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Opens the add / edit asset modal. Saving records a **new valuation** rather
 /// than overwriting the old one, so the net-worth graph keeps its history.
@@ -205,7 +206,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
-      child: SingleChildScrollView(
+      child: VoyagerScrollView(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
           child: Column(

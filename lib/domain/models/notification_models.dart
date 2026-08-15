@@ -43,11 +43,60 @@ class PinnedNote {
     required this.id,
     required this.text,
     required this.createdAt,
+    required this.updatedAt,
+    this.version = 0,
+    this.deletedAt,
   });
 
   final String id;
   final String text;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+
+  /// Set when the note is unpinned. Kept as a tombstone rather than deleted so
+  /// the unpin reaches the user's other devices.
+  final DateTime? deletedAt;
+
+  PinnedNote copyWith({
+    String? text,
+    DateTime? updatedAt,
+    int? version,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+  }) {
+    return PinnedNote(
+      id: id,
+      text: text ?? this.text,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    );
+  }
+}
+
+/// A feed item the user dismissed, keyed by [NotificationFeedItem.dismissalKey].
+///
+/// Un-dismissing sets [deletedAt] instead of dropping the row: a pull only ever
+/// sees the documents that exist, so a hard delete would leave the item
+/// dismissed forever on every other device.
+class DismissedNotification {
+  const DismissedNotification({
+    required this.key,
+    required this.dismissedAt,
+    required this.updatedAt,
+    this.version = 0,
+    this.deletedAt,
+  });
+
+  final String key;
+  final DateTime dismissedAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+
+  bool get isDismissed => deletedAt == null;
 }
 
 /// Classifies a task's urgency, or null if it shouldn't appear in the feed.

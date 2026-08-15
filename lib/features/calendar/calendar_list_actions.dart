@@ -5,54 +5,21 @@ import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
-import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
-import 'package:voyager/core/widgets/glass_button.dart';
-import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
-import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 
 Future<String?> promptCalendarName(
   BuildContext context,
   String title, {
   String? initial,
-}) async {
-  final controller = TextEditingController(text: initial ?? '');
-  try {
-    return await showVoyagerDialog<String>(
-      context: context,
-      builder: (context) => EnterToSubmitScope(
-        onSubmit: () => Navigator.pop(context, controller.text),
-        child: AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: 400,
-            child: LabeledTextField(
-              label: 'Name',
-              controller: controller,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => Navigator.pop(context, controller.text),
-            ),
-          ),
-          actions: [
-            GlassButton(
-              onPressed: () => Navigator.pop(context),
-              label: 'Cancel',
-              dense: true,
-            ),
-            GlassButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              label: 'OK',
-              dense: true,
-            ),
-          ],
-        ),
-      ),
-    );
-  } finally {
-    controller.dispose();
-  }
+}) {
+  return showPromptNameDialog(
+    context,
+    title: title,
+    initial: initial,
+    contentWidth: 400,
+  );
 }
 
 Future<void> renameCalendarList(

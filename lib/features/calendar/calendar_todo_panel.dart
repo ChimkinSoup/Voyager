@@ -21,6 +21,7 @@ import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class CalendarTodoPanel extends ConsumerStatefulWidget {
   const CalendarTodoPanel({
@@ -271,7 +272,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                       dense: true,
                       borderRadius: 12,
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
+                        horizontal: 15,
                         vertical: 15,
                       ),
                       onSubmitted: (_) => _submit(),
@@ -316,7 +317,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
               ],
               const SizedBox(height: 10),
               // ── Row 2: date pill & list selector ───────────────────
-              SingleChildScrollView(
+              VoyagerScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

@@ -177,4 +177,32 @@ void main() {
     // Verify top and bottom padding surrounding the text inside the button are balanced
     expect((topSpace - bottomSpace).abs(), lessThan(1.0));
   });
+
+  testWidgets('GlassButton standardizes text and icon color to black text',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: Scaffold(
+          body: Center(
+            child: GlassButton(
+              onPressed: () {},
+              label: 'Standardized Black Text',
+              icon: const Icon(Icons.star),
+              color: Colors.blue,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final Text textWidget = tester.widget(find.text('Standardized Black Text'));
+    expect(textWidget.style?.color, equals(Colors.black87));
+
+    final IconTheme iconThemeWidget = tester.widget(find.ancestor(
+      of: find.byIcon(Icons.star),
+      matching: find.byType(IconTheme),
+    ).first);
+    expect(iconThemeWidget.data.color, equals(Colors.black87));
+  });
 }

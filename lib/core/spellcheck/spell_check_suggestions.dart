@@ -1,4 +1,7 @@
-const _letters = 'abcdefghijklmnopqrstuvwxyz';
+const _letterChars = [
+  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+  'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+];
 
 Iterable<String> _edits1(String word) sync* {
   for (var i = 0; i <= word.length; i++) {
@@ -9,23 +12,23 @@ Iterable<String> _edits1(String word) sync* {
       yield left + right[1] + right[0] + right.substring(2); // transpose
     }
     if (right.isNotEmpty) {
-      for (final c in _letters.split('')) {
+      for (final c in _letterChars) {
         yield left + c + right.substring(1); // replace
       }
     }
-    for (final c in _letters.split('')) {
+    for (final c in _letterChars) {
       yield left + c + right; // insert
     }
   }
 }
 
 /// Distance-2 exploration is O((letters * word.length)^2) candidate strings,
-/// which can reach the hundreds of thousands for an in-progress word (the
-/// common case: [generateSuggestions] runs synchronously on every keystroke
-/// via Flutter's [SpellCheckService], and a partial word is almost never
-/// within edit-distance 1 of anything real). Capping how many distance-2
+/// which can reach the hundreds of thousands for a misspelling that isn't
+/// within edit-distance 1 of anything real. Capping how many distance-2
 /// candidates get generated keeps a single call from blocking the UI
 /// isolate for seconds — see project_flutter_spellcheck_freeze memory.
+/// The check hot path no longer calls this; only the right-click popup does,
+/// via `VoyagerSpellCheckService.hydrateSuggestions`.
 const _maxDistance2Explored = 50000;
 
 /// Norvig-style edit-distance-1/2 suggestion generator: cheap, no external

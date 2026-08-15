@@ -3,7 +3,7 @@ import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/domain/models/enums.dart';
 
 export 'package:voyager/domain/models/enums.dart'
-    show GeometricWaveShape, AppThemeMode;
+    show GeometricWaveShape, AppThemeMode, WeightUnit;
 
 /// Default petal tint for the light theme — a dusty watercolor rose, kept
 /// separate from the accent color so the petals never fight the UI's own
@@ -38,9 +38,12 @@ class AppSettings {
     this.alertOnPeriodicPrompts = false,
     this.alertTimeHour = 9,
     this.hideCompletedTasks = false,
+    this.vimModeEnabled = false,
     this.deviceId,
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
+    this.journalShowAllEntries = false,
+    this.todoShowAllTasks = false,
     this.weatherLocationLabel,
     this.weatherLat,
     this.weatherLon,
@@ -109,6 +112,14 @@ class AppSettings {
     this.showDreamStatistics = false,
     this.dreamNotesPinned = false,
     this.leetcodeUsername,
+    this.showNeetCode150 = true,
+    this.weightUnit = WeightUnit.lb,
+    this.workoutRestTimerEnabled = false,
+    this.workoutRestSeconds = 90,
+    this.showWorkoutsOnCalendar = false,
+    this.showWorkoutStatistics = false,
+    this.updatedAt,
+    this.syncBackfillVersion = 0,
     List<int>? colorPalette,
   }) : colorPalette = colorPalette ?? defaultColorPalette;
 
@@ -172,9 +183,18 @@ class AppSettings {
   final bool alertOnPeriodicPrompts;
   final int alertTimeHour;
   final bool hideCompletedTasks;
+
+  /// Whether Vim keybindings are active in the app's text boxes.
+  final bool vimModeEnabled;
   final String? deviceId;
   final String? lastViewedJournalId;
   final String? lastViewedTodoListId;
+
+  /// Whether the page was left in its "All journals" / "All tasks" view. Held
+  /// apart from the ids above so restoring the all-view doesn't lose track of
+  /// which journal/list a new entry or task should be created in.
+  final bool journalShowAllEntries;
+  final bool todoShowAllTasks;
   final String? weatherLocationLabel;
   final double? weatherLat;
   final double? weatherLon;
@@ -266,6 +286,41 @@ class AppSettings {
   /// most recently accepted submission).
   final String? leetcodeUsername;
 
+  /// Whether the LeetCode dashboard shows the NeetCode 150 progress ring.
+  final bool showNeetCode150;
+
+  /// Display unit for every weight in the workout tracker. Storage stays in
+  /// kilograms, so flipping this converts what's shown without rewriting a
+  /// single logged set.
+  final WeightUnit weightUnit;
+
+  /// Whether a rest countdown starts when a set is marked complete. Off by
+  /// default — the spec asks for the timer to be opt-in.
+  final bool workoutRestTimerEnabled;
+  final int workoutRestSeconds;
+
+  /// Whether days with a completed workout get a small icon on the month and
+  /// week calendars (never the year view, whose cells have no room).
+  final bool showWorkoutsOnCalendar;
+
+  /// Whether the analytics page shows the "worked out today" daily boolean.
+  final bool showWorkoutStatistics;
+
+  /// When a setting that syncs last changed, on whichever device changed it —
+  /// the last-write-wins clock for the whole settings document. Null on a row
+  /// written before this existed.
+  ///
+  /// Only [settingsSyncPayload] fields move it: a weather refresh, a dev-flag
+  /// toggle, or remembering which page you were on are device-local writes,
+  /// and letting them bump this clock would let simply opening the app
+  /// overwrite a preference another device changed more recently.
+  final DateTime? updatedAt;
+
+  /// Which one-time upload of the newly synced collections this device has
+  /// already run. Device-local: it describes this installation's upload
+  /// history, not a preference, so it never joins [settingsSyncPayload].
+  final int syncBackfillVersion;
+
   bool get hasWeatherLocation => weatherLat != null && weatherLon != null;
 
   AppSettings copyWith({
@@ -290,6 +345,7 @@ class AppSettings {
     String? srsGoodKey,
     String? srsEasyKey,
     bool? hideCompletedTasks,
+    bool? vimModeEnabled,
     bool? timelineModeYearZero,
     int? birthYear,
     bool clearBirthYear = false,
@@ -299,6 +355,8 @@ class AppSettings {
     String? deviceId,
     String? lastViewedJournalId,
     String? lastViewedTodoListId,
+    bool? journalShowAllEntries,
+    bool? todoShowAllTasks,
     String? weatherLocationLabel,
     double? weatherLat,
     double? weatherLon,
@@ -367,6 +425,14 @@ class AppSettings {
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
     String? leetcodeUsername,
+    bool? showNeetCode150,
+    WeightUnit? weightUnit,
+    bool? workoutRestTimerEnabled,
+    int? workoutRestSeconds,
+    bool? showWorkoutsOnCalendar,
+    bool? showWorkoutStatistics,
+    DateTime? updatedAt,
+    int? syncBackfillVersion,
     List<int>? colorPalette,
     bool clearLeetcodeUsername = false,
     bool clearWeatherLocationLabel = false,
@@ -385,6 +451,13 @@ class AppSettings {
     bool clearCustomStartupPage = false,
     bool clearLastSeenNavPage = false,
     bool clearDreamSplitWidth = false,
+    // Needed by the settings merge: a field the user cleared on another device
+    // has to arrive as "cleared" rather than being read as "unspecified" by
+    // the `??` fallbacks below and silently keeping the old local value.
+    bool clearBirthDate = false,
+    bool clearNavPageOrder = false,
+    bool clearWeatherChartTempColor = false,
+    bool clearWeatherChartRainColor = false,
   }) {
     return AppSettings(
       accentColor: accentColor ?? this.accentColor,
@@ -413,11 +486,12 @@ class AppSettings {
       srsEasyKey: srsEasyKey ?? this.srsEasyKey,
       timelineModeYearZero: timelineModeYearZero ?? this.timelineModeYearZero,
       birthYear: clearBirthYear ? null : (birthYear ?? this.birthYear),
-      birthDate: birthDate ?? this.birthDate,
+      birthDate: clearBirthDate ? null : (birthDate ?? this.birthDate),
       alertOnPeriodicPrompts:
           alertOnPeriodicPrompts ?? this.alertOnPeriodicPrompts,
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
+      vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
       deviceId: deviceId ?? this.deviceId,
       lastViewedJournalId: clearLastViewedJournalId
           ? null
@@ -425,6 +499,9 @@ class AppSettings {
       lastViewedTodoListId: clearLastViewedTodoListId
           ? null
           : (lastViewedTodoListId ?? this.lastViewedTodoListId),
+      journalShowAllEntries:
+          journalShowAllEntries ?? this.journalShowAllEntries,
+      todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
       weatherLocationLabel: clearWeatherLocationLabel
           ? null
           : (weatherLocationLabel ?? this.weatherLocationLabel),
@@ -525,14 +602,18 @@ class AppSettings {
       weatherForecastJson: clearWeatherForecastJson
           ? null
           : (weatherForecastJson ?? this.weatherForecastJson),
-      weatherChartTempColor: weatherChartTempColor ?? this.weatherChartTempColor,
-      weatherChartRainColor: weatherChartRainColor ?? this.weatherChartRainColor,
+      weatherChartTempColor: clearWeatherChartTempColor
+          ? null
+          : (weatherChartTempColor ?? this.weatherChartTempColor),
+      weatherChartRainColor: clearWeatherChartRainColor
+          ? null
+          : (weatherChartRainColor ?? this.weatherChartRainColor),
       weatherChartCurveTension:
           weatherChartCurveTension ?? this.weatherChartCurveTension,
       journalEntryListWidth: clearJournalEntryListWidth
           ? null
           : (journalEntryListWidth ?? this.journalEntryListWidth),
-      navPageOrder: navPageOrder ?? this.navPageOrder,
+      navPageOrder: clearNavPageOrder ? null : (navPageOrder ?? this.navPageOrder),
       startupPageMode: startupPageMode ?? this.startupPageMode,
       customStartupPage: clearCustomStartupPage
           ? null
@@ -553,6 +634,17 @@ class AppSettings {
       leetcodeUsername: clearLeetcodeUsername
           ? null
           : (leetcodeUsername ?? this.leetcodeUsername),
+      showNeetCode150: showNeetCode150 ?? this.showNeetCode150,
+      weightUnit: weightUnit ?? this.weightUnit,
+      workoutRestTimerEnabled:
+          workoutRestTimerEnabled ?? this.workoutRestTimerEnabled,
+      workoutRestSeconds: workoutRestSeconds ?? this.workoutRestSeconds,
+      showWorkoutsOnCalendar:
+          showWorkoutsOnCalendar ?? this.showWorkoutsOnCalendar,
+      showWorkoutStatistics:
+          showWorkoutStatistics ?? this.showWorkoutStatistics,
+      updatedAt: updatedAt ?? this.updatedAt,
+      syncBackfillVersion: syncBackfillVersion ?? this.syncBackfillVersion,
     );
   }
 }
@@ -563,6 +655,100 @@ class Quote {
   final String id;
   final String text;
 }
+
+/// A quote the user wrote, pooled with the bundled ones a journal entry draws
+/// from.
+///
+/// Synced, so it carries the same id/timestamps/version/deletedAt shape as the
+/// other synced entities. [toQuote] is how it joins the bundled asset quotes in
+/// the pool.
+/// The color the user picked for one journal tag.
+///
+/// Carries no `deletedAt`: a tag's color can be re-picked but never removed,
+/// so there is nothing for a tombstone to describe.
+class TagColorRecord {
+  const TagColorRecord({
+    required this.tag,
+    required this.colorValue,
+    required this.updatedAt,
+    this.version = 0,
+  });
+
+  final String tag;
+  final int colorValue;
+  final DateTime updatedAt;
+  final int version;
+}
+
+/// A word the user added to the spell checker's dictionary.
+///
+/// Removing one tombstones it rather than dropping the row, so the removal
+/// reaches the user's other devices instead of the word coming back on their
+/// next pull.
+class CustomWord {
+  const CustomWord({
+    required this.word,
+    required this.createdAt,
+    required this.updatedAt,
+    this.version = 0,
+    this.deletedAt,
+  });
+
+  final String word;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+}
+
+class CustomQuote {
+  const CustomQuote({
+    required this.id,
+    required this.text,
+    required this.createdAt,
+    required this.updatedAt,
+    this.version = 0,
+    this.deletedAt,
+  });
+
+  final String id;
+  final String text;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+
+  Quote toQuote() => Quote(id: id, text: text);
+
+  CustomQuote copyWith({
+    String? text,
+    DateTime? updatedAt,
+    int? version,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+  }) {
+    return CustomQuote(
+      id: id,
+      text: text ?? this.text,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+    );
+  }
+}
+
+/// Whether [a] and [b] are the same quote for duplicate-detection purposes:
+/// case- and whitespace-insensitive, so "Carpe diem" can't be added twice as
+/// "carpe  diem ".
+///
+/// Shared by the settings editor and any other entry point, so one cannot
+/// admit a duplicate the other would have rejected.
+bool sameQuoteText(String a, String b) =>
+    normalizeQuoteText(a) == normalizeQuoteText(b);
+
+String normalizeQuoteText(String text) =>
+    text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
 class SyncOperation {
   const SyncOperation({

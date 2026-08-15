@@ -86,7 +86,7 @@ class _WeatherLocationTileState extends ConsumerState<WeatherLocationTile> {
           children: [
             Row(
               children: [
-                Icon(weatherIconData(widget.settings.weatherIcon), size: 28),
+                WeatherIcon(widget.settings.weatherIcon, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(

@@ -8,8 +8,8 @@ import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
-import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -208,37 +208,13 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
     await _reload();
   }
 
-  Future<String?> _promptName(String title, {String? initial}) async {
-    final controller = TextEditingController(text: initial ?? '');
-    try {
-      return await showVoyagerDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(title),
-          content: LabeledTextField(
-            label: 'Name',
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => Navigator.pop(context, controller.text),
-          ),
-          actions: [
-            GlassButton(
-              onPressed: () => Navigator.pop(context),
-              label: 'Cancel',
-              dense: true,
-            ),
-            GlassButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              label: 'OK',
-              dense: true,
-            ),
-          ],
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
+  Future<String?> _promptName(String title, {String? initial}) {
+    return showPromptNameDialog(
+      context,
+      title: title,
+      initial: initial,
+      enterToSubmit: false,
+    );
   }
 
   @override

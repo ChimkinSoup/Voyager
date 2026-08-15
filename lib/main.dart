@@ -36,24 +36,94 @@ class VoyagerBootstrap extends ConsumerStatefulWidget {
   ConsumerState<VoyagerBootstrap> createState() => _VoyagerBootstrapState();
 }
 
-class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
+class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
+    with WidgetsBindingObserver {
   late final HotkeyService _hotkeys;
   Timer? _postAuthWarmupTimer;
   Timer? _weatherRefreshTimer;
   var _postAuthWarmupStarted = false;
 
+  /// Last connectivity state seen, so the offline→online *edge* can be told
+  /// apart from a notification that merely repeats it.
+  bool? _wasOnline;
+  var _resumingSync = false;
+
   @override
   void initState() {
     super.initState();
     _hotkeys = createHotkeyService();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  /// Coming back to the window is a cheap moment to empty the outbox.
+  ///
+  /// A desktop session this app is built around — global hotkeys, tray-style
+  /// usage — can run for days, and the drain otherwise only ever ran at
+  /// startup and sign-in. An empty queue costs one indexed query.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!mounted) return;
+    if (!ref.read(authNotifierProvider).isAuthenticated) return;
+    if (OutboxSyncWorker.isInitialized) {
+      unawaited(OutboxSyncWorker.instance.startDraining());
+    }
+  }
+
+  /// Restarts sync on the offline→online edge.
+  ///
+  /// [ConnectivityStatusController] was already detecting this transition, but
+  /// its only consumer was the shell's offline badge: the badge cleared while
+  /// the queued uploads sat in `pending_uploads` and the local database stayed
+  /// out of step with remote until the app was restarted.
+  void _onConnectivityChanged(bool isOnline) {
+    final wasOnline = _wasOnline;
+    _wasOnline = isOnline;
+    if (!isOnline || wasOnline != false) return;
+    unawaited(_resumeSyncAfterReconnect());
+  }
+
+  Future<void> _resumeSyncAfterReconnect() async {
+    if (_resumingSync || !mounted) return;
+    if (!ref.read(authNotifierProvider).isAuthenticated) return;
+    _resumingSync = true;
+    try {
+      if (OutboxSyncWorker.isInitialized) {
+        // Idempotent — a drain already running simply keeps going.
+        unawaited(OutboxSyncWorker.instance.startDraining());
+      }
+      // Weather is skipped: it runs on its own minute timer and refreshing it
+      // here would spend a request the timer is about to spend anyway.
+      await ref.read(remoteSyncServiceProvider).pullAll(skipWeather: true);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'VoyagerBootstrap',
+          context: ErrorDescription('while resuming sync after reconnecting'),
+        ),
+      );
+    } finally {
+      _resumingSync = false;
+    }
   }
 
   Future<void> _bootstrap() async {
     if (!mounted) return;
     final db = ref.read(databaseProvider);
     final authRepo = ref.read(authRepositoryProvider);
-    OutboxSyncWorker.initialize(db, FirebaseFirestore.instance, authRepo);
+    OutboxSyncWorker.initialize(
+      db,
+      FirebaseFirestore.instance,
+      authRepo,
+      // Read lazily: the drain only reaches for this once it has a queued row
+      // in a collection that keeps a character-operation log.
+      pushDocument: (collection, documentId) => ref
+          .read(remoteSyncServiceProvider)
+          .pushOutboxDocument(collection, documentId),
+    );
 
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final deviceId = await ensureDeviceId(settingsRepo);
@@ -228,6 +298,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _postAuthWarmupTimer?.cancel();
     _weatherRefreshTimer?.cancel();
     _hotkeys.dispose();
@@ -238,6 +309,11 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap> {
   Widget build(BuildContext context) {
     ref.listen(authNotifierProvider, (previous, next) {
       _onAuthStateChanged(next.isAuthenticated);
+    });
+    // The controller is the same object on both sides of the callback, so the
+    // previous value is no help — [_onConnectivityChanged] tracks it.
+    ref.listen(connectivityStatusProvider, (_, controller) {
+      _onConnectivityChanged(controller.isOnline);
     });
     return const VoyagerApp();
   }

@@ -17,4 +17,8 @@ class DevFlags {
   // Highlights each segment of the tree trunk, roots, and branches in distinct
   // glowing debug colors and labels.
   static bool showLifeTreeSegmentDebug = false;
+  // Makes the connectivity probe throw, so the shell offline badge (and the
+  // reconnect→resume-sync path) run through the same failure streak they
+  // would against an unreachable Firestore. Session-only; not persisted.
+  static bool forceOffline = false;
 }

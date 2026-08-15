@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
@@ -27,6 +29,8 @@ import 'package:voyager/features/shell/shell_keyboard_shortcuts.dart';
 import 'package:voyager/features/shell/shell_nav_theme.dart';
 import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
 import 'package:voyager/features/shell/weather_forecast_sheet.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/workout/workout_overlay.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.child});
@@ -40,14 +44,14 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
-    final orderedDestinations = getOrderedDestinations(settings, shellDestinations);
+    final orderedDestinations = getOrderedDestinations(
+      settings,
+      shellDestinations,
+    );
     final navigationShell = _navigationShell;
     final index = navigationShell.currentIndex;
     final accent = Color(settings.accentColor);
-    final content = _ShellBranchChangeFlusher(
-      branchIndex: index,
-      child: child,
-    );
+    final content = _ShellBranchChangeFlusher(branchIndex: index, child: child);
 
     return ShellKeyboardShortcuts(
       navigationShell: navigationShell,
@@ -89,6 +93,10 @@ class AppShell extends ConsumerWidget {
                       child: content,
                     ),
             ),
+            // Above the page content and outside the branch containers, so a
+            // live workout's island stays put no matter which section is on
+            // screen — that persistence is the whole point of the island.
+            const WorkoutOverlay(),
             const CacheStatusOverlay(),
             const FpsCounterOverlay(),
           ],
@@ -183,9 +191,7 @@ class _CompactShell extends StatelessWidget {
     return Column(
       children: [
         SafeArea(bottom: false, child: _CompactStatusStrip(accent: accent)),
-        Expanded(
-          child: SafeArea(top: false, bottom: false, child: child),
-        ),
+        Expanded(child: SafeArea(top: false, bottom: false, child: child)),
         ShellBottomNav(
           selectedIndex: selectedIndex,
           accent: accent,
@@ -214,6 +220,8 @@ class _CompactStatusStrip extends StatelessWidget {
             const SizedBox(width: VoyagerSpacing.md),
             _WeatherButton(axis: Axis.horizontal),
             const Spacer(),
+            const _ConnectivityIndicator(),
+            const SizedBox(width: VoyagerSpacing.xs),
             const _SyncActivityIndicator(axis: Axis.horizontal),
             const SizedBox(width: VoyagerSpacing.xs),
             NotificationBell(accent: accent),
@@ -239,7 +247,8 @@ class _ShellBranchChangeFlusher extends ConsumerStatefulWidget {
       _ShellBranchChangeFlusherState();
 }
 
-class _ShellBranchChangeFlusherState extends ConsumerState<_ShellBranchChangeFlusher> {
+class _ShellBranchChangeFlusherState
+    extends ConsumerState<_ShellBranchChangeFlusher> {
   @override
   void didUpdateWidget(covariant _ShellBranchChangeFlusher oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -274,43 +283,185 @@ class _VoyagerNavigationRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Clock, weather, sync and the inbox bell sit outside the scroll view so a
+    // rail with more destinations than fit still shows them: only the
+    // destination list itself scrolls, between two fixed shoulders.
     return SizedBox(
       width: 72,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            primary: false,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: IntrinsicHeight(
-                child: Column(
-                  children: [
-                    _RailClockWeather(accent: accent),
-                    const SizedBox(height: 8),
-                    for (final item in orderedDestinations)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: ExcludeFocus(
-                          child: _RailDestinationButton(
-                            icon: item.dest.icon,
-                            label: item.dest.label,
-                            selected: item.originalIndex == selectedIndex,
-                            accent: accent,
-                            onTap: () => onDestinationSelected(item.originalIndex),
-                          ),
+      child: Column(
+        children: [
+          _RailClockWeather(accent: accent),
+          const SizedBox(height: 18),
+          Expanded(
+            child: _RailDestinationList(
+              child: Column(
+                children: [
+                  for (final item in orderedDestinations)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: ExcludeFocus(
+                        child: _RailDestinationButton(
+                          icon: item.dest.icon,
+                          label: item.dest.label,
+                          selected: item.originalIndex == selectedIndex,
+                          accent: accent,
+                          onTap: () =>
+                              onDestinationSelected(item.originalIndex),
                         ),
                       ),
-                    const Spacer(),
-                    const _SyncActivityIndicator(axis: Axis.vertical),
-                    const SizedBox(height: 4),
-                    NotificationBell(accent: accent),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
-          );
-        },
+          ),
+          const SizedBox(height: 18),
+          const _ConnectivityIndicator(),
+          const SizedBox(height: 4),
+          const _SyncActivityIndicator(axis: Axis.vertical),
+          NotificationBell(accent: accent),
+          const SizedBox(height: 20),
+        ],
       ),
+    );
+  }
+}
+
+/// The rail's scrolling destination list, softened at whichever end is holding
+/// content back.
+///
+/// The list is squeezed between two fixed shoulders, so with more destinations
+/// than fit it has to cut one off — and a hard clip against the clock or the
+/// inbox bell reads as a rendering fault rather than as "there is more here".
+/// A gradient over the last [_fade] logical pixels says the same thing the way
+/// a scroll view should.
+///
+/// Each end's fade ramps in over its own first [_fade] pixels of travel rather
+/// than switching on, so an end that is already at rest stays perfectly sharp:
+/// a rail short enough to fit every destination never fades at all, and one
+/// scrolled to its bottom fades only its top.
+class _RailDestinationList extends StatefulWidget {
+  const _RailDestinationList({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_RailDestinationList> createState() => _RailDestinationListState();
+}
+
+class _RailDestinationListState extends State<_RailDestinationList> {
+  /// Depth of the gradient, and the travel over which it reaches full strength.
+  static const double _fade = 14;
+
+  final ScrollController _controller = ScrollController();
+
+  double _topFade = 0;
+  double _bottomFade = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _syncFades() {
+    if (!mounted) return;
+    final position = _controller.hasClients ? _controller.position : null;
+    final top = position == null
+        ? 0.0
+        : ((position.pixels - position.minScrollExtent) / _fade).clamp(
+            0.0,
+            1.0,
+          );
+    final bottom = position == null
+        ? 0.0
+        : ((position.maxScrollExtent - position.pixels) / _fade).clamp(
+            0.0,
+            1.0,
+          );
+    if (top == _topFade && bottom == _bottomFade) return;
+    setState(() {
+      _topFade = top;
+      _bottomFade = bottom;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Scroll notifications cover the pointer moving the list; this covers the
+    // dimensions changing under it — the first layout, and the destination set
+    // being reordered or trimmed in settings. It settles after one pass,
+    // because a sync that changes nothing doesn't rebuild.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncFades());
+
+    final list = NotificationListener<ScrollNotification>(
+      onNotification: (_) {
+        _syncFades();
+        return false;
+      },
+      child: VoyagerScrollView(controller: _controller, child: widget.child),
+    );
+
+    if (_topFade == 0 && _bottomFade == 0) return list;
+
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (rect) {
+        // Both ramps have to fit inside the rail with room to spare, or the
+        // stops stop ascending and the gradient throws.
+        final depth = math.min(_fade, rect.height / 3);
+        final ratio = rect.height == 0 ? 0.0 : depth / rect.height;
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFFFFFFFF).withValues(alpha: 1 - _topFade),
+            const Color(0xFFFFFFFF),
+            const Color(0xFFFFFFFF),
+            const Color(0xFFFFFFFF).withValues(alpha: 1 - _bottomFade),
+          ],
+          stops: [0, ratio, 1 - ratio, 1],
+        ).createShader(rect);
+      },
+      child: list,
+    );
+  }
+}
+
+/// The shell's offline badge — nothing at all while the backend is reachable.
+///
+/// Only the degraded state is worth chrome. A dot that is green all day trains
+/// the eye to stop reading it, and by the time it matters it has become part
+/// of the furniture; an icon that appears only when something is wrong is
+/// noticed the once it needs to be. It sits in the same shoulder as the sync
+/// activity slots because it answers the same question they do — is my work
+/// leaving this machine — just over a longer horizon.
+class _ConnectivityIndicator extends ConsumerWidget {
+  const _ConnectivityIndicator();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final online = ref.watch(connectivityStatusProvider).isOnline;
+
+    return AnimatedSwitcher(
+      duration: VoyagerMotion.reduced(context)
+          ? VoyagerMotion.crossfade
+          : const Duration(milliseconds: 220),
+      child: online
+          ? const SizedBox.shrink()
+          : Tooltip(
+              message:
+                  'Offline — changes are saved on this device and sync when '
+                  'the connection returns.',
+              child: PhosphorIcon(
+                PhosphorIconsDuotone.wifiSlash,
+                size: 20,
+                // The one themed role that reads as "attention" against the
+                // rail in both light and dark, unlike the fixed accent colors
+                // the sync slots below still use.
+                color: theme.colorScheme.error,
+              ),
+            ),
     );
   }
 }
@@ -323,6 +474,11 @@ class _SyncActivityIndicator extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activity = ref.watch(syncActivityProvider);
+    final hasActivity =
+        activity.eventFor(SyncActivityDirection.localSave) != null ||
+        activity.eventFor(SyncActivityDirection.upload) != null ||
+        activity.eventFor(SyncActivityDirection.download) != null;
+    if (!hasActivity) return const SizedBox.shrink();
 
     // NOTE: these three colors fail contrast on the light theme (audit P1).
     // Left as-is here on purpose — retheming them is `/impeccable colorize`'s
@@ -365,9 +521,8 @@ class _SyncActivityIndicator extends ConsumerWidget {
 
     return SizedBox(
       width: 28,
-      height: 72,
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < slots.length; i++) ...[
             if (i > 0) const SizedBox(height: 4),
@@ -438,9 +593,31 @@ class _RailDestinationButton extends StatefulWidget {
 class _RailDestinationButtonState extends State<_RailDestinationButton> {
   var _hovered = false;
 
+  /// One [AnimatedContainer] carries both fills, but they want different
+  /// clocks — selection settles with the page it summons, hover has to answer
+  /// the pointer immediately. Whichever changed last sets the duration.
+  Duration _fillDuration = shellNavHoverDuration;
+
+  @override
+  void didUpdateWidget(covariant _RailDestinationButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) {
+      _fillDuration = shellNavSelectionDuration(context);
+    }
+  }
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() {
+      _hovered = hovered;
+      _fillDuration = shellNavHoverDuration;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final selectionDuration = shellNavSelectionDuration(context);
     final foreground = widget.selected
         ? widget.accent
         : theme.colorScheme.onSurface;
@@ -459,17 +636,13 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           onTap: widget.onTap,
-          onHover: (hovered) {
-            if (_hovered != hovered) {
-              setState(() => _hovered = hovered);
-            }
-          },
+          onHover: _setHovered,
           borderRadius: BorderRadius.circular(18),
           hoverColor: Colors.transparent,
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
+            duration: _fillDuration,
             curve: Curves.easeOut,
             width: shellNavItemWidth,
             height: shellNavItemHeight,
@@ -478,9 +651,7 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
               borderRadius: BorderRadius.circular(18),
               border: widget.selected
                   ? Border.all(
-                      color: widget.accent.withValues(
-                        alpha: accentBorderAlpha,
-                      ),
+                      color: widget.accent.withValues(alpha: accentBorderAlpha),
                       width: 1.0,
                     )
                   : null,
@@ -488,10 +659,18 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, size: 24, color: foreground),
+                // Icon and label carry the accent, so they are as much the
+                // selection indicator as the fill is and settle on its clock.
+                TweenAnimationBuilder<Color?>(
+                  tween: ColorTween(end: foreground),
+                  duration: selectionDuration,
+                  curve: Curves.easeOut,
+                  builder: (context, color, _) =>
+                      Icon(widget.icon, size: 24, color: color),
+                ),
                 const SizedBox(height: 3),
                 AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 150),
+                  duration: selectionDuration,
                   curve: Curves.easeOut,
                   style:
                       theme.textTheme.labelSmall?.copyWith(
@@ -522,7 +701,7 @@ class _RailClockWeather extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      padding: const EdgeInsets.only(top: 8, bottom: 0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -604,11 +783,7 @@ class _WeatherButtonState extends ConsumerState<_WeatherButton> {
     final onSurface = theme.colorScheme.onSurface;
     final horizontal = widget.axis == Axis.horizontal;
 
-    final iconWidget = Icon(
-      weatherIconData(icon),
-      size: 22,
-      color: onSurface,
-    );
+    final iconWidget = WeatherIcon(icon, size: 22);
     final tempWidget = weather?.tempC == null
         ? null
         : Text(

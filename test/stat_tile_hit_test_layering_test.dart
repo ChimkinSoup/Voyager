@@ -74,7 +74,9 @@ void main() {
     await tester.pumpWidget(build(guarded: true, onTap: () => taps++));
 
     await tester.tapAt(const Offset(300, 50)); // empty chrome
-    await tester.tap(find.text('label')); // the label itself
+    // Missing the label is the whole point here — it is wrapped in an
+    // IgnorePointer, so the press lands on the gesture target behind it.
+    await tester.tap(find.text('label'), warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(taps, 2);
   });

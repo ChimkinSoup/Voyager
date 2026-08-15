@@ -1,8 +1,10 @@
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
@@ -90,40 +92,43 @@ List<List<CalendarEvent?>> calendarPackWeekEvents(
   final weekEvents = allEvents.where((e) {
     return weekDates.any((day) => calendarEventOccursOnDay(e, day));
   }).toList();
-  
+
   weekEvents.sort((a, b) {
     final aStart = a.start.toLocal();
     final bStart = b.start.toLocal();
     final startCmp = aStart.compareTo(bStart);
     if (startCmp != 0) return startCmp;
-    
+
     final aDuration = a.end.difference(a.start);
     final bDuration = b.end.difference(b.start);
     return bDuration.compareTo(aDuration);
   });
-  
+
   final result = List<List<CalendarEvent?>>.generate(7, (_) => []);
-  
+
   for (final event in weekEvents) {
     int availableRow = 0;
     while (true) {
       bool canFit = true;
       for (int c = 0; c < 7; c++) {
         if (calendarEventOccursOnDay(event, weekDates[c])) {
-           if (result[c].length > availableRow && result[c][availableRow] != null) {
-              canFit = false;
-              break;
-           }
+          if (result[c].length > availableRow &&
+              result[c][availableRow] != null) {
+            canFit = false;
+            break;
+          }
         }
       }
       if (canFit) break;
       availableRow++;
     }
-    
+
     for (int c = 0; c < 7; c++) {
       if (calendarEventOccursOnDay(event, weekDates[c])) {
-         while (result[c].length <= availableRow) { result[c].add(null); }
-         result[c][availableRow] = event;
+        while (result[c].length <= availableRow) {
+          result[c].add(null);
+        }
+        result[c][availableRow] = event;
       }
     }
   }
@@ -247,10 +252,9 @@ Color calendarWeekdayAccentColor(BuildContext context, {Color? accentColor}) =>
       0.5,
     )!;
 
-Color calendarAdjacentMonthColor(BuildContext context) =>
-    Theme.of(context).colorScheme.onSurface.withValues(
-      alpha: calendarAdjacentMonthTextOpacity,
-    );
+Color calendarAdjacentMonthColor(BuildContext context) => Theme.of(
+  context,
+).colorScheme.onSurface.withValues(alpha: calendarAdjacentMonthTextOpacity);
 
 /// Black or white, whichever contrasts better against [background] — used for
 /// text/icons painted directly on an arbitrary calendar color.
@@ -344,6 +348,7 @@ class CalendarDayCell extends StatelessWidget {
     required this.style,
     this.todoMarkers = const [],
     this.showTodoIcons = true,
+    this.hasWorkout = false,
     this.onTap,
     this.onEntryTap,
     this.entryMenuBuilder,
@@ -382,6 +387,10 @@ class CalendarDayCell extends StatelessWidget {
 
   /// When false, todo icons are hidden (e.g. during view morph animations).
   final bool showTodoIcons;
+
+  /// Whether a workout was completed on this day. Already gated by the
+  /// "show workouts on the calendar" setting by the time it reaches here.
+  final bool hasWorkout;
 
   /// When set, adjacent-month day numbers lerp from muted (0) to active (1).
   final double? adjacentTextT;
@@ -461,7 +470,9 @@ class CalendarDayCell extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               color: weekHighlightAlpha > 0
-                  ? highlightColor.withValues(alpha: weekHighlightAlpha.clamp(0.0, 1.0))
+                  ? highlightColor.withValues(
+                      alpha: weekHighlightAlpha.clamp(0.0, 1.0),
+                    )
                   : null,
               border: Border.all(
                 width: _cellBorderWidth,
@@ -516,8 +527,10 @@ class CalendarDayCell extends StatelessWidget {
       headerUsed += 2 + style.dotSize;
     }
     const eventGap = 2.0;
-    final eventAreaHeight =
-        (layoutHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
+    final eventAreaHeight = (layoutHeight - headerUsed - eventGap).clamp(
+      0.0,
+      double.infinity,
+    );
     final visibleEvents = calendarVisibleEventCount(
       cellHeight: layoutHeight,
       style: style,
@@ -532,167 +545,187 @@ class CalendarDayCell extends StatelessWidget {
             hasIndicators: indicators.isNotEmpty,
           )
         : 0.0;
-    final availableHeight =
-        (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
+    final availableHeight = (cellHeight - headerUsed - eventGap).clamp(
+      0.0,
+      double.infinity,
+    );
     final maxEventAreaHeight = visibleEvents >= 4
         ? availableHeight + style.cellPadding.bottom
         : availableHeight;
-    final clampedEventAreaHeight =
-        eventAreaHeight.clamp(0.0, maxEventAreaHeight);
+    final clampedEventAreaHeight = eventAreaHeight.clamp(
+      0.0,
+      maxEventAreaHeight,
+    );
 
-    final showTodos =
-        inMonth && showTodoIcons && todoMarkers.isNotEmpty;
+    final showTodos = inMonth && showTodoIcons && todoMarkers.isNotEmpty;
 
-    final packedEvents =
-        events.whereType<CalendarEvent>().toList(growable: false);
+    final packedEvents = events.whereType<CalendarEvent>().toList(
+      growable: false,
+    );
     final overflowCount = packedEvents.length > style.maxEventLines
         ? packedEvents.length - style.maxEventLines
         : 0;
     final overflowEvents = overflowCount > 0
         ? packedEvents.sublist(style.maxEventLines)
         : const <CalendarEvent>[];
-    final displayedEventCount =
-        visibleEvents.clamp(0, style.maxEventLines);
+    final displayedEventCount = visibleEvents.clamp(0, style.maxEventLines);
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
         Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Opacity(
+              opacity: dayNumberOpacity.clamp(0.0, 1.0),
+              child: CalendarDayNumber(
+                date: date,
+                month: month,
+                fontSize: style.fontSize,
+                mutedWhenAdjacent: !inMonth,
+                adjacentTextT: adjacentTextT,
+                isSelected: isSelected,
+                accentColor: accentColor,
+                leading: inMonth && hasWorkout
+                    ? CalendarWorkoutIcon(
+                        fontSize: style.fontSize,
+                        color: accentColor,
+                      )
+                    : null,
+              ),
+            ),
+            if (indicators.isNotEmpty) ...[
+              const SizedBox(height: 2),
               Opacity(
-                opacity: dayNumberOpacity.clamp(0.0, 1.0),
-                child: CalendarDayNumber(
-                  date: date,
-                  month: month,
-                  fontSize: style.fontSize,
-                  mutedWhenAdjacent: !inMonth,
-                  adjacentTextT: adjacentTextT,
-                  isSelected: isSelected,
-                  accentColor: accentColor,
+                opacity: entryOpacity.clamp(0.0, 1.0),
+                child: CalendarDayIndicatorDots(
+                  indicators: indicators,
+                  dotSize: style.dotSize,
                 ),
               ),
-              if (indicators.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Opacity(
-                  opacity: entryOpacity.clamp(0.0, 1.0),
-                  child: CalendarDayIndicatorDots(
-                    indicators: indicators,
-                    dotSize: style.dotSize,
-                  ),
-                ),
-              ],
-              if (inMonth && displayedEventCount > 0 && !hideEntries) ...[
-                const SizedBox(height: 2),
-                Opacity(
-                  opacity: entryOpacity.clamp(0.0, 1.0),
-                  child: SizedBox(
-                    height: clampedEventAreaHeight,
-                    child: OverflowBox(
-                      maxHeight: double.infinity,
-                      alignment: Alignment.topCenter,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (var i = 0; i < displayedEventCount; i++) ...[
-                            if (i > 0) const SizedBox(height: 1),
-                            SizedBox(
-                              height: barHeight,
-                              child: i < events.length && events[i] != null
-                                  ? LayoutBuilder(
-                                      builder: (context, constraints) {
-                                        final eventFontSize =
-                                            calendarMonthEventFontSize(
-                                          barHeight: barHeight,
-                                          style: style,
-                                        );
-                                        final event = events[i]!;
-                                        final eventEntry = event.isFullDay
-                                            ? CalendarDayEntry.allDayEvent(event)
-                                            : CalendarDayEntry.timedEvent(event);
-                                        return calendarEntryContextMenu(
-                                          builder: entryMenuBuilder,
-                                          entry: eventEntry,
-                                          child: CalendarDayEventBar(
-                                            event: event,
-                                            date: date,
-                                            fontSize: eventFontSize,
-                                            height: barHeight,
-                                            isStart: calendarEventBarStartsOnDay(event, date),
-                                            isEnd: calendarEventBarEndsOnDay(event, date),
-                                            isFirstColumn: isFirstColumn,
-                                            isLastColumn: isLastColumn,
-                                            isBottom: displayedEventCount >= 4 && i == displayedEventCount - 1,
-                                            cellMargin: style.cellMargin,
-                                            cellPadding: style.cellPadding,
-                                            highlighted: editingEventId == event.id,
-                                            onTap: onEntryTap == null
-                                                ? null
-                                                : () => onEntryTap!(eventEntry),
+            ],
+            if (inMonth && displayedEventCount > 0 && !hideEntries) ...[
+              const SizedBox(height: 2),
+              Opacity(
+                opacity: entryOpacity.clamp(0.0, 1.0),
+                child: SizedBox(
+                  height: clampedEventAreaHeight,
+                  child: OverflowBox(
+                    maxHeight: double.infinity,
+                    alignment: Alignment.topCenter,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < displayedEventCount; i++) ...[
+                          if (i > 0) const SizedBox(height: 1),
+                          SizedBox(
+                            height: barHeight,
+                            child: i < events.length && events[i] != null
+                                ? LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final eventFontSize =
+                                          calendarMonthEventFontSize(
+                                            barHeight: barHeight,
+                                            style: style,
+                                          );
+                                      final event = events[i]!;
+                                      final eventEntry = event.isFullDay
+                                          ? CalendarDayEntry.allDayEvent(event)
+                                          : CalendarDayEntry.timedEvent(event);
+                                      return calendarEntryContextMenu(
+                                        builder: entryMenuBuilder,
+                                        entry: eventEntry,
+                                        child: CalendarDayEventBar(
+                                          event: event,
+                                          date: date,
+                                          fontSize: eventFontSize,
+                                          height: barHeight,
+                                          isStart: calendarEventBarStartsOnDay(
+                                            event,
+                                            date,
                                           ),
-                                        );
-                                      },
-                                    )
-                                  : null,
-                            ),
-                          ],
+                                          isEnd: calendarEventBarEndsOnDay(
+                                            event,
+                                            date,
+                                          ),
+                                          isFirstColumn: isFirstColumn,
+                                          isLastColumn: isLastColumn,
+                                          isBottom:
+                                              displayedEventCount >= 4 &&
+                                              i == displayedEventCount - 1,
+                                          cellMargin: style.cellMargin,
+                                          cellPadding: style.cellPadding,
+                                          highlighted:
+                                              editingEventId == event.id,
+                                          onTap: onEntryTap == null
+                                              ? null
+                                              : () => onEntryTap!(eventEntry),
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : null,
+                          ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ],
-          ),
-          if (inMonth && overflowCount > 0 && !hideEntries)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Opacity(
-                opacity: entryOpacity.clamp(0.0, 1.0),
-                child: _CalendarDayOverflowBadge(
-                  extraCount: overflowCount,
-                  onTap: onEntryTap == null
-                      ? null
-                      : (badgeContext) => _showOverflowEventsPopover(
-                            badgeContext: badgeContext,
-                            overflowEvents: overflowEvents,
-                            editingEventId: editingEventId,
-                            onEntryTap: onEntryTap!,
-                            entryMenuBuilder: entryMenuBuilder,
-                          ),
-                ),
-              ),
-            ),
-          if (showTodos && todoMarkers.isNotEmpty)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Opacity(
-                opacity: entryOpacity.clamp(0.0, 1.0),
-                child: Builder(
-                  builder: (todoContext) {
-                    return GestureDetector(
-                      onTap: onEntryTap == null ? null : () {
-                        _showTodoPopover(
-                          badgeContext: todoContext,
-                          todos: todoMarkers,
-                          onEntryTap: onEntryTap!,
-                          entryMenuBuilder: entryMenuBuilder,
-                        );
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.all(2.0),
-                        child: CalendarDayTodoIcons(markers: todoMarkers),
+          ],
+        ),
+        if (inMonth && overflowCount > 0 && !hideEntries)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Opacity(
+              opacity: entryOpacity.clamp(0.0, 1.0),
+              child: _CalendarDayOverflowBadge(
+                extraCount: overflowCount,
+                onTap: onEntryTap == null
+                    ? null
+                    : (badgeContext) => _showOverflowEventsPopover(
+                        badgeContext: badgeContext,
+                        overflowEvents: overflowEvents,
+                        editingEventId: editingEventId,
+                        onEntryTap: onEntryTap!,
+                        entryMenuBuilder: entryMenuBuilder,
                       ),
-                    );
-                  }
-                ),
               ),
             ),
-        ],
-      );
+          ),
+        if (showTodos && todoMarkers.isNotEmpty)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Opacity(
+              opacity: entryOpacity.clamp(0.0, 1.0),
+              child: Builder(
+                builder: (todoContext) {
+                  return GestureDetector(
+                    onTap: onEntryTap == null
+                        ? null
+                        : () {
+                            _showTodoPopover(
+                              badgeContext: todoContext,
+                              todos: todoMarkers,
+                              onEntryTap: onEntryTap!,
+                              entryMenuBuilder: entryMenuBuilder,
+                            );
+                          },
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.all(2.0),
+                      child: CalendarDayTodoIcons(markers: todoMarkers),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildCompactCellContent(bool inMonth) {
@@ -718,7 +751,10 @@ class CalendarDayCell extends StatelessWidget {
         if (inMonth && events.isNotEmpty) ...[
           const SizedBox(height: 1),
           CalendarFadedEventDots(
-            events: events.where((e) => e != null).cast<CalendarEvent>().toList(),
+            events: events
+                .where((e) => e != null)
+                .cast<CalendarEvent>()
+                .toList(),
             dotSize: style.eventDotSize,
             maxDots: style.maxEventLines,
             baseOpacity: entryOpacity,
@@ -731,20 +767,22 @@ class CalendarDayCell extends StatelessWidget {
             child: Builder(
               builder: (todoContext) {
                 return GestureDetector(
-                  onTap: onEntryTap == null ? null : () {
-                    _showTodoPopover(
-                      badgeContext: todoContext,
-                      todos: todoMarkers,
-                      onEntryTap: onEntryTap!,
-                    );
-                  },
+                  onTap: onEntryTap == null
+                      ? null
+                      : () {
+                          _showTodoPopover(
+                            badgeContext: todoContext,
+                            todos: todoMarkers,
+                            onEntryTap: onEntryTap!,
+                          );
+                        },
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
                     padding: const EdgeInsets.all(2.0),
                     child: CalendarDayTodoIcons(markers: todoMarkers),
                   ),
                 );
-              }
+              },
             ),
           ),
         ],
@@ -763,12 +801,18 @@ class CalendarDayNumber extends StatelessWidget {
     this.adjacentTextT,
     this.isSelected = false,
     this.accentColor,
+    this.leading,
   });
 
   final DateTime date;
   final DateTime month;
   final double fontSize;
   final bool mutedWhenAdjacent;
+
+  /// Small marker rendered immediately before the number (currently the
+  /// worked-out icon). Sits inside the same centred row so the pair stays
+  /// visually anchored to the date rather than floating in the cell.
+  final Widget? leading;
 
   /// Lerps adjacent-month text from muted (0) to active (1). Ignored when null.
   final double? adjacentTextT;
@@ -798,7 +842,11 @@ class CalendarDayNumber extends StatelessWidget {
           ? calendarContrastingLabelColor(todayColor)
           : Theme.of(context).colorScheme.onPrimary;
     } else if (muted && adjacentTextT != null) {
-      textColor = Color.lerp(mutedColor, onSurface, adjacentTextT!.clamp(0.0, 1.0))!;
+      textColor = Color.lerp(
+        mutedColor,
+        onSurface,
+        adjacentTextT!.clamp(0.0, 1.0),
+      )!;
     } else if (muted) {
       textColor = mutedColor;
     } else {
@@ -834,13 +882,36 @@ class CalendarDayNumber extends StatelessWidget {
       ),
     );
 
+    final positioned = (fontSize <= 9) && isToday
+        ? Transform.translate(offset: const Offset(0, -0.5), child: dayNumber)
+        : dayNumber;
+
     return Center(
-      child: (fontSize <= 9) && isToday
-          ? Transform.translate(
-              offset: const Offset(0, -0.5),
-              child: dayNumber,
-            )
-          : dayNumber,
+      child: leading == null
+          ? positioned
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [leading!, const SizedBox(width: 1), positioned],
+            ),
+    );
+  }
+}
+
+/// The worked-out marker shown beside a day's number when the calendar
+/// workout setting is on. Deliberately tiny and unlabelled — it is a presence
+/// indicator, not a data point.
+class CalendarWorkoutIcon extends StatelessWidget {
+  const CalendarWorkoutIcon({super.key, required this.fontSize, this.color});
+
+  final double fontSize;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      PhosphorIconsFill.barbell,
+      size: (fontSize * 0.85).clamp(8.0, 14.0),
+      color: color ?? Theme.of(context).colorScheme.primary,
     );
   }
 }
@@ -887,14 +958,15 @@ double calendarMonthEventBarHeight({
   const eventGap = 2.0;
   const betweenEventGap = 1.0;
   final slotCount = style.maxEventLines.clamp(1, style.maxEventLines);
-  var eventAreaHeight =
-      (cellHeight - headerUsed - eventGap).clamp(0.0, double.infinity);
+  var eventAreaHeight = (cellHeight - headerUsed - eventGap).clamp(
+    0.0,
+    double.infinity,
+  );
   if (visibleEventCount >= 4) {
     eventAreaHeight += style.cellPadding.bottom;
   }
   final slotGaps = (slotCount - 1) * betweenEventGap;
-  return ((eventAreaHeight - slotGaps) / slotCount)
-      .clamp(0.0, double.infinity);
+  return ((eventAreaHeight - slotGaps) / slotCount).clamp(0.0, double.infinity);
 }
 
 double calendarMonthEventFontSize({
@@ -983,7 +1055,10 @@ class MorphDayEventFrozenMetrics {
       cellHeight: cellHeight,
       eventCount: capped,
     );
-    final visible = monthLayoutCount.clamp(1, MorphDayEventStack.maxMonthEvents);
+    final visible = monthLayoutCount.clamp(
+      1,
+      MorphDayEventStack.maxMonthEvents,
+    );
     final barHeight = calendarMonthEventBarHeight(
       cellHeight: cellHeight,
       style: MonthDayCellStyle.full,
@@ -1046,6 +1121,7 @@ class MorphDayEventStack extends StatefulWidget {
   static const yearDotSize = 2.0; // MonthDayCellStyle.compact.eventDotSize
   /// Each event (bottom-up) shrinks/grows during this styleT span.
   static const reverseSlotSegment = 0.09;
+
   /// After all slots finish, dots travel between the year row and month rows.
   static const reverseMoveDuration = 0.30;
 
@@ -1093,10 +1169,7 @@ class MorphDayEventStack extends StatefulWidget {
   }
 
   /// 0 = dots at month rows, 1 = dots at year row.
-  static double reverseDotMoveT({
-    required int count,
-    required double styleT,
-  }) {
+  static double reverseDotMoveT({required int count, required double styleT}) {
     if (count <= 0) return 0.0;
     final shrinkPhaseEnd = 1.0 - count * reverseSlotSegment;
     if (styleT >= shrinkPhaseEnd) return 0.0;
@@ -1117,8 +1190,10 @@ class MorphDayEventStack extends StatefulWidget {
 
 class _MorphDayEventStackState extends State<MorphDayEventStack> {
   int _displayCount() {
-    final cappedCount =
-        widget.events.length.clamp(0, MorphDayEventStack.maxMonthEvents);
+    final cappedCount = widget.events.length.clamp(
+      0,
+      MorphDayEventStack.maxMonthEvents,
+    );
     if (cappedCount == 0) return 0;
     if (!widget.inMonth && widget.styleT <= 0) return 0;
     return cappedCount;
@@ -1126,8 +1201,10 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
 
   @override
   Widget build(BuildContext context) {
-    final cappedCount =
-        widget.events.length.clamp(0, MorphDayEventStack.maxMonthEvents);
+    final cappedCount = widget.events.length.clamp(
+      0,
+      MorphDayEventStack.maxMonthEvents,
+    );
     final count = _displayCount();
     if (count == 0) return const SizedBox.shrink();
 
@@ -1140,22 +1217,28 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     final frozenMonthEventsTop =
         frozen?.monthEventsTop ??
         (widget.layoutDayLayoutSize ?? widget.dayLayoutSize) + 2;
-    final frozenBarHeight = frozen?.barHeight ??
+    final frozenBarHeight =
+        frozen?.barHeight ??
         calendarMonthEventBarHeight(
           cellHeight: widget.cellHeight,
           style: MonthDayCellStyle.full,
-          visibleEventCount: cappedCount.clamp(1, MorphDayEventStack.maxMonthEvents),
+          visibleEventCount: cappedCount.clamp(
+            1,
+            MorphDayEventStack.maxMonthEvents,
+          ),
         );
     final frozenBarStride = frozen?.barStride ?? frozenBarHeight + 1;
-    final frozenEventFontSize = frozen?.eventFontSize ??
+    final frozenEventFontSize =
+        frozen?.eventFontSize ??
         calendarMonthEventFontSize(
           barHeight: frozenBarHeight,
           style: MonthDayCellStyle.full,
         );
 
     const yearDotSize = MorphDayEventStack.yearDotSize;
-    final yearDotCount =
-        widget.inMonth ? cappedCount.clamp(0, MorphDayEventStack.maxYearDots) : 0;
+    final yearDotCount = widget.inMonth
+        ? cappedCount.clamp(0, MorphDayEventStack.maxYearDots)
+        : 0;
     final yearEventsTop = _compactYearDotsTop(widget.cellHeight);
 
     final slotShrinkEased = List<double>.filled(count, 0);
@@ -1191,33 +1274,37 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
                 _buildEventMarker(
                   event: widget.events[i]!,
                   index: i,
-              dotSize: yearDotSize,
-              reverseMove: reverseMove,
-              yearEventsTop: yearEventsTop,
-              frozenMonthEventsTop: frozenMonthEventsTop,
-              frozenBarStride: frozenBarStride,
-              frozenBarHeight: frozenBarHeight,
-              frozenEventFontSize: frozenEventFontSize,
-              shrinkEased: slotShrinkEased[i],
-              yearX: 0,
-            ),
-          for (var i = 0; i < count && i < MorphDayEventStack.maxYearDots; i++)
-            if (widget.events[i] != null)
-              _buildEventMarker(
-                event: widget.events[i]!,
-                index: i,
-              dotSize: yearDotSize,
-              reverseMove: reverseMove,
-              yearEventsTop: yearEventsTop,
-              frozenMonthEventsTop: frozenMonthEventsTop,
-              frozenBarStride: frozenBarStride,
-              frozenBarHeight: frozenBarHeight,
-              frozenEventFontSize: frozenEventFontSize,
-              shrinkEased: slotShrinkEased[i],
-              yearX: yearXOffsets[i],
-            ),
-        ],
-      ),
+                  dotSize: yearDotSize,
+                  reverseMove: reverseMove,
+                  yearEventsTop: yearEventsTop,
+                  frozenMonthEventsTop: frozenMonthEventsTop,
+                  frozenBarStride: frozenBarStride,
+                  frozenBarHeight: frozenBarHeight,
+                  frozenEventFontSize: frozenEventFontSize,
+                  shrinkEased: slotShrinkEased[i],
+                  yearX: 0,
+                ),
+            for (
+              var i = 0;
+              i < count && i < MorphDayEventStack.maxYearDots;
+              i++
+            )
+              if (widget.events[i] != null)
+                _buildEventMarker(
+                  event: widget.events[i]!,
+                  index: i,
+                  dotSize: yearDotSize,
+                  reverseMove: reverseMove,
+                  yearEventsTop: yearEventsTop,
+                  frozenMonthEventsTop: frozenMonthEventsTop,
+                  frozenBarStride: frozenBarStride,
+                  frozenBarHeight: frozenBarHeight,
+                  frozenEventFontSize: frozenEventFontSize,
+                  shrinkEased: slotShrinkEased[i],
+                  yearX: yearXOffsets[i],
+                ),
+          ],
+        ),
       ),
     );
   }
@@ -1236,7 +1323,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     required double frozenEventFontSize,
   }) {
     final isDotSlot = index < MorphDayEventStack.maxYearDots;
-    
+
     final isStart = calendarEventBarStartsOnDay(event, widget.date);
     final isEnd = calendarEventBarEndsOnDay(event, widget.date);
     // isStart/isEnd sides extend into the cell padding to exactly match
@@ -1245,10 +1332,14 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     // an instant visual snap when the morph takes over.
     final bridgeLeft = isStart
         ? MonthDayCellStyle.full.cellPadding.left
-        : MonthDayCellStyle.full.cellMargin.left + MonthDayCellStyle.full.cellPadding.left + 1.0;
+        : MonthDayCellStyle.full.cellMargin.left +
+              MonthDayCellStyle.full.cellPadding.left +
+              1.0;
     final bridgeRight = isEnd
         ? MonthDayCellStyle.full.cellPadding.right
-        : MonthDayCellStyle.full.cellMargin.right + MonthDayCellStyle.full.cellPadding.right + 1.0;
+        : MonthDayCellStyle.full.cellMargin.right +
+              MonthDayCellStyle.full.cellPadding.right +
+              1.0;
     final currentBridgeLeft = lerpDouble(bridgeLeft, 0, shrinkEased)!;
     final currentBridgeRight = lerpDouble(bridgeRight, 0, shrinkEased)!;
 
@@ -1257,17 +1348,15 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       if (shrinkT >= 1.0) return const SizedBox.shrink();
       if (shrinkT <= 0.0) {
         final ownY = frozenMonthEventsTop + index * frozenBarStride;
-        final maxTop = widget.cellHeight +
+        final maxTop =
+            widget.cellHeight +
             (index >= 3 ? MonthDayCellStyle.full.cellPadding.bottom : 0.0) -
             frozenBarHeight;
         return _eventPill(
           event: event,
           date: widget.date,
           left: -bridgeLeft,
-          top: ownY.clamp(
-            0.0,
-            maxTop.clamp(0.0, double.infinity),
-          ),
+          top: ownY.clamp(0.0, maxTop.clamp(0.0, double.infinity)),
           width: widget.maxWidth + bridgeLeft + bridgeRight,
           height: index >= 3
               ? frozenBarHeight + MonthDayCellStyle.full.cellPadding.bottom
@@ -1288,7 +1377,8 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       final ownY = frozenMonthEventsTop + index * frozenBarStride;
       if (height < 0.25) return const SizedBox.shrink();
 
-      final maxTop = widget.cellHeight +
+      final maxTop =
+          widget.cellHeight +
           (index >= 3 ? MonthDayCellStyle.full.cellPadding.bottom : 0.0) -
           height;
 
@@ -1382,10 +1472,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }
@@ -1475,8 +1562,8 @@ class CalendarInteractiveEventTap extends StatefulWidget {
     required this.eventColor,
     required this.borderRadius,
     this.onTap,
-    // [highlighted] kept for API compatibility but no longer applies its own
-    // highlight — the popup container's accent border does that instead.
+    // Outlines the bar whose event is open in the edit sidebar, matching the
+    // focus outline sidebar list rows use.
     this.highlighted = false,
     this.eventId,
     this.isSegmentStart = true,
@@ -1489,8 +1576,10 @@ class CalendarInteractiveEventTap extends StatefulWidget {
   final VoidCallback? onTap;
   final bool highlighted;
   final String? eventId;
+
   /// Whether this segment is the leftmost cap of the event bar.
   final bool isSegmentStart;
+
   /// Whether this segment is the rightmost cap of the event bar.
   final bool isSegmentEnd;
 
@@ -1499,7 +1588,8 @@ class CalendarInteractiveEventTap extends StatefulWidget {
       _CalendarInteractiveEventTapState();
 }
 
-class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTap>
+class _CalendarInteractiveEventTapState
+    extends State<CalendarInteractiveEventTap>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late Animation<double> _scale;
@@ -1552,8 +1642,9 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
     if (!_configuredMotion) {
       _configuredMotion = true;
       final reduced = VoyagerMotion.reduced(context);
-      _controller.duration =
-          reduced ? Duration.zero : const Duration(milliseconds: 140);
+      _controller.duration = reduced
+          ? Duration.zero
+          : const Duration(milliseconds: 140);
       final curved = CurvedAnimation(
         parent: _controller,
         curve: reduced ? Curves.linear : VoyagerSpring.snappyCurve,
@@ -1596,10 +1687,7 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
       final rect = box != null
           ? box.localToGlobal(Offset.zero) & box.size
           : Rect.zero;
-      _tapState!.notifyEventTap(
-        eventId: widget.eventId!,
-        widgetRect: rect,
-      );
+      _tapState!.notifyEventTap(eventId: widget.eventId!, widgetRect: rect);
     }
 
     await _controller.forward(from: 0);
@@ -1610,6 +1698,17 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
 
   @override
   Widget build(BuildContext context) {
+    final child = widget.highlighted
+        ? CustomPaint(
+            foregroundPainter: _EventFocusRingPainter(
+              color: VoyagerListItemSurface.focusBorderColor(context),
+              borderRadius: widget.borderRadius,
+              clipLeft: !widget.isSegmentStart,
+              clipRight: !widget.isSegmentEnd,
+            ),
+            child: widget.child,
+          )
+        : widget.child;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -1632,9 +1731,61 @@ class _CalendarInteractiveEventTapState extends State<CalendarInteractiveEventTa
           ),
         );
       },
-      child: widget.child,
+      child: child,
     );
   }
+}
+
+/// Focus outline for the event bar whose editor sidebar is open.
+///
+/// A multi-day event is drawn as one segment per cell, so the sides that meet a
+/// neighbouring segment are clipped away — otherwise the ring would read as a
+/// row of boxes instead of one outline around the whole bar. The horizontal
+/// strokes lose [_strokeWidth] at those seams, which the segments' own overlap
+/// paints back over.
+class _EventFocusRingPainter extends CustomPainter {
+  const _EventFocusRingPainter({
+    required this.color,
+    required this.borderRadius,
+    required this.clipLeft,
+    required this.clipRight,
+  });
+
+  final Color color;
+  final BorderRadius borderRadius;
+  final bool clipLeft;
+  final bool clipRight;
+
+  static const _strokeWidth = 1.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTRB(
+        clipLeft ? rect.left + _strokeWidth : rect.left,
+        rect.top,
+        clipRight ? rect.right - _strokeWidth : rect.right,
+        rect.bottom,
+      ),
+    );
+    canvas.drawRRect(
+      borderRadius.toRRect(rect).deflate(_strokeWidth / 2),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _strokeWidth
+        ..color = color,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_EventFocusRingPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.borderRadius != borderRadius ||
+      oldDelegate.clipLeft != clipLeft ||
+      oldDelegate.clipRight != clipRight;
 }
 
 Future<void> _showOverflowEventsPopover({
@@ -1771,19 +1922,19 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                   highlighted: editingEventId == event.id,
                   onTap: () => onEventTap(event),
                   child: Container(
-                  height: 24,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: calendarEventFillDecoration(
-                    Color(event.colorValue),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    event.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppFonts.style(fontSize: 11, height: 1),
-                  ),
+                    height: 24,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: calendarEventFillDecoration(
+                      Color(event.colorValue),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      event.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppFonts.style(fontSize: 11, height: 1),
+                    ),
                   ),
                 ),
               ),
@@ -1891,13 +2042,13 @@ class CalendarDayEventBar extends StatelessWidget {
           left: isStart
               ? -cellPadding.left
               : isFirstColumn
-                  ? -cellPadding.left
-                  : -cellMargin.left - cellPadding.left - 2.0,
+              ? -cellPadding.left
+              : -cellMargin.left - cellPadding.left - 2.0,
           right: isEnd
               ? -cellPadding.right
               : isLastColumn
-                  ? -cellPadding.right
-                  : -cellMargin.right - cellPadding.right - 2.0,
+              ? -cellPadding.right
+              : -cellMargin.right - cellPadding.right - 2.0,
           child: CalendarInteractiveEventTap(
             eventColor: eventColor,
             borderRadius: borderRadius,
@@ -2058,10 +2209,7 @@ const monthDayGridWeekdayHeaderGap = 8.0;
 /// Weekday labels render at [labelSmall] × this scale in month/year views.
 const calendarWeekdayFontSizeScale = 1.05;
 
-double calendarWeekdayFontSize(
-  BuildContext context, {
-  double? baseFontSize,
-}) {
+double calendarWeekdayFontSize(BuildContext context, {double? baseFontSize}) {
   final base =
       baseFontSize ?? Theme.of(context).textTheme.labelSmall!.fontSize ?? 12;
   return base * calendarWeekdayFontSizeScale;
@@ -2334,11 +2482,7 @@ class _MorphWeekdayColumn extends StatelessWidget {
                         SizedBox(
                           width:
                               metrics.suffixCharFullWidths[i] *
-                              _suffixCharT(
-                                i,
-                                suffixChars.length,
-                                styleT,
-                              ),
+                              _suffixCharT(i, suffixChars.length, styleT),
                           child: ClipRect(
                             child: Align(
                               alignment: Alignment.centerLeft,
@@ -2368,6 +2512,7 @@ class MonthDayGrid extends StatelessWidget {
     required this.weekStartsMonday,
     required this.style,
     this.todoMarkers = const [],
+    this.workoutDays = const {},
     this.showTodoIcons = true,
     this.onDayTap,
     this.onEntryTap,
@@ -2387,6 +2532,10 @@ class MonthDayGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
+
+  /// Local calendar days with a completed workout. Empty when the setting is
+  /// off, which is what keeps the year view free of the marker.
+  final Set<DateTime> workoutDays;
   final bool weekStartsMonday;
   final MonthDayCellStyle style;
   final void Function(DateTime day)? onDayTap;
@@ -2448,7 +2597,10 @@ class MonthDayGrid extends StatelessWidget {
     } else {
       packedWeeks = List.generate(6, (row) {
         if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
-        return calendarPackWeekEvents(cells.sublist(row * 7, row * 7 + 7), events);
+        return calendarPackWeekEvents(
+          cells.sublist(row * 7, row * 7 + 7),
+          events,
+        );
       });
     }
 
@@ -2489,12 +2641,13 @@ class MonthDayGrid extends StatelessWidget {
                     final isSelected =
                         selectedDay != null &&
                         calendarSameDay(date, selectedDay!);
-                    final weekHighlightAlpha = calendarFocusedWeekHighlightAlpha(
-                      date: date,
-                      month: month,
-                      weekStart: highlightedWeekStart,
-                      opacity: weekHighlightOpacity,
-                    );
+                    final weekHighlightAlpha =
+                        calendarFocusedWeekHighlightAlpha(
+                          date: date,
+                          month: month,
+                          weekStart: highlightedWeekStart,
+                          opacity: weekHighlightOpacity,
+                        );
 
                     return Expanded(
                       child: CalendarDayCell(
@@ -2504,6 +2657,11 @@ class MonthDayGrid extends StatelessWidget {
                         indicators: dayIndicators,
                         todoMarkers: dayTodos,
                         showTodoIcons: showTodoIcons,
+                        hasWorkout:
+                            inMonth &&
+                            workoutDays.contains(
+                              DateUtils.dateOnly(date.toLocal()),
+                            ),
                         style: style,
                         isSelected: isSelected,
                         isFirstColumn: col == 0,

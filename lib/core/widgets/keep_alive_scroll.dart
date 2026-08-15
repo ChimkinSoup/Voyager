@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Preserves scroll offset when this list is temporarily hidden by shell navigation.
 class KeepAliveScrollView extends StatefulWidget {
@@ -118,7 +119,7 @@ class _KeepAliveSingleChildScrollViewState
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return SingleChildScrollView(key: widget.storageKey, child: widget.child);
+    return VoyagerScrollView(key: widget.storageKey, child: widget.child);
   }
 }
 
