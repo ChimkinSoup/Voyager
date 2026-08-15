@@ -910,8 +910,8 @@
     "semantic_hash": ""
   },
   "lib/features/shell/app_shell.dart": {
-    "mtime": 1786818228.897543,
-    "ast_hash": "7b597156ba0c423bc678ae808d2bd603",
+    "mtime": 1786834690.189598,
+    "ast_hash": "0fa570164b3d114502cdf8f08daa9a0b",
     "semantic_hash": ""
   },
   "lib/features/shell/shell_destinations.dart": {
@@ -2045,8 +2045,8 @@
     "semantic_hash": ""
   },
   "test/shell_navigation_rail_test.dart": {
-    "mtime": 1786818424.7457368,
-    "ast_hash": "04fe2b55c90fc123b612d3bc1ec02dc0",
+    "mtime": 1786834690.1906004,
+    "ast_hash": "c69b21f9c2e1b73c47c4ce2f8b1f73ce",
     "semantic_hash": ""
   },
   "UNIFIED_NOTIFICATIONS.md": {
@@ -2270,8 +2270,8 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_code_field.dart": {
-    "mtime": 1786830725.167493,
-    "ast_hash": "0a1f1da3ec7cf17287d21b5506e78af1",
+    "mtime": 1786830933.6280832,
+    "ast_hash": "a9441d22e330af4b84309b899d0a292a",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_dashboard.dart": {
@@ -3235,8 +3235,8 @@
     "semantic_hash": ""
   },
   "test/leetcode_code_editing_test.dart": {
-    "mtime": 1786830747.0020006,
-    "ast_hash": "52427aa4f6afa4641a9fe6b7f9d6b390",
+    "mtime": 1786830886.389361,
+    "ast_hash": "3386900756c12ae604b60102887cdc74",
     "semantic_hash": ""
   },
   "lib/core/text/newline_normalization.dart": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "test/leetcode_retrack_test.dart": {
-    "mtime": 1786829572.6183138,
-    "ast_hash": "e1ac3c0798041f75ecf8991334390cc8",
+    "mtime": 1786830848.1046078,
+    "ast_hash": "3bd7b69e8553894c2bf0c33bebf8b191",
     "semantic_hash": ""
   },
   "test/study_session_undo_test.dart": {
@@ -3362,6 +3362,11 @@
   "test/sync_saving_regressions_test.dart": {
     "mtime": 1786829161.0434146,
     "ast_hash": "a95434e3204729646d8d215c3b528f6f",
+    "semantic_hash": ""
+  },
+  "test/multi_word_tags_test.dart": {
+    "mtime": 1786830908.9174078,
+    "ast_hash": "2b570b73e3475e7fb670e0ce6e0606c6",
     "semantic_hash": ""
   }
 }
