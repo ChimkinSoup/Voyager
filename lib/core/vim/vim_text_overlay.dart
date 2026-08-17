@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/snippets/snippet_session.dart';
 import 'package:voyager/core/vim/vim_session.dart';
 import 'package:voyager/core/vim/vim_text_ops.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
@@ -113,13 +114,23 @@ class VimTextOverlay extends StatefulWidget {
     required this.focusNode,
     required this.style,
     required this.accentColor,
+    this.snippetSession,
     this.strutStyle,
     this.textAlign = TextAlign.start,
     this.scrollController,
     this.hintText,
   });
 
-  final VimSession session;
+  /// Null on a field that has snippets but not Vim, where this layer exists
+  /// only to draw the tabstop marks.
+  final VimSession? session;
+
+  /// The field's snippet runtime, when it has one. Only its remaining tabstops
+  /// are read — the dotted marks in [_paintTabstops] — and only while a session
+  /// is live, so a field with no expansion open pays one listener and paints
+  /// nothing.
+  final SnippetSession? snippetSession;
+
   final TextEditingController controller;
   final FocusNode focusNode;
   final TextStyle style;
@@ -160,6 +171,7 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
   void didUpdateWidget(covariant VimTextOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session ||
+        oldWidget.snippetSession != widget.snippetSession ||
         oldWidget.controller != widget.controller ||
         oldWidget.focusNode != widget.focusNode) {
       _unlisten(oldWidget);
@@ -176,19 +188,30 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
   void _listen(VimTextOverlay w) {
     w.controller.addListener(_repaint);
     w.focusNode.addListener(_repaint);
-    w.session.modeListenable.addListener(_repaint);
-    w.session.searchHighlightListenable.addListener(_repaint);
-    // Not redundant with the controller: in linewise Visual the caret moves
-    // without the selection changing — see [VimSession.caretListenable].
-    w.session.caretListenable.addListener(_repaint);
+    final session = w.session;
+    if (session != null) {
+      session.modeListenable.addListener(_repaint);
+      session.searchHighlightListenable.addListener(_repaint);
+      // Not redundant with the controller: in linewise Visual the caret moves
+      // without the selection changing — see [VimSession.caretListenable].
+      session.caretListenable.addListener(_repaint);
+    }
+    // Fires on expansion, on Tab, and on the edits that push the stops along
+    // the text — the controller listener above repaints on the same edit, so
+    // both have to be current for a mark to stay on its character.
+    w.snippetSession?.marksListenable.addListener(_repaint);
   }
 
   void _unlisten(VimTextOverlay w) {
     w.controller.removeListener(_repaint);
     w.focusNode.removeListener(_repaint);
-    w.session.modeListenable.removeListener(_repaint);
-    w.session.searchHighlightListenable.removeListener(_repaint);
-    w.session.caretListenable.removeListener(_repaint);
+    final session = w.session;
+    if (session != null) {
+      session.modeListenable.removeListener(_repaint);
+      session.searchHighlightListenable.removeListener(_repaint);
+      session.caretListenable.removeListener(_repaint);
+    }
+    w.snippetSession?.marksListenable.removeListener(_repaint);
   }
 
   void _repaint() {
@@ -198,11 +221,15 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
-    final mode = session.mode;
-    final highlightPattern = session.searchHighlightListenable.value;
-    // Insert mode with nothing highlighted is the ordinary case and the field
-    // draws its own caret there, so this whole layer paints nothing.
-    final idle = mode == VimMode.insert && highlightPattern.isEmpty;
+    final mode = session?.mode ?? VimMode.insert;
+    final highlightPattern = session?.searchHighlightListenable.value ?? '';
+    final marks =
+        widget.snippetSession?.marksListenable.value ?? SnippetMarks.none;
+    // Insert mode with nothing highlighted and no tabstops open is the ordinary
+    // case and the field draws its own caret there, so this whole layer paints
+    // nothing.
+    final idle =
+        mode == VimMode.insert && highlightPattern.isEmpty && marks.isEmpty;
     if (idle || !widget.focusNode.hasFocus) return const SizedBox.shrink();
 
     // Only the placeholder's first character can ever fall under the caret, so
@@ -223,10 +250,11 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
       textHeightBehavior: DefaultTextHeightBehavior.maybeOf(context),
-      caretOffset: mode == VimMode.insert ? null : session.caretOffset,
+      caretOffset: mode == VimMode.insert ? null : session?.caretOffset,
       selection: mode.isVisual ? widget.controller.selection : null,
-      searchOffsets: session.searchHighlightOffsets,
-      searchLength: session.searchHighlightLength,
+      searchOffsets: session?.searchHighlightOffsets ?? const [],
+      searchLength: session?.searchHighlightLength ?? 0,
+      tabstops: marks,
       accentColor: widget.accentColor,
       // Deliberately not the accent: the point of the search marks is to be
       // told apart from the caret and the selection at a glance, and every
@@ -269,6 +297,7 @@ class _VimOverlayPainter extends CustomPainter {
     required this.selection,
     required this.searchOffsets,
     required this.searchLength,
+    required this.tabstops,
     required this.accentColor,
     required this.searchColor,
   });
@@ -294,6 +323,10 @@ class _VimOverlayPainter extends CustomPainter {
 
   final List<int> searchOffsets;
   final int searchLength;
+
+  /// Snippet tabstops still to visit. Empty whenever no expansion is open.
+  final SnippetMarks tabstops;
+
   final Color accentColor;
   final Color searchColor;
 
@@ -322,10 +355,56 @@ class _VimOverlayPainter extends CustomPainter {
       _fillRange(canvas, painter, sel.start, sel.end, paint);
     }
 
+    if (!tabstops.isEmpty) _paintTabstops(canvas, painter);
+
     final caret = caretOffset;
     if (caret != null) _paintCaret(canvas, painter, caret);
 
     painter.dispose();
+  }
+
+  /// A faint dotted stub at every tabstop the user has still to visit.
+  ///
+  /// Dotted rather than solid so it never reads as a second caret: the real one
+  /// is a continuous bar (Insert) or a filled block (Normal), and the whole
+  /// point of these marks is that they are places the caret *will* go, not
+  /// places it is. Drawn under the caret so a mark at the current position
+  /// never sits on top of it.
+  ///
+  /// The next stop is drawn at full strength and the rest are halved, which is
+  /// enough to read the order at a glance without turning the field into a
+  /// column of dashes.
+  void _paintTabstops(Canvas canvas, TextPainter painter) {
+    final paint = Paint()
+      ..color = accentColor.withValues(alpha: _kTabstopAlpha)
+      ..strokeWidth = _kTabstopWidth
+      ..strokeCap = StrokeCap.round;
+    final laterPaint = Paint()
+      ..color = accentColor.withValues(alpha: _kTabstopAlpha * 0.45)
+      ..strokeWidth = _kTabstopWidth
+      ..strokeCap = StrokeCap.round;
+
+    for (final offset in tabstops.offsets) {
+      if (offset < 0 || offset > text.length) continue;
+      final position = TextPosition(offset: offset);
+      final origin = painter.getOffsetForCaret(position, Rect.zero);
+      final height = painter.getFullHeightForCaret(position, Rect.zero);
+      if (height <= 0) continue;
+      final active = offset == tabstops.nextOffset;
+      // Inset top and bottom so the dashes sit inside the line box rather than
+      // touching the line above and below.
+      final top = origin.dy + height * _kTabstopInset;
+      final bottom = origin.dy + height * (1 - _kTabstopInset);
+      final x = origin.dx + _kTabstopWidth / 2;
+      for (var y = top; y < bottom; y += _kTabstopDash + _kTabstopGap) {
+        final end = math.min(y + _kTabstopDash, bottom);
+        canvas.drawLine(
+          Offset(x, y),
+          Offset(x, end),
+          active ? paint : laterPaint,
+        );
+      }
+    }
   }
 
   /// Width of the mark standing in for a covered empty line, in fractions of
@@ -553,6 +632,7 @@ class _VimOverlayPainter extends CustomPainter {
         old.caretOffset != caretOffset ||
         old.selection != selection ||
         old.searchLength != searchLength ||
+        old.tabstops != tabstops ||
         old.accentColor != accentColor ||
         !_sameOffsets(old.searchOffsets, searchOffsets);
   }
@@ -566,6 +646,17 @@ class _VimOverlayPainter extends CustomPainter {
     return true;
   }
 }
+
+/// Geometry of a dotted tabstop mark — see [_VimOverlayPainter._paintTabstops].
+/// A 1.5px stroke with 2px dashes on 2px gaps reads as dotted at every text
+/// size the app uses without turning into a solid line on the dense fields.
+const double _kTabstopWidth = 1.5;
+const double _kTabstopDash = 2.0;
+const double _kTabstopGap = 2.0;
+const double _kTabstopAlpha = 0.75;
+
+/// Fraction of the line height left clear above and below each mark.
+const double _kTabstopInset = 0.12;
 
 /// Material 3 default [InputDecoration.contentPadding] for an outlined field
 /// when the decoration leaves it null. Must stay in lockstep with
@@ -644,6 +735,7 @@ class VimOverlayHost extends StatelessWidget {
     required this.accentColor,
     required this.overlayPadding,
     required this.child,
+    this.snippetSession,
     this.scrollController,
     this.hintText,
     this.strutStyle,
@@ -652,6 +744,10 @@ class VimOverlayHost extends StatelessWidget {
   });
 
   final VimSession? session;
+
+  /// The field's snippet runtime, when it has one. Mounting the overlay for
+  /// this alone is what puts dotted tabstop marks on a field with Vim off.
+  final SnippetSession? snippetSession;
   final bool overlayPaintsSelection;
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -667,7 +763,8 @@ class VimOverlayHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (session == null && underlay == null) return child;
+    final overlayNeeded = session != null || snippetSession != null;
+    if (!overlayNeeded && underlay == null) return child;
 
     Widget field = Stack(
       fit: fit,
@@ -679,13 +776,14 @@ class VimOverlayHost extends StatelessWidget {
             ),
           ),
         child,
-        if (session != null)
+        if (overlayNeeded)
           Positioned.fill(
             child: IgnorePointer(
               child: Padding(
                 padding: overlayPadding,
                 child: VimTextOverlay(
-                  session: session!,
+                  session: session,
+                  snippetSession: snippetSession,
                   controller: controller,
                   focusNode: focusNode,
                   style: style,

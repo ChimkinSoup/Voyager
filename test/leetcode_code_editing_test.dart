@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
+import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
+import 'package:voyager/domain/models/snippet.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 
 TextEditingValue addChar(TextEditingValue v, String char) {
@@ -634,6 +637,67 @@ void main() {
       expect(titleFocus.hasFocus, isFalse);
 
       await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('text snippets never expand in the code box', (tester) async {
+      // Hard opt-out, per SNIPPET.md §2.3: an auto trigger firing inside code
+      // would rewrite the very text the box exists to show verbatim, and Tab
+      // here belongs to the indenter.
+      final controller = LeetCodeCodeController(text: 'e');
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: VimEnabledScope(
+            enabled: false,
+            child: SnippetEnabledScope(
+              data: SnippetScopeData(
+                enabled: true,
+                expandKey: SnippetExpandKey.tab,
+                index: SnippetIndex.from(const [
+                  Snippet(
+                    id: 'a',
+                    trigger: 'ee',
+                    replacement: 'EXPANDED',
+                    autoExpand: true,
+                  ),
+                ]),
+              ),
+              child: Scaffold(
+                body: LeetCodeCodeInput(
+                  controller: controller,
+                  language: 'python',
+                  onLanguageChanged: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final codeEditable = find.byWidgetPredicate(
+        (widget) => widget is EditableText && widget.controller == controller,
+      );
+      await tester.tap(codeEditable);
+      await tester.pumpAndSettle();
+      controller.selection = const TextSelection.collapsed(offset: 1);
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+      tester.state<EditableTextState>(codeEditable).updateEditingValue(
+        const TextEditingValue(
+          text: 'ee',
+          selection: TextSelection.collapsed(offset: 2),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(controller.text, 'ee');
+
+      // Long enough to drain CodeHistoryController's 5s debounce, which the
+      // edit above starts and the binding checks for on the way out.
+      await tester.pump(const Duration(seconds: 6));
     });
   });
 }

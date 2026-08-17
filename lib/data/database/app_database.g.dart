@@ -6731,6 +6731,44 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _snippetsEnabledMeta = const VerificationMeta(
+    'snippetsEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> snippetsEnabled = GeneratedColumn<bool>(
+    'snippets_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("snippets_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _snippetExpandKeyMeta = const VerificationMeta(
+    'snippetExpandKey',
+  );
+  @override
+  late final GeneratedColumn<String> snippetExpandKey = GeneratedColumn<String>(
+    'snippet_expand_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('tab'),
+  );
+  static const VerificationMeta _snippetsJsonMeta = const VerificationMeta(
+    'snippetsJson',
+  );
+  @override
+  late final GeneratedColumn<String> snippetsJson = GeneratedColumn<String>(
+    'snippets_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _deviceIdMeta = const VerificationMeta(
     'deviceId',
   );
@@ -7836,6 +7874,9 @@ class $SettingsTableTable extends SettingsTable
     alertTimeHour,
     hideCompletedTasks,
     vimModeEnabled,
+    snippetsEnabled,
+    snippetExpandKey,
+    snippetsJson,
     deviceId,
     lastViewedJournalId,
     lastViewedTodoListId,
@@ -8124,6 +8165,33 @@ class $SettingsTableTable extends SettingsTable
         vimModeEnabled.isAcceptableOrUnknown(
           data['vim_mode_enabled']!,
           _vimModeEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('snippets_enabled')) {
+      context.handle(
+        _snippetsEnabledMeta,
+        snippetsEnabled.isAcceptableOrUnknown(
+          data['snippets_enabled']!,
+          _snippetsEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('snippet_expand_key')) {
+      context.handle(
+        _snippetExpandKeyMeta,
+        snippetExpandKey.isAcceptableOrUnknown(
+          data['snippet_expand_key']!,
+          _snippetExpandKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('snippets_json')) {
+      context.handle(
+        _snippetsJsonMeta,
+        snippetsJson.isAcceptableOrUnknown(
+          data['snippets_json']!,
+          _snippetsJsonMeta,
         ),
       );
     }
@@ -8991,6 +9059,18 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}vim_mode_enabled'],
       )!,
+      snippetsEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}snippets_enabled'],
+      )!,
+      snippetExpandKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}snippet_expand_key'],
+      )!,
+      snippetsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}snippets_json'],
+      ),
       deviceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}device_id'],
@@ -9370,6 +9450,15 @@ class SettingsTableData extends DataClass
   final int alertTimeHour;
   final bool hideCompletedTasks;
   final bool vimModeEnabled;
+  final bool snippetsEnabled;
+
+  /// [SnippetExpandKey] name — 'tab' or 'space'.
+  final String snippetExpandKey;
+
+  /// The snippet list as a JSON array of [Snippet.toJson] maps. One column
+  /// rather than a table of its own: the list is small, always read whole, and
+  /// syncs as a single settings field.
+  final String? snippetsJson;
   final String? deviceId;
   final String? lastViewedJournalId;
   final String? lastViewedTodoListId;
@@ -9498,6 +9587,9 @@ class SettingsTableData extends DataClass
     required this.alertTimeHour,
     required this.hideCompletedTasks,
     required this.vimModeEnabled,
+    required this.snippetsEnabled,
+    required this.snippetExpandKey,
+    this.snippetsJson,
     this.deviceId,
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
@@ -9626,6 +9718,11 @@ class SettingsTableData extends DataClass
     map['alert_time_hour'] = Variable<int>(alertTimeHour);
     map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks);
     map['vim_mode_enabled'] = Variable<bool>(vimModeEnabled);
+    map['snippets_enabled'] = Variable<bool>(snippetsEnabled);
+    map['snippet_expand_key'] = Variable<String>(snippetExpandKey);
+    if (!nullToAbsent || snippetsJson != null) {
+      map['snippets_json'] = Variable<String>(snippetsJson);
+    }
     if (!nullToAbsent || deviceId != null) {
       map['device_id'] = Variable<String>(deviceId);
     }
@@ -9857,6 +9954,11 @@ class SettingsTableData extends DataClass
       alertTimeHour: Value(alertTimeHour),
       hideCompletedTasks: Value(hideCompletedTasks),
       vimModeEnabled: Value(vimModeEnabled),
+      snippetsEnabled: Value(snippetsEnabled),
+      snippetExpandKey: Value(snippetExpandKey),
+      snippetsJson: snippetsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(snippetsJson),
       deviceId: deviceId == null && nullToAbsent
           ? const Value.absent()
           : Value(deviceId),
@@ -10040,6 +10142,9 @@ class SettingsTableData extends DataClass
       alertTimeHour: serializer.fromJson<int>(json['alertTimeHour']),
       hideCompletedTasks: serializer.fromJson<bool>(json['hideCompletedTasks']),
       vimModeEnabled: serializer.fromJson<bool>(json['vimModeEnabled']),
+      snippetsEnabled: serializer.fromJson<bool>(json['snippetsEnabled']),
+      snippetExpandKey: serializer.fromJson<String>(json['snippetExpandKey']),
+      snippetsJson: serializer.fromJson<String?>(json['snippetsJson']),
       deviceId: serializer.fromJson<String?>(json['deviceId']),
       lastViewedJournalId: serializer.fromJson<String?>(
         json['lastViewedJournalId'],
@@ -10282,6 +10387,9 @@ class SettingsTableData extends DataClass
       'alertTimeHour': serializer.toJson<int>(alertTimeHour),
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
       'vimModeEnabled': serializer.toJson<bool>(vimModeEnabled),
+      'snippetsEnabled': serializer.toJson<bool>(snippetsEnabled),
+      'snippetExpandKey': serializer.toJson<String>(snippetExpandKey),
+      'snippetsJson': serializer.toJson<String?>(snippetsJson),
       'deviceId': serializer.toJson<String?>(deviceId),
       'lastViewedJournalId': serializer.toJson<String?>(lastViewedJournalId),
       'lastViewedTodoListId': serializer.toJson<String?>(lastViewedTodoListId),
@@ -10464,6 +10572,9 @@ class SettingsTableData extends DataClass
     int? alertTimeHour,
     bool? hideCompletedTasks,
     bool? vimModeEnabled,
+    bool? snippetsEnabled,
+    String? snippetExpandKey,
+    Value<String?> snippetsJson = const Value.absent(),
     Value<String?> deviceId = const Value.absent(),
     Value<String?> lastViewedJournalId = const Value.absent(),
     Value<String?> lastViewedTodoListId = const Value.absent(),
@@ -10582,6 +10693,9 @@ class SettingsTableData extends DataClass
     alertTimeHour: alertTimeHour ?? this.alertTimeHour,
     hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
     vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
+    snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+    snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
+    snippetsJson: snippetsJson.present ? snippetsJson.value : this.snippetsJson,
     deviceId: deviceId.present ? deviceId.value : this.deviceId,
     lastViewedJournalId: lastViewedJournalId.present
         ? lastViewedJournalId.value
@@ -10804,6 +10918,15 @@ class SettingsTableData extends DataClass
       vimModeEnabled: data.vimModeEnabled.present
           ? data.vimModeEnabled.value
           : this.vimModeEnabled,
+      snippetsEnabled: data.snippetsEnabled.present
+          ? data.snippetsEnabled.value
+          : this.snippetsEnabled,
+      snippetExpandKey: data.snippetExpandKey.present
+          ? data.snippetExpandKey.value
+          : this.snippetExpandKey,
+      snippetsJson: data.snippetsJson.present
+          ? data.snippetsJson.value
+          : this.snippetsJson,
       deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
       lastViewedJournalId: data.lastViewedJournalId.present
           ? data.lastViewedJournalId.value
@@ -11096,6 +11219,9 @@ class SettingsTableData extends DataClass
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
+          ..write('snippetsEnabled: $snippetsEnabled, ')
+          ..write('snippetExpandKey: $snippetExpandKey, ')
+          ..write('snippetsJson: $snippetsJson, ')
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
@@ -11234,6 +11360,9 @@ class SettingsTableData extends DataClass
     alertTimeHour,
     hideCompletedTasks,
     vimModeEnabled,
+    snippetsEnabled,
+    snippetExpandKey,
+    snippetsJson,
     deviceId,
     lastViewedJournalId,
     lastViewedTodoListId,
@@ -11350,6 +11479,9 @@ class SettingsTableData extends DataClass
           other.alertTimeHour == this.alertTimeHour &&
           other.hideCompletedTasks == this.hideCompletedTasks &&
           other.vimModeEnabled == this.vimModeEnabled &&
+          other.snippetsEnabled == this.snippetsEnabled &&
+          other.snippetExpandKey == this.snippetExpandKey &&
+          other.snippetsJson == this.snippetsJson &&
           other.deviceId == this.deviceId &&
           other.lastViewedJournalId == this.lastViewedJournalId &&
           other.lastViewedTodoListId == this.lastViewedTodoListId &&
@@ -11481,6 +11613,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<int> alertTimeHour;
   final Value<bool> hideCompletedTasks;
   final Value<bool> vimModeEnabled;
+  final Value<bool> snippetsEnabled;
+  final Value<String> snippetExpandKey;
+  final Value<String?> snippetsJson;
   final Value<String?> deviceId;
   final Value<String?> lastViewedJournalId;
   final Value<String?> lastViewedTodoListId;
@@ -11592,6 +11727,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
+    this.snippetsEnabled = const Value.absent(),
+    this.snippetExpandKey = const Value.absent(),
+    this.snippetsJson = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
@@ -11704,6 +11842,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.alertTimeHour = const Value.absent(),
     this.hideCompletedTasks = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
+    this.snippetsEnabled = const Value.absent(),
+    this.snippetExpandKey = const Value.absent(),
+    this.snippetsJson = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
@@ -11816,6 +11957,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<int>? alertTimeHour,
     Expression<bool>? hideCompletedTasks,
     Expression<bool>? vimModeEnabled,
+    Expression<bool>? snippetsEnabled,
+    Expression<String>? snippetExpandKey,
+    Expression<String>? snippetsJson,
     Expression<String>? deviceId,
     Expression<String>? lastViewedJournalId,
     Expression<String>? lastViewedTodoListId,
@@ -11938,6 +12082,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (hideCompletedTasks != null)
         'hide_completed_tasks': hideCompletedTasks,
       if (vimModeEnabled != null) 'vim_mode_enabled': vimModeEnabled,
+      if (snippetsEnabled != null) 'snippets_enabled': snippetsEnabled,
+      if (snippetExpandKey != null) 'snippet_expand_key': snippetExpandKey,
+      if (snippetsJson != null) 'snippets_json': snippetsJson,
       if (deviceId != null) 'device_id': deviceId,
       if (lastViewedJournalId != null)
         'last_viewed_journal_id': lastViewedJournalId,
@@ -12116,6 +12263,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<int>? alertTimeHour,
     Value<bool>? hideCompletedTasks,
     Value<bool>? vimModeEnabled,
+    Value<bool>? snippetsEnabled,
+    Value<String>? snippetExpandKey,
+    Value<String?>? snippetsJson,
     Value<String?>? deviceId,
     Value<String?>? lastViewedJournalId,
     Value<String?>? lastViewedTodoListId,
@@ -12233,6 +12383,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
+      snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+      snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
+      snippetsJson: snippetsJson ?? this.snippetsJson,
       deviceId: deviceId ?? this.deviceId,
       lastViewedJournalId: lastViewedJournalId ?? this.lastViewedJournalId,
       lastViewedTodoListId: lastViewedTodoListId ?? this.lastViewedTodoListId,
@@ -12455,6 +12608,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (vimModeEnabled.present) {
       map['vim_mode_enabled'] = Variable<bool>(vimModeEnabled.value);
+    }
+    if (snippetsEnabled.present) {
+      map['snippets_enabled'] = Variable<bool>(snippetsEnabled.value);
+    }
+    if (snippetExpandKey.present) {
+      map['snippet_expand_key'] = Variable<String>(snippetExpandKey.value);
+    }
+    if (snippetsJson.present) {
+      map['snippets_json'] = Variable<String>(snippetsJson.value);
     }
     if (deviceId.present) {
       map['device_id'] = Variable<String>(deviceId.value);
@@ -12848,6 +13010,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('alertTimeHour: $alertTimeHour, ')
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
+          ..write('snippetsEnabled: $snippetsEnabled, ')
+          ..write('snippetExpandKey: $snippetExpandKey, ')
+          ..write('snippetsJson: $snippetsJson, ')
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
@@ -13391,6 +13556,15 @@ class $SyncConflictsTableTable extends SyncConflictsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -13403,6 +13577,7 @@ class $SyncConflictsTableTable extends SyncConflictsTable
     localText,
     remoteText,
     detectedAt,
+    reason,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -13494,6 +13669,12 @@ class $SyncConflictsTableTable extends SyncConflictsTable
     } else if (isInserting) {
       context.missing(_detectedAtMeta);
     }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    }
     return context;
   }
 
@@ -13543,6 +13724,10 @@ class $SyncConflictsTableTable extends SyncConflictsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}detected_at'],
       )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      ),
     );
   }
 
@@ -13564,6 +13749,10 @@ class SyncConflictsTableData extends DataClass
   final String? localText;
   final String? remoteText;
   final DateTime detectedAt;
+
+  /// [SyncConflictReason.storageValue]; null for rows written before the
+  /// detector recorded which of its checks fired.
+  final String? reason;
   const SyncConflictsTableData({
     required this.id,
     required this.collection,
@@ -13575,6 +13764,7 @@ class SyncConflictsTableData extends DataClass
     this.localText,
     this.remoteText,
     required this.detectedAt,
+    this.reason,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -13597,6 +13787,9 @@ class SyncConflictsTableData extends DataClass
       map['remote_text'] = Variable<String>(remoteText);
     }
     map['detected_at'] = Variable<DateTime>(detectedAt);
+    if (!nullToAbsent || reason != null) {
+      map['reason'] = Variable<String>(reason);
+    }
     return map;
   }
 
@@ -13620,6 +13813,9 @@ class SyncConflictsTableData extends DataClass
           ? const Value.absent()
           : Value(remoteText),
       detectedAt: Value(detectedAt),
+      reason: reason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reason),
     );
   }
 
@@ -13639,6 +13835,7 @@ class SyncConflictsTableData extends DataClass
       localText: serializer.fromJson<String?>(json['localText']),
       remoteText: serializer.fromJson<String?>(json['remoteText']),
       detectedAt: serializer.fromJson<DateTime>(json['detectedAt']),
+      reason: serializer.fromJson<String?>(json['reason']),
     );
   }
   @override
@@ -13655,6 +13852,7 @@ class SyncConflictsTableData extends DataClass
       'localText': serializer.toJson<String?>(localText),
       'remoteText': serializer.toJson<String?>(remoteText),
       'detectedAt': serializer.toJson<DateTime>(detectedAt),
+      'reason': serializer.toJson<String?>(reason),
     };
   }
 
@@ -13669,6 +13867,7 @@ class SyncConflictsTableData extends DataClass
     Value<String?> localText = const Value.absent(),
     Value<String?> remoteText = const Value.absent(),
     DateTime? detectedAt,
+    Value<String?> reason = const Value.absent(),
   }) => SyncConflictsTableData(
     id: id ?? this.id,
     collection: collection ?? this.collection,
@@ -13680,6 +13879,7 @@ class SyncConflictsTableData extends DataClass
     localText: localText.present ? localText.value : this.localText,
     remoteText: remoteText.present ? remoteText.value : this.remoteText,
     detectedAt: detectedAt ?? this.detectedAt,
+    reason: reason.present ? reason.value : this.reason,
   );
   SyncConflictsTableData copyWithCompanion(SyncConflictsTableCompanion data) {
     return SyncConflictsTableData(
@@ -13709,6 +13909,7 @@ class SyncConflictsTableData extends DataClass
       detectedAt: data.detectedAt.present
           ? data.detectedAt.value
           : this.detectedAt,
+      reason: data.reason.present ? data.reason.value : this.reason,
     );
   }
 
@@ -13724,7 +13925,8 @@ class SyncConflictsTableData extends DataClass
           ..write('remoteTitle: $remoteTitle, ')
           ..write('localText: $localText, ')
           ..write('remoteText: $remoteText, ')
-          ..write('detectedAt: $detectedAt')
+          ..write('detectedAt: $detectedAt, ')
+          ..write('reason: $reason')
           ..write(')'))
         .toString();
   }
@@ -13741,6 +13943,7 @@ class SyncConflictsTableData extends DataClass
     localText,
     remoteText,
     detectedAt,
+    reason,
   );
   @override
   bool operator ==(Object other) =>
@@ -13755,7 +13958,8 @@ class SyncConflictsTableData extends DataClass
           other.remoteTitle == this.remoteTitle &&
           other.localText == this.localText &&
           other.remoteText == this.remoteText &&
-          other.detectedAt == this.detectedAt);
+          other.detectedAt == this.detectedAt &&
+          other.reason == this.reason);
 }
 
 class SyncConflictsTableCompanion
@@ -13770,6 +13974,7 @@ class SyncConflictsTableCompanion
   final Value<String?> localText;
   final Value<String?> remoteText;
   final Value<DateTime> detectedAt;
+  final Value<String?> reason;
   final Value<int> rowid;
   const SyncConflictsTableCompanion({
     this.id = const Value.absent(),
@@ -13782,6 +13987,7 @@ class SyncConflictsTableCompanion
     this.localText = const Value.absent(),
     this.remoteText = const Value.absent(),
     this.detectedAt = const Value.absent(),
+    this.reason = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SyncConflictsTableCompanion.insert({
@@ -13795,6 +14001,7 @@ class SyncConflictsTableCompanion
     this.localText = const Value.absent(),
     this.remoteText = const Value.absent(),
     required DateTime detectedAt,
+    this.reason = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        collection = Value(collection),
@@ -13813,6 +14020,7 @@ class SyncConflictsTableCompanion
     Expression<String>? localText,
     Expression<String>? remoteText,
     Expression<DateTime>? detectedAt,
+    Expression<String>? reason,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -13826,6 +14034,7 @@ class SyncConflictsTableCompanion
       if (localText != null) 'local_text': localText,
       if (remoteText != null) 'remote_text': remoteText,
       if (detectedAt != null) 'detected_at': detectedAt,
+      if (reason != null) 'reason': reason,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -13841,6 +14050,7 @@ class SyncConflictsTableCompanion
     Value<String?>? localText,
     Value<String?>? remoteText,
     Value<DateTime>? detectedAt,
+    Value<String?>? reason,
     Value<int>? rowid,
   }) {
     return SyncConflictsTableCompanion(
@@ -13854,6 +14064,7 @@ class SyncConflictsTableCompanion
       localText: localText ?? this.localText,
       remoteText: remoteText ?? this.remoteText,
       detectedAt: detectedAt ?? this.detectedAt,
+      reason: reason ?? this.reason,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -13891,6 +14102,9 @@ class SyncConflictsTableCompanion
     if (detectedAt.present) {
       map['detected_at'] = Variable<DateTime>(detectedAt.value);
     }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -13910,6 +14124,7 @@ class SyncConflictsTableCompanion
           ..write('localText: $localText, ')
           ..write('remoteText: $remoteText, ')
           ..write('detectedAt: $detectedAt, ')
+          ..write('reason: $reason, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -31015,6 +31230,9 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
       Value<bool> vimModeEnabled,
+      Value<bool> snippetsEnabled,
+      Value<String> snippetExpandKey,
+      Value<String?> snippetsJson,
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
@@ -31128,6 +31346,9 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<int> alertTimeHour,
       Value<bool> hideCompletedTasks,
       Value<bool> vimModeEnabled,
+      Value<bool> snippetsEnabled,
+      Value<String> snippetExpandKey,
+      Value<String?> snippetsJson,
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
@@ -31342,6 +31563,21 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get vimModeEnabled => $composableBuilder(
     column: $table.vimModeEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get snippetsEnabled => $composableBuilder(
+    column: $table.snippetsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get snippetExpandKey => $composableBuilder(
+    column: $table.snippetExpandKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get snippetsJson => $composableBuilder(
+    column: $table.snippetsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -31909,6 +32145,21 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get snippetsEnabled => $composableBuilder(
+    column: $table.snippetsEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get snippetExpandKey => $composableBuilder(
+    column: $table.snippetExpandKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get snippetsJson => $composableBuilder(
+    column: $table.snippetsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get deviceId => $composableBuilder(
     column: $table.deviceId,
     builder: (column) => ColumnOrderings(column),
@@ -32471,6 +32722,21 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get snippetsEnabled => $composableBuilder(
+    column: $table.snippetsEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get snippetExpandKey => $composableBuilder(
+    column: $table.snippetExpandKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get snippetsJson => $composableBuilder(
+    column: $table.snippetsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
 
@@ -32968,6 +33234,9 @@ class $$SettingsTableTableTableManager
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
+                Value<bool> snippetsEnabled = const Value.absent(),
+                Value<String> snippetExpandKey = const Value.absent(),
+                Value<String?> snippetsJson = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
@@ -33097,6 +33366,9 @@ class $$SettingsTableTableTableManager
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
                 vimModeEnabled: vimModeEnabled,
+                snippetsEnabled: snippetsEnabled,
+                snippetExpandKey: snippetExpandKey,
+                snippetsJson: snippetsJson,
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
@@ -33214,6 +33486,9 @@ class $$SettingsTableTableTableManager
                 Value<int> alertTimeHour = const Value.absent(),
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
+                Value<bool> snippetsEnabled = const Value.absent(),
+                Value<String> snippetExpandKey = const Value.absent(),
+                Value<String?> snippetsJson = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
@@ -33343,6 +33618,9 @@ class $$SettingsTableTableTableManager
                 alertTimeHour: alertTimeHour,
                 hideCompletedTasks: hideCompletedTasks,
                 vimModeEnabled: vimModeEnabled,
+                snippetsEnabled: snippetsEnabled,
+                snippetExpandKey: snippetExpandKey,
+                snippetsJson: snippetsJson,
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
@@ -33659,6 +33937,7 @@ typedef $$SyncConflictsTableTableCreateCompanionBuilder =
       Value<String?> localText,
       Value<String?> remoteText,
       required DateTime detectedAt,
+      Value<String?> reason,
       Value<int> rowid,
     });
 typedef $$SyncConflictsTableTableUpdateCompanionBuilder =
@@ -33673,6 +33952,7 @@ typedef $$SyncConflictsTableTableUpdateCompanionBuilder =
       Value<String?> localText,
       Value<String?> remoteText,
       Value<DateTime> detectedAt,
+      Value<String?> reason,
       Value<int> rowid,
     });
 
@@ -33732,6 +34012,11 @@ class $$SyncConflictsTableTableFilterComposer
 
   ColumnFilters<DateTime> get detectedAt => $composableBuilder(
     column: $table.detectedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -33794,6 +34079,11 @@ class $$SyncConflictsTableTableOrderingComposer
     column: $table.detectedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncConflictsTableTableAnnotationComposer
@@ -33850,6 +34140,9 @@ class $$SyncConflictsTableTableAnnotationComposer
     column: $table.detectedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
 }
 
 class $$SyncConflictsTableTableTableManager
@@ -33902,6 +34195,7 @@ class $$SyncConflictsTableTableTableManager
                 Value<String?> localText = const Value.absent(),
                 Value<String?> remoteText = const Value.absent(),
                 Value<DateTime> detectedAt = const Value.absent(),
+                Value<String?> reason = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncConflictsTableCompanion(
                 id: id,
@@ -33914,6 +34208,7 @@ class $$SyncConflictsTableTableTableManager
                 localText: localText,
                 remoteText: remoteText,
                 detectedAt: detectedAt,
+                reason: reason,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -33928,6 +34223,7 @@ class $$SyncConflictsTableTableTableManager
                 Value<String?> localText = const Value.absent(),
                 Value<String?> remoteText = const Value.absent(),
                 required DateTime detectedAt,
+                Value<String?> reason = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SyncConflictsTableCompanion.insert(
                 id: id,
@@ -33940,6 +34236,7 @@ class $$SyncConflictsTableTableTableManager
                 localText: localText,
                 remoteText: remoteText,
                 detectedAt: detectedAt,
+                reason: reason,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

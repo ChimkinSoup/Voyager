@@ -124,6 +124,7 @@ class VimSession {
     required this.textController,
     required this.resolveEditableState,
     required this.isMultiline,
+    this.trySnippetUndo,
   });
 
   final TextEditingController textController;
@@ -141,6 +142,13 @@ class VimSession {
   /// reinterpret `o`/`O` as plain Insert-mode entry instead of splitting the
   /// value with a newline the field could never render.
   final bool Function() isMultiline;
+
+  /// Tries to revert the last snippet expansion as one undo atom.
+  ///
+  /// Wired live by `VimTextScope` so Normal `u` can share `SnippetSession`'s
+  /// undo path without holding a session that settings sync may recreate.
+  /// Null in tests that do not care, and a no-op when snippets are off.
+  final bool Function()? trySnippetUndo;
 
   /// Undo stack for the host field, driven by `u` and `<C-r>`.
   ///
@@ -413,6 +421,44 @@ class VimSession {
         ),
       );
     }
+  }
+
+  /// Undoes the select-all a field does when focus comes back to it after a
+  /// window switch, putting [selection] — what Vim had before the switch —
+  /// back.
+  ///
+  /// The mode survives that switch (see `VimTextScope`), but the selection
+  /// underneath it does not: desktop [EditableText] selects the whole of a
+  /// single-line field whenever it takes focus, and the framework hands the
+  /// focus back by itself when the window returns. Normal mode would come back
+  /// with its caret at the end of the field, and Visual mode with its range
+  /// painted over everything.
+  ///
+  /// Narrowed to exactly that case — the field is now selected end to end and
+  /// was not before — because the way *back* into a field can also be a click
+  /// in it, and a caret the user placed themselves must stay where they put
+  /// it. Same rule, for the same reason, as
+  /// `PreserveSelectionOnAppResume.restoreIfSelectAll`.
+  void restoreSelection(TextSelection selection) {
+    if (_disposed || !selection.isValid) return;
+    final max = _text.length;
+    if (max == 0) return;
+    final current = textController.selection;
+    if (!current.isValid || current.isCollapsed) return;
+    if (current.start != 0 || current.end != max) return;
+    if (selection.start == 0 && selection.end == max) return;
+    final restored = TextSelection(
+      baseOffset: selection.baseOffset.clamp(0, max),
+      extentOffset: selection.extentOffset.clamp(0, max),
+      affinity: selection.affinity,
+    );
+    if (textController.selection == restored) return;
+    _applyValue(
+      textController.value.copyWith(
+        selection: restored,
+        composing: TextRange.empty,
+      ),
+    );
   }
 
   /// `Esc` from Insert: commit the dot-record (command + the text just typed)
@@ -1070,12 +1116,16 @@ class VimSession {
         if (mode.isVisual) {
           _applyCaseOverRange(_visualRange(), VimCaseOp.toLower);
         } else {
+          // Prefer reverting a still-valid snippet expansion (same atom as
+          // Ctrl/Cmd+Z). Esc steps the caret back, so this path matches on
+          // text only — see SnippetSession.undoLastExpansion.
+          final undone = trySnippetUndo?.call() ?? false;
           // Flutter UndoHistory asserts the restored value sticks after
           // onTriggered. Journal/dream/todo `onChanged` handlers call
           // applyListEditing, which would rewrite numbered lists mid-restore
           // and trip `widget.value.value == nextValue`. Suspend those writes
           // for the restore; gate on canUndo so a no-op `u` stays quiet.
-          if (undoController.value.canUndo) {
+          if (!undone && undoController.value.canUndo) {
             suppressListEditingWrites(undoController.undo);
           }
           _clearPending();

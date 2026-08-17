@@ -33,7 +33,7 @@ class LabeledTextField extends StatefulWidget {
     this.dense = false,
     this.borderRadius,
     this.alignLabelToTop,
-    this.modeBadgeOutside = false,
+    this.snippetsAllowed = true,
   });
 
   final String label;
@@ -62,9 +62,9 @@ class LabeledTextField extends StatefulWidget {
   final double? borderRadius;
   final bool? alignLabelToTop;
 
-  /// See [VimTextScope.modeBadgeOutside]. Default false: keep the capsule
-  /// inside the field.
-  final bool modeBadgeOutside;
+  /// Whether text snippets may expand here. Set false for a field that edits
+  /// snippets themselves, where a trigger has to stay literal.
+  final bool snippetsAllowed;
 
   @override
   State<LabeledTextField> createState() => _LabeledTextFieldState();
@@ -154,17 +154,18 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
 
   @override
   Widget build(BuildContext context) {
+    // Snippets share Vim's field-suitability rule but not its enable switch,
+    // so the predicate is hoisted out and the two are gated separately.
+    final suits = vimSuitsField(
+      obscureText: widget.obscureText,
+      keyboardType: widget.keyboardType,
+    );
     return VimTextScope(
-      enabled:
-          VimEnabledScope.of(context) &&
-          vimSuitsField(
-            obscureText: widget.obscureText,
-            keyboardType: widget.keyboardType,
-          ),
+      enabled: VimEnabledScope.of(context) && suits,
+      snippetsAllowed: widget.snippetsAllowed && suits,
       controller: widget.controller,
       multiline: _spellcheckOn,
       accentColor: widget.accentColor,
-      modeBadgeOutside: widget.modeBadgeOutside,
       builder: _buildField,
     );
   }
@@ -192,13 +193,18 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       minLines: widget.minLines,
     );
 
-    var textStyle = theme.textTheme.bodyLarge?.copyWith(
-      color: theme.colorScheme.onSurface,
-      height: widget.dense ? 1.0 : null,
-    );
-    // A dense *single-line* field keeps the 1.0 that makes it short. A dense
-    // multi-line one is also spellchecked, and 1.0 leaves its squiggles
-    // nowhere to go but the next line — see [withSquiggleRoom].
+    // Dense fields use bodyMedium so the resting floating label fits the
+    // short box (snippet Trigger/Replacement). Pin height to 1.0 so every
+    // dense field — single or multi-line — shares one compact size ladder.
+    var textStyle = (widget.dense
+            ? theme.textTheme.bodyMedium
+            : theme.textTheme.bodyLarge)
+        ?.copyWith(
+          color: theme.colorScheme.onSurface,
+          height: widget.dense ? 1.0 : null,
+        );
+    // A dense multi-line field is also spellchecked, and 1.0 leaves its
+    // squiggles nowhere to go but the next line — see [withSquiggleRoom].
     if (spellcheckOn && textStyle != null) {
       textStyle = withSquiggleRoom(textStyle);
     }
@@ -263,6 +269,8 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       cursorWidth: vim.overlayCaretWidth,
     );
     final vimSession = vim.session;
+    final snippetSession = vim.snippetSession;
+    final needsTextOverlay = vimSession != null || snippetSession != null;
 
     // Same predicate as [spellcheckOn]: only a wrapped paragraph can show the
     // ragged block and the seam that [SelectionHighlightLayer] exists to fix,
@@ -273,7 +281,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     // highlight, or it would come back transparent.
     final selectionColor = resolveSelectionColor(context);
 
-    if (spellcheckOn || vimSession != null) {
+    if (spellcheckOn || needsTextOverlay) {
       field = Stack(
         fit: StackFit.passthrough,
         children: [
@@ -318,14 +326,17 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
               ),
             ),
           field,
-          // Above the field, not behind it — see [VimTextOverlay].
-          if (vimSession != null)
+          // Above the field, not behind it — see [VimTextOverlay]. Mounted for
+          // a snippet session too, which is what puts dotted tabstop marks on
+          // a field with Vim switched off.
+          if (needsTextOverlay)
             Positioned.fill(
               child: IgnorePointer(
                 child: Padding(
                   padding: overlayPadding,
                   child: VimTextOverlay(
                     session: vimSession,
+                    snippetSession: snippetSession,
                     controller: widget.controller,
                     focusNode: _focusNode,
                     style: textStyle ?? const TextStyle(),
@@ -379,6 +390,9 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       focusNode: _focusNode,
       accentColor: accent,
       label: showLabel ? widget.label : null,
+      // Match [TagHighlightedTextField]: resting label uses the field's text
+      // metrics so dense/non-dense stay aligned with what will be typed.
+      labelStyle: showLabel ? textStyle : null,
       hasContent: _hasText,
       enabled: widget.enabled,
       contentPadding: contentPadding,

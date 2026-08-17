@@ -1078,7 +1078,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                         hintText: 'Add subtask',
                         controller: _subtaskController,
                         focusNode: _subtaskFocusNode,
-                        modeBadgeOutside: true,
                         accentColor: listColor,
                         dense: true,
                         borderRadius: 12,
@@ -1326,7 +1325,6 @@ class _SubtaskRowState extends State<_SubtaskRow>
                         enabled: VimEnabledScope.of(context) && vimSuitsField(),
                         controller: _editController,
                         multiline: false,
-                        modeBadgeOutside: true,
                         builder: (context, vim) {
                           final theme = Theme.of(context);
                           final fieldStyle = textStyle ?? const TextStyle();
@@ -1336,6 +1334,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
                           );
                           return VimOverlayHost(
                             session: vim.session,
+              snippetSession: vim.snippetSession,
                             overlayPaintsSelection: vim.overlayPaintsSelection,
                             controller: _editController,
                             focusNode: _editFocusNode,

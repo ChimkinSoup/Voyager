@@ -256,6 +256,15 @@ class _SyncConflictResolutionDialogState
                     isJournal ? 'Journal entry' : 'Todo task',
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _reasonExplanation(conflict.reason),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
                   if (showDocumentIds) ...[
                     const SizedBox(height: 8),
                     _ConflictDocumentIds(conflict: conflict),
@@ -375,6 +384,22 @@ class _SyncConflictResolutionDialogState
         ],
       ),
     );
+  }
+}
+
+/// What the detector actually objected to, so the dialog says why this
+/// document is here and not just that it is.
+String _reasonExplanation(SyncConflictReason? reason) {
+  switch (reason) {
+    case SyncConflictReason.corruptedOpChain:
+      return "Why: the remote edit history couldn't be replayed into "
+          'determinate text.';
+    case SyncConflictReason.hardMetadataCollision:
+      return 'Why: both copies claim the same version and edit time but '
+          'their details differ, so neither one is the later write.';
+    case null:
+      return 'Why: not recorded — this conflict was detected by an older '
+          'build.';
   }
 }
 

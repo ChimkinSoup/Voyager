@@ -41,7 +41,7 @@ class VoyagerTextField extends StatefulWidget {
     this.borderRadius,
     this.tagScope,
     this.onKeyEvent,
-    this.modeBadgeOutside = false,
+    this.snippetsAllowed = true,
   }) : assert(
          tagScope == null || controller != null,
          'Tag completion reads and rewrites the field text, so it needs a '
@@ -85,9 +85,9 @@ class VoyagerTextField extends StatefulWidget {
   /// they reach the caret.
   final FocusOnKeyEventCallback? onKeyEvent;
 
-  /// See [VimTextScope.modeBadgeOutside]. Default false: keep the capsule
-  /// inside the field.
-  final bool modeBadgeOutside;
+  /// Whether text snippets may expand here. Set false for a field that edits
+  /// snippets themselves, where a trigger has to stay literal.
+  final bool snippetsAllowed;
 
   @override
   State<VoyagerTextField> createState() => _VoyagerTextFieldState();
@@ -159,18 +159,20 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
 
   @override
   Widget build(BuildContext context) {
+    // Snippets share Vim's field-suitability rule but not its enable switch,
+    // so the predicate is hoisted out and the two are gated separately.
+    final suits = vimSuitsField(
+      obscureText: widget.obscureText,
+      keyboardType: widget.keyboardType,
+      inputFormatters: widget.inputFormatters,
+      maxLength: widget.maxLength,
+    );
     return VimTextScope(
-      enabled:
-          VimEnabledScope.of(context) &&
-          vimSuitsField(
-            obscureText: widget.obscureText,
-            keyboardType: widget.keyboardType,
-            inputFormatters: widget.inputFormatters,
-          ),
+      enabled: VimEnabledScope.of(context) && suits,
+      snippetsAllowed: widget.snippetsAllowed && suits,
       controller: widget.controller,
       multiline: _spellcheckOn,
       accentColor: widget.accentColor,
-      modeBadgeOutside: widget.modeBadgeOutside,
       builder: _buildField,
     );
   }
@@ -310,6 +312,8 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       cursorWidth: vim.overlayCaretWidth,
     );
     final vimSession = vim.session;
+    final snippetSession = vim.snippetSession;
+    final needsTextOverlay = vimSession != null || snippetSession != null;
     final controller = widget.controller;
 
     // Same predicate as [spellcheckOn]: only a wrapped paragraph can show the
@@ -322,7 +326,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     // highlight, or it would come back transparent.
     final selectionColor = resolveSelectionColor(context);
 
-    if (controller != null && (spellcheckOn || vimSession != null)) {
+    if (controller != null && (spellcheckOn || needsTextOverlay)) {
       field = Stack(
         fit: StackFit.passthrough,
         children: [
@@ -367,14 +371,17 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
               ),
             ),
           field,
-          // Above the field, not behind it — see [VimTextOverlay].
-          if (vimSession != null)
+          // Above the field, not behind it — see [VimTextOverlay]. Mounted for
+          // a snippet session too, which is what puts dotted tabstop marks on
+          // a field with Vim switched off.
+          if (needsTextOverlay)
             Positioned.fill(
               child: IgnorePointer(
                 child: Padding(
                   padding: overlayPadding,
                   child: VimTextOverlay(
                     session: vimSession,
+                    snippetSession: snippetSession,
                     controller: controller,
                     focusNode: _focusNode,
                     style: textStyle ?? const TextStyle(),

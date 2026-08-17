@@ -2057,6 +2057,9 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'alertTimeHour': s.alertTimeHour,
   'hideCompletedTasks': s.hideCompletedTasks,
   'vimModeEnabled': s.vimModeEnabled,
+  'snippetsEnabled': s.snippetsEnabled,
+  'snippetExpandKey': s.snippetExpandKey.name,
+  'snippets': [for (final snippet in s.snippets) snippet.toJson()],
   'lastViewedJournalId': s.lastViewedJournalId,
   'lastViewedTodoListId': s.lastViewedTodoListId,
   'journalShowAllEntries': s.journalShowAllEntries,
@@ -2177,6 +2180,18 @@ AppSettings mergeSettingsFromRemote(
     alertTimeHour: _remoteInt(data, 'alertTimeHour'),
     hideCompletedTasks: data['hideCompletedTasks'] as bool?,
     vimModeEnabled: data['vimModeEnabled'] as bool?,
+    snippetsEnabled: data['snippetsEnabled'] as bool?,
+    snippetExpandKey: _enumFromName(
+      SnippetExpandKey.values,
+      data['snippetExpandKey'],
+      local.snippetExpandKey,
+    ),
+    // Absent means "this document predates snippets", which must leave the
+    // local list alone; present-but-empty is a real "the user deleted them
+    // all" and has to come through as an empty list, not as unspecified.
+    snippets: data.containsKey('snippets')
+        ? Snippet.listFromJson(data['snippets'])
+        : null,
     lastViewedJournalId: data['lastViewedJournalId'] as String?,
     clearLastViewedJournalId: _remoteClears(data, 'lastViewedJournalId'),
     lastViewedTodoListId: data['lastViewedTodoListId'] as String?,

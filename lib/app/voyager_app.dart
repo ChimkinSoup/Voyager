@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
+import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/text/preserve_selection_on_app_resume.dart';
@@ -95,6 +96,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     final vimEnabled = ref.watch(
       settingsProvider.select((s) => s.value?.vimModeEnabled ?? false),
     );
+    final snippetScope = ref.watch(snippetScopeProvider);
 
     return MaterialApp.router(
       title: 'Voyager',
@@ -107,16 +109,19 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
           // its overlay — see the same Vim setting as the page behind them.
           child: VimEnabledScope(
             enabled: vimEnabled,
-            child: Stack(
-              children: [
-                const _AppBackground(),
-                RepaintBoundary(
-                  child: DefaultTextStyle(
-                    style: AppFonts.style(color: theme.colorScheme.onSurface),
-                    child: child ?? const SizedBox.shrink(),
+            child: SnippetEnabledScope(
+              data: snippetScope,
+              child: Stack(
+                children: [
+                  const _AppBackground(),
+                  RepaintBoundary(
+                    child: DefaultTextStyle(
+                      style: AppFonts.style(color: theme.colorScheme.onSurface),
+                      child: child ?? const SizedBox.shrink(),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

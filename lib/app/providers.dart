@@ -17,6 +17,8 @@ import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
 import 'package:voyager/core/dev/sync_compare_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
+import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
+import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/spellcheck/dictionary_loader.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/sync/connectivity_status.dart';
@@ -547,6 +549,45 @@ final colorPaletteProvider = Provider<List<int>>((ref) {
       defaultColorPalette;
 });
 
+/// The user's snippet settings in the form every text field reads them.
+///
+/// A provider rather than a plain read so the [SnippetIndex] — which buckets
+/// triggers for the keystroke path — is compiled once per settings change and
+/// then shared by every mounted field, instead of being rebuilt on each app
+/// rebuild.
+///
+/// An unrelated settings write must not reach a field, because re-publishing
+/// the index tears down whatever tabstop session that field has open. Two
+/// things enforce that, and both are needed:
+///
+///  * the [select] here, which holds the snippet list by identity —
+///    [AppSettings.copyWith] passes the same instance through when snippets
+///    are not the field being changed, so a toggle elsewhere stops right here;
+///  * [SnippetIndex]'s value equality, for `ref.invalidate(settingsProvider)`,
+///    which re-reads the row and so *does* hand back a new list instance. The
+///    index compiled from it compares equal, so [SnippetScopeData] does too and
+///    `updateShouldNotify` stays false.
+final snippetScopeProvider = Provider<SnippetScopeData>((ref) {
+  final config = ref.watch(
+    settingsProvider.select((async) {
+      final settings = async.valueOrNull;
+      return (
+        enabled: settings?.snippetsEnabled ?? false,
+        expandKey: settings?.snippetExpandKey,
+        snippets: settings?.snippets,
+      );
+    }),
+  );
+  final expandKey = config.expandKey;
+  final snippets = config.snippets;
+  if (expandKey == null || snippets == null) return SnippetScopeData.disabled;
+  return SnippetScopeData(
+    enabled: config.enabled,
+    expandKey: expandKey,
+    index: SnippetIndex.from(snippets),
+  );
+});
+
 /// The active theme mode. Watched narrowly so a theme flip rebuilds
 /// [MaterialApp] but nothing else re-derives from it.
 final themeModeProvider = Provider<AppThemeMode>((ref) {
@@ -1037,7 +1078,10 @@ final dictionaryProvider = FutureProvider<Set<String>>((ref) {
   return loadDictionaryFromAssets();
 });
 
-/// User-added spellcheck dictionary words, local-only (never synced).
+/// User-added spellcheck dictionary words. Synced: the rows go up through the
+/// repository's [SyncedWriteNotifier] path, and a removal travels as a
+/// tombstone so it reaches the user's other devices. Managed in the Dictionary
+/// settings dialog, and added to from the misspelling popup.
 final customWordsProvider = FutureProvider<Set<String>>((ref) {
   ref.keepAlive();
   return ref.watch(settingsRepositoryProvider).getCustomWords();

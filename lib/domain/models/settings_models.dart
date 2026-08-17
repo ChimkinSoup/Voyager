@@ -1,9 +1,11 @@
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/snippet.dart';
 
 export 'package:voyager/domain/models/enums.dart'
-    show GeometricWaveShape, AppThemeMode, WeightUnit;
+    show GeometricWaveShape, AppThemeMode, WeightUnit, SnippetExpandKey;
+export 'package:voyager/domain/models/snippet.dart' show Snippet;
 
 /// Default petal tint for the light theme — a dusty watercolor rose, kept
 /// separate from the accent color so the petals never fight the UI's own
@@ -39,6 +41,9 @@ class AppSettings {
     this.alertTimeHour = 9,
     this.hideCompletedTasks = false,
     this.vimModeEnabled = false,
+    this.snippetsEnabled = true,
+    this.snippetExpandKey = SnippetExpandKey.tab,
+    this.snippets = const [],
     this.deviceId,
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
@@ -186,6 +191,20 @@ class AppSettings {
 
   /// Whether Vim keybindings are active in the app's text boxes.
   final bool vimModeEnabled;
+
+  /// Master switch for text snippets. On by default, which is free: the list
+  /// ships empty, and an empty list can never expand anything.
+  ///
+  /// Deliberately independent of [vimModeEnabled] — snippets run in the same
+  /// fields Vim would suit, whether or not Vim itself is switched on.
+  final bool snippetsEnabled;
+
+  /// Which key expands a non-auto snippet. Global rather than per-snippet.
+  final SnippetExpandKey snippetExpandKey;
+
+  /// The user's snippets, in the order the settings list shows them. Triggers
+  /// are unique; the settings editor is what enforces that.
+  final List<Snippet> snippets;
   final String? deviceId;
   final String? lastViewedJournalId;
   final String? lastViewedTodoListId;
@@ -346,6 +365,9 @@ class AppSettings {
     String? srsEasyKey,
     bool? hideCompletedTasks,
     bool? vimModeEnabled,
+    bool? snippetsEnabled,
+    SnippetExpandKey? snippetExpandKey,
+    List<Snippet>? snippets,
     bool? timelineModeYearZero,
     int? birthYear,
     bool clearBirthYear = false,
@@ -492,6 +514,9 @@ class AppSettings {
       alertTimeHour: alertTimeHour ?? this.alertTimeHour,
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
+      snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+      snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
+      snippets: snippets ?? this.snippets,
       deviceId: deviceId ?? this.deviceId,
       lastViewedJournalId: clearLastViewedJournalId
           ? null

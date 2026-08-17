@@ -4,6 +4,13 @@ Text expansion shortcuts inspired by [Obsidian Latex Suite](https://github.com/a
 
 This document is a high-level design. It records product decisions and the intended architecture against Voyager’s existing text / Vim stack. It is not an implementation checklist.
 
+Status: implemented (2026-08-16). See `lib/domain/models/snippet.dart`,
+`lib/core/snippets/`, `lib/core/vim/vim_text_scope.dart` (which hosts the
+runtime — see §11), `lib/core/vim/vim_text_overlay.dart` (dotted marks),
+`lib/features/settings/snippets_dialog.dart`, and
+`test/snippet_engine_test.dart`, `test/snippet_expansion_test.dart`,
+`test/snippet_settings_test.dart`.
+
 ---
 
 ## 1. Goals
@@ -81,6 +88,8 @@ Does **not** expand on:
 
 Implementation implication: drive matching from the **input key / composing path**, not from a blind `TextEditingController` listener.
 
+**Known v1 limitation — astral-plane trigger characters.** The auto path recognises a typed character as exactly one UTF-16 code unit of growth, so a trigger whose **final** character is outside the BMP (most emoji, some CJK extensions) inserts a surrogate pair and never auto-expands. Such a trigger still expands manually with the expand key, and a trigger that merely *contains* an emoji earlier on is unaffected. The settings dialog accepts these triggers without complaint.
+
 ### 3.2 Auto vs manual
 
 | Kind | Behavior |
@@ -90,7 +99,7 @@ Implementation implication: drive matching from the **input key / composing path
 
 ### 3.3 Word boundary (`wordBoundary: true`)
 
-Follow Latex Suite `w`: the trigger must be preceded **and** followed by a word delimiter (for auto-expand, “followed by” is satisfied by the fact that the caret is at the end of the trigger and the next character is not yet a word character — i.e. the match is checked with a delimiter **before** the trigger and end-of-match at the caret).
+Follow Latex Suite `w`: the trigger must be preceded **and** followed by a word delimiter. Matching checks the character immediately **before** the trigger and the character immediately **after** the caret (end of the match). Start and end of the field count as delimiters, so typing at the end of a field still expands.
 
 **Delimiters** (v1, align with Latex Suite spirit):
 
@@ -148,11 +157,15 @@ Each session owns a **region**: a closed character offset range covering the exp
 - Caret moves outside that session’s region (mouse click, arrow keys, Vim motions in Normal mode, etc.)
 - Undo that reverts the expansion (see §5)
 - The session’s tabstops are fully consumed
+- A deletion takes any of the **replacement’s own characters** with it — the backticks in `` `$0`$1 ``, say. Those are the scaffolding the remaining tabstops are positions *within*, so once one is gone the rest no longer mean anything and the next Tab should do nothing. Only the session whose characters were cut is cleared.
 
 **Do not clear merely because:**
 
 - User presses Esc / enters Normal mode, **as long as the caret stays inside the region**
 - User types inside the region (including nested expansions)
+- User **deletes text they typed themselves** into a tabstop — fixing a typo mid-fill keeps the remaining stops
+
+Where an edit is textually ambiguous — typing an `e` in front of the replacement’s own `e` leaves exactly the text that typing one behind it would — **the caret decides**. The character it ends up beside is the user’s and the replacement keeps the other, which is also what puts the tabstop between them on the right side of what was typed.
 
 If the caret leaves the **innermost** region but remains inside an outer region, pop/clear only the sessions whose regions no longer contain the caret (innermost first).
 
@@ -345,7 +358,68 @@ Reject multi-character inserts (paste), deletions, and replacements.
 
 ## 10. Open polish (non-blocking)
 
-- Exact Latex Suite delimiter character class — port during implementation.
-- Whether `snippetsEnabled` defaults to on or off for first ship.
-- Slightly stronger style for the *next* tabstop mark vs later ones.
+- ~~Exact Latex Suite delimiter character class~~ — shipped as the complement of
+  `\w` (letters, digits, `_`), Unicode-aware; see `isSnippetWordDelimiter`.
+- ~~Whether `snippetsEnabled` defaults to on or off for first ship~~ — **on**.
+  The list ships empty, so default-on can never expand anything; it only means
+  the user's first snippet works without hunting for a second switch.
+- ~~Slightly stronger style for the *next* tabstop mark vs later ones~~ —
+  shipped: the next stop paints at full alpha, later ones at 45% of it.
 - Later: regex triggers, placeholders, mirrored tabstops, per-snippet expand key.
+
+---
+
+## 11. Implementation notes (where this deviates)
+
+Three things landed differently from the HLD. All three are deliberate.
+
+### 11.1 The runtime lives inside `VimTextScope`, not a sibling scope
+
+§6.1 sketched a separate `SnippetTextScope`. It went into `VimTextScope`
+instead, because that widget already owns the one thing snippets need — an
+ancestor `Focus` that sees every key the field didn't claim — and because a
+second scope would have added a `Focus` node and a `StatefulWidget` to *every*
+text field in the app, including the long lists of inline renames.
+
+Consequences:
+
+- All ten `VimTextScope` call sites got snippets with no edit; only
+  `LeetCodeCodeInput` (and the snippet editor's own fields) pass
+  `snippetsAllowed: false`.
+- Key order is fixed and unambiguous rather than depending on nesting:
+  tag popup (`focusNode.onKeyEvent`) → snippets → Vim → focus traversal.
+- Snippets do not require `enabled`. When Vim is off the scope still mounts,
+  builds through a `ValueNotifier<VimMode>` pinned to Insert, and hands the
+  field a `VimFieldBinding` whose `mode` is null.
+
+### 11.2 Undo is handled by the snippet layer, not by the field's undo stack
+
+§5 asks for one Undo to restore the trigger. Flutter's `UndoHistory` pushes on
+a 500 ms **trailing** throttle (`undo_history.dart`), so the typed character and
+the expansion it triggers always coalesce into a single stack entry — its undo
+would jump back past the trigger rather than restoring it.
+
+So `SnippetSession` claims `Ctrl`/`Cmd+Z` itself while the text *and* selection
+are still exactly what the last expansion produced, restores the pre-expansion
+value in one step, and clears the whole session stack. Any edit in between
+invalidates the record and hands the key straight back to Flutter.
+
+Vim Normal `u` uses the same restore via a live callback from `VimTextScope`
+into `VimSession`. Esc steps the caret back without editing, so that path
+matches on text only; if the record is stale it falls through to the field
+undo stack. Visual `u` is still lowercase. Bare `u` is not claimed in
+`SnippetSession.handleKey` (Insert must still type the letter).
+
+### 11.3 "Was that typed?" is answered by the key event, not the diff alone
+
+§3.1 requires that paste, delete-joins and programmatic writes never expand. A
+diff catches the first two, but a bare `controller.value = …` that inserts one
+character at the caret is byte-for-byte identical to typing one.
+
+The discriminator is the key event, which the scope's `Focus` receives before
+the embedder passes the character to the text input plugin. On desktop a typed
+character is therefore always accounted for by a key; a redo, a sync pull or any
+other programmatic write is not. Two exceptions are allowed through: an **IME
+commit** (recognised by a composing range that has just ended — the timing §3.1
+asks for) and **soft keyboards**, which deliver no key events at all, so on
+mobile the diff still stands alone.

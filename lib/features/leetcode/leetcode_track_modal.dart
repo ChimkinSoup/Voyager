@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -19,17 +22,45 @@ import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 import 'package:voyager/features/leetcode/leetcode_loading_toast.dart';
 import 'package:voyager/features/leetcode/leetcode_search_popover.dart';
+import 'package:voyager/features/leetcode/leetcode_track_draft.dart';
+import 'package:voyager/features/leetcode/leetcode_track_draft_store.dart';
+
+/// What the Track flow found in the local draft slot, and so what the modal
+/// has to say about it on arrival. Decided by the caller, which is the only
+/// place that knows both the draft and the question the lookup returned.
+enum LeetCodeTrackDraftOutcome {
+  /// No draft, or nothing worth mentioning — the modal opens silently.
+  none,
+
+  /// The draft is for the question that was just looked up, and the form was
+  /// built from it. Offers to throw it away and start over.
+  resumed,
+
+  /// A draft exists for some other question; the form was built from the fresh
+  /// lookup instead. Offers to switch to the draft.
+  mismatch,
+
+  /// The lookup couldn't answer, so the draft was opened in its place.
+  resumedAfterFetchFailure,
+}
 
 /// Opens the "track a problem" modal. When [prefill] is given, the form
 /// starts populated with that API result (e.g. the user's most recently
 /// accepted submission) but every field stays manually editable. When
 /// [existing] is given, the modal edits that problem in place instead of
 /// creating a new one.
+///
+/// [draft] is the locally saved, never-synced create form from a previous
+/// visit. Depending on [draftOutcome] the modal either opens *as* that draft
+/// or keeps it aside to offer. An edit ignores both outright: a draft belongs
+/// to the create flow only, and must never read or write the slot from here.
 Future<bool> showLeetCodeTrackModal(
   BuildContext context,
   WidgetRef ref, {
   LeetCodeApiQuestion? prefill,
   LeetCodeProblem? existing,
+  LeetCodeTrackDraft? draft,
+  LeetCodeTrackDraftOutcome draftOutcome = LeetCodeTrackDraftOutcome.none,
 }) async {
   // Modal bottom sheets cap out at 640px wide by default (Material 3's
   // BottomSheetThemeData default), which reads as a narrow drawer on a
@@ -44,49 +75,128 @@ Future<bool> showLeetCodeTrackModal(
     ),
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
-      child: _TrackModal(prefill: prefill, existing: existing),
+      child: _TrackModal(
+        prefill: prefill,
+        existing: existing,
+        // An edit never carries a draft, whatever the caller passed.
+        draft: existing == null ? draft : null,
+        draftOutcome: existing == null
+            ? draftOutcome
+            : LeetCodeTrackDraftOutcome.none,
+      ),
     ),
   );
   return saved ?? false;
 }
 
 class _TrackModal extends ConsumerStatefulWidget {
-  const _TrackModal({this.prefill, this.existing});
+  const _TrackModal({
+    this.prefill,
+    this.existing,
+    this.draft,
+    this.draftOutcome = LeetCodeTrackDraftOutcome.none,
+  });
 
   final LeetCodeApiQuestion? prefill;
   final LeetCodeProblem? existing;
+  final LeetCodeTrackDraft? draft;
+  final LeetCodeTrackDraftOutcome draftOutcome;
 
   @override
   ConsumerState<_TrackModal> createState() => _TrackModalState();
 }
 
 class _TrackModalState extends ConsumerState<_TrackModal> {
-  late final TextEditingController _titleController;
+  /// Long enough that a burst of typing writes once, short enough that a
+  /// window closed straight after a keystroke has already been captured.
+  static const _draftDebounce = Duration(milliseconds: 400);
+
+  /// Draft toasts carry an offer, so they sit a little longer than the
+  /// 2.6s failure toasts — and hovering holds them open indefinitely.
+  static const _draftToastDwell = Duration(milliseconds: 4200);
+
+  late TextEditingController _titleController;
   final _titleFocusNode = FocusNode();
   String? _titleError;
-  late final TextEditingController _questionFrontendIdController;
-  late final TextEditingController _tagsController;
-  late final TextEditingController _descriptionController;
+  late TextEditingController _questionFrontendIdController;
+  late TextEditingController _tagsController;
+  late TextEditingController _descriptionController;
 
   /// One controller per example, in display order. The "Example N" headings
   /// come from each controller's index, so removing one renumbers the rest.
-  late final List<TextEditingController> _exampleControllers;
+  final List<TextEditingController> _exampleControllers = [];
 
   /// One group of boxes per solution, in display order — numbered by position
   /// the same way the examples are, and unnumbered while there's only one.
-  late final List<_SolutionEditors> _solutionEditors;
+  final List<_SolutionEditors> _solutionEditors = [];
   late LeetCodeDifficulty _difficulty;
   String? _titleSlug;
   String? _questionId;
   bool _saving = false;
   bool _retracking = false;
 
+  late final LeetCodeTrackDraftStore _draftStore;
+  late final Future<void> Function() _lifecycleFlushCallback;
+
+  /// The form as it stood once this open had finished populating. Everything
+  /// the draft slot does is decided by comparing against this.
+  late LeetCodeTrackDraft _baseline;
+
+  /// Set once the form has diverged from [_baseline], and never unset for this
+  /// populate: after the first divergence there is nothing left to compare
+  /// for, so typing costs a timer reset and no snapshot at all.
+  bool _started = false;
+
+  /// What is on disk, so an autosave that would rewrite the same bytes doesn't.
+  LeetCodeTrackDraft? _lastWritten;
+
+  /// Stops touching the slot for good — set when a successful save has already
+  /// cleared it, so the close flush can't put it back.
+  bool _draftClosed = false;
+
+  /// The draft the flow found but didn't open, kept for "Continue with draft".
+  LeetCodeTrackDraft? _draftOffer;
+
+  Timer? _draftTimer;
+  VoidCallback? _dismissDraftToast;
+
+  bool get _isCreate => widget.existing == null;
+
   @override
   void initState() {
     super.initState();
-    final existing = widget.existing;
-    final prefill = widget.prefill;
+    final draft = widget.draft;
+    final opensAsDraft =
+        draft != null &&
+        (widget.draftOutcome == LeetCodeTrackDraftOutcome.resumed ||
+            widget.draftOutcome ==
+                LeetCodeTrackDraftOutcome.resumedAfterFetchFailure);
+    if (opensAsDraft) {
+      _populateFromDraft(draft);
+      _lastWritten = draft;
+    } else {
+      _draftOffer = draft;
+      _populateFromForm(existing: widget.existing, prefill: widget.prefill);
+      if (draft != null) _lastWritten = draft;
+    }
 
+    if (_isCreate) {
+      _draftStore = ref.read(leetCodeTrackDraftStoreProvider);
+      _lifecycleFlushCallback = _flushDraft;
+      PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
+      _attachDraftListeners();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showDraftToast(widget.draftOutcome);
+      });
+    }
+    _baseline = _snapshot();
+  }
+
+  /// Builds every editor from a saved problem, an API result, or neither.
+  void _populateFromForm({
+    LeetCodeProblem? existing,
+    LeetCodeApiQuestion? prefill,
+  }) {
     _titleController = TextEditingController(
       text: existing?.title ?? prefill?.title ?? '',
     );
@@ -102,10 +212,10 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     _descriptionController = TextEditingController(
       text: existing?.description ?? prefill?.description ?? '',
     );
-    _exampleControllers = [
+    _exampleControllers.addAll([
       for (final example in existing?.examples ?? prefill?.examples ?? const [])
         TextEditingController(text: example),
-    ];
+    ]);
     // An edit keeps whatever was saved; a fresh entry prefilled from the
     // user's last accepted submission starts on the language they solved it
     // in. Anything else — a language the selector doesn't offer, a search hit
@@ -115,12 +225,12 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         leetCodeCodeLanguages.first;
     // A problem with nothing written down still opens on one empty group, so
     // the fields are there to type into rather than behind an "Add solution".
-    _solutionEditors = [
+    _solutionEditors.addAll([
       for (final solution in existing?.solutions ?? const <LeetCodeSolution>[])
         _SolutionEditors.from(solution),
       if ((existing?.solutions ?? const []).isEmpty)
         _SolutionEditors.empty(language: defaultLanguage),
-    ];
+    ]);
     _difficulty =
         existing?.difficulty ??
         prefill?.difficulty ??
@@ -129,8 +239,39 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     _questionId = existing?.questionId ?? prefill?.questionId;
   }
 
+  /// Rebuilds the form the draft was taken from, field for field and row for
+  /// row — blank boxes the user had added included, since those are part of
+  /// the form they left behind.
+  void _populateFromDraft(LeetCodeTrackDraft draft) {
+    _titleController = TextEditingController(text: draft.title);
+    _questionFrontendIdController = TextEditingController(
+      text: draft.questionFrontendId,
+    );
+    _tagsController = TextEditingController(text: draft.tags);
+    _descriptionController = TextEditingController(text: draft.description);
+    _exampleControllers.addAll([
+      for (final example in draft.examples) TextEditingController(text: example),
+    ]);
+    _solutionEditors.addAll([
+      for (final solution in draft.solutions) _SolutionEditors.fromDraft(solution),
+      if (draft.solutions.isEmpty)
+        _SolutionEditors.empty(language: leetCodeCodeLanguages.first),
+    ]);
+    _difficulty = draft.difficulty;
+    _titleSlug = draft.titleSlug;
+    _questionId = draft.questionId;
+  }
+
   @override
   void dispose() {
+    _draftTimer?.cancel();
+    if (_isCreate) {
+      PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
+      // Reads the controllers synchronously and hands the finished snapshot
+      // to an async write, so the disposal below can't race it.
+      unawaited(_flushDraft());
+    }
+    _dismissDraftToast?.call();
     _titleController.dispose();
     _titleFocusNode.dispose();
     _questionFrontendIdController.dispose();
@@ -143,6 +284,216 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       editors.dispose();
     }
     super.dispose();
+  }
+
+  // ───────────────────────── local draft ─────────────────────────
+  //
+  // Create-mode only, device-only. Nothing here ever reaches the problems
+  // table, the outbox, or `remoteSyncService` — the slot holds one unsaved
+  // form so closing the sheet by accident doesn't cost the user their typing.
+
+  Iterable<TextEditingController> get _draftControllers sync* {
+    yield _titleController;
+    yield _questionFrontendIdController;
+    yield _tagsController;
+    yield _descriptionController;
+    yield* _exampleControllers;
+    for (final editors in _solutionEditors) {
+      yield* editors.controllers;
+    }
+  }
+
+  void _attachDraftListeners() {
+    for (final controller in _draftControllers) {
+      controller.addListener(_handleDraftEdit);
+    }
+  }
+
+  /// Every keystroke lands here, so it does as little as possible: cancel a
+  /// timer, start a timer. Snapshotting and comparing wait for the debounce.
+  void _handleDraftEdit() {
+    if (!_isCreate || _draftClosed) return;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(_draftDebounce, () => unawaited(_flushDraft()));
+  }
+
+  /// The whole form as it stands, ready to persist or to compare.
+  LeetCodeTrackDraft _snapshot() => LeetCodeTrackDraft(
+    title: _titleController.text,
+    questionFrontendId: _questionFrontendIdController.text,
+    tags: _tagsController.text,
+    description: _descriptionController.text,
+    examples: [for (final c in _exampleControllers) c.text],
+    difficulty: _difficulty,
+    titleSlug: _titleSlug,
+    questionId: _questionId,
+    solutions: [for (final e in _solutionEditors) e.readDraft()],
+    savedAt: utcNow(),
+  );
+
+  /// Writes, clears, or leaves the one slot alone, whichever the current form
+  /// calls for. Runs on the debounce, on close, and on app termination.
+  Future<void> _flushDraft() async {
+    _draftTimer?.cancel();
+    _draftTimer = null;
+    if (!_isCreate || _draftClosed) return;
+
+    final snapshot = _snapshot();
+    if (!_started) {
+      // Opened and closed untouched: whatever is in the slot stays there.
+      if (snapshot.sameContentAs(_baseline)) return;
+      _started = true;
+    }
+    // Blank rows, a difficulty pill and a language selector are not work worth
+    // keeping. A form with no text left in it clears the slot instead.
+    if (!snapshot.hasText) {
+      if (_lastWritten == null) return;
+      _lastWritten = null;
+      await _draftStore.clear();
+      return;
+    }
+    if (_lastWritten != null && snapshot.sameContentAs(_lastWritten!)) return;
+    _lastWritten = snapshot;
+    await _draftStore.save(snapshot);
+  }
+
+  /// Re-snapshots the baseline after a search or retrack has written API
+  /// metadata over the form. What the user typed is still there, so the
+  /// question "has anything changed" restarts from the merged state — but an
+  /// apply that changed anything counts as having started the form.
+  void _rebaselineAfterApply() {
+    if (!_isCreate) return;
+    final snapshot = _snapshot();
+    if (!_started && !snapshot.sameContentAs(_baseline)) _started = true;
+    _baseline = snapshot;
+    if (_started) _handleDraftEdit();
+  }
+
+  /// Throws the form away and rebuilds it from [draft], or from [prefill] (or
+  /// empty). Every editor is replaced rather than reassigned: the code boxes
+  /// reconstruct an assigned value from a diff, which mangles a wholesale
+  /// replacement — see [LeetCodeCodeController].
+  void _replaceContents({
+    LeetCodeTrackDraft? draft,
+    LeetCodeApiQuestion? prefill,
+  }) {
+    setState(() {
+      for (final controller in _draftControllers) {
+        controller.removeListener(_handleDraftEdit);
+      }
+      _titleController.dispose();
+      _questionFrontendIdController.dispose();
+      _tagsController.dispose();
+      _descriptionController.dispose();
+      for (final controller in _exampleControllers) {
+        controller.dispose();
+      }
+      for (final editors in _solutionEditors) {
+        editors.dispose();
+      }
+      _exampleControllers.clear();
+      _solutionEditors.clear();
+      _titleError = null;
+
+      if (draft != null) {
+        _populateFromDraft(draft);
+      } else {
+        _populateFromForm(prefill: prefill);
+      }
+      _attachDraftListeners();
+      _baseline = _snapshot();
+      _started = false;
+    });
+  }
+
+  void _showDraftToast(LeetCodeTrackDraftOutcome outcome) {
+    _dismissDraftToast?.call();
+    _dismissDraftToast = null;
+    switch (outcome) {
+      case LeetCodeTrackDraftOutcome.none:
+        return;
+      case LeetCodeTrackDraftOutcome.resumed:
+        _dismissDraftToast = showLeetCodeToast(
+          context,
+          message: 'Picked up your draft',
+          icon: PhosphorIconsRegular.arrowCounterClockwise,
+          dwell: _draftToastDwell,
+          actions: [
+            LeetCodeToastAction(
+              label: 'Clear draft',
+              onPressed: () => unawaited(_clearDraftAndStartNew()),
+            ),
+          ],
+        );
+      case LeetCodeTrackDraftOutcome.resumedAfterFetchFailure:
+        _dismissDraftToast = showLeetCodeToast(
+          context,
+          message: "Couldn't refresh — showing your draft",
+          icon: PhosphorIconsRegular.warning,
+          dwell: _draftToastDwell,
+          actions: [
+            LeetCodeToastAction(
+              label: 'Clear draft',
+              onPressed: () => unawaited(_clearDraftAndStartNew()),
+            ),
+          ],
+        );
+      case LeetCodeTrackDraftOutcome.mismatch:
+        final offer = _draftOffer;
+        if (offer == null) return;
+        final name = offer.title.trim();
+        _dismissDraftToast = showLeetCodeToast(
+          context,
+          message: name.isEmpty
+              ? 'Unsaved draft available'
+              : 'Draft saved for "$name"',
+          icon: PhosphorIconsRegular.pencilSimple,
+          dwell: _draftToastDwell,
+          actions: [
+            LeetCodeToastAction(
+              label: 'Continue with draft',
+              onPressed: () => _continueWithDraft(offer),
+            ),
+          ],
+        );
+    }
+  }
+
+  /// Swaps the fresh form out for the draft the flow set aside. The slot is
+  /// left exactly as it is — this is opening what's already saved, not saving.
+  void _continueWithDraft(LeetCodeTrackDraft draft) {
+    if (!mounted) return;
+    _draftOffer = null;
+    _lastWritten = draft;
+    _replaceContents(draft: draft);
+    _showDraftToast(LeetCodeTrackDraftOutcome.resumed);
+  }
+
+  /// Drops the draft and refills the form from a fresh lookup — the same one
+  /// the Track button ran, so a failure leaves an empty form and says why.
+  Future<void> _clearDraftAndStartNew() async {
+    if (!_isCreate || _retracking || _saving) return;
+    _draftTimer?.cancel();
+    // The lookup below is async, but these controllers stay mounted and
+    // visible until _replaceContents swaps them out. Detaching now, rather
+    // than after the await, is what stops a keystroke landing in that window
+    // from re-autosaving the very draft this just cleared.
+    for (final controller in _draftControllers) {
+      controller.removeListener(_handleDraftEdit);
+    }
+    _draftOffer = null;
+    _lastWritten = null;
+    _started = false;
+    await _draftStore.clear();
+    if (!mounted) return;
+    setState(() => _retracking = true);
+    try {
+      final detail = await _fetchLatestSubmission();
+      if (!mounted) return;
+      _replaceContents(prefill: detail);
+    } finally {
+      if (mounted) setState(() => _retracking = false);
+    }
   }
 
   /// The tags field's text for a set of LeetCode topic tags, whichever lookup
@@ -177,27 +528,49 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       .where((solution) => !solution.isEmpty)
       .toList();
 
+  /// A new row is a change to the form even while its boxes are still blank,
+  /// so every one of these marks the draft dirty as well as rebuilding.
   void _addExample() {
-    setState(() => _exampleControllers.add(TextEditingController()));
+    setState(() => _exampleControllers.add(_newExampleController()));
+    _handleDraftEdit();
   }
 
   void _removeExample(int index) {
     setState(() => _exampleControllers.removeAt(index).dispose());
+    _handleDraftEdit();
   }
 
   void _addSolution() {
-    setState(
-      () => _solutionEditors.add(
-        // The new group starts on the language the one above it is in: a
-        // second solution is usually the same language, and when it isn't,
-        // the selector is right there.
-        _SolutionEditors.empty(language: _solutionEditors.last.language),
-      ),
-    );
+    setState(() {
+      // The new group starts on the language the one above it is in: a
+      // second solution is usually the same language, and when it isn't,
+      // the selector is right there.
+      final editors = _SolutionEditors.empty(
+        language: _solutionEditors.last.language,
+      );
+      _solutionEditors.add(editors);
+      _attachSolutionListeners(editors);
+    });
+    _handleDraftEdit();
   }
 
   void _removeSolution(int index) {
     setState(() => _solutionEditors.removeAt(index).dispose());
+    _handleDraftEdit();
+  }
+
+  /// An example box that feeds the draft from the moment it exists.
+  TextEditingController _newExampleController([String text = '']) {
+    final controller = TextEditingController(text: text);
+    if (_isCreate) controller.addListener(_handleDraftEdit);
+    return controller;
+  }
+
+  void _attachSolutionListeners(_SolutionEditors editors) {
+    if (!_isCreate) return;
+    for (final controller in editors.controllers) {
+      controller.addListener(_handleDraftEdit);
+    }
   }
 
   Future<void> _openSearch(BuildContext buttonContext) async {
@@ -236,10 +609,11 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
           ..clear()
           ..addAll([
             for (final example in detail.examples)
-              TextEditingController(text: example),
+              _newExampleController(example),
           ]);
       }
     });
+    _rebaselineAfterApply();
   }
 
   /// Re-pulls this problem's metadata from LeetCode, overwriting only what the
@@ -385,7 +759,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
           ..clear()
           ..addAll([
             for (final example in detail.examples)
-              TextEditingController(text: example),
+              _newExampleController(example),
           ]);
       }
       if (language != null) {
@@ -397,6 +771,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         }
       }
     });
+    _rebaselineAfterApply();
   }
 
   /// Says why a retrack changed nothing, in the same toast the fetch itself
@@ -454,6 +829,14 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     await repo.upsertProblem(problem);
     ref.read(remoteSyncServiceProvider).pushLeetCodeProblem(problem);
     ref.invalidate(leetcodeProblemsProvider);
+
+    // The work is filed; there is nothing left to recover. Closing the slot
+    // before the pop is what stops the dispose flush from writing it back.
+    if (_isCreate) {
+      _draftClosed = true;
+      _draftTimer?.cancel();
+      unawaited(_draftStore.clear());
+    }
 
     if (mounted) Navigator.of(context).pop(true);
   }
@@ -554,8 +937,10 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                                     isActive: _difficulty == d,
                                     accentColor: colorForLeetCodeDifficulty(d),
                                     fillWhenActive: true,
-                                    onTap: () =>
-                                        setState(() => _difficulty = d),
+                                    onTap: () {
+                                      setState(() => _difficulty = d);
+                                      _handleDraftEdit();
+                                    },
                                   ),
                               ],
                             ),
@@ -655,9 +1040,10 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                           // no name there's nothing to remove it from either.
                           number: _solutionEditors.length > 1 ? i + 1 : null,
                           onRemove: () => _removeSolution(i),
-                          onLanguageChanged: (lang) => setState(
-                            () => _solutionEditors[i].language = lang,
-                          ),
+                          onLanguageChanged: (lang) {
+                            setState(() => _solutionEditors[i].language = lang);
+                            _handleDraftEdit();
+                          },
                         ),
                       const SizedBox(height: 24),
                       GlassButton(
@@ -733,6 +1119,17 @@ class _SolutionEditors {
         language: solution.codeLanguage,
       );
 
+  factory _SolutionEditors.fromDraft(LeetCodeTrackDraftSolution solution) =>
+      _SolutionEditors._(
+        algorithm: TextEditingController(text: solution.algorithm),
+        timeComplexity: TextEditingController(text: solution.timeComplexity),
+        spaceComplexity: TextEditingController(text: solution.spaceComplexity),
+        explanation: TextEditingController(text: solution.explanation),
+        code: LeetCodeCodeController(text: solution.code),
+        notes: TextEditingController(text: solution.notes),
+        language: solution.codeLanguage,
+      );
+
   final TextEditingController algorithm;
   final TextEditingController timeComplexity;
   final TextEditingController spaceComplexity;
@@ -740,6 +1137,28 @@ class _SolutionEditors {
   final LeetCodeCodeController code;
   final TextEditingController notes;
   String language;
+
+  /// Every box in the group, for anything that has to watch the lot of them.
+  Iterable<TextEditingController> get controllers => [
+    algorithm,
+    timeComplexity,
+    spaceComplexity,
+    explanation,
+    code,
+    notes,
+  ];
+
+  /// The group exactly as typed — untrimmed, blanks kept. What a saved
+  /// solution drops, a draft has to restore.
+  LeetCodeTrackDraftSolution readDraft() => LeetCodeTrackDraftSolution(
+    algorithm: algorithm.text,
+    timeComplexity: timeComplexity.text,
+    spaceComplexity: spaceComplexity.text,
+    explanation: explanation.text,
+    codeLanguage: language,
+    code: code.text,
+    notes: notes.text,
+  );
 
   LeetCodeSolution read() => LeetCodeSolution(
     algorithm: algorithm.text.trim(),

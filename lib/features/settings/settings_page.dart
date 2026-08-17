@@ -25,8 +25,10 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
+import 'package:voyager/features/settings/dictionary_dialog.dart';
 import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
+import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/features/settings/weather_location_tile.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
@@ -224,6 +226,20 @@ class SettingsPage extends ConsumerWidget {
             value: settings.vimModeEnabled,
             onChanged: (v) => _save(ref, settings.copyWith(vimModeEnabled: v)),
           ),
+          ListTile(
+            title: const Text('Text snippets'),
+            subtitle: Text(
+              settings.snippets.isEmpty
+                  ? 'Type a shortcut in any text box and expand it into '
+                        'something longer — none set up yet'
+                  : '${settings.snippets.length} '
+                        '${settings.snippets.length == 1 ? 'snippet' : 'snippets'}'
+                        '${settings.snippetsEnabled ? '' : ' (disabled)'}',
+            ),
+            trailing: const Icon(PhosphorIconsRegular.textAa),
+            onTap: () => showSnippetsDialog(context),
+          ),
+          const _DictionaryTile(),
           WeatherLocationTile(settings: settings),
           const SizedBox(height: 16),
           Text('Finance', style: Theme.of(context).textTheme.titleMedium),
@@ -830,6 +846,31 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
+/// Opens the app-wide spell-check dictionary, and counts the user's own words
+/// in its subtitle.
+///
+/// Its own widget so that count — which changes every time a word is added
+/// from a misspelling popup anywhere in the app — rebuilds one tile instead of
+/// the whole settings page.
+class _DictionaryTile extends ConsumerWidget {
+  const _DictionaryTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(customWordsProvider).valueOrNull?.length ?? 0;
+    return ListTile(
+      title: const Text('Dictionary'),
+      subtitle: Text(
+        count == 0
+            ? 'Add extra words the spell checker should accept'
+            : '$count custom ${count == 1 ? 'word' : 'words'}',
+      ),
+      trailing: const Icon(PhosphorIconsRegular.bookOpen),
+      onTap: () => showDictionaryDialog(context),
+    );
+  }
+}
+
 /// Light-theme petal controls. Only mounted while the light theme is active.
 ///
 /// Kept in the settings list (not a separate page) so tuning is immediate: the
@@ -1090,6 +1131,7 @@ class _LeetCodeUsernameDialogState extends State<_LeetCodeUsernameDialog> {
           const hintText = 'e.g. johndoe123';
           return VimOverlayHost(
             session: vim.session,
+              snippetSession: vim.snippetSession,
             overlayPaintsSelection: vim.overlayPaintsSelection,
             controller: _controller,
             focusNode: _focusNode,

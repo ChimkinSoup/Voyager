@@ -442,6 +442,17 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get vimModeEnabled =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get snippetsEnabled =>
+      boolean().withDefault(const Constant(true))();
+
+  /// [SnippetExpandKey] name — 'tab' or 'space'.
+  TextColumn get snippetExpandKey =>
+      text().withDefault(const Constant('tab'))();
+
+  /// The snippet list as a JSON array of [Snippet.toJson] maps. One column
+  /// rather than a table of its own: the list is small, always read whole, and
+  /// syncs as a single settings field.
+  TextColumn get snippetsJson => text().nullable()();
   TextColumn get deviceId => text().nullable()();
   TextColumn get lastViewedJournalId => text().nullable()();
   TextColumn get lastViewedTodoListId => text().nullable()();
@@ -670,6 +681,10 @@ class SyncConflictsTable extends Table {
   TextColumn get localText => text().nullable()();
   TextColumn get remoteText => text().nullable()();
   DateTimeColumn get detectedAt => dateTime()();
+
+  /// [SyncConflictReason.storageValue]; null for rows written before the
+  /// detector recorded which of its checks fired.
+  TextColumn get reason => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -922,7 +937,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 77;
+  int get schemaVersion => 79;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1785,6 +1800,28 @@ class AppDatabase extends _$AppDatabase {
         );
         await _foldLeetCodeSolutionColumns();
       }
+      if (from < 78) {
+        await _addColumnIfNotExists(
+          migrator,
+          'sync_conflicts_table',
+          syncConflictsTable,
+          syncConflictsTable.reason,
+        );
+      }
+      if (from < 79) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.snippetsEnabled,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.snippetExpandKey,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.snippetsJson,
+        );
+      }
     },
   );
 
@@ -1934,6 +1971,12 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'UPDATE settings_table SET dev_show_fps_counter = 0 WHERE dev_show_fps_counter IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET snippets_enabled = 1 WHERE snippets_enabled IS NULL',
+    );
+    await customStatement(
+      "UPDATE settings_table SET snippet_expand_key = 'tab' WHERE snippet_expand_key IS NULL",
     );
     await customStatement(
       'UPDATE settings_table SET dev_slow_calendar_animations = 0 WHERE dev_slow_calendar_animations IS NULL',
