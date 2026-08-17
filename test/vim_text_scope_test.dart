@@ -1,3 +1,5 @@
+import 'dart:ui' show ViewFocusDirection, ViewFocusEvent, ViewFocusState;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,7 +46,6 @@ void main() {
     bool multiline = false,
     bool obscure = false,
     String? hintText,
-    bool modeBadgeOutside = false,
   }) async {
     controller.text = text;
     controller.selection = const TextSelection.collapsed(offset: 0);
@@ -62,7 +63,6 @@ void main() {
                 controller: controller,
                 obscureText: obscure,
                 maxLines: multiline ? null : 1,
-                modeBadgeOutside: modeBadgeOutside,
                 onChanged: changes.add,
               ),
             ),
@@ -207,19 +207,6 @@ void main() {
 
     await typeCommand(tester, 'i');
     expect(find.text('NORMAL'), findsNothing);
-  });
-
-  testWidgets('mode badge still appears when hung outside the field', (
-    tester,
-  ) async {
-    await pumpField(
-      tester,
-      vimEnabled: true,
-      text: 'abc',
-      modeBadgeOutside: true,
-    );
-    await press(tester, LogicalKeyboardKey.escape);
-    expect(find.text('NORMAL'), findsOneWidget);
   });
 
   testWidgets('empty-field hint stays up in Normal mode', (tester) async {
@@ -649,6 +636,127 @@ void main() {
       await tester.pump();
 
       await setAppLifecycleState(AppLifecycleState.resumed);
+      await tester.pump();
+
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(find.text('NORMAL'), findsNothing);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  /// The *other* signal a window switch arrives by: the engine reports view
+  /// focus on its own channel, and `View` parks the primary focus the moment
+  /// the view is unfocused — with no lifecycle message involved. On Windows
+  /// this one lands first, which is why consulting only the lifecycle state
+  /// used to read an Alt-Tab as "the user left this field".
+  void setViewFocus(WidgetTester tester, ViewFocusState state) {
+    WidgetsBinding.instance.handleViewFocusChanged(
+      ViewFocusEvent(
+        viewId: tester.view.viewId,
+        state: state,
+        direction: ViewFocusDirection.undefined,
+      ),
+    );
+  }
+
+  testWidgets(
+    'a window blur with no lifecycle message keeps the mode and the range',
+    (tester) async {
+      await pumpField(tester, vimEnabled: true, text: 'alpha beta');
+      await press(tester, LogicalKeyboardKey.escape);
+      await typeCommand(tester, 'vll');
+      expect(find.text('VISUAL'), findsOneWidget);
+      final selected = controller.selection;
+      expect(selected.textInside(controller.text), 'alp');
+
+      setViewFocus(tester, ViewFocusState.unfocused);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus,
+        FocusManager.instance.rootScope,
+        reason: 'the framework must park the focus, or this proves nothing',
+      );
+      // The badge follows the field's focus, so it is down while the window
+      // is away; the range underneath it is what must survive.
+      expect(controller.selection, selected);
+
+      setViewFocus(tester, ViewFocusState.focused);
+      await tester.pump();
+      expect(find.text('VISUAL'), findsOneWidget);
+      expect(controller.selection, selected);
+
+      // Still a live Visual selection, not a caret in Insert: `x` cuts it.
+      await typeCommand(tester, 'x');
+      expect(controller.text, 'ha beta');
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'the select-all a single-line field does on refocus is undone',
+    (tester) async {
+      // `EditableText.selectAllOnFocus` fires when the framework hands the
+      // focus back at the end of the switch. Normal mode would come back with
+      // its caret at the end of the field.
+      await pumpField(tester, vimEnabled: true, text: 'alpha beta');
+      await press(tester, LogicalKeyboardKey.escape);
+      await typeCommand(tester, 'll');
+      final caret = controller.selection;
+      expect(caret.baseOffset, 2);
+
+      setViewFocus(tester, ViewFocusState.unfocused);
+      await tester.pump();
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+      setViewFocus(tester, ViewFocusState.focused);
+      await tester.pump();
+
+      expect(find.text('NORMAL'), findsOneWidget);
+      expect(controller.selection, caret);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'a field abandoned during a window blur still resets to Insert',
+    (tester) async {
+      final decoy = FocusNode(debugLabel: 'decoy');
+      addTearDown(decoy.dispose);
+      controller.text = 'abc';
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: VimEnabledScope(
+              enabled: true,
+              child: Scaffold(
+                body: Column(
+                  children: [
+                    LabeledTextField(label: 'Body', controller: controller),
+                    Focus(
+                      focusNode: decoy,
+                      child: const SizedBox(width: 20, height: 20),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(find.text('NORMAL'), findsOneWidget);
+
+      setViewFocus(tester, ViewFocusState.unfocused);
+      await tester.pump();
+      decoy.requestFocus();
+      await tester.pump();
+
+      setViewFocus(tester, ViewFocusState.focused);
       await tester.pump();
 
       await tester.tap(find.byType(TextField));

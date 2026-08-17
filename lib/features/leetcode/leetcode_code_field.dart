@@ -501,6 +501,10 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
     return VimTextScope(
       enabled: VimEnabledScope.of(context) &&
           vimSuitsField(readOnly: widget.readOnly),
+      // Hard off, per SNIPPET.md §2.3. Tab here indents the code (see
+      // [_codeEditorShortcuts]), and a prose trigger firing inside a code
+      // block would corrupt the very text it is meant to be showing verbatim.
+      snippetsAllowed: false,
       controller: widget.controller,
       multiline: true,
       accentColor: Theme.of(context).colorScheme.primary,
@@ -585,6 +589,9 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
               scrollPadding: kVoyagerFieldScrollPadding,
               decoration: _codeDecoration,
             ),
+            // Vim alone, unlike the prose fields, which mount this for a
+            // snippet session too: this one turns snippets off at the scope
+            // above, so there are never tabstop marks here to draw.
             if (vim.session != null)
               Positioned.fill(
                 child: IgnorePointer(

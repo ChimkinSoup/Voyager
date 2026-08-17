@@ -35,6 +35,14 @@ enum WeightUnit { kg, lb }
 
 enum StartupPageMode { first, custom, lastSeen }
 
+/// Which key expands a non-auto text snippet once its trigger sits before the
+/// caret. Global rather than per-snippet — see `SNIPPET.md` decision 18.
+///
+/// [tab] slots into the field's existing Tab chain (tags → tabstops → expand →
+/// focus traversal); [space] moves expansion off Tab entirely and suppresses
+/// the space it would otherwise have typed.
+enum SnippetExpandKey { tab, space }
+
 /// Which of the two hand-built app themes is active.
 ///
 /// Deliberately not tied to the platform brightness: each theme carries its own

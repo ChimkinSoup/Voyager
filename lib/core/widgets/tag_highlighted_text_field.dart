@@ -39,7 +39,6 @@ class TagHighlightedTextField extends StatefulWidget {
     this.readOnly = false,
     this.tagScope,
     this.onKeyEvent,
-    this.modeBadgeOutside = false,
   }) : assert(
          onKeyEvent == null || tagScope != null,
          'onKeyEvent is only installed by the completion popup, which is '
@@ -80,10 +79,6 @@ class TagHighlightedTextField extends StatefulWidget {
   /// completion popup owns that slot so it can claim the arrow keys before
   /// they reach the caret.
   final FocusOnKeyEventCallback? onKeyEvent;
-
-  /// See [VimTextScope.modeBadgeOutside]. Default false: keep the capsule
-  /// inside the field.
-  final bool modeBadgeOutside;
 
   @override
   State<TagHighlightedTextField> createState() =>
@@ -199,17 +194,18 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
 
   @override
   Widget build(BuildContext context) {
+    // Snippets share Vim's field-suitability rule but not its enable switch,
+    // so the predicate is hoisted out and the two are gated separately.
+    final suits = vimSuitsField(
+      keyboardType: widget.keyboardType,
+      readOnly: widget.readOnly,
+    );
     return VimTextScope(
-      enabled:
-          VimEnabledScope.of(context) &&
-          vimSuitsField(
-            keyboardType: widget.keyboardType,
-            readOnly: widget.readOnly,
-          ),
+      enabled: VimEnabledScope.of(context) && suits,
+      snippetsAllowed: suits,
       controller: widget.controller,
       multiline: _spellcheckOn,
       accentColor: widget.accentColor ?? widget.cursorColor,
-      modeBadgeOutside: widget.modeBadgeOutside,
       builder: _buildField,
     );
   }
@@ -394,14 +390,17 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                 )
               : textField,
         ),
-        // Above the field, not behind it — see [VimTextOverlay].
-        if (vim.session != null)
+        // Above the field, not behind it — see [VimTextOverlay]. Mounted for a
+        // snippet session too, which is what puts dotted tabstop marks on a
+        // field with Vim switched off.
+        if (vim.session != null || vim.snippetSession != null)
           Positioned.fill(
             child: IgnorePointer(
               child: Padding(
                 padding: overlayPadding,
                 child: VimTextOverlay(
-                  session: vim.session!,
+                  session: vim.session,
+                  snippetSession: vim.snippetSession,
                   controller: widget.controller,
                   focusNode: widget.focusNode,
                   style: baseStyle,

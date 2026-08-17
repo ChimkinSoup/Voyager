@@ -263,6 +263,7 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                   );
                   return VimOverlayHost(
                     session: vim.session,
+              snippetSession: vim.snippetSession,
                     overlayPaintsSelection: vim.overlayPaintsSelection,
                     controller: widget.controller,
                     focusNode: _focusNode,

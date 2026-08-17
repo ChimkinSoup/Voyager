@@ -127,13 +127,28 @@ class CharacterSequenceCrdtMerger {
   }
 
   /// Throws if the op chain cannot produce stable text.
+  ///
+  /// Two live operations sharing a fractional position is not corruption:
+  /// [applyMergedText] breaks that tie on logical clock and then client id, so
+  /// the text they resolve to is fully determined. Only operations that tie on
+  /// all three are genuinely ambiguous. Rejecting bare position duplicates
+  /// quarantined documents whose chain resolved perfectly — three collisions
+  /// among a thousand live characters was enough — and because resolving a
+  /// conflict never removed the colliding operations, the next pull raised the
+  /// same conflict again, forever.
+  ///
+  /// A chain that really is doubled (every character present twice, from a
+  /// reseed that never tombstoned the original ops) still gets caught, by
+  /// [_pickBody] rejecting a merge that comes out far longer than the snapshot.
   void validateOpChain(List<CharacterOperation> ops) {
     applyMergedText(ops);
-    final positions = ops.where((op) => !op.deleted).map((op) => op.position);
     final seen = <String>{};
-    for (final pos in positions) {
-      if (!seen.add(pos)) {
-        throw FormatException('Duplicate fractional position: $pos');
+    for (final op in ops.where((op) => !op.deleted)) {
+      final orderingKey = '${op.position}|${op.logicalClock}|${op.clientId}';
+      if (!seen.add(orderingKey)) {
+        throw FormatException(
+          'Ambiguous operation ordering at position ${op.position}',
+        );
       }
     }
   }

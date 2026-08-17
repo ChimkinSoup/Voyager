@@ -405,6 +405,22 @@ abstract class SettingsRepository {
   Future<CustomWord?> getCustomWordRecord(String word);
   Future<void> addCustomWord(String word);
   Future<void> removeCustomWord(String word);
+
+  /// Changes the spelling of a custom word: tombstones [from] and adds [to] in
+  /// one transaction, since the word string is this collection's primary key
+  /// and there is no row to edit in place.
+  ///
+  /// [to] must not be a word the bundled dictionary already has — the
+  /// repository can't see that set. A caller renaming onto a bundled word
+  /// calls [removeCustomWord] instead: the new spelling is already accepted,
+  /// so the rename is only the tombstone, and a single write needs no
+  /// transaction.
+  ///
+  /// A no-op if [from] isn't a live custom word, if [to] isn't a single word
+  /// token, or if [to] is already a custom word — the same "reject rather than
+  /// corrupt" stance the other custom-word writes take on input they can't
+  /// use.
+  Future<void> renameCustomWord(String from, String to);
   Future<void> upsertCustomWord(
     CustomWord word, {
     bool recordLocalActivity = true,

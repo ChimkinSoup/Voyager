@@ -261,13 +261,13 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                   enabled: VimEnabledScope.of(context) && vimSuitsField(),
                   controller: _newItemController,
                   multiline: false,
-                  modeBadgeOutside: true,
                   builder: (context, vim) {
                     final textStyle =
                         theme.textTheme.bodyLarge ?? const TextStyle();
                     const hintText = 'Add something to your bucket list…';
                     return VimOverlayHost(
                       session: vim.session,
+              snippetSession: vim.snippetSession,
                       overlayPaintsSelection: vim.overlayPaintsSelection,
                       controller: _newItemController,
                       focusNode: _newItemFocusNode,
@@ -482,7 +482,6 @@ class _TitleEditor extends StatelessWidget {
         enabled: VimEnabledScope.of(context) && vimSuitsField(),
         controller: controller,
         multiline: false,
-        modeBadgeOutside: true,
         accentColor: accentColor,
         builder: (context, vim) {
           final textStyle =
@@ -492,6 +491,7 @@ class _TitleEditor extends StatelessWidget {
                   .copyWith(decoration: TextDecoration.none);
           return VimOverlayHost(
             session: vim.session,
+              snippetSession: vim.snippetSession,
             overlayPaintsSelection: vim.overlayPaintsSelection,
             controller: controller,
             focusNode: focusNode,
@@ -587,6 +587,7 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
             const hintText = 'How did it go? (optional)';
             return VimOverlayHost(
               session: vim.session,
+              snippetSession: vim.snippetSession,
               overlayPaintsSelection: vim.overlayPaintsSelection,
               controller: _controller,
               focusNode: _focusNode,

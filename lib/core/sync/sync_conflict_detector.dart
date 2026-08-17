@@ -5,14 +5,10 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/character_operation.dart';
 import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
-
-enum SyncConflictReason {
-  corruptedOpChain,
-  hardMetadataCollision,
-}
 
 class SyncConflictDetection {
   const SyncConflictDetection({

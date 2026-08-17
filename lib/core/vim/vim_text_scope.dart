@@ -1,6 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:voyager/core/platform/window_focus_watcher.dart';
+import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
+import 'package:voyager/core/snippets/snippet_session.dart';
+import 'package:voyager/core/vim/vim_anchored_chrome.dart';
 import 'package:voyager/core/vim/vim_session.dart';
 
 /// What the host field needs to know about its Vim session while building.
@@ -11,7 +13,12 @@ import 'package:voyager/core/vim/vim_session.dart';
 /// every text mutation) is handled by [VimTextScope] itself, above the field.
 @immutable
 class VimFieldBinding {
-  const VimFieldBinding({this.mode, this.undoController, this.session});
+  const VimFieldBinding({
+    this.mode,
+    this.undoController,
+    this.session,
+    this.snippetSession,
+  });
 
   /// The current mode, or null when Vim is switched off for this field — in
   /// which case every getter below returns the field's ordinary defaults.
@@ -23,6 +30,14 @@ class VimFieldBinding {
   /// the caret offset, Visual selection and search matches to paint. Null when
   /// Vim is off for this field.
   final VimSession? session;
+
+  /// The field's text-snippet runtime, or null when snippets are off, the
+  /// field opted out, or the user has not written a snippet yet.
+  ///
+  /// Independent of [session]: snippets work with Vim switched off. Fields that
+  /// stack a `VimTextOverlay` pass this to it so the dotted tabstop marks get
+  /// drawn — and must mount that overlay when *either* session is live.
+  final SnippetSession? snippetSession;
 
   /// Normal and Visual mode draw a block caret sitting *on* a character,
   /// rather than the thin bar that sits between two.
@@ -127,20 +142,38 @@ typedef VimFieldBuilder =
 /// out from under a box that is being typed into. See [VimSession.handleKey].
 ///
 /// ### Mode badge placement
-/// The `NORMAL` / `VISUAL` / `V-LINE` capsule hangs **inside** the field's
-/// bottom-right by default (`Offset(-10, -8)` from that corner). That is
-/// the right default: this overlay is a [CompositedTransformFollower] on
-/// the root [Overlay], which does not flip or clamp, so hanging the pill
-/// *outside* a field flush with the bottom of the screen (the todo page's
-/// "Add task" composer) would paint over the bottom nav or off the window.
-/// The `/` search bar already docks below and has that problem.
+/// The `NORMAL` / `VISUAL` / `V-LINE` capsule sits **inside** the field's
+/// bottom-right, `Offset(-10, -8)` from that corner, and is fixed there. It is
+/// part of the field: it scrolls with it, and where the field is cut off — by
+/// the box it scrolls inside, by the list its row belongs to — the badge is
+/// cut off on the same line, exactly like a character typed in that corner.
 ///
-/// Opt into [modeBadgeOutside] only when the field is too short for the
-/// pill to sit in that interior corner without covering the last characters
-/// — it then hangs below-right, same family as the search bar. Do **not**
-/// infer this from `multiline == false`; one-line boxes that are tall
-/// enough (Add task, settings, dialogs) should keep the interior chip.
-/// Pick it per call site.
+/// It never repositions itself to stay in sight. A readout that moves on its
+/// own while you are reading it is worse than one you have to scroll to, and
+/// worse again than one that hangs outside the field and lands on whatever is
+/// underneath. See [VimChromeFit.clip].
+///
+/// On a field too short to hold that capsule comfortably — a dense one-line
+/// box, which is most of the composers and inline renames in the app — it
+/// gives way to a smaller, borderless one on the field's centre-right. See
+/// [kVimCompactBadgeField].
+///
+/// The `/` search bar is the exception, and takes [VimChromeFit.clamp]: it
+/// docks below the field and is held to the part of it still on screen, since
+/// a prompt you cannot see is no use for the second you are typing into it.
+///
+/// ### It also hosts text snippets
+/// Snippet expansion needs exactly what this widget already owns — an ancestor
+/// [Focus] that sees every key the field didn't claim, and a way to rewrite the
+/// text through [EditableTextState] — so it lives here rather than in a scope
+/// of its own. That keeps the arbitration order unambiguous and costs no extra
+/// node: one [Focus] serves both.
+///
+/// The two are otherwise independent. Snippets do **not** require [enabled];
+/// they follow the user's own setting (see `SnippetEnabledScope`) and the same
+/// field-suitability rule Vim uses. Keys are offered to the snippet layer
+/// first, since the only ones it claims — Tab and the expand key — are keys
+/// Vim deliberately passes through. See [_handleKey].
 class VimTextScope extends StatefulWidget {
   const VimTextScope({
     super.key,
@@ -149,7 +182,7 @@ class VimTextScope extends StatefulWidget {
     required this.multiline,
     required this.builder,
     this.accentColor,
-    this.modeBadgeOutside = false,
+    this.snippetsAllowed = true,
   });
 
   /// Whether this field gets Vim at all. False for password boxes, numeric
@@ -165,11 +198,13 @@ class VimTextScope extends StatefulWidget {
   /// whether `o`/`O` and a linewise `p` may insert newlines.
   final bool multiline;
 
-  final Color? accentColor;
+  /// Whether this field may run text snippets, on top of the user's own
+  /// setting. The hard opt-out for the two places expansion would be wrong:
+  /// the LeetCode code editor (SNIPPET.md §2.3) and the snippet editor itself,
+  /// where a trigger being typed into a form field must stay literal.
+  final bool snippetsAllowed;
 
-  /// Hang the mode capsule below the field instead of inside its
-  /// bottom-right. Default false — see the class doc for when to set this.
-  final bool modeBadgeOutside;
+  final Color? accentColor;
 
   final VimFieldBuilder builder;
 
@@ -212,10 +247,32 @@ class _VimTextScopeState extends State<VimTextScope> {
   );
 
   VimSession? _session;
+  SnippetSession? _snippetSession;
 
-  /// Live only while this field's focus is parked by an app switch — its
-  /// presence *is* the "suspended" flag. See [_handleFocusChanged].
-  AppLifecycleListener? _resumeListener;
+  /// The snippet settings this field last built against, read in
+  /// [didChangeDependencies] rather than [initState] because it comes from an
+  /// inherited widget.
+  SnippetScopeData _snippetScope = SnippetScopeData.disabled;
+
+  /// Stands in for [VimSession.modeListenable] when Vim is off, so a field with
+  /// only snippets running builds through the same [ValueListenableBuilder] as
+  /// one with Vim on.
+  ///
+  /// That is not cosmetic: switching Vim on or off would otherwise change the
+  /// widget *type* directly above the field, re-inflating [EditableTextState]
+  /// and dropping the platform input connection — the failure [_fieldKey]
+  /// exists to prevent. Pinned to Insert and never fired.
+  final ValueNotifier<VimMode> _insertOnly = ValueNotifier<VimMode>(
+    VimMode.insert,
+  );
+
+  /// True while this field's focus is parked by a window switch rather than by
+  /// the user leaving the box. See [_handleFocusChanged].
+  bool _suspended = false;
+
+  /// The selection Vim had when that happened, put back on the way in — see
+  /// [_endSuspension].
+  TextSelection? _parkedSelection;
 
   /// Whether the badge/search-bar overlay is mounted. Also gates the
   /// [CompositedTransformTarget] below — see [build].
@@ -223,11 +280,26 @@ class _VimTextScopeState extends State<VimTextScope> {
 
   bool get _active => widget.enabled && widget.controller != null;
 
+  bool get _snippetsActive =>
+      widget.snippetsAllowed &&
+      _snippetScope.active &&
+      widget.controller != null;
+
   @override
   void initState() {
     super.initState();
     _createSessionIfNeeded();
     _scopeNode.addListener(_handleFocusChanged);
+    WindowFocusWatcher.instance.addListener(_handleWindowFocusChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = SnippetEnabledScope.of(context);
+    if (scope == _snippetScope) return;
+    _snippetScope = scope;
+    _syncSnippetSession();
   }
 
   @override
@@ -237,6 +309,8 @@ class _VimTextScopeState extends State<VimTextScope> {
         oldWidget.controller != widget.controller) {
       _disposeSession();
       _createSessionIfNeeded();
+      // Offsets from the old field's text mean nothing in the new one.
+      _parkedSelection = null;
       // The fresh session starts in Insert, so any overlay from the old one is
       // stale. Assigned directly rather than through [_syncOverlay]: a rebuild
       // already follows didUpdateWidget, so setState here would be redundant
@@ -245,28 +319,79 @@ class _VimTextScopeState extends State<VimTextScope> {
         _overlayVisible = false;
         _portal.hide();
       }
+    } else if (oldWidget.snippetsAllowed != widget.snippetsAllowed) {
+      _syncSnippetSession();
     }
   }
 
   @override
   void dispose() {
-    _endSuspension();
+    WindowFocusWatcher.instance.removeListener(_handleWindowFocusChanged);
     _scopeNode.removeListener(_handleFocusChanged);
     _scopeNode.dispose();
     _disposeSession();
+    _insertOnly.dispose();
     super.dispose();
   }
 
   void _createSessionIfNeeded() {
-    if (!_active) return;
-    final session = VimSession(
+    if (_active) {
+      final session = VimSession(
+        textController: widget.controller!,
+        resolveEditableState: _resolveEditableState,
+        isMultiline: () => widget.multiline,
+        // Looked up live: settings sync can replace [_snippetSession].
+        trySnippetUndo: () =>
+            _snippetSession?.undoLastExpansion(
+              requireMatchingSelection: false,
+            ) ??
+            false,
+      );
+      session.modeListenable.addListener(_syncOverlay);
+      session.searchListenable.addListener(_syncOverlay);
+      _session = session;
+    }
+    _syncSnippetSession();
+  }
+
+  /// Creates, updates or tears down the snippet runtime to match the current
+  /// settings.
+  ///
+  /// An existing session is *updated* rather than replaced when only the list
+  /// or the expand key changed, so editing an unrelated snippet doesn't destroy
+  /// live tabstops in some other field.
+  void _syncSnippetSession() {
+    final existing = _snippetSession;
+    if (!_snippetsActive) {
+      if (existing == null) return;
+      existing.dispose();
+      _snippetSession = null;
+      return;
+    }
+    if (existing != null) {
+      existing.index = _snippetScope.index;
+      existing.expandKey = _snippetScope.expandKey;
+      return;
+    }
+    _snippetSession = SnippetSession(
       textController: widget.controller!,
       resolveEditableState: _resolveEditableState,
-      isMultiline: () => widget.multiline,
+      isInsertMode: _isInsertBehaviour,
+      index: _snippetScope.index,
+      expandKey: _snippetScope.expandKey,
     );
-    session.modeListenable.addListener(_syncOverlay);
-    session.searchListenable.addListener(_syncOverlay);
-    _session = session;
+  }
+
+  /// Whether the field is behaving as an insert surface right now.
+  ///
+  /// Always true with Vim off. With Vim on it means Insert mode and no `/`
+  /// prompt open — the two states where a typed character is text rather than
+  /// a command (SNIPPET.md §2.3).
+  bool _isInsertBehaviour() {
+    final session = _session;
+    if (session == null) return true;
+    return session.mode == VimMode.insert &&
+        session.searchListenable.value == null;
   }
 
   /// Finds the focused field's [EditableTextState].
@@ -282,6 +407,8 @@ class _VimTextScopeState extends State<VimTextScope> {
   }
 
   void _disposeSession() {
+    _snippetSession?.dispose();
+    _snippetSession = null;
     final session = _session;
     if (session == null) return;
     session.modeListenable.removeListener(_syncOverlay);
@@ -292,60 +419,85 @@ class _VimTextScopeState extends State<VimTextScope> {
 
   void _handleFocusChanged() {
     if (_scopeNode.hasFocus) {
-      // Focus is back — whether the framework handed it back after an app
+      // Focus is back — whether the framework handed it back after a window
       // switch or the user clicked in. Either way there is nothing left to
       // wait for.
       _endSuspension();
-    } else if (_appIsBackgrounded) {
-      // Not the user leaving the box. On desktop the framework parks the
-      // primary focus whenever the app itself stops being `resumed` — an
-      // Alt-Tab to another window is enough — and hands it back on resume
-      // (`FocusManager._appLifecycleChange`). Resetting here is what used to
-      // dump you into Insert on every app switch, and take the Visual range
-      // with it. So the session is left exactly as it stands: mode, pending
-      // command, `/` prompt and selection all still there when you come back.
-      _watchForResume();
+    } else if (!WindowFocusWatcher.instance.hasFocus) {
+      // Not the user leaving the box: the *window* left. The framework parks
+      // the primary focus on both of the paths a switch arrives by (see
+      // [WindowFocusWatcher]) and hands it back when the window returns.
+      // Resetting here is what used to dump you into Insert on every Alt-Tab,
+      // and take the Visual range with it. So the session is left exactly as
+      // it stands: mode, pending command, `/` prompt and selection all still
+      // there when you come back.
+      _beginSuspension();
     } else {
       // A field's Vim state belongs to one editing session: leaving the box
       // drops back to Insert so the next click behaves like an ordinary field.
+      // Snippet tabstops are per-session for the same reason (SNIPPET.md §7),
+      // and are left alone by the suspension branch above on the same grounds
+      // as the Vim mode: a window switch is not the user leaving the box.
       _session?.reset();
+      _snippetSession?.reset();
     }
     _syncOverlay();
   }
 
-  /// Whether the *app* — not just this field — is out of the foreground.
-  ///
-  /// Null until the first lifecycle message arrives, which reads as
-  /// foreground: a focus loss that early is a real one.
-  static bool get _appIsBackgrounded {
-    final state = WidgetsBinding.instance.lifecycleState;
-    return state != null && state != AppLifecycleState.resumed;
-  }
-
-  void _watchForResume() {
-    _resumeListener ??= AppLifecycleListener(onResume: _handleAppResumed);
+  void _beginSuspension() {
+    if (_suspended) return;
+    _suspended = true;
+    // Snapshotted now, while it is still the caret Vim put there: nothing has
+    // stomped it yet, because `EditableText` re-selects a field when it is
+    // *focused*, on the way back.
+    _parkedSelection = widget.controller?.selection;
   }
 
   void _endSuspension() {
-    _resumeListener?.dispose();
-    _resumeListener = null;
+    if (!_suspended) return;
+    _suspended = false;
+    final parked = _parkedSelection;
+    _parkedSelection = null;
+    final session = _session;
+    if (parked == null || session == null || session.mode == VimMode.insert) {
+      return;
+    }
+    // Desktop [EditableText] selects the whole of a single-line field whenever
+    // it takes focus (`selectAllOnFocus`), and after a window switch the
+    // framework hands that focus back on its own. Left alone, Normal mode
+    // comes back with its caret at the end of the field and Visual mode paints
+    // its range over everything. Deferred a frame because that select-all can
+    // land after this notification.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scopeNode.hasFocus) return;
+      session.restoreSelection(parked);
+    });
   }
 
-  /// The app is back in the foreground.
+  /// The window came back — or left, in which case there is nothing to do here
+  /// and [_handleFocusChanged] will have parked the session already.
   ///
-  /// [FocusManager] restores the node it suspended from a microtask of its
-  /// own, queued ahead of this one — its lifecycle observer is registered when
-  /// the binding is created, long before this listener. So by the time this
-  /// runs the focus has either returned, in which case [_handleFocusChanged]
-  /// has already cleared the suspension, or it is not going to: something else
-  /// took focus while the app was away. That second case is an abandoned
-  /// field, and it resets like any other, so a click into it later still lands
-  /// in Insert.
-  void _handleAppResumed() {
-    scheduleMicrotask(() {
-      if (!mounted || _resumeListener == null || _scopeNode.hasFocus) return;
-      _endSuspension();
+  /// By the next frame the focus has either returned, in which case
+  /// [_handleFocusChanged] has already ended the suspension, or it is not
+  /// going to: something else took focus while the window was away. That
+  /// second case is an abandoned field, and it resets like any other, so a
+  /// click into it later still lands in Insert.
+  ///
+  /// Checked from a frame callback rather than a microtask because the
+  /// framework restores the focus it parked from a microtask of *its* own, and
+  /// which of the two runs first depends on the order the binding observers
+  /// happen to sit in. Both are long done by the time a frame is drawn.
+  void _handleWindowFocusChanged() {
+    if (!_suspended || !WindowFocusWatcher.instance.hasFocus) return;
+    // Nothing about a window regaining focus dirties the tree on its own, so
+    // ask for the frame this callback needs.
+    WidgetsBinding.instance.ensureVisualUpdate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_suspended || _scopeNode.hasFocus) return;
+      _suspended = false;
+      _parkedSelection = null;
       _session?.reset();
+      _snippetSession?.reset();
       _syncOverlay();
     });
   }
@@ -370,9 +522,23 @@ class _VimTextScopeState extends State<VimTextScope> {
     }
   }
 
+  /// Key arbitration for the field below.
+  ///
+  /// By the time this runs, `TagSuggestionPortal` has already had first refusal
+  /// — it owns `focusNode.onKeyEvent`, one level down — so an open completion
+  /// popup keeps Tab and Escape for itself.
+  ///
+  /// Snippets go before Vim because the two never want the same key: the only
+  /// keys the snippet layer claims are Tab, the expand key and `Ctrl+Z`, and
+  /// [VimSession] passes Tab straight through in every mode (focus traversal
+  /// stays available) while Space and `Ctrl+Z` only mean anything to it outside
+  /// Insert — which is exactly where the snippet layer declines to act.
+  /// Bare `u` stays with Vim: Normal mode asks the snippet session via
+  /// [VimSession.trySnippetUndo] rather than claiming the key here.
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     final session = _session;
-    if (session == null) return KeyEventResult.ignored;
+    final snippets = _snippetSession;
+    if (session == null && snippets == null) return KeyEventResult.ignored;
     // Only claim keys destined for a real text field. The scope's subtree can
     // also contain focusable chrome (a suffix icon button, say), and Vim has
     // no business intercepting keys typed at those.
@@ -380,13 +546,18 @@ class _VimTextScopeState extends State<VimTextScope> {
     if (focused?.findAncestorStateOfType<EditableTextState>() == null) {
       return KeyEventResult.ignored;
     }
-    return session.handleKey(event);
+    if (snippets != null) {
+      final result = snippets.handleKey(event);
+      if (result == KeyEventResult.handled) return result;
+    }
+    return session?.handleKey(event) ?? KeyEventResult.ignored;
   }
 
   @override
   Widget build(BuildContext context) {
     final session = _session;
-    if (session == null) {
+    final snippets = _snippetSession;
+    if (session == null && snippets == null) {
       return widget.builder(context, const VimFieldBinding());
     }
 
@@ -394,17 +565,22 @@ class _VimTextScopeState extends State<VimTextScope> {
 
     // Only the mode notifier drives this rebuild. The HUD text and the search
     // bar change far more often and are listened to separately, inside the
-    // overlay, so typing a command never rebuilds the field.
+    // overlay, so typing a command never rebuilds the field. A snippet-only
+    // field builds through the same shape against a notifier that never fires
+    // — see [_insertOnly].
     Widget field = KeyedSubtree(
       key: _fieldKey,
       child: ValueListenableBuilder<VimMode>(
-        valueListenable: session.modeListenable,
+        valueListenable: session?.modeListenable ?? _insertOnly,
         builder: (context, mode, _) => widget.builder(
           context,
           VimFieldBinding(
-            mode: mode,
-            undoController: session.undoController,
+            // Null, not Insert, when Vim is off: that is what makes every
+            // getter on the binding fall back to the field's own defaults.
+            mode: session == null ? null : mode,
+            undoController: session?.undoController,
             session: session,
+            snippetSession: snippets,
           ),
         ),
       ),
@@ -428,11 +604,15 @@ class _VimTextScopeState extends State<VimTextScope> {
       focusNode: _scopeNode,
       child: OverlayPortal(
         controller: _portal,
+        // Never built without a Vim session: [_syncOverlay] is the only thing
+        // that shows this portal and it requires one. Kept mounted (hidden) on
+        // a snippet-only field so switching Vim on doesn't change the shape of
+        // the tree above the field — see [_insertOnly].
         overlayChildBuilder: (context) => _VimFieldOverlay(
           link: _link,
-          session: session,
+          fieldKey: _fieldKey,
+          session: session!,
           accentColor: accent,
-          modeBadgeOutside: widget.modeBadgeOutside,
         ),
         child: field,
       ),
@@ -440,52 +620,101 @@ class _VimTextScopeState extends State<VimTextScope> {
   }
 }
 
+/// A field shorter than this gets the compact mode badge.
+///
+/// The full capsule is 16px tall and hangs 8px off the bottom of the field, so
+/// on a short one it stops reading as tucked into a corner and starts reading
+/// as filling the box — 16px of badge in a 36px field, sitting 4px below the
+/// centre line, is what looks crooked in the quick-reminder composer.
+///
+/// The line is drawn from the app's own fields, measured under
+/// [VoyagerTheme]'s compact density: the dense family runs 36px (the
+/// quick-reminder box) to 46px (the bucket-list composer), with the bucket-list
+/// rows and todo's inline rename at 44, while an ordinary outlined field is 54.
+/// 50 splits that gap evenly.
+const kVimCompactBadgeField = 50.0;
+
 /// The mode badge and the `/` search bar, both hung off the field's
-/// [LayerLink] so they track it through scrolling, dialogs and popovers
-/// without any measurement code.
-class _VimFieldOverlay extends StatelessWidget {
+/// [LayerLink] so they track it through scrolling, dialogs and popovers without
+/// any measurement code — and each given the [VimChromeFit] that suits it,
+/// since the link alone would follow the field straight out of the box it
+/// scrolls inside and keep painting.
+class _VimFieldOverlay extends StatefulWidget {
   const _VimFieldOverlay({
     required this.link,
+    required this.fieldKey,
     required this.session,
     required this.accentColor,
-    required this.modeBadgeOutside,
   });
 
   final LayerLink link;
+  final GlobalKey fieldKey;
   final VimSession session;
   final Color accentColor;
-  final bool modeBadgeOutside;
+
+  @override
+  State<_VimFieldOverlay> createState() => _VimFieldOverlayState();
+}
+
+class _VimFieldOverlayState extends State<_VimFieldOverlay> {
+  /// How tall the field is, which decides which badge it gets.
+  ///
+  /// Seeded here from the render object rather than from `BuildContext.size`,
+  /// which refuses to answer during a build: the value is one frame old by
+  /// definition, and that is the right one, since this overlay is unmounted
+  /// for the whole of Insert mode (see `_syncOverlay`) and so is built afresh
+  /// on the field you have just finished typing into. From then on the badge's
+  /// own chrome reports every change — a `p` that pastes in three lines, a
+  /// `dd` that takes them out again.
+  late double? _fieldHeight = _measureField();
+
+  double? _measureField() {
+    final field = widget.fieldKey.currentContext?.findRenderObject();
+    return field is RenderBox && field.hasSize ? field.size.height : null;
+  }
+
+  void _handleFieldHeight(double height) {
+    if (height == _fieldHeight || !mounted) return;
+    setState(() => _fieldHeight = height);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final height = _fieldHeight;
+    final compact = height != null && height < kVimCompactBadgeField;
     return Stack(
       children: [
-        Positioned(
-          left: 0,
-          top: 0,
-          child: CompositedTransformFollower(
-            link: link,
-            showWhenUnlinked: false,
-            targetAnchor: Alignment.bottomRight,
-            followerAnchor: modeBadgeOutside
-                ? Alignment.topRight
-                : Alignment.bottomRight,
-            offset: modeBadgeOutside
-                ? const Offset(-10, 6)
-                : const Offset(-10, -8),
-            child: _VimModeBadge(session: session, accentColor: accentColor),
+        VimAnchoredChrome(
+          link: widget.link,
+          fieldKey: widget.fieldKey,
+          onFieldHeight: _handleFieldHeight,
+          // Centred rather than tucked into the corner, which is most of the
+          // fix on a short field: a 13px badge centred on a 40px box comes
+          // within a pixel of the border's curve, where the same badge sitting
+          // on the bottom edge runs straight into it — so the inset off the
+          // right stays 10px either way.
+          targetAnchor: compact ? Alignment.centerRight : Alignment.bottomRight,
+          followerAnchor: compact
+              ? Alignment.centerRight
+              : Alignment.bottomRight,
+          offset: compact ? const Offset(-10, 0) : const Offset(-10, -8),
+          fit: VimChromeFit.clip,
+          child: _VimModeBadge(
+            session: widget.session,
+            accentColor: widget.accentColor,
+            compact: compact,
           ),
         ),
-        Positioned(
-          left: 0,
-          top: 0,
-          child: CompositedTransformFollower(
-            link: link,
-            showWhenUnlinked: false,
-            targetAnchor: Alignment.bottomLeft,
-            followerAnchor: Alignment.topLeft,
-            offset: const Offset(0, 6),
-            child: _VimSearchBar(session: session, accentColor: accentColor),
+        VimAnchoredChrome(
+          link: widget.link,
+          fieldKey: widget.fieldKey,
+          targetAnchor: Alignment.bottomLeft,
+          followerAnchor: Alignment.topLeft,
+          offset: const Offset(0, 6),
+          fit: VimChromeFit.clamp,
+          child: _VimSearchBar(
+            session: widget.session,
+            accentColor: widget.accentColor,
           ),
         ),
       ],
@@ -499,14 +728,25 @@ class _VimFieldOverlay extends StatelessWidget {
 /// mean the mode you are in is briefly ambiguous at exactly the moment you
 /// need to know it.
 class _VimModeBadge extends StatelessWidget {
-  const _VimModeBadge({required this.session, required this.accentColor});
+  const _VimModeBadge({
+    required this.session,
+    required this.accentColor,
+    required this.compact,
+  });
 
   final VimSession session;
   final Color accentColor;
 
+  /// The short-field form: same word, a point smaller, with less padding and
+  /// no border — around 13px of height against the full badge's 16. The border
+  /// is the part that makes the full badge crowd a dense box, two strokes a
+  /// few pixels apart with the field's own, so dropping it buys more room than
+  /// it costs legibility and the fill carries the badge alone.
+  /// See [kVimCompactBadgeField].
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return IgnorePointer(
       child: ValueListenableBuilder<VimMode>(
         valueListenable: session.modeListenable,
@@ -514,45 +754,48 @@ class _VimModeBadge extends StatelessWidget {
           if (mode == VimMode.insert) return const SizedBox.shrink();
           return ValueListenableBuilder<String>(
             valueListenable: session.hudListenable,
-            builder: (context, pending, _) {
-              return DecoratedBox(
-                decoration: BoxDecoration(
-                  // A flat translucent fill rather than a GlassSurface: this
-                  // sits on screen for the whole time you are in Normal mode,
-                  // and a persistent BackdropFilter would cost a saveLayer
-                  // every frame for a 60px pill.
-                  color: Color.alphaBlend(
-                    accentColor.withValues(alpha: 0.22),
-                    theme.colorScheme.surface,
-                  ),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: accentColor.withValues(alpha: 0.45),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  child: Text(
-                    pending.isEmpty ? mode.label : '${mode.label}  $pending',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontSize: 10,
-                      height: 1.2,
-                      letterSpacing: 0.8,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.85,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
+            builder: (context, pending, _) => _badge(context, mode, pending),
           );
         },
+      ),
+    );
+  }
+
+  Widget _badge(BuildContext context, VimMode mode, String pending) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        // A flat translucent fill rather than a GlassSurface: this sits on
+        // screen for the whole time you are in Normal mode, and a persistent
+        // BackdropFilter would cost a saveLayer every frame for a 60px pill.
+        color: Color.alphaBlend(
+          // Carrying the badge without a border takes a little more fill.
+          accentColor.withValues(alpha: compact ? 0.3 : 0.22),
+          theme.colorScheme.surface,
+        ),
+        borderRadius: BorderRadius.circular(compact ? 4 : 6),
+        border: compact
+            ? null
+            : Border.all(color: accentColor.withValues(alpha: 0.45), width: 1),
+      ),
+      child: Padding(
+        padding: compact
+            ? const EdgeInsets.symmetric(horizontal: 5, vertical: 1)
+            : const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          pending.isEmpty ? mode.label : '${mode.label}  $pending',
+          style: theme.textTheme.labelSmall?.copyWith(
+            // A point under the full badge, which on the densest fields is
+            // also a point under the field's own text — the badge reading as
+            // large as the note you are writing is much of why it draws the
+            // eye there.
+            fontSize: compact ? 9 : 10,
+            height: 1.2,
+            letterSpacing: compact ? 0.6 : 0.8,
+            fontFeatures: const [FontFeature.tabularFigures()],
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+          ),
+        ),
       ),
     );
   }

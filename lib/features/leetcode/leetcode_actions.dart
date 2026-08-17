@@ -6,10 +6,13 @@ import 'package:voyager/app/providers.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/domain/models/leetcode_api_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_loading_toast.dart';
+import 'package:voyager/features/leetcode/leetcode_track_draft.dart';
+import 'package:voyager/features/leetcode/leetcode_track_draft_store.dart';
 import 'package:voyager/features/leetcode/leetcode_track_modal.dart';
 
 /// Writes [problem] through the repository and out to sync, then refreshes
@@ -25,31 +28,64 @@ Future<void> _save(WidgetRef ref, LeetCodeProblem problem) async {
 /// Any failure there just opens an empty form — the fetch is a convenience,
 /// not a precondition for tracking a problem by hand.
 ///
+/// The lookup runs whether or not a local draft is waiting, because it is what
+/// decides between them: a draft whose problem name is the one just solved is
+/// the same piece of work, and resuming it beats handing back a blank prefill
+/// of a form the user had already half-written. Any other draft is set aside
+/// and offered rather than opened, and a lookup that can't answer falls back to
+/// the draft if there is one.
+///
 /// Shared by the Track button and the Review Deck's empty state, which offers
 /// the same action rather than pointing at the button.
 Future<void> startLeetCodeTrackFlow(BuildContext context, WidgetRef ref) async {
+  // Started before the network call rather than awaited first: a local file
+  // read has no business adding to the time the fetch toast is up.
+  final draftFuture = ref.read(leetCodeTrackDraftStoreProvider).load();
   final username = ref.read(settingsProvider).value?.leetcodeUsername?.trim();
-  if (username == null || username.isEmpty) {
-    await showLeetCodeTrackModal(context, ref);
+
+  LeetCodeApiQuestion? recent;
+  if (username != null && username.isNotEmpty) {
+    final dismissToast = showLeetCodeToast(
+      context,
+      message: 'Fetching your latest submission…',
+    );
+    try {
+      recent = await ref
+          .read(leetCodeApiClientProvider)
+          .fetchMostRecentAcceptedSubmission(username);
+    } catch (_) {
+      // Handled the same as "no submission": the draft, or an empty form.
+    }
+    dismissToast();
+  }
+
+  final draft = await draftFuture;
+  if (!context.mounted) return;
+
+  if (recent == null) {
+    await showLeetCodeTrackModal(
+      context,
+      ref,
+      draft: draft,
+      draftOutcome: draft == null
+          ? LeetCodeTrackDraftOutcome.none
+          : LeetCodeTrackDraftOutcome.resumedAfterFetchFailure,
+    );
     return;
   }
 
-  final dismissToast = showLeetCodeToast(
+  final resume = draft != null && leetCodeTrackDraftMatches(draft, recent.title);
+  await showLeetCodeTrackModal(
     context,
-    message: 'Fetching your latest submission…',
+    ref,
+    prefill: resume ? null : recent,
+    draft: draft,
+    draftOutcome: draft == null
+        ? LeetCodeTrackDraftOutcome.none
+        : resume
+        ? LeetCodeTrackDraftOutcome.resumed
+        : LeetCodeTrackDraftOutcome.mismatch,
   );
-  try {
-    final recent = await ref
-        .read(leetCodeApiClientProvider)
-        .fetchMostRecentAcceptedSubmission(username);
-    dismissToast();
-    if (!context.mounted) return;
-    await showLeetCodeTrackModal(context, ref, prefill: recent);
-  } catch (_) {
-    dismissToast();
-    if (!context.mounted) return;
-    await showLeetCodeTrackModal(context, ref);
-  }
 }
 
 /// Persists a Study-session grade. Returns the graded problem so the session

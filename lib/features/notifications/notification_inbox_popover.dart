@@ -224,7 +224,6 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
                 vimSuitsField(keyboardType: TextInputType.multiline),
             controller: _controller,
             multiline: true,
-            modeBadgeOutside: true,
             builder: (context, vim) {
               const hintText = 'Type a quick reminder...';
               final overlayPadding = vimOverlayPadding(
@@ -236,6 +235,7 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
               );
               return VimOverlayHost(
                 session: vim.session,
+              snippetSession: vim.snippetSession,
                 overlayPaintsSelection: vim.overlayPaintsSelection,
                 controller: _controller,
                 focusNode: _focusNode,
@@ -462,7 +462,6 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
               vimSuitsField(keyboardType: TextInputType.multiline),
           controller: _editController,
           multiline: true,
-          modeBadgeOutside: true,
           builder: (context, vim) {
             final overlayPadding = vimOverlayPadding(
               contentPadding: fieldContentPadding,
@@ -473,6 +472,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
             );
             return VimOverlayHost(
               session: vim.session,
+              snippetSession: vim.snippetSession,
               overlayPaintsSelection: vim.overlayPaintsSelection,
               controller: _editController,
               focusNode: _editFocusNode,

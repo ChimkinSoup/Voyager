@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
+import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
@@ -2096,6 +2097,11 @@ class DriftSettingsRepository implements SettingsRepository {
       alertTimeHour: row.alertTimeHour,
       hideCompletedTasks: row.hideCompletedTasks,
       vimModeEnabled: row.vimModeEnabled,
+      snippetsEnabled: row.snippetsEnabled,
+      snippetExpandKey: SnippetExpandKey.values.byName(row.snippetExpandKey),
+      snippets: row.snippetsJson == null
+          ? const []
+          : Snippet.listFromJson(jsonDecode(row.snippetsJson!)),
       deviceId: row.deviceId,
       lastViewedJournalId: row.lastViewedJournalId,
       lastViewedTodoListId: row.lastViewedTodoListId,
@@ -2277,6 +2283,11 @@ class DriftSettingsRepository implements SettingsRepository {
             alertTimeHour: Value(settings.alertTimeHour),
             hideCompletedTasks: Value(settings.hideCompletedTasks),
             vimModeEnabled: Value(settings.vimModeEnabled),
+            snippetsEnabled: Value(settings.snippetsEnabled),
+            snippetExpandKey: Value(settings.snippetExpandKey.name),
+            snippetsJson: Value(
+              jsonEncode([for (final s in settings.snippets) s.toJson()]),
+            ),
             deviceId: Value(settings.deviceId),
             lastViewedJournalId: Value(settings.lastViewedJournalId),
             lastViewedTodoListId: Value(settings.lastViewedTodoListId),
@@ -2473,7 +2484,7 @@ class DriftSettingsRepository implements SettingsRepository {
 
   @override
   Future<void> addCustomWord(String word) async {
-    final normalized = word.trim().toLowerCase();
+    final normalized = normalizeCustomWord(word);
     if (normalized.isEmpty) return;
     final existing = await getCustomWordRecord(normalized);
     await upsertCustomWord(
@@ -2493,7 +2504,7 @@ class DriftSettingsRepository implements SettingsRepository {
   /// on their next pull.
   @override
   Future<void> removeCustomWord(String word) async {
-    final normalized = word.trim().toLowerCase();
+    final normalized = normalizeCustomWord(word);
     final existing = await getCustomWordRecord(normalized);
     if (existing == null) return;
     await upsertCustomWord(
@@ -2505,6 +2516,60 @@ class DriftSettingsRepository implements SettingsRepository {
         deletedAt: utcNow(),
       ),
     );
+  }
+
+  /// See [SettingsRepository.renameCustomWord]. Both writes go in one
+  /// transaction so a crash between them can't leave the old spelling deleted
+  /// with the new one never written; the two sync notifications fire after the
+  /// commit, so a rolled-back rename is never uploaded.
+  @override
+  Future<void> renameCustomWord(String from, String to) async {
+    final oldWord = normalizeCustomWord(from);
+    final newWord = normalizeCustomWord(to);
+    // Only the new spelling is checked: the old one is whatever is in the
+    // table, and a row that predates this rule should be fixable, not stuck.
+    if (oldWord == newWord || !isCustomWordToken(newWord)) return;
+
+    CustomWord? removed;
+    CustomWord? added;
+    await _db.transaction(() async {
+      final existing = await getCustomWordRecord(oldWord);
+      if (existing == null || existing.deletedAt != null) return;
+      final target = await getCustomWordRecord(newWord);
+      if (target != null && target.deletedAt == null) return;
+
+      final now = utcNow();
+      final tombstone = CustomWord(
+        word: oldWord,
+        createdAt: existing.createdAt,
+        updatedAt: now,
+        version: existing.version + 1,
+        deletedAt: now,
+      );
+      // Renaming onto a word that was removed earlier clears its tombstone,
+      // exactly as re-adding it would.
+      final replacement = CustomWord(
+        word: newWord,
+        createdAt: target?.createdAt ?? now,
+        updatedAt: now,
+        version: (target?.version ?? -1) + 1,
+      );
+      await upsertCustomWord(tombstone, recordLocalActivity: false);
+      await upsertCustomWord(replacement, recordLocalActivity: false);
+      removed = tombstone;
+      added = replacement;
+    });
+
+    final tombstone = removed;
+    final replacement = added;
+    if (tombstone == null || replacement == null) return;
+    // One notification carrying both: the other devices pull a deleted old doc
+    // and a live new one, which is what "this spelling is gone, this spelling
+    // is present" looks like on the wire.
+    _syncedWrites?.notify(FirestoreCollections.customWords, [
+      tombstone,
+      replacement,
+    ]);
   }
 
   @override
@@ -2653,6 +2718,7 @@ class DriftSyncConflictRepository implements SyncConflictRepository {
             localText: Value(conflict.localText),
             remoteText: Value(conflict.remoteText),
             detectedAt: Value(conflict.detectedAt),
+            reason: Value(conflict.reason?.storageValue),
           ),
         );
   }
@@ -2688,6 +2754,7 @@ class DriftSyncConflictRepository implements SyncConflictRepository {
     localText: row.localText,
     remoteText: row.remoteText,
     detectedAt: row.detectedAt,
+    reason: SyncConflictReason.fromStorage(row.reason),
   );
 }
 

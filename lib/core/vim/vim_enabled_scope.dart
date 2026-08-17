@@ -41,13 +41,20 @@ class VimEnabledScope extends InheritedWidget {
 ///   reject most of what an operator would write back, so a Vim edit there
 ///   would silently half-apply.
 /// - **Read-only** fields cannot be edited at all.
+/// - **Length-capped** fields are the same case as formatter-constrained ones:
+///   `maxLength` installs a [LengthLimitingTextInputFormatter] of Flutter's
+///   own, which would truncate a write after the caller computed its offsets
+///   against the untruncated text — a snippet expansion would leave its
+///   tabstops past the end of the field.
 bool vimSuitsField({
   bool obscureText = false,
   TextInputType? keyboardType,
   List<TextInputFormatter>? inputFormatters,
   bool readOnly = false,
+  int? maxLength,
 }) {
   if (obscureText || readOnly) return false;
+  if (maxLength != null) return false;
   if (inputFormatters != null && inputFormatters.isNotEmpty) return false;
   if (keyboardType != null && !_isFreeTextKeyboard(keyboardType)) return false;
   return true;
