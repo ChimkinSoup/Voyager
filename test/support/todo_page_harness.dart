@@ -15,6 +15,8 @@ import 'package:voyager/features/todo/todo_page.dart';
 import '../fakes/fake_weather_api_client.dart';
 
 const todoHarnessListId = 'harness-list';
+const todoHarnessSecondListId = 'harness-list-2';
+const todoHarnessSecondListName = 'Second';
 
 /// Seeds [active] incomplete then [done] completed tasks titled `Task 0..n`,
 /// already in normalized sort order so the page's normalize pass has nothing
@@ -54,23 +56,61 @@ Future<void> seedTodoTasks(
 ///
 /// Returns the database so callers can assert against what was actually
 /// written. Pass [showAllTasks] to start the page in the "All tasks" view the
-/// way a restart into that view would.
+/// way a restart into that view would, [seedSecondList] to add a second list
+/// holding one task, [configureList] to adjust the harness list's per-list
+/// settings before it is written, and [defaultTodoListId] to seed the setting
+/// that decides which list the page opens into.
 Future<AppDatabase> pumpTodoPage(
   WidgetTester tester, {
   required int active,
   required int done,
   bool completedExpanded = true,
   bool showAllTasks = false,
+  bool seedSecondList = false,
+  TodoListModel Function(TodoListModel)? configureList,
+  String? defaultTodoListId,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
   await seedTodoTasks(db, active: active, done: done);
+  final repo = DriftTodoRepository(db);
+  final now = DateTime.now().toUtc();
+  if (configureList != null) {
+    final list = (await repo.listLists()).firstWhere(
+      (l) => l.id == todoHarnessListId,
+    );
+    await repo.upsertList(configureList(list));
+  }
+  if (seedSecondList) {
+    await repo.upsertList(
+      TodoListModel(
+        id: todoHarnessSecondListId,
+        name: todoHarnessSecondListName,
+        createdAt: now,
+        updatedAt: now,
+        colorValue: 0xFFCC3366,
+      ),
+    );
+    await repo.upsertTask(
+      TodoTask(
+        id: 'second-task',
+        listId: todoHarnessSecondListId,
+        // Keeps the `Task ` substring the settle assertion below looks for, so
+        // a test that hides the harness list still has something to match.
+        title: 'Second Task 1',
+        sortOrder: 1000000,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
   final settingsRepo = DriftSettingsRepository(db);
   await settingsRepo.saveSettings(
     (await settingsRepo.getSettings()).copyWith(
       todoCompletedSectionExpanded: completedExpanded,
       lastViewedTodoListId: todoHarnessListId,
       todoShowAllTasks: showAllTasks,
+      defaultTodoListId: defaultTodoListId,
     ),
   );
 

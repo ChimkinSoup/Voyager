@@ -522,7 +522,10 @@ class _WordEditorState extends State<_WordEditor> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      // Six, not four: the field inside is 28px tall and the [ListTile] this
+      // row replaces is 40, so 4px of padding left the list jumping 4px
+      // shorter the moment a word was opened for renaming.
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

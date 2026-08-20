@@ -115,6 +115,17 @@ Future<bool> deleteTodoList(
   }
 
   await repo.softDeleteList(list.id);
+  // A deleted list can't stay the one the page opens into; leaving the id
+  // behind would make the todo page fall back silently and look as if the
+  // setting had been forgotten.
+  final settingsRepo = ref.read(settingsRepositoryProvider);
+  final settings = await settingsRepo.getSettings();
+  if (settings.defaultTodoListId == list.id) {
+    await settingsRepo.saveSettings(
+      settings.copyWith(clearDefaultTodoListId: true),
+    );
+    ref.invalidate(settingsProvider);
+  }
   final deleted =
       (await repo.listLists(includeDeleted: true))
           .firstWhere((item) => item.id == list.id);

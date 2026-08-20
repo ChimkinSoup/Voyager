@@ -6,6 +6,7 @@ import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 enum VoyagerMenuCatalogEntry {
   rename,
   changeColor,
+  settings,
   delete,
   weatherSunny,
   weatherCloudy,
@@ -26,6 +27,23 @@ const entityManageMenuEntries = [
   VoyagerMenuCatalogEntry.delete,
 ];
 
+/// Journal and todo-list manage menus, which carry a per-entity settings sheet
+/// the calendar's lists have no equivalent of.
+const configurableManageMenuEntries = [
+  VoyagerMenuCatalogEntry.rename,
+  VoyagerMenuCatalogEntry.changeColor,
+  VoyagerMenuCatalogEntry.settings,
+  VoyagerMenuCatalogEntry.delete,
+];
+
+/// [configurableManageMenuEntries] for the built-in default journal/list, which
+/// can be renamed and configured but not deleted.
+const defaultConfigurableManageMenuEntries = [
+  VoyagerMenuCatalogEntry.rename,
+  VoyagerMenuCatalogEntry.changeColor,
+  VoyagerMenuCatalogEntry.settings,
+];
+
 /// Default entries and order for journal entry weather picker.
 const weatherMenuEntries = [
   VoyagerMenuCatalogEntry.weatherSunny,
@@ -41,6 +59,7 @@ extension VoyagerMenuCatalogEntryLabels on VoyagerMenuCatalogEntry {
   String get label => switch (this) {
     VoyagerMenuCatalogEntry.rename => 'Rename',
     VoyagerMenuCatalogEntry.changeColor => 'Change color',
+    VoyagerMenuCatalogEntry.settings => 'Settings',
     VoyagerMenuCatalogEntry.delete => 'Delete',
     VoyagerMenuCatalogEntry.weatherSunny => 'Sunny',
     VoyagerMenuCatalogEntry.weatherCloudy => 'Cloudy',
@@ -51,6 +70,7 @@ extension VoyagerMenuCatalogEntryLabels on VoyagerMenuCatalogEntry {
   IconData? get icon => switch (this) {
     VoyagerMenuCatalogEntry.rename => PhosphorIconsRegular.pencilSimple,
     VoyagerMenuCatalogEntry.changeColor => PhosphorIconsRegular.palette,
+    VoyagerMenuCatalogEntry.settings => PhosphorIconsRegular.slidersHorizontal,
     VoyagerMenuCatalogEntry.delete => PhosphorIconsRegular.trash,
     VoyagerMenuCatalogEntry.weatherSunny => weatherIconData('sunny'),
     VoyagerMenuCatalogEntry.weatherCloudy => weatherIconData('cloudy'),

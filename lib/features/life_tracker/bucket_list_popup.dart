@@ -374,62 +374,66 @@ class _BucketListRow extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: _kTitleLineHeight,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: isEditing
-                          ? _TitleEditor(
-                              controller: editController,
-                              focusNode: editFocusNode,
-                              style: titleStyle,
-                              accentColor: accentColor,
-                              onSubmit: onSubmitEdit,
-                              onCancel: onCancelEdit,
-                            )
-                          // Tap the title to rename in place; the circle to the
-                          // left still owns completion, so the two don't
-                          // compete. Inset by the editor's own horizontal
-                          // padding so the text doesn't jump sideways the
-                          // moment the field swaps in.
-                          : GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: onEdit,
-                              child: Padding(
+              // Tap anywhere in the row's text column to rename in place —
+              // the whole width, and the note under the title too, not just
+              // the glyphs. A short item like "Skydive" left almost the entire
+              // row inert, with the only way in a click on eight characters.
+              // The circle to the left still owns completion and the ✕ to the
+              // right deletion, so nothing here competes with either.
+              child: _TapToEdit(
+                enabled: !isEditing,
+                onTap: onEdit,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: _kTitleLineHeight,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: isEditing
+                            ? _TitleEditor(
+                                controller: editController,
+                                focusNode: editFocusNode,
+                                style: titleStyle,
+                                accentColor: accentColor,
+                                onSubmit: onSubmitEdit,
+                                onCancel: onCancelEdit,
+                              )
+                            // Inset by the editor's own horizontal padding so
+                            // the text doesn't jump sideways the moment the
+                            // field swaps in.
+                            : Padding(
                                 padding: EdgeInsets.only(
                                   left: _kTitleEditorPadding.left,
                                 ),
                                 child: Text(item.title, style: titleStyle),
                               ),
-                            ),
-                    ),
-                  ),
-                  if (item.note != null && item.note!.isNotEmpty)
-                    Padding(
-                      // Same left inset the title carries, so the note reads
-                      // as hanging off it rather than as a second column. The
-                      // title's inset is the rename editor's own horizontal
-                      // padding (see above); without matching it here the note
-                      // started a few pixels to the left of the words it
-                      // belongs to.
-                      padding: EdgeInsets.only(
-                        top: 2,
-                        left: _kTitleEditorPadding.left,
                       ),
-                      child: Text(
-                        item.note!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.55,
+                    ),
+                    if (item.note != null && item.note!.isNotEmpty)
+                      Padding(
+                        // Same left inset the title carries, so the note reads
+                        // as hanging off it rather than as a second column. The
+                        // title's inset is the rename editor's own horizontal
+                        // padding (see above); without matching it here the
+                        // note started a few pixels to the left of the words it
+                        // belongs to.
+                        padding: EdgeInsets.only(
+                          top: 2,
+                          left: _kTitleEditorPadding.left,
+                        ),
+                        child: Text(
+                          item.note!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.55,
+                            ),
+                            fontStyle: FontStyle.italic,
                           ),
-                          fontStyle: FontStyle.italic,
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
             SizedBox(
@@ -450,6 +454,34 @@ class _BucketListRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Makes [child] and all the space it is laid out in open the rename editor,
+/// and gets out of the way once it is open — a live tap target sitting over a
+/// focused text field would steal the click that positions its caret.
+class _TapToEdit extends StatelessWidget {
+  const _TapToEdit({
+    required this.enabled,
+    required this.onTap,
+    required this.child,
+  });
+
+  final bool enabled;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: child,
       ),
     );
   }

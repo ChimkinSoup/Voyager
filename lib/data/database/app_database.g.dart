@@ -65,6 +65,66 @@ class $JournalsTableTable extends JournalsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(7),
   );
+  static const VerificationMeta _showMoodMeta = const VerificationMeta(
+    'showMood',
+  );
+  @override
+  late final GeneratedColumn<bool> showMood = GeneratedColumn<bool>(
+    'show_mood',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_mood" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _showWeatherMeta = const VerificationMeta(
+    'showWeather',
+  );
+  @override
+  late final GeneratedColumn<bool> showWeather = GeneratedColumn<bool>(
+    'show_weather',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_weather" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _showQuotesMeta = const VerificationMeta(
+    'showQuotes',
+  );
+  @override
+  late final GeneratedColumn<bool> showQuotes = GeneratedColumn<bool>(
+    'show_quotes',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_quotes" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _includeInAllViewMeta = const VerificationMeta(
+    'includeInAllView',
+  );
+  @override
+  late final GeneratedColumn<bool> includeInAllView = GeneratedColumn<bool>(
+    'include_in_all_view',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_in_all_view" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -117,6 +177,10 @@ class $JournalsTableTable extends JournalsTable
     colorValue,
     guidedJournaling,
     promptCycleDays,
+    showMood,
+    showWeather,
+    showQuotes,
+    includeInAllView,
     createdAt,
     updatedAt,
     version,
@@ -168,6 +232,36 @@ class $JournalsTableTable extends JournalsTable
         promptCycleDays.isAcceptableOrUnknown(
           data['prompt_cycle_days']!,
           _promptCycleDaysMeta,
+        ),
+      );
+    }
+    if (data.containsKey('show_mood')) {
+      context.handle(
+        _showMoodMeta,
+        showMood.isAcceptableOrUnknown(data['show_mood']!, _showMoodMeta),
+      );
+    }
+    if (data.containsKey('show_weather')) {
+      context.handle(
+        _showWeatherMeta,
+        showWeather.isAcceptableOrUnknown(
+          data['show_weather']!,
+          _showWeatherMeta,
+        ),
+      );
+    }
+    if (data.containsKey('show_quotes')) {
+      context.handle(
+        _showQuotesMeta,
+        showQuotes.isAcceptableOrUnknown(data['show_quotes']!, _showQuotesMeta),
+      );
+    }
+    if (data.containsKey('include_in_all_view')) {
+      context.handle(
+        _includeInAllViewMeta,
+        includeInAllView.isAcceptableOrUnknown(
+          data['include_in_all_view']!,
+          _includeInAllViewMeta,
         ),
       );
     }
@@ -228,6 +322,22 @@ class $JournalsTableTable extends JournalsTable
         DriftSqlType.int,
         data['${effectivePrefix}prompt_cycle_days'],
       )!,
+      showMood: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_mood'],
+      )!,
+      showWeather: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_weather'],
+      )!,
+      showQuotes: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_quotes'],
+      )!,
+      includeInAllView: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_in_all_view'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -260,6 +370,10 @@ class JournalsTableData extends DataClass
   final int? colorValue;
   final bool guidedJournaling;
   final int promptCycleDays;
+  final bool showMood;
+  final bool showWeather;
+  final bool showQuotes;
+  final bool includeInAllView;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -270,6 +384,10 @@ class JournalsTableData extends DataClass
     this.colorValue,
     required this.guidedJournaling,
     required this.promptCycleDays,
+    required this.showMood,
+    required this.showWeather,
+    required this.showQuotes,
+    required this.includeInAllView,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -285,6 +403,10 @@ class JournalsTableData extends DataClass
     }
     map['guided_journaling'] = Variable<bool>(guidedJournaling);
     map['prompt_cycle_days'] = Variable<int>(promptCycleDays);
+    map['show_mood'] = Variable<bool>(showMood);
+    map['show_weather'] = Variable<bool>(showWeather);
+    map['show_quotes'] = Variable<bool>(showQuotes);
+    map['include_in_all_view'] = Variable<bool>(includeInAllView);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -303,6 +425,10 @@ class JournalsTableData extends DataClass
           : Value(colorValue),
       guidedJournaling: Value(guidedJournaling),
       promptCycleDays: Value(promptCycleDays),
+      showMood: Value(showMood),
+      showWeather: Value(showWeather),
+      showQuotes: Value(showQuotes),
+      includeInAllView: Value(includeInAllView),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -323,6 +449,10 @@ class JournalsTableData extends DataClass
       colorValue: serializer.fromJson<int?>(json['colorValue']),
       guidedJournaling: serializer.fromJson<bool>(json['guidedJournaling']),
       promptCycleDays: serializer.fromJson<int>(json['promptCycleDays']),
+      showMood: serializer.fromJson<bool>(json['showMood']),
+      showWeather: serializer.fromJson<bool>(json['showWeather']),
+      showQuotes: serializer.fromJson<bool>(json['showQuotes']),
+      includeInAllView: serializer.fromJson<bool>(json['includeInAllView']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -338,6 +468,10 @@ class JournalsTableData extends DataClass
       'colorValue': serializer.toJson<int?>(colorValue),
       'guidedJournaling': serializer.toJson<bool>(guidedJournaling),
       'promptCycleDays': serializer.toJson<int>(promptCycleDays),
+      'showMood': serializer.toJson<bool>(showMood),
+      'showWeather': serializer.toJson<bool>(showWeather),
+      'showQuotes': serializer.toJson<bool>(showQuotes),
+      'includeInAllView': serializer.toJson<bool>(includeInAllView),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -351,6 +485,10 @@ class JournalsTableData extends DataClass
     Value<int?> colorValue = const Value.absent(),
     bool? guidedJournaling,
     int? promptCycleDays,
+    bool? showMood,
+    bool? showWeather,
+    bool? showQuotes,
+    bool? includeInAllView,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -361,6 +499,10 @@ class JournalsTableData extends DataClass
     colorValue: colorValue.present ? colorValue.value : this.colorValue,
     guidedJournaling: guidedJournaling ?? this.guidedJournaling,
     promptCycleDays: promptCycleDays ?? this.promptCycleDays,
+    showMood: showMood ?? this.showMood,
+    showWeather: showWeather ?? this.showWeather,
+    showQuotes: showQuotes ?? this.showQuotes,
+    includeInAllView: includeInAllView ?? this.includeInAllView,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -379,6 +521,16 @@ class JournalsTableData extends DataClass
       promptCycleDays: data.promptCycleDays.present
           ? data.promptCycleDays.value
           : this.promptCycleDays,
+      showMood: data.showMood.present ? data.showMood.value : this.showMood,
+      showWeather: data.showWeather.present
+          ? data.showWeather.value
+          : this.showWeather,
+      showQuotes: data.showQuotes.present
+          ? data.showQuotes.value
+          : this.showQuotes,
+      includeInAllView: data.includeInAllView.present
+          ? data.includeInAllView.value
+          : this.includeInAllView,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -394,6 +546,10 @@ class JournalsTableData extends DataClass
           ..write('colorValue: $colorValue, ')
           ..write('guidedJournaling: $guidedJournaling, ')
           ..write('promptCycleDays: $promptCycleDays, ')
+          ..write('showMood: $showMood, ')
+          ..write('showWeather: $showWeather, ')
+          ..write('showQuotes: $showQuotes, ')
+          ..write('includeInAllView: $includeInAllView, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -409,6 +565,10 @@ class JournalsTableData extends DataClass
     colorValue,
     guidedJournaling,
     promptCycleDays,
+    showMood,
+    showWeather,
+    showQuotes,
+    includeInAllView,
     createdAt,
     updatedAt,
     version,
@@ -423,6 +583,10 @@ class JournalsTableData extends DataClass
           other.colorValue == this.colorValue &&
           other.guidedJournaling == this.guidedJournaling &&
           other.promptCycleDays == this.promptCycleDays &&
+          other.showMood == this.showMood &&
+          other.showWeather == this.showWeather &&
+          other.showQuotes == this.showQuotes &&
+          other.includeInAllView == this.includeInAllView &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -435,6 +599,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   final Value<int?> colorValue;
   final Value<bool> guidedJournaling;
   final Value<int> promptCycleDays;
+  final Value<bool> showMood;
+  final Value<bool> showWeather;
+  final Value<bool> showQuotes;
+  final Value<bool> includeInAllView;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -446,6 +614,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     this.colorValue = const Value.absent(),
     this.guidedJournaling = const Value.absent(),
     this.promptCycleDays = const Value.absent(),
+    this.showMood = const Value.absent(),
+    this.showWeather = const Value.absent(),
+    this.showQuotes = const Value.absent(),
+    this.includeInAllView = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -458,6 +630,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     this.colorValue = const Value.absent(),
     this.guidedJournaling = const Value.absent(),
     this.promptCycleDays = const Value.absent(),
+    this.showMood = const Value.absent(),
+    this.showWeather = const Value.absent(),
+    this.showQuotes = const Value.absent(),
+    this.includeInAllView = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -473,6 +649,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     Expression<int>? colorValue,
     Expression<bool>? guidedJournaling,
     Expression<int>? promptCycleDays,
+    Expression<bool>? showMood,
+    Expression<bool>? showWeather,
+    Expression<bool>? showQuotes,
+    Expression<bool>? includeInAllView,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -485,6 +665,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
       if (colorValue != null) 'color_value': colorValue,
       if (guidedJournaling != null) 'guided_journaling': guidedJournaling,
       if (promptCycleDays != null) 'prompt_cycle_days': promptCycleDays,
+      if (showMood != null) 'show_mood': showMood,
+      if (showWeather != null) 'show_weather': showWeather,
+      if (showQuotes != null) 'show_quotes': showQuotes,
+      if (includeInAllView != null) 'include_in_all_view': includeInAllView,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -499,6 +683,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     Value<int?>? colorValue,
     Value<bool>? guidedJournaling,
     Value<int>? promptCycleDays,
+    Value<bool>? showMood,
+    Value<bool>? showWeather,
+    Value<bool>? showQuotes,
+    Value<bool>? includeInAllView,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -511,6 +699,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
       colorValue: colorValue ?? this.colorValue,
       guidedJournaling: guidedJournaling ?? this.guidedJournaling,
       promptCycleDays: promptCycleDays ?? this.promptCycleDays,
+      showMood: showMood ?? this.showMood,
+      showWeather: showWeather ?? this.showWeather,
+      showQuotes: showQuotes ?? this.showQuotes,
+      includeInAllView: includeInAllView ?? this.includeInAllView,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -536,6 +728,18 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     }
     if (promptCycleDays.present) {
       map['prompt_cycle_days'] = Variable<int>(promptCycleDays.value);
+    }
+    if (showMood.present) {
+      map['show_mood'] = Variable<bool>(showMood.value);
+    }
+    if (showWeather.present) {
+      map['show_weather'] = Variable<bool>(showWeather.value);
+    }
+    if (showQuotes.present) {
+      map['show_quotes'] = Variable<bool>(showQuotes.value);
+    }
+    if (includeInAllView.present) {
+      map['include_in_all_view'] = Variable<bool>(includeInAllView.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -563,6 +767,10 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
           ..write('colorValue: $colorValue, ')
           ..write('guidedJournaling: $guidedJournaling, ')
           ..write('promptCycleDays: $promptCycleDays, ')
+          ..write('showMood: $showMood, ')
+          ..write('showWeather: $showWeather, ')
+          ..write('showQuotes: $showQuotes, ')
+          ..write('includeInAllView: $includeInAllView, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -2175,6 +2383,21 @@ class $TodoListsTableTable extends TodoListsTable
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _includeInAllViewMeta = const VerificationMeta(
+    'includeInAllView',
+  );
+  @override
+  late final GeneratedColumn<bool> includeInAllView = GeneratedColumn<bool>(
+    'include_in_all_view',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("include_in_all_view" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2225,6 +2448,7 @@ class $TodoListsTableTable extends TodoListsTable
     id,
     name,
     colorValue,
+    includeInAllView,
     createdAt,
     updatedAt,
     version,
@@ -2259,6 +2483,15 @@ class $TodoListsTableTable extends TodoListsTable
       context.handle(
         _colorValueMeta,
         colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    }
+    if (data.containsKey('include_in_all_view')) {
+      context.handle(
+        _includeInAllViewMeta,
+        includeInAllView.isAcceptableOrUnknown(
+          data['include_in_all_view']!,
+          _includeInAllViewMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -2310,6 +2543,10 @@ class $TodoListsTableTable extends TodoListsTable
         DriftSqlType.int,
         data['${effectivePrefix}color_value'],
       ),
+      includeInAllView: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}include_in_all_view'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2340,6 +2577,11 @@ class TodoListsTableData extends DataClass
   final String id;
   final String name;
   final int? colorValue;
+
+  /// Whether this list's tasks join the combined "All tasks" list. Excluding a
+  /// list hides it from that view only; its tasks stay in search and on the
+  /// calendar.
+  final bool includeInAllView;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -2348,6 +2590,7 @@ class TodoListsTableData extends DataClass
     required this.id,
     required this.name,
     this.colorValue,
+    required this.includeInAllView,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -2361,6 +2604,7 @@ class TodoListsTableData extends DataClass
     if (!nullToAbsent || colorValue != null) {
       map['color_value'] = Variable<int>(colorValue);
     }
+    map['include_in_all_view'] = Variable<bool>(includeInAllView);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -2377,6 +2621,7 @@ class TodoListsTableData extends DataClass
       colorValue: colorValue == null && nullToAbsent
           ? const Value.absent()
           : Value(colorValue),
+      includeInAllView: Value(includeInAllView),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -2395,6 +2640,7 @@ class TodoListsTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       colorValue: serializer.fromJson<int?>(json['colorValue']),
+      includeInAllView: serializer.fromJson<bool>(json['includeInAllView']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -2408,6 +2654,7 @@ class TodoListsTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'colorValue': serializer.toJson<int?>(colorValue),
+      'includeInAllView': serializer.toJson<bool>(includeInAllView),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -2419,6 +2666,7 @@ class TodoListsTableData extends DataClass
     String? id,
     String? name,
     Value<int?> colorValue = const Value.absent(),
+    bool? includeInAllView,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -2427,6 +2675,7 @@ class TodoListsTableData extends DataClass
     id: id ?? this.id,
     name: name ?? this.name,
     colorValue: colorValue.present ? colorValue.value : this.colorValue,
+    includeInAllView: includeInAllView ?? this.includeInAllView,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -2439,6 +2688,9 @@ class TodoListsTableData extends DataClass
       colorValue: data.colorValue.present
           ? data.colorValue.value
           : this.colorValue,
+      includeInAllView: data.includeInAllView.present
+          ? data.includeInAllView.value
+          : this.includeInAllView,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -2452,6 +2704,7 @@ class TodoListsTableData extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
+          ..write('includeInAllView: $includeInAllView, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -2465,6 +2718,7 @@ class TodoListsTableData extends DataClass
     id,
     name,
     colorValue,
+    includeInAllView,
     createdAt,
     updatedAt,
     version,
@@ -2477,6 +2731,7 @@ class TodoListsTableData extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.colorValue == this.colorValue &&
+          other.includeInAllView == this.includeInAllView &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -2487,6 +2742,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
   final Value<String> id;
   final Value<String> name;
   final Value<int?> colorValue;
+  final Value<bool> includeInAllView;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -2496,6 +2752,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.colorValue = const Value.absent(),
+    this.includeInAllView = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -2506,6 +2763,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     required String id,
     required String name,
     this.colorValue = const Value.absent(),
+    this.includeInAllView = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -2519,6 +2777,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<int>? colorValue,
+    Expression<bool>? includeInAllView,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -2529,6 +2788,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (colorValue != null) 'color_value': colorValue,
+      if (includeInAllView != null) 'include_in_all_view': includeInAllView,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -2541,6 +2801,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     Value<String>? id,
     Value<String>? name,
     Value<int?>? colorValue,
+    Value<bool>? includeInAllView,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -2551,6 +2812,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
       id: id ?? this.id,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
+      includeInAllView: includeInAllView ?? this.includeInAllView,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -2570,6 +2832,9 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
     }
     if (colorValue.present) {
       map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (includeInAllView.present) {
+      map['include_in_all_view'] = Variable<bool>(includeInAllView.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -2595,6 +2860,7 @@ class TodoListsTableCompanion extends UpdateCompanion<TodoListsTableData> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
+          ..write('includeInAllView: $includeInAllView, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -6802,6 +7068,29 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _defaultJournalIdMeta = const VerificationMeta(
+    'defaultJournalId',
+  );
+  @override
+  late final GeneratedColumn<String> defaultJournalId = GeneratedColumn<String>(
+    'default_journal_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _defaultTodoListIdMeta = const VerificationMeta(
+    'defaultTodoListId',
+  );
+  @override
+  late final GeneratedColumn<String> defaultTodoListId =
+      GeneratedColumn<String>(
+        'default_todo_list_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _journalShowAllEntriesMeta =
       const VerificationMeta('journalShowAllEntries');
   @override
@@ -7710,6 +7999,110 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _leetCodeHideDifficultyMeta =
+      const VerificationMeta('leetCodeHideDifficulty');
+  @override
+  late final GeneratedColumn<bool> leetCodeHideDifficulty =
+      GeneratedColumn<bool>(
+        'leet_code_hide_difficulty',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("leet_code_hide_difficulty" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _leetCodeHideTagsMeta = const VerificationMeta(
+    'leetCodeHideTags',
+  );
+  @override
+  late final GeneratedColumn<bool> leetCodeHideTags = GeneratedColumn<bool>(
+    'leet_code_hide_tags',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("leet_code_hide_tags" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _leetCodeHideQuestionNameMeta =
+      const VerificationMeta('leetCodeHideQuestionName');
+  @override
+  late final GeneratedColumn<bool> leetCodeHideQuestionName =
+      GeneratedColumn<bool>(
+        'leet_code_hide_question_name',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("leet_code_hide_question_name" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _leetCodeHideDescriptionMeta =
+      const VerificationMeta('leetCodeHideDescription');
+  @override
+  late final GeneratedColumn<bool> leetCodeHideDescription =
+      GeneratedColumn<bool>(
+        'leet_code_hide_description',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("leet_code_hide_description" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _leetCodeHideExamplesMeta =
+      const VerificationMeta('leetCodeHideExamples');
+  @override
+  late final GeneratedColumn<bool> leetCodeHideExamples = GeneratedColumn<bool>(
+    'leet_code_hide_examples',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("leet_code_hide_examples" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _leetCodeHideComplexityMeta =
+      const VerificationMeta('leetCodeHideComplexity');
+  @override
+  late final GeneratedColumn<bool> leetCodeHideComplexity =
+      GeneratedColumn<bool>(
+        'leet_code_hide_complexity',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("leet_code_hide_complexity" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _leetCodeHideCodeMeta = const VerificationMeta(
+    'leetCodeHideCode',
+  );
+  @override
+  late final GeneratedColumn<bool> leetCodeHideCode = GeneratedColumn<bool>(
+    'leet_code_hide_code',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("leet_code_hide_code" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _srsFailKeyMeta = const VerificationMeta(
     'srsFailKey',
   );
@@ -7880,6 +8273,8 @@ class $SettingsTableTable extends SettingsTable
     deviceId,
     lastViewedJournalId,
     lastViewedTodoListId,
+    defaultJournalId,
+    defaultTodoListId,
     journalShowAllEntries,
     todoShowAllTasks,
     weatherLocationLabel,
@@ -7952,6 +8347,13 @@ class $SettingsTableTable extends SettingsTable
     dreamNotesPinned,
     leetcodeUsername,
     showNeetCode150,
+    leetCodeHideDifficulty,
+    leetCodeHideTags,
+    leetCodeHideQuestionName,
+    leetCodeHideDescription,
+    leetCodeHideExamples,
+    leetCodeHideComplexity,
+    leetCodeHideCode,
     srsFailKey,
     srsHardKey,
     srsGoodKey,
@@ -8216,6 +8618,24 @@ class $SettingsTableTable extends SettingsTable
         lastViewedTodoListId.isAcceptableOrUnknown(
           data['last_viewed_todo_list_id']!,
           _lastViewedTodoListIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_journal_id')) {
+      context.handle(
+        _defaultJournalIdMeta,
+        defaultJournalId.isAcceptableOrUnknown(
+          data['default_journal_id']!,
+          _defaultJournalIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_todo_list_id')) {
+      context.handle(
+        _defaultTodoListIdMeta,
+        defaultTodoListId.isAcceptableOrUnknown(
+          data['default_todo_list_id']!,
+          _defaultTodoListIdMeta,
         ),
       );
     }
@@ -8861,6 +9281,69 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('leet_code_hide_difficulty')) {
+      context.handle(
+        _leetCodeHideDifficultyMeta,
+        leetCodeHideDifficulty.isAcceptableOrUnknown(
+          data['leet_code_hide_difficulty']!,
+          _leetCodeHideDifficultyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_hide_tags')) {
+      context.handle(
+        _leetCodeHideTagsMeta,
+        leetCodeHideTags.isAcceptableOrUnknown(
+          data['leet_code_hide_tags']!,
+          _leetCodeHideTagsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_hide_question_name')) {
+      context.handle(
+        _leetCodeHideQuestionNameMeta,
+        leetCodeHideQuestionName.isAcceptableOrUnknown(
+          data['leet_code_hide_question_name']!,
+          _leetCodeHideQuestionNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_hide_description')) {
+      context.handle(
+        _leetCodeHideDescriptionMeta,
+        leetCodeHideDescription.isAcceptableOrUnknown(
+          data['leet_code_hide_description']!,
+          _leetCodeHideDescriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_hide_examples')) {
+      context.handle(
+        _leetCodeHideExamplesMeta,
+        leetCodeHideExamples.isAcceptableOrUnknown(
+          data['leet_code_hide_examples']!,
+          _leetCodeHideExamplesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_hide_complexity')) {
+      context.handle(
+        _leetCodeHideComplexityMeta,
+        leetCodeHideComplexity.isAcceptableOrUnknown(
+          data['leet_code_hide_complexity']!,
+          _leetCodeHideComplexityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_hide_code')) {
+      context.handle(
+        _leetCodeHideCodeMeta,
+        leetCodeHideCode.isAcceptableOrUnknown(
+          data['leet_code_hide_code']!,
+          _leetCodeHideCodeMeta,
+        ),
+      );
+    }
     if (data.containsKey('srs_fail_key')) {
       context.handle(
         _srsFailKeyMeta,
@@ -9082,6 +9565,14 @@ class $SettingsTableTable extends SettingsTable
       lastViewedTodoListId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}last_viewed_todo_list_id'],
+      ),
+      defaultJournalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_journal_id'],
+      ),
+      defaultTodoListId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_todo_list_id'],
       ),
       journalShowAllEntries: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
@@ -9371,6 +9862,34 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}show_neet_code150'],
       )!,
+      leetCodeHideDifficulty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_hide_difficulty'],
+      )!,
+      leetCodeHideTags: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_hide_tags'],
+      )!,
+      leetCodeHideQuestionName: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_hide_question_name'],
+      )!,
+      leetCodeHideDescription: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_hide_description'],
+      )!,
+      leetCodeHideExamples: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_hide_examples'],
+      )!,
+      leetCodeHideComplexity: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_hide_complexity'],
+      )!,
+      leetCodeHideCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_hide_code'],
+      )!,
       srsFailKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}srs_fail_key'],
@@ -9462,6 +9981,16 @@ class SettingsTableData extends DataClass
   final String? deviceId;
   final String? lastViewedJournalId;
   final String? lastViewedTodoListId;
+
+  /// The journal the journal page always opens into, overriding
+  /// [lastViewedJournalId] and [journalShowAllEntries]. Null means "restore
+  /// whatever was last open", which is the behaviour this column replaced.
+  final String? defaultJournalId;
+
+  /// The todo list the todo page always opens into, overriding
+  /// [lastViewedTodoListId] and [todoShowAllTasks]. The [defaultJournalId]
+  /// twin, kept as its own column for the same reason.
+  final String? defaultTodoListId;
   final bool journalShowAllEntries;
   final bool todoShowAllTasks;
   final String? weatherLocationLabel;
@@ -9534,6 +10063,16 @@ class SettingsTableData extends DataClass
   final bool dreamNotesPinned;
   final String? leetcodeUsername;
   final bool showNeetCode150;
+
+  /// What a LeetCode Study or Cram session leaves off the card — see
+  /// [AppSettings.leetCodeHideDifficulty] and friends.
+  final bool leetCodeHideDifficulty;
+  final bool leetCodeHideTags;
+  final bool leetCodeHideQuestionName;
+  final bool leetCodeHideDescription;
+  final bool leetCodeHideExamples;
+  final bool leetCodeHideComplexity;
+  final bool leetCodeHideCode;
   final String srsFailKey;
   final String srsHardKey;
   final String srsGoodKey;
@@ -9593,6 +10132,8 @@ class SettingsTableData extends DataClass
     this.deviceId,
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
+    this.defaultJournalId,
+    this.defaultTodoListId,
     required this.journalShowAllEntries,
     required this.todoShowAllTasks,
     this.weatherLocationLabel,
@@ -9665,6 +10206,13 @@ class SettingsTableData extends DataClass
     required this.dreamNotesPinned,
     this.leetcodeUsername,
     required this.showNeetCode150,
+    required this.leetCodeHideDifficulty,
+    required this.leetCodeHideTags,
+    required this.leetCodeHideQuestionName,
+    required this.leetCodeHideDescription,
+    required this.leetCodeHideExamples,
+    required this.leetCodeHideComplexity,
+    required this.leetCodeHideCode,
     required this.srsFailKey,
     required this.srsHardKey,
     required this.srsGoodKey,
@@ -9731,6 +10279,12 @@ class SettingsTableData extends DataClass
     }
     if (!nullToAbsent || lastViewedTodoListId != null) {
       map['last_viewed_todo_list_id'] = Variable<String>(lastViewedTodoListId);
+    }
+    if (!nullToAbsent || defaultJournalId != null) {
+      map['default_journal_id'] = Variable<String>(defaultJournalId);
+    }
+    if (!nullToAbsent || defaultTodoListId != null) {
+      map['default_todo_list_id'] = Variable<String>(defaultTodoListId);
     }
     map['journal_show_all_entries'] = Variable<bool>(journalShowAllEntries);
     map['todo_show_all_tasks'] = Variable<bool>(todoShowAllTasks);
@@ -9906,6 +10460,15 @@ class SettingsTableData extends DataClass
       map['leetcode_username'] = Variable<String>(leetcodeUsername);
     }
     map['show_neet_code150'] = Variable<bool>(showNeetCode150);
+    map['leet_code_hide_difficulty'] = Variable<bool>(leetCodeHideDifficulty);
+    map['leet_code_hide_tags'] = Variable<bool>(leetCodeHideTags);
+    map['leet_code_hide_question_name'] = Variable<bool>(
+      leetCodeHideQuestionName,
+    );
+    map['leet_code_hide_description'] = Variable<bool>(leetCodeHideDescription);
+    map['leet_code_hide_examples'] = Variable<bool>(leetCodeHideExamples);
+    map['leet_code_hide_complexity'] = Variable<bool>(leetCodeHideComplexity);
+    map['leet_code_hide_code'] = Variable<bool>(leetCodeHideCode);
     map['srs_fail_key'] = Variable<String>(srsFailKey);
     map['srs_hard_key'] = Variable<String>(srsHardKey);
     map['srs_good_key'] = Variable<String>(srsGoodKey);
@@ -9968,6 +10531,12 @@ class SettingsTableData extends DataClass
       lastViewedTodoListId: lastViewedTodoListId == null && nullToAbsent
           ? const Value.absent()
           : Value(lastViewedTodoListId),
+      defaultJournalId: defaultJournalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultJournalId),
+      defaultTodoListId: defaultTodoListId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultTodoListId),
       journalShowAllEntries: Value(journalShowAllEntries),
       todoShowAllTasks: Value(todoShowAllTasks),
       weatherLocationLabel: weatherLocationLabel == null && nullToAbsent
@@ -10080,6 +10649,13 @@ class SettingsTableData extends DataClass
           ? const Value.absent()
           : Value(leetcodeUsername),
       showNeetCode150: Value(showNeetCode150),
+      leetCodeHideDifficulty: Value(leetCodeHideDifficulty),
+      leetCodeHideTags: Value(leetCodeHideTags),
+      leetCodeHideQuestionName: Value(leetCodeHideQuestionName),
+      leetCodeHideDescription: Value(leetCodeHideDescription),
+      leetCodeHideExamples: Value(leetCodeHideExamples),
+      leetCodeHideComplexity: Value(leetCodeHideComplexity),
+      leetCodeHideCode: Value(leetCodeHideCode),
       srsFailKey: Value(srsFailKey),
       srsHardKey: Value(srsHardKey),
       srsGoodKey: Value(srsGoodKey),
@@ -10151,6 +10727,10 @@ class SettingsTableData extends DataClass
       ),
       lastViewedTodoListId: serializer.fromJson<String?>(
         json['lastViewedTodoListId'],
+      ),
+      defaultJournalId: serializer.fromJson<String?>(json['defaultJournalId']),
+      defaultTodoListId: serializer.fromJson<String?>(
+        json['defaultTodoListId'],
       ),
       journalShowAllEntries: serializer.fromJson<bool>(
         json['journalShowAllEntries'],
@@ -10330,6 +10910,23 @@ class SettingsTableData extends DataClass
       dreamNotesPinned: serializer.fromJson<bool>(json['dreamNotesPinned']),
       leetcodeUsername: serializer.fromJson<String?>(json['leetcodeUsername']),
       showNeetCode150: serializer.fromJson<bool>(json['showNeetCode150']),
+      leetCodeHideDifficulty: serializer.fromJson<bool>(
+        json['leetCodeHideDifficulty'],
+      ),
+      leetCodeHideTags: serializer.fromJson<bool>(json['leetCodeHideTags']),
+      leetCodeHideQuestionName: serializer.fromJson<bool>(
+        json['leetCodeHideQuestionName'],
+      ),
+      leetCodeHideDescription: serializer.fromJson<bool>(
+        json['leetCodeHideDescription'],
+      ),
+      leetCodeHideExamples: serializer.fromJson<bool>(
+        json['leetCodeHideExamples'],
+      ),
+      leetCodeHideComplexity: serializer.fromJson<bool>(
+        json['leetCodeHideComplexity'],
+      ),
+      leetCodeHideCode: serializer.fromJson<bool>(json['leetCodeHideCode']),
       srsFailKey: serializer.fromJson<String>(json['srsFailKey']),
       srsHardKey: serializer.fromJson<String>(json['srsHardKey']),
       srsGoodKey: serializer.fromJson<String>(json['srsGoodKey']),
@@ -10393,6 +10990,8 @@ class SettingsTableData extends DataClass
       'deviceId': serializer.toJson<String?>(deviceId),
       'lastViewedJournalId': serializer.toJson<String?>(lastViewedJournalId),
       'lastViewedTodoListId': serializer.toJson<String?>(lastViewedTodoListId),
+      'defaultJournalId': serializer.toJson<String?>(defaultJournalId),
+      'defaultTodoListId': serializer.toJson<String?>(defaultTodoListId),
       'journalShowAllEntries': serializer.toJson<bool>(journalShowAllEntries),
       'todoShowAllTasks': serializer.toJson<bool>(todoShowAllTasks),
       'weatherLocationLabel': serializer.toJson<String?>(weatherLocationLabel),
@@ -10531,6 +11130,17 @@ class SettingsTableData extends DataClass
       'dreamNotesPinned': serializer.toJson<bool>(dreamNotesPinned),
       'leetcodeUsername': serializer.toJson<String?>(leetcodeUsername),
       'showNeetCode150': serializer.toJson<bool>(showNeetCode150),
+      'leetCodeHideDifficulty': serializer.toJson<bool>(leetCodeHideDifficulty),
+      'leetCodeHideTags': serializer.toJson<bool>(leetCodeHideTags),
+      'leetCodeHideQuestionName': serializer.toJson<bool>(
+        leetCodeHideQuestionName,
+      ),
+      'leetCodeHideDescription': serializer.toJson<bool>(
+        leetCodeHideDescription,
+      ),
+      'leetCodeHideExamples': serializer.toJson<bool>(leetCodeHideExamples),
+      'leetCodeHideComplexity': serializer.toJson<bool>(leetCodeHideComplexity),
+      'leetCodeHideCode': serializer.toJson<bool>(leetCodeHideCode),
       'srsFailKey': serializer.toJson<String>(srsFailKey),
       'srsHardKey': serializer.toJson<String>(srsHardKey),
       'srsGoodKey': serializer.toJson<String>(srsGoodKey),
@@ -10578,6 +11188,8 @@ class SettingsTableData extends DataClass
     Value<String?> deviceId = const Value.absent(),
     Value<String?> lastViewedJournalId = const Value.absent(),
     Value<String?> lastViewedTodoListId = const Value.absent(),
+    Value<String?> defaultJournalId = const Value.absent(),
+    Value<String?> defaultTodoListId = const Value.absent(),
     bool? journalShowAllEntries,
     bool? todoShowAllTasks,
     Value<String?> weatherLocationLabel = const Value.absent(),
@@ -10650,6 +11262,13 @@ class SettingsTableData extends DataClass
     bool? dreamNotesPinned,
     Value<String?> leetcodeUsername = const Value.absent(),
     bool? showNeetCode150,
+    bool? leetCodeHideDifficulty,
+    bool? leetCodeHideTags,
+    bool? leetCodeHideQuestionName,
+    bool? leetCodeHideDescription,
+    bool? leetCodeHideExamples,
+    bool? leetCodeHideComplexity,
+    bool? leetCodeHideCode,
     String? srsFailKey,
     String? srsHardKey,
     String? srsGoodKey,
@@ -10703,6 +11322,12 @@ class SettingsTableData extends DataClass
     lastViewedTodoListId: lastViewedTodoListId.present
         ? lastViewedTodoListId.value
         : this.lastViewedTodoListId,
+    defaultJournalId: defaultJournalId.present
+        ? defaultJournalId.value
+        : this.defaultJournalId,
+    defaultTodoListId: defaultTodoListId.present
+        ? defaultTodoListId.value
+        : this.defaultTodoListId,
     journalShowAllEntries: journalShowAllEntries ?? this.journalShowAllEntries,
     todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
     weatherLocationLabel: weatherLocationLabel.present
@@ -10838,6 +11463,17 @@ class SettingsTableData extends DataClass
         ? leetcodeUsername.value
         : this.leetcodeUsername,
     showNeetCode150: showNeetCode150 ?? this.showNeetCode150,
+    leetCodeHideDifficulty:
+        leetCodeHideDifficulty ?? this.leetCodeHideDifficulty,
+    leetCodeHideTags: leetCodeHideTags ?? this.leetCodeHideTags,
+    leetCodeHideQuestionName:
+        leetCodeHideQuestionName ?? this.leetCodeHideQuestionName,
+    leetCodeHideDescription:
+        leetCodeHideDescription ?? this.leetCodeHideDescription,
+    leetCodeHideExamples: leetCodeHideExamples ?? this.leetCodeHideExamples,
+    leetCodeHideComplexity:
+        leetCodeHideComplexity ?? this.leetCodeHideComplexity,
+    leetCodeHideCode: leetCodeHideCode ?? this.leetCodeHideCode,
     srsFailKey: srsFailKey ?? this.srsFailKey,
     srsHardKey: srsHardKey ?? this.srsHardKey,
     srsGoodKey: srsGoodKey ?? this.srsGoodKey,
@@ -10934,6 +11570,12 @@ class SettingsTableData extends DataClass
       lastViewedTodoListId: data.lastViewedTodoListId.present
           ? data.lastViewedTodoListId.value
           : this.lastViewedTodoListId,
+      defaultJournalId: data.defaultJournalId.present
+          ? data.defaultJournalId.value
+          : this.defaultJournalId,
+      defaultTodoListId: data.defaultTodoListId.present
+          ? data.defaultTodoListId.value
+          : this.defaultTodoListId,
       journalShowAllEntries: data.journalShowAllEntries.present
           ? data.journalShowAllEntries.value
           : this.journalShowAllEntries,
@@ -11156,6 +11798,27 @@ class SettingsTableData extends DataClass
       showNeetCode150: data.showNeetCode150.present
           ? data.showNeetCode150.value
           : this.showNeetCode150,
+      leetCodeHideDifficulty: data.leetCodeHideDifficulty.present
+          ? data.leetCodeHideDifficulty.value
+          : this.leetCodeHideDifficulty,
+      leetCodeHideTags: data.leetCodeHideTags.present
+          ? data.leetCodeHideTags.value
+          : this.leetCodeHideTags,
+      leetCodeHideQuestionName: data.leetCodeHideQuestionName.present
+          ? data.leetCodeHideQuestionName.value
+          : this.leetCodeHideQuestionName,
+      leetCodeHideDescription: data.leetCodeHideDescription.present
+          ? data.leetCodeHideDescription.value
+          : this.leetCodeHideDescription,
+      leetCodeHideExamples: data.leetCodeHideExamples.present
+          ? data.leetCodeHideExamples.value
+          : this.leetCodeHideExamples,
+      leetCodeHideComplexity: data.leetCodeHideComplexity.present
+          ? data.leetCodeHideComplexity.value
+          : this.leetCodeHideComplexity,
+      leetCodeHideCode: data.leetCodeHideCode.present
+          ? data.leetCodeHideCode.value
+          : this.leetCodeHideCode,
       srsFailKey: data.srsFailKey.present
           ? data.srsFailKey.value
           : this.srsFailKey,
@@ -11225,6 +11888,8 @@ class SettingsTableData extends DataClass
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
+          ..write('defaultJournalId: $defaultJournalId, ')
+          ..write('defaultTodoListId: $defaultTodoListId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
           ..write('todoShowAllTasks: $todoShowAllTasks, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
@@ -11319,6 +11984,13 @@ class SettingsTableData extends DataClass
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
           ..write('leetcodeUsername: $leetcodeUsername, ')
           ..write('showNeetCode150: $showNeetCode150, ')
+          ..write('leetCodeHideDifficulty: $leetCodeHideDifficulty, ')
+          ..write('leetCodeHideTags: $leetCodeHideTags, ')
+          ..write('leetCodeHideQuestionName: $leetCodeHideQuestionName, ')
+          ..write('leetCodeHideDescription: $leetCodeHideDescription, ')
+          ..write('leetCodeHideExamples: $leetCodeHideExamples, ')
+          ..write('leetCodeHideComplexity: $leetCodeHideComplexity, ')
+          ..write('leetCodeHideCode: $leetCodeHideCode, ')
           ..write('srsFailKey: $srsFailKey, ')
           ..write('srsHardKey: $srsHardKey, ')
           ..write('srsGoodKey: $srsGoodKey, ')
@@ -11366,6 +12038,8 @@ class SettingsTableData extends DataClass
     deviceId,
     lastViewedJournalId,
     lastViewedTodoListId,
+    defaultJournalId,
+    defaultTodoListId,
     journalShowAllEntries,
     todoShowAllTasks,
     weatherLocationLabel,
@@ -11438,6 +12112,13 @@ class SettingsTableData extends DataClass
     dreamNotesPinned,
     leetcodeUsername,
     showNeetCode150,
+    leetCodeHideDifficulty,
+    leetCodeHideTags,
+    leetCodeHideQuestionName,
+    leetCodeHideDescription,
+    leetCodeHideExamples,
+    leetCodeHideComplexity,
+    leetCodeHideCode,
     srsFailKey,
     srsHardKey,
     srsGoodKey,
@@ -11485,6 +12166,8 @@ class SettingsTableData extends DataClass
           other.deviceId == this.deviceId &&
           other.lastViewedJournalId == this.lastViewedJournalId &&
           other.lastViewedTodoListId == this.lastViewedTodoListId &&
+          other.defaultJournalId == this.defaultJournalId &&
+          other.defaultTodoListId == this.defaultTodoListId &&
           other.journalShowAllEntries == this.journalShowAllEntries &&
           other.todoShowAllTasks == this.todoShowAllTasks &&
           other.weatherLocationLabel == this.weatherLocationLabel &&
@@ -11575,6 +12258,13 @@ class SettingsTableData extends DataClass
           other.dreamNotesPinned == this.dreamNotesPinned &&
           other.leetcodeUsername == this.leetcodeUsername &&
           other.showNeetCode150 == this.showNeetCode150 &&
+          other.leetCodeHideDifficulty == this.leetCodeHideDifficulty &&
+          other.leetCodeHideTags == this.leetCodeHideTags &&
+          other.leetCodeHideQuestionName == this.leetCodeHideQuestionName &&
+          other.leetCodeHideDescription == this.leetCodeHideDescription &&
+          other.leetCodeHideExamples == this.leetCodeHideExamples &&
+          other.leetCodeHideComplexity == this.leetCodeHideComplexity &&
+          other.leetCodeHideCode == this.leetCodeHideCode &&
           other.srsFailKey == this.srsFailKey &&
           other.srsHardKey == this.srsHardKey &&
           other.srsGoodKey == this.srsGoodKey &&
@@ -11619,6 +12309,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> deviceId;
   final Value<String?> lastViewedJournalId;
   final Value<String?> lastViewedTodoListId;
+  final Value<String?> defaultJournalId;
+  final Value<String?> defaultTodoListId;
   final Value<bool> journalShowAllEntries;
   final Value<bool> todoShowAllTasks;
   final Value<String?> weatherLocationLabel;
@@ -11691,6 +12383,13 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> dreamNotesPinned;
   final Value<String?> leetcodeUsername;
   final Value<bool> showNeetCode150;
+  final Value<bool> leetCodeHideDifficulty;
+  final Value<bool> leetCodeHideTags;
+  final Value<bool> leetCodeHideQuestionName;
+  final Value<bool> leetCodeHideDescription;
+  final Value<bool> leetCodeHideExamples;
+  final Value<bool> leetCodeHideComplexity;
+  final Value<bool> leetCodeHideCode;
   final Value<String> srsFailKey;
   final Value<String> srsHardKey;
   final Value<String> srsGoodKey;
@@ -11733,6 +12432,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
+    this.defaultJournalId = const Value.absent(),
+    this.defaultTodoListId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
     this.todoShowAllTasks = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
@@ -11805,6 +12506,13 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.dreamNotesPinned = const Value.absent(),
     this.leetcodeUsername = const Value.absent(),
     this.showNeetCode150 = const Value.absent(),
+    this.leetCodeHideDifficulty = const Value.absent(),
+    this.leetCodeHideTags = const Value.absent(),
+    this.leetCodeHideQuestionName = const Value.absent(),
+    this.leetCodeHideDescription = const Value.absent(),
+    this.leetCodeHideExamples = const Value.absent(),
+    this.leetCodeHideComplexity = const Value.absent(),
+    this.leetCodeHideCode = const Value.absent(),
     this.srsFailKey = const Value.absent(),
     this.srsHardKey = const Value.absent(),
     this.srsGoodKey = const Value.absent(),
@@ -11848,6 +12556,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
+    this.defaultJournalId = const Value.absent(),
+    this.defaultTodoListId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
     this.todoShowAllTasks = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
@@ -11920,6 +12630,13 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.dreamNotesPinned = const Value.absent(),
     this.leetcodeUsername = const Value.absent(),
     this.showNeetCode150 = const Value.absent(),
+    this.leetCodeHideDifficulty = const Value.absent(),
+    this.leetCodeHideTags = const Value.absent(),
+    this.leetCodeHideQuestionName = const Value.absent(),
+    this.leetCodeHideDescription = const Value.absent(),
+    this.leetCodeHideExamples = const Value.absent(),
+    this.leetCodeHideComplexity = const Value.absent(),
+    this.leetCodeHideCode = const Value.absent(),
     this.srsFailKey = const Value.absent(),
     this.srsHardKey = const Value.absent(),
     this.srsGoodKey = const Value.absent(),
@@ -11963,6 +12680,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? deviceId,
     Expression<String>? lastViewedJournalId,
     Expression<String>? lastViewedTodoListId,
+    Expression<String>? defaultJournalId,
+    Expression<String>? defaultTodoListId,
     Expression<bool>? journalShowAllEntries,
     Expression<bool>? todoShowAllTasks,
     Expression<String>? weatherLocationLabel,
@@ -12035,6 +12754,13 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? dreamNotesPinned,
     Expression<String>? leetcodeUsername,
     Expression<bool>? showNeetCode150,
+    Expression<bool>? leetCodeHideDifficulty,
+    Expression<bool>? leetCodeHideTags,
+    Expression<bool>? leetCodeHideQuestionName,
+    Expression<bool>? leetCodeHideDescription,
+    Expression<bool>? leetCodeHideExamples,
+    Expression<bool>? leetCodeHideComplexity,
+    Expression<bool>? leetCodeHideCode,
     Expression<String>? srsFailKey,
     Expression<String>? srsHardKey,
     Expression<String>? srsGoodKey,
@@ -12090,6 +12816,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'last_viewed_journal_id': lastViewedJournalId,
       if (lastViewedTodoListId != null)
         'last_viewed_todo_list_id': lastViewedTodoListId,
+      if (defaultJournalId != null) 'default_journal_id': defaultJournalId,
+      if (defaultTodoListId != null) 'default_todo_list_id': defaultTodoListId,
       if (journalShowAllEntries != null)
         'journal_show_all_entries': journalShowAllEntries,
       if (todoShowAllTasks != null) 'todo_show_all_tasks': todoShowAllTasks,
@@ -12219,6 +12947,18 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (dreamNotesPinned != null) 'dream_notes_pinned': dreamNotesPinned,
       if (leetcodeUsername != null) 'leetcode_username': leetcodeUsername,
       if (showNeetCode150 != null) 'show_neet_code150': showNeetCode150,
+      if (leetCodeHideDifficulty != null)
+        'leet_code_hide_difficulty': leetCodeHideDifficulty,
+      if (leetCodeHideTags != null) 'leet_code_hide_tags': leetCodeHideTags,
+      if (leetCodeHideQuestionName != null)
+        'leet_code_hide_question_name': leetCodeHideQuestionName,
+      if (leetCodeHideDescription != null)
+        'leet_code_hide_description': leetCodeHideDescription,
+      if (leetCodeHideExamples != null)
+        'leet_code_hide_examples': leetCodeHideExamples,
+      if (leetCodeHideComplexity != null)
+        'leet_code_hide_complexity': leetCodeHideComplexity,
+      if (leetCodeHideCode != null) 'leet_code_hide_code': leetCodeHideCode,
       if (srsFailKey != null) 'srs_fail_key': srsFailKey,
       if (srsHardKey != null) 'srs_hard_key': srsHardKey,
       if (srsGoodKey != null) 'srs_good_key': srsGoodKey,
@@ -12269,6 +13009,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? deviceId,
     Value<String?>? lastViewedJournalId,
     Value<String?>? lastViewedTodoListId,
+    Value<String?>? defaultJournalId,
+    Value<String?>? defaultTodoListId,
     Value<bool>? journalShowAllEntries,
     Value<bool>? todoShowAllTasks,
     Value<String?>? weatherLocationLabel,
@@ -12341,6 +13083,13 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? dreamNotesPinned,
     Value<String?>? leetcodeUsername,
     Value<bool>? showNeetCode150,
+    Value<bool>? leetCodeHideDifficulty,
+    Value<bool>? leetCodeHideTags,
+    Value<bool>? leetCodeHideQuestionName,
+    Value<bool>? leetCodeHideDescription,
+    Value<bool>? leetCodeHideExamples,
+    Value<bool>? leetCodeHideComplexity,
+    Value<bool>? leetCodeHideCode,
     Value<String>? srsFailKey,
     Value<String>? srsHardKey,
     Value<String>? srsGoodKey,
@@ -12389,6 +13138,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       deviceId: deviceId ?? this.deviceId,
       lastViewedJournalId: lastViewedJournalId ?? this.lastViewedJournalId,
       lastViewedTodoListId: lastViewedTodoListId ?? this.lastViewedTodoListId,
+      defaultJournalId: defaultJournalId ?? this.defaultJournalId,
+      defaultTodoListId: defaultTodoListId ?? this.defaultTodoListId,
       journalShowAllEntries:
           journalShowAllEntries ?? this.journalShowAllEntries,
       todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
@@ -12503,6 +13254,17 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
       leetcodeUsername: leetcodeUsername ?? this.leetcodeUsername,
       showNeetCode150: showNeetCode150 ?? this.showNeetCode150,
+      leetCodeHideDifficulty:
+          leetCodeHideDifficulty ?? this.leetCodeHideDifficulty,
+      leetCodeHideTags: leetCodeHideTags ?? this.leetCodeHideTags,
+      leetCodeHideQuestionName:
+          leetCodeHideQuestionName ?? this.leetCodeHideQuestionName,
+      leetCodeHideDescription:
+          leetCodeHideDescription ?? this.leetCodeHideDescription,
+      leetCodeHideExamples: leetCodeHideExamples ?? this.leetCodeHideExamples,
+      leetCodeHideComplexity:
+          leetCodeHideComplexity ?? this.leetCodeHideComplexity,
+      leetCodeHideCode: leetCodeHideCode ?? this.leetCodeHideCode,
       srsFailKey: srsFailKey ?? this.srsFailKey,
       srsHardKey: srsHardKey ?? this.srsHardKey,
       srsGoodKey: srsGoodKey ?? this.srsGoodKey,
@@ -12630,6 +13392,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       map['last_viewed_todo_list_id'] = Variable<String>(
         lastViewedTodoListId.value,
       );
+    }
+    if (defaultJournalId.present) {
+      map['default_journal_id'] = Variable<String>(defaultJournalId.value);
+    }
+    if (defaultTodoListId.present) {
+      map['default_todo_list_id'] = Variable<String>(defaultTodoListId.value);
     }
     if (journalShowAllEntries.present) {
       map['journal_show_all_entries'] = Variable<bool>(
@@ -12939,6 +13707,37 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (showNeetCode150.present) {
       map['show_neet_code150'] = Variable<bool>(showNeetCode150.value);
     }
+    if (leetCodeHideDifficulty.present) {
+      map['leet_code_hide_difficulty'] = Variable<bool>(
+        leetCodeHideDifficulty.value,
+      );
+    }
+    if (leetCodeHideTags.present) {
+      map['leet_code_hide_tags'] = Variable<bool>(leetCodeHideTags.value);
+    }
+    if (leetCodeHideQuestionName.present) {
+      map['leet_code_hide_question_name'] = Variable<bool>(
+        leetCodeHideQuestionName.value,
+      );
+    }
+    if (leetCodeHideDescription.present) {
+      map['leet_code_hide_description'] = Variable<bool>(
+        leetCodeHideDescription.value,
+      );
+    }
+    if (leetCodeHideExamples.present) {
+      map['leet_code_hide_examples'] = Variable<bool>(
+        leetCodeHideExamples.value,
+      );
+    }
+    if (leetCodeHideComplexity.present) {
+      map['leet_code_hide_complexity'] = Variable<bool>(
+        leetCodeHideComplexity.value,
+      );
+    }
+    if (leetCodeHideCode.present) {
+      map['leet_code_hide_code'] = Variable<bool>(leetCodeHideCode.value);
+    }
     if (srsFailKey.present) {
       map['srs_fail_key'] = Variable<String>(srsFailKey.value);
     }
@@ -13016,6 +13815,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
+          ..write('defaultJournalId: $defaultJournalId, ')
+          ..write('defaultTodoListId: $defaultTodoListId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
           ..write('todoShowAllTasks: $todoShowAllTasks, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
@@ -13110,6 +13911,13 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
           ..write('leetcodeUsername: $leetcodeUsername, ')
           ..write('showNeetCode150: $showNeetCode150, ')
+          ..write('leetCodeHideDifficulty: $leetCodeHideDifficulty, ')
+          ..write('leetCodeHideTags: $leetCodeHideTags, ')
+          ..write('leetCodeHideQuestionName: $leetCodeHideQuestionName, ')
+          ..write('leetCodeHideDescription: $leetCodeHideDescription, ')
+          ..write('leetCodeHideExamples: $leetCodeHideExamples, ')
+          ..write('leetCodeHideComplexity: $leetCodeHideComplexity, ')
+          ..write('leetCodeHideCode: $leetCodeHideCode, ')
           ..write('srsFailKey: $srsFailKey, ')
           ..write('srsHardKey: $srsHardKey, ')
           ..write('srsGoodKey: $srsGoodKey, ')
@@ -28080,6 +28888,10 @@ typedef $$JournalsTableTableCreateCompanionBuilder =
       Value<int?> colorValue,
       Value<bool> guidedJournaling,
       Value<int> promptCycleDays,
+      Value<bool> showMood,
+      Value<bool> showWeather,
+      Value<bool> showQuotes,
+      Value<bool> includeInAllView,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -28093,6 +28905,10 @@ typedef $$JournalsTableTableUpdateCompanionBuilder =
       Value<int?> colorValue,
       Value<bool> guidedJournaling,
       Value<int> promptCycleDays,
+      Value<bool> showMood,
+      Value<bool> showWeather,
+      Value<bool> showQuotes,
+      Value<bool> includeInAllView,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -28131,6 +28947,26 @@ class $$JournalsTableTableFilterComposer
 
   ColumnFilters<int> get promptCycleDays => $composableBuilder(
     column: $table.promptCycleDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showMood => $composableBuilder(
+    column: $table.showMood,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showWeather => $composableBuilder(
+    column: $table.showWeather,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showQuotes => $composableBuilder(
+    column: $table.showQuotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includeInAllView => $composableBuilder(
+    column: $table.includeInAllView,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -28189,6 +29025,26 @@ class $$JournalsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get showMood => $composableBuilder(
+    column: $table.showMood,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get showWeather => $composableBuilder(
+    column: $table.showWeather,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get showQuotes => $composableBuilder(
+    column: $table.showQuotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get includeInAllView => $composableBuilder(
+    column: $table.includeInAllView,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -28237,6 +29093,24 @@ class $$JournalsTableTableAnnotationComposer
 
   GeneratedColumn<int> get promptCycleDays => $composableBuilder(
     column: $table.promptCycleDays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get showMood =>
+      $composableBuilder(column: $table.showMood, builder: (column) => column);
+
+  GeneratedColumn<bool> get showWeather => $composableBuilder(
+    column: $table.showWeather,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get showQuotes => $composableBuilder(
+    column: $table.showQuotes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get includeInAllView => $composableBuilder(
+    column: $table.includeInAllView,
     builder: (column) => column,
   );
 
@@ -28293,6 +29167,10 @@ class $$JournalsTableTableTableManager
                 Value<int?> colorValue = const Value.absent(),
                 Value<bool> guidedJournaling = const Value.absent(),
                 Value<int> promptCycleDays = const Value.absent(),
+                Value<bool> showMood = const Value.absent(),
+                Value<bool> showWeather = const Value.absent(),
+                Value<bool> showQuotes = const Value.absent(),
+                Value<bool> includeInAllView = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -28304,6 +29182,10 @@ class $$JournalsTableTableTableManager
                 colorValue: colorValue,
                 guidedJournaling: guidedJournaling,
                 promptCycleDays: promptCycleDays,
+                showMood: showMood,
+                showWeather: showWeather,
+                showQuotes: showQuotes,
+                includeInAllView: includeInAllView,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -28317,6 +29199,10 @@ class $$JournalsTableTableTableManager
                 Value<int?> colorValue = const Value.absent(),
                 Value<bool> guidedJournaling = const Value.absent(),
                 Value<int> promptCycleDays = const Value.absent(),
+                Value<bool> showMood = const Value.absent(),
+                Value<bool> showWeather = const Value.absent(),
+                Value<bool> showQuotes = const Value.absent(),
+                Value<bool> includeInAllView = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -28328,6 +29214,10 @@ class $$JournalsTableTableTableManager
                 colorValue: colorValue,
                 guidedJournaling: guidedJournaling,
                 promptCycleDays: promptCycleDays,
+                showMood: showMood,
+                showWeather: showWeather,
+                showQuotes: showQuotes,
+                includeInAllView: includeInAllView,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -29124,6 +30014,7 @@ typedef $$TodoListsTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<int?> colorValue,
+      Value<bool> includeInAllView,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -29135,6 +30026,7 @@ typedef $$TodoListsTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<int?> colorValue,
+      Value<bool> includeInAllView,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -29163,6 +30055,11 @@ class $$TodoListsTableTableFilterComposer
 
   ColumnFilters<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get includeInAllView => $composableBuilder(
+    column: $table.includeInAllView,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -29211,6 +30108,11 @@ class $$TodoListsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get includeInAllView => $composableBuilder(
+    column: $table.includeInAllView,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -29249,6 +30151,11 @@ class $$TodoListsTableTableAnnotationComposer
 
   GeneratedColumn<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get includeInAllView => $composableBuilder(
+    column: $table.includeInAllView,
     builder: (column) => column,
   );
 
@@ -29305,6 +30212,7 @@ class $$TodoListsTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<int?> colorValue = const Value.absent(),
+                Value<bool> includeInAllView = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -29314,6 +30222,7 @@ class $$TodoListsTableTableTableManager
                 id: id,
                 name: name,
                 colorValue: colorValue,
+                includeInAllView: includeInAllView,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -29325,6 +30234,7 @@ class $$TodoListsTableTableTableManager
                 required String id,
                 required String name,
                 Value<int?> colorValue = const Value.absent(),
+                Value<bool> includeInAllView = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -29334,6 +30244,7 @@ class $$TodoListsTableTableTableManager
                 id: id,
                 name: name,
                 colorValue: colorValue,
+                includeInAllView: includeInAllView,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -31236,6 +32147,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
+      Value<String?> defaultJournalId,
+      Value<String?> defaultTodoListId,
       Value<bool> journalShowAllEntries,
       Value<bool> todoShowAllTasks,
       Value<String?> weatherLocationLabel,
@@ -31308,6 +32221,13 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> dreamNotesPinned,
       Value<String?> leetcodeUsername,
       Value<bool> showNeetCode150,
+      Value<bool> leetCodeHideDifficulty,
+      Value<bool> leetCodeHideTags,
+      Value<bool> leetCodeHideQuestionName,
+      Value<bool> leetCodeHideDescription,
+      Value<bool> leetCodeHideExamples,
+      Value<bool> leetCodeHideComplexity,
+      Value<bool> leetCodeHideCode,
       Value<String> srsFailKey,
       Value<String> srsHardKey,
       Value<String> srsGoodKey,
@@ -31352,6 +32272,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
+      Value<String?> defaultJournalId,
+      Value<String?> defaultTodoListId,
       Value<bool> journalShowAllEntries,
       Value<bool> todoShowAllTasks,
       Value<String?> weatherLocationLabel,
@@ -31424,6 +32346,13 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> dreamNotesPinned,
       Value<String?> leetcodeUsername,
       Value<bool> showNeetCode150,
+      Value<bool> leetCodeHideDifficulty,
+      Value<bool> leetCodeHideTags,
+      Value<bool> leetCodeHideQuestionName,
+      Value<bool> leetCodeHideDescription,
+      Value<bool> leetCodeHideExamples,
+      Value<bool> leetCodeHideComplexity,
+      Value<bool> leetCodeHideCode,
       Value<String> srsFailKey,
       Value<String> srsHardKey,
       Value<String> srsGoodKey,
@@ -31593,6 +32522,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get lastViewedTodoListId => $composableBuilder(
     column: $table.lastViewedTodoListId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultJournalId => $composableBuilder(
+    column: $table.defaultJournalId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultTodoListId => $composableBuilder(
+    column: $table.defaultTodoListId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -31960,6 +32899,41 @@ class $$SettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get leetCodeHideDifficulty => $composableBuilder(
+    column: $table.leetCodeHideDifficulty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get leetCodeHideTags => $composableBuilder(
+    column: $table.leetCodeHideTags,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get leetCodeHideQuestionName => $composableBuilder(
+    column: $table.leetCodeHideQuestionName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get leetCodeHideDescription => $composableBuilder(
+    column: $table.leetCodeHideDescription,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get leetCodeHideExamples => $composableBuilder(
+    column: $table.leetCodeHideExamples,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get leetCodeHideComplexity => $composableBuilder(
+    column: $table.leetCodeHideComplexity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get leetCodeHideCode => $composableBuilder(
+    column: $table.leetCodeHideCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get srsFailKey => $composableBuilder(
     column: $table.srsFailKey,
     builder: (column) => ColumnFilters(column),
@@ -32172,6 +33146,16 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<String> get lastViewedTodoListId => $composableBuilder(
     column: $table.lastViewedTodoListId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defaultJournalId => $composableBuilder(
+    column: $table.defaultJournalId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defaultTodoListId => $composableBuilder(
+    column: $table.defaultTodoListId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -32545,6 +33529,41 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get leetCodeHideDifficulty => $composableBuilder(
+    column: $table.leetCodeHideDifficulty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get leetCodeHideTags => $composableBuilder(
+    column: $table.leetCodeHideTags,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get leetCodeHideQuestionName => $composableBuilder(
+    column: $table.leetCodeHideQuestionName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get leetCodeHideDescription => $composableBuilder(
+    column: $table.leetCodeHideDescription,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get leetCodeHideExamples => $composableBuilder(
+    column: $table.leetCodeHideExamples,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get leetCodeHideComplexity => $composableBuilder(
+    column: $table.leetCodeHideComplexity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get leetCodeHideCode => $composableBuilder(
+    column: $table.leetCodeHideCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get srsFailKey => $composableBuilder(
     column: $table.srsFailKey,
     builder: (column) => ColumnOrderings(column),
@@ -32747,6 +33766,16 @@ class $$SettingsTableTableAnnotationComposer
 
   GeneratedColumn<String> get lastViewedTodoListId => $composableBuilder(
     column: $table.lastViewedTodoListId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultJournalId => $composableBuilder(
+    column: $table.defaultJournalId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultTodoListId => $composableBuilder(
+    column: $table.defaultTodoListId,
     builder: (column) => column,
   );
 
@@ -33120,6 +34149,41 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get leetCodeHideDifficulty => $composableBuilder(
+    column: $table.leetCodeHideDifficulty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get leetCodeHideTags => $composableBuilder(
+    column: $table.leetCodeHideTags,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get leetCodeHideQuestionName => $composableBuilder(
+    column: $table.leetCodeHideQuestionName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get leetCodeHideDescription => $composableBuilder(
+    column: $table.leetCodeHideDescription,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get leetCodeHideExamples => $composableBuilder(
+    column: $table.leetCodeHideExamples,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get leetCodeHideComplexity => $composableBuilder(
+    column: $table.leetCodeHideComplexity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get leetCodeHideCode => $composableBuilder(
+    column: $table.leetCodeHideCode,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get srsFailKey => $composableBuilder(
     column: $table.srsFailKey,
     builder: (column) => column,
@@ -33240,6 +34304,8 @@ class $$SettingsTableTableTableManager
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
+                Value<String?> defaultJournalId = const Value.absent(),
+                Value<String?> defaultTodoListId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
                 Value<bool> todoShowAllTasks = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
@@ -33330,6 +34396,13 @@ class $$SettingsTableTableTableManager
                 Value<bool> dreamNotesPinned = const Value.absent(),
                 Value<String?> leetcodeUsername = const Value.absent(),
                 Value<bool> showNeetCode150 = const Value.absent(),
+                Value<bool> leetCodeHideDifficulty = const Value.absent(),
+                Value<bool> leetCodeHideTags = const Value.absent(),
+                Value<bool> leetCodeHideQuestionName = const Value.absent(),
+                Value<bool> leetCodeHideDescription = const Value.absent(),
+                Value<bool> leetCodeHideExamples = const Value.absent(),
+                Value<bool> leetCodeHideComplexity = const Value.absent(),
+                Value<bool> leetCodeHideCode = const Value.absent(),
                 Value<String> srsFailKey = const Value.absent(),
                 Value<String> srsHardKey = const Value.absent(),
                 Value<String> srsGoodKey = const Value.absent(),
@@ -33372,6 +34445,8 @@ class $$SettingsTableTableTableManager
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
+                defaultJournalId: defaultJournalId,
+                defaultTodoListId: defaultTodoListId,
                 journalShowAllEntries: journalShowAllEntries,
                 todoShowAllTasks: todoShowAllTasks,
                 weatherLocationLabel: weatherLocationLabel,
@@ -33447,6 +34522,13 @@ class $$SettingsTableTableTableManager
                 dreamNotesPinned: dreamNotesPinned,
                 leetcodeUsername: leetcodeUsername,
                 showNeetCode150: showNeetCode150,
+                leetCodeHideDifficulty: leetCodeHideDifficulty,
+                leetCodeHideTags: leetCodeHideTags,
+                leetCodeHideQuestionName: leetCodeHideQuestionName,
+                leetCodeHideDescription: leetCodeHideDescription,
+                leetCodeHideExamples: leetCodeHideExamples,
+                leetCodeHideComplexity: leetCodeHideComplexity,
+                leetCodeHideCode: leetCodeHideCode,
                 srsFailKey: srsFailKey,
                 srsHardKey: srsHardKey,
                 srsGoodKey: srsGoodKey,
@@ -33492,6 +34574,8 @@ class $$SettingsTableTableTableManager
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
+                Value<String?> defaultJournalId = const Value.absent(),
+                Value<String?> defaultTodoListId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
                 Value<bool> todoShowAllTasks = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
@@ -33582,6 +34666,13 @@ class $$SettingsTableTableTableManager
                 Value<bool> dreamNotesPinned = const Value.absent(),
                 Value<String?> leetcodeUsername = const Value.absent(),
                 Value<bool> showNeetCode150 = const Value.absent(),
+                Value<bool> leetCodeHideDifficulty = const Value.absent(),
+                Value<bool> leetCodeHideTags = const Value.absent(),
+                Value<bool> leetCodeHideQuestionName = const Value.absent(),
+                Value<bool> leetCodeHideDescription = const Value.absent(),
+                Value<bool> leetCodeHideExamples = const Value.absent(),
+                Value<bool> leetCodeHideComplexity = const Value.absent(),
+                Value<bool> leetCodeHideCode = const Value.absent(),
                 Value<String> srsFailKey = const Value.absent(),
                 Value<String> srsHardKey = const Value.absent(),
                 Value<String> srsGoodKey = const Value.absent(),
@@ -33624,6 +34715,8 @@ class $$SettingsTableTableTableManager
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
+                defaultJournalId: defaultJournalId,
+                defaultTodoListId: defaultTodoListId,
                 journalShowAllEntries: journalShowAllEntries,
                 todoShowAllTasks: todoShowAllTasks,
                 weatherLocationLabel: weatherLocationLabel,
@@ -33699,6 +34792,13 @@ class $$SettingsTableTableTableManager
                 dreamNotesPinned: dreamNotesPinned,
                 leetcodeUsername: leetcodeUsername,
                 showNeetCode150: showNeetCode150,
+                leetCodeHideDifficulty: leetCodeHideDifficulty,
+                leetCodeHideTags: leetCodeHideTags,
+                leetCodeHideQuestionName: leetCodeHideQuestionName,
+                leetCodeHideDescription: leetCodeHideDescription,
+                leetCodeHideExamples: leetCodeHideExamples,
+                leetCodeHideComplexity: leetCodeHideComplexity,
+                leetCodeHideCode: leetCodeHideCode,
                 srsFailKey: srsFailKey,
                 srsHardKey: srsHardKey,
                 srsGoodKey: srsGoodKey,

@@ -40,6 +40,7 @@ import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/todo/todo_manage_sheet.dart';
+import 'package:voyager/features/todo/todo_settings_dialog.dart';
 
 const _todoEditPanelWidth = 420.0;
 const _todoEditPanelDuration = Duration(milliseconds: 270);
@@ -311,8 +312,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
   var _showAllTasks = false;
   // settingsProvider can still be loading when initState reads it, so the
   // restore of _showAllTasks is retried once from build (see
-  // _applySavedShowAllTasks) — the same late recovery _resolveListId performs
-  // for the selected list id.
+  // _applySavedViewPreferences) — the same late recovery _resolveListId
+  // performs for the selected list id.
   var _appliedSavedShowAllTasks = false;
   // Cache subtask stats futures by task ID to avoid re-querying the DB on
   // every rebuild (e.g. during drag-to-scroll), which would cause
@@ -393,23 +394,45 @@ class _TodoPageState extends ConsumerState<TodoPage>
       }
     });
     final savedSettings = ref.read(settingsProvider).valueOrNull;
-    final savedId = savedSettings?.lastViewedTodoListId;
-    if (savedId != null) {
-      _selectedListId = savedId;
+    final defaultListId = savedSettings?.defaultTodoListId;
+    if (defaultListId != null) {
+      // A default list replaces the whole "reopen where you left off" restore
+      // — both the id and the all-tasks flag — rather than layering on it.
+      _selectedListId = defaultListId;
+      _showAllTasks = false;
+    } else {
+      final savedId = savedSettings?.lastViewedTodoListId;
+      if (savedId != null) {
+        _selectedListId = savedId;
+      }
+      // Both, not one or the other: reopening into the all-view still needs the
+      // concrete list, since that is where new tasks are filed.
+      _showAllTasks = savedSettings?.todoShowAllTasks ?? false;
     }
-    // Both, not one or the other: reopening into the all-view still needs the
-    // concrete list, since that is where new tasks are filed.
-    _showAllTasks = savedSettings?.todoShowAllTasks ?? false;
     _appliedSavedShowAllTasks = savedSettings != null;
   }
 
-  void _applySavedShowAllTasks(AppSettings? settings) {
+  /// Restores the saved view — a default list if one is set, otherwise the
+  /// last-viewed list and all-tasks flag — on the first build that has
+  /// settings, for the case where [initState] read them while still loading.
+  void _applySavedViewPreferences(AppSettings? settings) {
     if (_appliedSavedShowAllTasks || settings == null) return;
     _appliedSavedShowAllTasks = true;
-    if (settings.todoShowAllTasks == _showAllTasks) return;
+    final defaultListId = settings.defaultTodoListId;
+    if (defaultListId != null) {
+      // Assigned straight away rather than from the post-frame callback below:
+      // this runs at the top of build and _resolveListId reads _selectedListId
+      // further down the *same* build, so deferring it would let that resolve
+      // against the stale id and write it back before this ever applied.
+      _selectedListId = defaultListId;
+    }
+    // A default list replaces the saved all-tasks flag rather than layering on
+    // top of it — the page opens into that list, not the combined view.
+    final showAll = defaultListId == null && settings.todoShowAllTasks;
+    if (showAll == _showAllTasks) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _showAllTasks = settings.todoShowAllTasks);
+      setState(() => _showAllTasks = showAll);
     });
   }
 
@@ -1629,6 +1652,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
         await renameTodoList(context, ref, list);
       case VoyagerMenuCatalogEntry.changeColor:
         await changeTodoListColor(context, ref, list, allLists);
+      case VoyagerMenuCatalogEntry.settings:
+        await showTodoListSettingsDialog(context, ref, list);
       case VoyagerMenuCatalogEntry.delete:
         final deleted = await deleteTodoList(
           context,
@@ -1843,7 +1868,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.valueOrNull;
-    _applySavedShowAllTasks(settings);
+    _applySavedViewPreferences(settings);
     final hideCompleted = settingsAsync.maybeWhen(
       data: (settings) => settings.hideCompletedTasks,
       orElse: () => false,
@@ -1919,9 +1944,25 @@ class _TodoPageState extends ConsumerState<TodoPage>
           _showAllTasks ? allTodoTasksProvider : todoTasksProvider(listId),
           (previous, next) => _refreshOrDeferWhileScrolling(),
         );
-        final tasksAsync = _showAllTasks
+        // Lists opted out of the combined view are dropped here rather than in
+        // the provider: allTodoTasksProvider also feeds the calendar's due-date
+        // markers and the search index, which the opt-out doesn't touch.
+        final excludedListIds = _showAllTasks
+            ? {
+                for (final list in lists)
+                  if (!list.includeInAllView) list.id,
+              }
+            : const <String>{};
+        final rawTasksAsync = _showAllTasks
             ? ref.read(allTodoTasksProvider)
             : ref.read(todoTasksProvider(listId));
+        final tasksAsync = excludedListIds.isEmpty
+            ? rawTasksAsync
+            : rawTasksAsync.whenData(
+                (tasks) => tasks
+                    .where((task) => !excludedListIds.contains(task.listId))
+                    .toList(),
+              );
         return tasksAsync.when(
           skipLoadingOnReload: true,
           data: (tasks) {
@@ -2094,8 +2135,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                           unawaited(_createListFromDropdown()),
                                       manageMenuEntriesFor: (listId) =>
                                           listId == legacyTodoListId
-                                          ? defaultEntityManageMenuEntries
-                                          : entityManageMenuEntries,
+                                          ? defaultConfigurableManageMenuEntries
+                                          : configurableManageMenuEntries,
                                       onManage: (listId, action) async {
                                         if (listId == null) return;
                                         final stat = _statsForList(

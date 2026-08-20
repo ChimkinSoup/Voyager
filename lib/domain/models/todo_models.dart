@@ -9,14 +9,21 @@ class TodoListModel extends SoftDeletable {
     super.deletedAt,
     required this.name,
     this.colorValue,
+    this.includeInAllView = true,
   });
 
   final String name;
   final int? colorValue;
 
+  /// Whether this list's tasks appear in the combined "All tasks" list.
+  /// Opting out hides them from that view only; the tasks stay in search,
+  /// the calendar's due-date markers and their own list.
+  final bool includeInAllView;
+
   TodoListModel copyWith({
     String? name,
     int? colorValue,
+    bool? includeInAllView,
     DateTime? deletedAt,
     bool bumpVersion = true,
   }) {
@@ -28,6 +35,7 @@ class TodoListModel extends SoftDeletable {
       deletedAt: deletedAt ?? this.deletedAt,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
+      includeInAllView: includeInAllView ?? this.includeInAllView,
     );
   }
 }

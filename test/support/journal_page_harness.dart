@@ -15,6 +15,8 @@ import '../fakes/fake_weather_api_client.dart';
 
 const journalHarnessId = 'harness-journal';
 const journalHarnessName = 'Harness';
+const journalHarnessSecondId = 'harness-journal-2';
+const journalHarnessSecondName = 'Second';
 
 /// Pumps a real [JournalPage] over an in-memory database holding a single
 /// non-default journal with one entry in it.
@@ -23,24 +25,59 @@ const journalHarnessName = 'Harness';
 /// [showAllJournals] to start the page in the "All journals" view the way a
 /// restart into that view would. [extraOverrides] is handed the harness
 /// database so a caller can swap in an instrumented repository.
+///
+/// [configureJournal] rewrites the seeded journal before it is saved, which is
+/// how per-journal settings tests flip the toggles. [seedSecondJournal] adds a
+/// second journal with one entry, so a test can tell the two apart in the
+/// all-journals list. [defaultJournalId] seeds the journal the page is
+/// supposed to open into regardless of what was last viewed.
 Future<AppDatabase> pumpJournalPage(
   WidgetTester tester, {
   bool showAllJournals = false,
+  Journal Function(Journal journal)? configureJournal,
+  bool seedSecondJournal = false,
+  String? defaultJournalId,
   List<Override> Function(AppDatabase db)? extraOverrides,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
   final repo = DriftJournalRepository(db);
   final now = DateTime.now().toUtc();
-  await repo.upsertJournal(
-    Journal(
-      id: journalHarnessId,
-      name: journalHarnessName,
-      colorValue: 0xFF3366FF,
-      createdAt: now,
-      updatedAt: now,
-    ),
+  final harnessJournal = Journal(
+    id: journalHarnessId,
+    name: journalHarnessName,
+    colorValue: 0xFF3366FF,
+    createdAt: now,
+    updatedAt: now,
   );
+  await repo.upsertJournal(
+    configureJournal == null
+        ? harnessJournal
+        : configureJournal(harnessJournal),
+  );
+  if (seedSecondJournal) {
+    await repo.upsertJournal(
+      Journal(
+        id: journalHarnessSecondId,
+        name: journalHarnessSecondName,
+        colorValue: 0xFFFF6633,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await repo.upsertEntry(
+      JournalEntry(
+        id: 'harness-entry-2',
+        journalId: journalHarnessSecondId,
+        title: 'Second journal entry',
+        body: '',
+        entryDate: now,
+        timestamp: now,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
   await repo.upsertEntry(
     JournalEntry(
       id: 'harness-entry',
@@ -59,6 +96,7 @@ Future<AppDatabase> pumpJournalPage(
     (await settingsRepo.getSettings()).copyWith(
       lastViewedJournalId: journalHarnessId,
       journalShowAllEntries: showAllJournals,
+      defaultJournalId: defaultJournalId,
     ),
   );
 

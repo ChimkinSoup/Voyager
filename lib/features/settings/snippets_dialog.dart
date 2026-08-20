@@ -515,6 +515,10 @@ class _SnippetEditorState extends State<_SnippetEditor> {
               children: [
                 VoyagerCheckbox(
                   value: _autoExpand,
+                  // No confetti in settings: the burst is the To-Do list's
+                  // "you finished something", and a snippet option is a
+                  // preference being set, not an accomplishment.
+                  celebrateOnComplete: false,
                   onChanged: (v) => setState(() => _autoExpand = v),
                 ),
                 const SizedBox(width: 6),
@@ -527,6 +531,7 @@ class _SnippetEditorState extends State<_SnippetEditor> {
                 const SizedBox(width: 16),
                 VoyagerCheckbox(
                   value: _wordBoundary,
+                  celebrateOnComplete: false,
                   onChanged: (v) => setState(() => _wordBoundary = v),
                 ),
                 const SizedBox(width: 6),
@@ -552,18 +557,6 @@ class _SnippetEditorState extends State<_SnippetEditor> {
                 ),
               ],
             ),
-            if (_autoExpand)
-              Padding(
-                padding: const EdgeInsets.only(top: 8, left: 4),
-                child: Text(
-                  'Fires the moment the trigger is complete, so a short '
-                  'automatic trigger wins over any longer one starting with '
-                  'it.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
             if (placeholders)
               Padding(
                 padding: const EdgeInsets.only(top: 8, left: 4),

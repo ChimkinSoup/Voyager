@@ -335,8 +335,28 @@ class _CashFlowChartState extends State<_CashFlowChart> {
     final next = !event.isInterestedForInteractions || spot == null
         ? null
         : (group: spot.touchedBarGroupIndex, rod: spot.touchedRodDataIndex);
+    // A bucket with no income (or no spending) draws no rod at all, but
+    // fl_chart still reports a hit on the zero-height one when the pointer
+    // crosses where it would have been. Reading out "$0.00" from a bar that
+    // isn't on screen is a reading of nothing, so it doesn't get a bubble.
+    if (next != null && _centsAt(next.group, next.rod) == 0) {
+      if (_touched == null) return;
+      setState(() => _touched = null);
+      return;
+    }
     if (next == _touched) return;
     setState(() => _touched = next);
+  }
+
+  /// Value of one rod, or 0 when [group]/[rod] isn't a rod in this chart.
+  int _centsAt(int group, int rod) {
+    if (group < 0 || group >= widget.series.length) return 0;
+    final point = widget.series[group];
+    return switch (rod) {
+      0 => point.incomeCents,
+      1 => point.expenseCents,
+      _ => 0,
+    };
   }
 
   /// Width of one rod, so the pair fills [_slotFill] of the bucket's share of
@@ -438,9 +458,16 @@ class _CashFlowChartState extends State<_CashFlowChart> {
                     if (i < 0 || i >= series.length) {
                       return const SizedBox.shrink();
                     }
-                    // Thin out labels so they never collide.
+                    // Thin out labels so they never collide, counting back
+                    // from the right-hand end rather than forward from the
+                    // left. With an even number of buckets and every other
+                    // one labelled, one of the two ends goes unlabelled — and
+                    // the one that matters is the newest bucket, which is the
+                    // period the user is currently in.
                     final step = (series.length / 6).ceil();
-                    if (i % step != 0) return const SizedBox.shrink();
+                    if ((series.length - 1 - i) % step != 0) {
+                      return const SizedBox.shrink();
+                    }
                     return Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
@@ -1082,6 +1109,10 @@ class _NetWorthChartState extends State<_NetWorthChart> {
     final values = spots.map((s) => s.y).toList();
     var minValue = values.reduce((a, b) => a < b ? a : b);
     var maxValue = values.reduce((a, b) => a > b ? a : b);
+    // The lowest month the series actually contains, kept before the flat-
+    // series nudge below invents a range around it. This is where the hover
+    // indicator line stops — see `getTouchLineStart`.
+    final floor = minValue;
     if (minValue == maxValue) {
       minValue -= 1;
       maxValue += 1;
@@ -1110,6 +1141,14 @@ class _NetWorthChartState extends State<_NetWorthChart> {
           // most of the chart's width — showed nothing at all.
           touchSpotThreshold: 10000,
           touchCallback: _handleTouch,
+          // The indicator line hangs from the hovered point down to this y.
+          // fl_chart's default is the bottom of the *plot*, which sits a
+          // 15%-of-range pad below the lowest month in the series — so the
+          // lowest point on the curve, the one most likely to be $0, still
+          // trailed a stub of line below itself with nothing under it to
+          // point at. Ending on the series' own floor makes that stub exactly
+          // zero-length while every higher point keeps a line to read down.
+          getTouchLineStart: (_, _) => floor,
         ),
         gridData: const FlGridData(show: false),
         borderData: FlBorderData(show: false),

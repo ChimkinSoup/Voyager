@@ -215,6 +215,18 @@ Future<bool> deleteJournalList(
     }
 
     await repo.softDeleteJournal(journal.id);
+
+    // A deleted journal can't stay the one the page opens into; leaving the id
+    // behind would make the journal page fall back silently and look as if the
+    // setting had been forgotten.
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.defaultJournalId == journal.id) {
+      await settingsRepo.saveSettings(
+        settings.copyWith(clearDefaultJournalId: true),
+      );
+      ref.invalidate(settingsProvider);
+    }
   } catch (error, stackTrace) {
     onLocalDeleteFailed?.call();
     FlutterError.reportError(
