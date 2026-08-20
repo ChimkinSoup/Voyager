@@ -151,6 +151,10 @@ Map<String, dynamic> journalToFirestore(Journal journal) => {
   'colorValue': journal.colorValue,
   'guidedJournaling': journal.guidedJournaling,
   'promptCycleDays': journal.promptCycleDays,
+  'showMood': journal.showMood,
+  'showWeather': journal.showWeather,
+  'showQuotes': journal.showQuotes,
+  'includeInAllView': journal.includeInAllView,
   'createdAt': _dateToFirestoreRequired(journal.createdAt),
   'updatedAt': _dateToFirestoreRequired(journal.updatedAt),
   'version': journal.version,
@@ -186,6 +190,11 @@ Journal mergeJournalFromRemote(
     promptCycleDays: (data['promptCycleDays'] as num?)?.toInt() ??
         local?.promptCycleDays ??
         7,
+    showMood: data['showMood'] as bool? ?? local?.showMood ?? true,
+    showWeather: data['showWeather'] as bool? ?? local?.showWeather ?? true,
+    showQuotes: data['showQuotes'] as bool? ?? local?.showQuotes ?? true,
+    includeInAllView:
+        data['includeInAllView'] as bool? ?? local?.includeInAllView ?? true,
     createdAt: parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
@@ -938,6 +947,7 @@ Map<String, dynamic> todoListToFirestore(TodoListModel list) => {
   'id': todoListDocumentIdForFirestore(list.id),
   'name': list.name,
   'colorValue': list.colorValue,
+  'includeInAllView': list.includeInAllView,
   'createdAt': _dateToFirestoreRequired(list.createdAt),
   'updatedAt': _dateToFirestoreRequired(list.updatedAt),
   'version': list.version,
@@ -967,6 +977,8 @@ TodoListModel mergeTodoListFromRemote(
     colorValue: data.containsKey('colorValue')
         ? data['colorValue'] as int?
         : local?.colorValue,
+    includeInAllView:
+        data['includeInAllView'] as bool? ?? local?.includeInAllView ?? true,
     createdAt: parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
@@ -2062,6 +2074,8 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'snippets': [for (final snippet in s.snippets) snippet.toJson()],
   'lastViewedJournalId': s.lastViewedJournalId,
   'lastViewedTodoListId': s.lastViewedTodoListId,
+  'defaultJournalId': s.defaultJournalId,
+  'defaultTodoListId': s.defaultTodoListId,
   'journalShowAllEntries': s.journalShowAllEntries,
   'todoShowAllTasks': s.todoShowAllTasks,
   'geometricTextureScale': s.geometricTextureScale,
@@ -2107,6 +2121,13 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'dreamNotesPinned': s.dreamNotesPinned,
   'leetcodeUsername': s.leetcodeUsername,
   'showNeetCode150': s.showNeetCode150,
+  'leetCodeHideDifficulty': s.leetCodeHideDifficulty,
+  'leetCodeHideTags': s.leetCodeHideTags,
+  'leetCodeHideQuestionName': s.leetCodeHideQuestionName,
+  'leetCodeHideDescription': s.leetCodeHideDescription,
+  'leetCodeHideExamples': s.leetCodeHideExamples,
+  'leetCodeHideComplexity': s.leetCodeHideComplexity,
+  'leetCodeHideCode': s.leetCodeHideCode,
   'weightUnit': s.weightUnit.name,
   'workoutRestTimerEnabled': s.workoutRestTimerEnabled,
   'workoutRestSeconds': s.workoutRestSeconds,
@@ -2196,6 +2217,10 @@ AppSettings mergeSettingsFromRemote(
     clearLastViewedJournalId: _remoteClears(data, 'lastViewedJournalId'),
     lastViewedTodoListId: data['lastViewedTodoListId'] as String?,
     clearLastViewedTodoListId: _remoteClears(data, 'lastViewedTodoListId'),
+    defaultJournalId: data['defaultJournalId'] as String?,
+    clearDefaultJournalId: _remoteClears(data, 'defaultJournalId'),
+    defaultTodoListId: data['defaultTodoListId'] as String?,
+    clearDefaultTodoListId: _remoteClears(data, 'defaultTodoListId'),
     journalShowAllEntries: data['journalShowAllEntries'] as bool?,
     todoShowAllTasks: data['todoShowAllTasks'] as bool?,
     geometricTextureScale: _remoteDouble(data, 'geometricTextureScale'),
@@ -2301,6 +2326,13 @@ AppSettings mergeSettingsFromRemote(
     leetcodeUsername: data['leetcodeUsername'] as String?,
     clearLeetcodeUsername: _remoteClears(data, 'leetcodeUsername'),
     showNeetCode150: data['showNeetCode150'] as bool?,
+    leetCodeHideDifficulty: data['leetCodeHideDifficulty'] as bool?,
+    leetCodeHideTags: data['leetCodeHideTags'] as bool?,
+    leetCodeHideQuestionName: data['leetCodeHideQuestionName'] as bool?,
+    leetCodeHideDescription: data['leetCodeHideDescription'] as bool?,
+    leetCodeHideExamples: data['leetCodeHideExamples'] as bool?,
+    leetCodeHideComplexity: data['leetCodeHideComplexity'] as bool?,
+    leetCodeHideCode: data['leetCodeHideCode'] as bool?,
     weightUnit: _enumFromName(
       WeightUnit.values,
       data['weightUnit'],

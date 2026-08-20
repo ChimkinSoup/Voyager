@@ -42,11 +42,20 @@ List<String> leetCodeContentToExamples(String? html) {
   return examples;
 }
 
-/// Collapses runs of blank lines so GraphQL-extracted description and example
-/// text don't ship empty lines between every paragraph or Input/Output line.
-/// Hand-written fields never go through this path.
+/// Drops every line with nothing on it, so GraphQL-extracted description and
+/// example text don't ship empty lines between paragraphs or Input/Output
+/// lines. Hand-written fields never go through this path.
+///
+/// "Nothing on it" is decided by [String.trim], not by a `\n{2,}` run: a line
+/// LeetCode left a stray `\r`, a non-breaking space (`&#160;` decodes to one,
+/// unlike `&nbsp;`), or any other Unicode blank on reads as empty to the user
+/// but breaks the run, so a newline-counting rule leaves exactly the blank
+/// lines that are hardest to see in the source HTML.
 String _collapseBlankLines(String text) {
-  return text.replaceAll(RegExp(r'\n{2,}'), '\n');
+  return [
+    for (final line in text.split('\n'))
+      if (line.trim().isNotEmpty) line.trimRight(),
+  ].join('\n');
 }
 
 final _exampleHeading = RegExp(r'Example\s+\d+\s*:', caseSensitive: false);

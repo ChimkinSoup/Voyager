@@ -10,6 +10,7 @@ import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_cram_page.dart';
@@ -337,6 +338,8 @@ class _ControlBar extends ConsumerWidget {
             ),
           ),
         ],
+        const SizedBox(width: 6),
+        const _SessionDisplayButton(),
       ],
     );
   }
@@ -371,6 +374,145 @@ class _TagFilterButton extends ConsumerWidget {
                 builder: (_) => _TagFilterList(tags: tags),
               ),
       ),
+    );
+  }
+}
+
+/// One hide toggle: what it is called, whether it is on, and how to flip it.
+/// The list of them is the menu, so adding a hideable part of the card is a
+/// row here rather than another widget.
+typedef _HideToggle = ({
+  String label,
+  bool value,
+  AppSettings Function(AppSettings settings, bool value) apply,
+});
+
+List<_HideToggle> _hideToggles(AppSettings s) => [
+  (
+    label: 'Hide difficulty',
+    value: s.leetCodeHideDifficulty,
+    apply: (settings, v) => settings.copyWith(leetCodeHideDifficulty: v),
+  ),
+  (
+    label: 'Hide tags',
+    value: s.leetCodeHideTags,
+    apply: (settings, v) => settings.copyWith(leetCodeHideTags: v),
+  ),
+  (
+    label: 'Hide question name',
+    value: s.leetCodeHideQuestionName,
+    apply: (settings, v) => settings.copyWith(leetCodeHideQuestionName: v),
+  ),
+  (
+    label: 'Hide description',
+    value: s.leetCodeHideDescription,
+    apply: (settings, v) => settings.copyWith(leetCodeHideDescription: v),
+  ),
+  (
+    label: 'Hide examples',
+    value: s.leetCodeHideExamples,
+    apply: (settings, v) => settings.copyWith(leetCodeHideExamples: v),
+  ),
+  (
+    label: 'Hide complexity',
+    value: s.leetCodeHideComplexity,
+    apply: (settings, v) => settings.copyWith(leetCodeHideComplexity: v),
+  ),
+  (
+    label: 'Hide solution code',
+    value: s.leetCodeHideCode,
+    apply: (settings, v) => settings.copyWith(leetCodeHideCode: v),
+  ),
+];
+
+/// Opens the session display menu — what a Study or Cram run leaves off the
+/// card. Unlike the filters beside it these are settings rather than page
+/// state: they persist, and they follow the account to another device.
+class _SessionDisplayButton extends ConsumerWidget {
+  const _SessionDisplayButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider).valueOrNull;
+    final hiding =
+        settings != null && _hideToggles(settings).any((t) => t.value);
+
+    return Builder(
+      builder: (buttonContext) => GlassButton(
+        dense: true,
+        tooltip: 'What Study and Cram show on the card',
+        icon: const Icon(PhosphorIconsRegular.gear),
+        color: hiding ? theme.colorScheme.primary : null,
+        onPressed: settings == null
+            ? null
+            : () => showContextualPopover<void>(
+                context: context,
+                buttonContext: buttonContext,
+                width: 240,
+                builder: (_) => const _SessionDisplayList(),
+              ),
+      ),
+    );
+  }
+}
+
+class _SessionDisplayList extends ConsumerWidget {
+  const _SessionDisplayList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider).valueOrNull;
+    if (settings == null) return const SizedBox.shrink();
+    final toggles = _hideToggles(settings);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+          child: Text(
+            'Study & Cram',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+        for (final toggle in toggles)
+          InkWell(
+            onTap: () => ref
+                .read(settingsProvider.notifier)
+                .saveSettings(toggle.apply(settings, !toggle.value)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    toggle.value
+                        ? PhosphorIconsFill.checkSquare
+                        : PhosphorIconsRegular.square,
+                    size: 16,
+                    color: toggle.value
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      toggle.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 4),
+      ],
     );
   }
 }

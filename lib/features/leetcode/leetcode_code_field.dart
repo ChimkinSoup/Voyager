@@ -18,11 +18,13 @@ import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
+import 'package:voyager/features/leetcode/leetcode_comment_stripper.dart';
 
 /// The highlight grammar for a stored `codeLanguage` key, falling back to
 /// Python for anything unrecognised. Public because inline `` `code` `` in the
@@ -237,6 +239,25 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
     super.dispose();
   }
 
+  /// Drops the selected language's line comments from the buffer.
+  ///
+  /// The rewrite goes through [CodeController.fullText] rather than [value]:
+  /// [CodeController] reconstructs an assigned value from a length diff, which
+  /// misreads a multi-line deletion as a single backspace. [fullText] leaves
+  /// the selection unset, so the caret is placed afterwards — clamped, since
+  /// the text it used to sit in may be gone.
+  void _stripComments() {
+    final controller = widget.controller;
+    final source = controller.fullText;
+    final stripped = stripLeetCodeLineComments(source, widget.language);
+    if (stripped == source) return;
+    final caret = controller.selection.baseOffset;
+    controller.fullText = stripped;
+    controller.selection = TextSelection.collapsed(
+      offset: caret < 0 ? stripped.length : caret.clamp(0, stripped.length),
+    );
+  }
+
   /// The box is 160px tall from empty, but a [TextField] only occupies — and
   /// so only hit-tests — the lines it actually holds. Everything under the
   /// last line reads as part of the field and does nothing when clicked, so
@@ -267,28 +288,44 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
       children: [
         SizedBox(
           height: 32,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: leetCodeCodeLanguages.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 6),
-            itemBuilder: (context, index) {
-              final lang = leetCodeCodeLanguages[index];
-              // One width for every language, so the row reads as a set of
-              // equal choices rather than a ragged run sized by how long each
-              // language happens to be spelled ("go" next to "typescript").
-              return SizedBox(
-                width: _kLanguagePillWidth,
-                child: SelectorPill(
-                  dense: true,
-                  label: labelForLeetCodeLanguage(lang),
-                  isActive: lang == widget.language,
-                  // The whole capsule takes the accent when chosen. A border
-                  // alone is a thin cue to carry the one thing this row says.
-                  fillWhenActive: true,
-                  onTap: () => widget.onLanguageChanged(lang),
+          child: Row(
+            children: [
+              Expanded(
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: leetCodeCodeLanguages.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 6),
+                  itemBuilder: (context, index) {
+                    final lang = leetCodeCodeLanguages[index];
+                    // One width for every language, so the row reads as a set of
+                    // equal choices rather than a ragged run sized by how long each
+                    // language happens to be spelled ("go" next to "typescript").
+                    return SizedBox(
+                      width: _kLanguagePillWidth,
+                      child: SelectorPill(
+                        dense: true,
+                        label: labelForLeetCodeLanguage(lang),
+                        isActive: lang == widget.language,
+                        // The whole capsule takes the accent when chosen. A border
+                        // alone is a thin cue to carry the one thing this row says.
+                        fillWhenActive: true,
+                        onTap: () => widget.onLanguageChanged(lang),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+              const SizedBox(width: 8),
+              GlassButton(
+                dense: true,
+                height: 32,
+                icon: const Icon(Icons.comments_disabled_outlined),
+                label: 'Strip',
+                tooltip: 'Remove ${labelForLeetCodeLanguage(widget.language)} '
+                    'comments',
+                onPressed: _stripComments,
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),

@@ -21,6 +21,11 @@ class JournalsTable extends Table {
   BoolColumn get guidedJournaling =>
       boolean().withDefault(const Constant(false))();
   IntColumn get promptCycleDays => integer().withDefault(const Constant(7))();
+  BoolColumn get showMood => boolean().withDefault(const Constant(true))();
+  BoolColumn get showWeather => boolean().withDefault(const Constant(true))();
+  BoolColumn get showQuotes => boolean().withDefault(const Constant(true))();
+  BoolColumn get includeInAllView =>
+      boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -124,6 +129,12 @@ class TodoListsTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   IntColumn get colorValue => integer().nullable()();
+
+  /// Whether this list's tasks join the combined "All tasks" list. Excluding a
+  /// list hides it from that view only; its tasks stay in search and on the
+  /// calendar.
+  BoolColumn get includeInAllView =>
+      boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -456,6 +467,16 @@ class SettingsTable extends Table {
   TextColumn get deviceId => text().nullable()();
   TextColumn get lastViewedJournalId => text().nullable()();
   TextColumn get lastViewedTodoListId => text().nullable()();
+
+  /// The journal the journal page always opens into, overriding
+  /// [lastViewedJournalId] and [journalShowAllEntries]. Null means "restore
+  /// whatever was last open", which is the behaviour this column replaced.
+  TextColumn get defaultJournalId => text().nullable()();
+
+  /// The todo list the todo page always opens into, overriding
+  /// [lastViewedTodoListId] and [todoShowAllTasks]. The [defaultJournalId]
+  /// twin, kept as its own column for the same reason.
+  TextColumn get defaultTodoListId => text().nullable()();
   // Kept separate from the lastViewed* ids above rather than folded into them
   // as a sentinel: the all-view and "which one was I actually in" are two
   // independent facts, and storing them in one column loses the second, which
@@ -584,6 +605,23 @@ class SettingsTable extends Table {
   TextColumn get leetcodeUsername => text().nullable()();
   BoolColumn get showNeetCode150 =>
       boolean().withDefault(const Constant(true))();
+
+  /// What a LeetCode Study or Cram session leaves off the card — see
+  /// [AppSettings.leetCodeHideDifficulty] and friends.
+  BoolColumn get leetCodeHideDifficulty =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get leetCodeHideTags =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get leetCodeHideQuestionName =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get leetCodeHideDescription =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get leetCodeHideExamples =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get leetCodeHideComplexity =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get leetCodeHideCode =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get srsFailKey =>
       text().withDefault(const Constant(defaultStudyFailKey))();
   TextColumn get srsHardKey =>
@@ -937,7 +975,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 79;
+  int get schemaVersion => 82;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1822,6 +1860,50 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.snippetsJson,
         );
       }
+      if (from < 80) {
+        for (final column in [
+          settingsTable.leetCodeHideDifficulty,
+          settingsTable.leetCodeHideTags,
+          settingsTable.leetCodeHideQuestionName,
+          settingsTable.leetCodeHideDescription,
+          settingsTable.leetCodeHideExamples,
+          settingsTable.leetCodeHideComplexity,
+          settingsTable.leetCodeHideCode,
+        ]) {
+          await _addSettingsColumnIfNotExists(migrator, column);
+        }
+      }
+      if (from < 81) {
+        for (final column in [
+          journalsTable.showMood,
+          journalsTable.showWeather,
+          journalsTable.showQuotes,
+          journalsTable.includeInAllView,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'journals_table',
+            journalsTable,
+            column,
+          );
+        }
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.defaultJournalId,
+        );
+      }
+      if (from < 82) {
+        await _addColumnIfNotExists(
+          migrator,
+          'todo_lists_table',
+          todoListsTable,
+          todoListsTable.includeInAllView,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.defaultTodoListId,
+        );
+      }
     },
   );
 
@@ -1977,6 +2059,33 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       "UPDATE settings_table SET snippet_expand_key = 'tab' WHERE snippet_expand_key IS NULL",
+    );
+    for (final column in [
+      'leet_code_hide_difficulty',
+      'leet_code_hide_tags',
+      'leet_code_hide_question_name',
+      'leet_code_hide_description',
+      'leet_code_hide_examples',
+      'leet_code_hide_complexity',
+      'leet_code_hide_code',
+    ]) {
+      await customStatement(
+        'UPDATE settings_table SET $column = 0 WHERE $column IS NULL',
+      );
+    }
+    for (final column in [
+      'show_mood',
+      'show_weather',
+      'show_quotes',
+      'include_in_all_view',
+    ]) {
+      await customStatement(
+        'UPDATE journals_table SET $column = 1 WHERE $column IS NULL',
+      );
+    }
+    await customStatement(
+      'UPDATE todo_lists_table SET include_in_all_view = 1 '
+      'WHERE include_in_all_view IS NULL',
     );
     await customStatement(
       'UPDATE settings_table SET dev_slow_calendar_animations = 0 WHERE dev_slow_calendar_animations IS NULL',

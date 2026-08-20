@@ -55,6 +55,7 @@ import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/features/journal/journal_list_actions.dart';
+import 'package:voyager/features/journal/journal_settings_dialog.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
@@ -122,6 +123,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   var _metadataDirty = false;
   var _suppressAutoSelect = false;
   var _appliedSavedPreferences = false;
+
+  /// The journal [_applySavedPreferencesIfReady] is about to restore into,
+  /// held only for the frame between deciding it and the post-frame setState
+  /// that commits it. See that method for why the gap matters.
+  String? _pendingRestoreJournalId;
   int? _mood;
   String? _weatherIcon;
   RemoteSyncService? _remoteSync;
@@ -296,6 +302,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   void _restoreFromSettings(AppSettings? settings) {
+    // A default journal replaces the whole "reopen where you left off" restore
+    // — both the id and the all-view flag — rather than layering on top of it.
+    final defaultId = settings?.defaultJournalId;
+    if (defaultId != null) {
+      _journalFilter = defaultId;
+      _viewAllJournals = false;
+      _entryListWidth ??= settings?.journalEntryListWidth;
+      return;
+    }
     if (settings?.journalShowAllEntries ?? false) {
       _viewAllJournals = true;
     }
@@ -313,12 +328,22 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (_appliedSavedPreferences || settings == null) return;
     _appliedSavedPreferences = true;
 
-    final savedId = settings.lastViewedJournalId;
-    final isAll = settings.journalShowAllEntries;
-    final restoredJournalId =
-        savedId != null && journals.any((journal) => journal.id == savedId)
-        ? savedId
+    // Same precedence as [_restoreFromSettings], re-applied here because that
+    // one runs before the journal list has loaded and can't tell whether the
+    // id still exists. A default that has since been deleted falls back to the
+    // ordinary last-viewed restore.
+    final defaultId = settings.defaultJournalId;
+    final defaultJournalId =
+        defaultId != null && journals.any((journal) => journal.id == defaultId)
+        ? defaultId
         : null;
+    final savedId = settings.lastViewedJournalId;
+    final isAll = defaultJournalId == null && settings.journalShowAllEntries;
+    final restoredJournalId =
+        defaultJournalId ??
+        (savedId != null && journals.any((journal) => journal.id == savedId)
+            ? savedId
+            : null);
 
     if (!isAll &&
         restoredJournalId == null &&
@@ -326,13 +351,25 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       return;
     }
 
+    // Published before the post-frame callback so [_buildJournalContent],
+    // which runs later in this same build, tests the restore target rather
+    // than the stale filter. Otherwise it decides the stale id names no live
+    // journal, queues its own fallback to the first journal in the list, and
+    // — being registered second — that fallback lands last and undoes the
+    // restore. Only visible when the restored id isn't the first journal,
+    // which is exactly the case a default journal creates.
+    _pendingRestoreJournalId = restoredJournalId;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
+        _pendingRestoreJournalId = null;
         // Both, not one or the other: reopening into the all-view still needs
         // the concrete journal, since that is where new entries are filed.
         if (isAll) {
           _viewAllJournals = true;
+        } else if (defaultJournalId != null) {
+          _viewAllJournals = false;
         }
         if (restoredJournalId != null) {
           _journalFilter = restoredJournalId;
@@ -629,6 +666,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       case VoyagerMenuCatalogEntry.changeColor:
         await changeJournalListColor(context, ref, journal, allJournals);
         await _refreshPendingJournal(journalId);
+      case VoyagerMenuCatalogEntry.settings:
+        await showJournalSettingsDialog(context, ref, journal);
+        await _refreshPendingJournal(journalId);
       case VoyagerMenuCatalogEntry.delete:
         final deleted = await deleteJournalList(
           context,
@@ -906,12 +946,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final remoteSync = ref.read(remoteSyncServiceProvider);
     final weatherService = ref.read(weatherServiceProvider);
 
-    Quote? assignedQuote;
-    if (settings.showQuotes) {
-      await ref.read(quotesLoadedProvider.future);
-      if (!mounted) return;
-      assignedQuote = ref.read(quoteBankProvider).nextQuote();
-    }
+    // Assigned even when quotes are hidden — globally or for this journal —
+    // so turning them back on shows a quote on entries written while they were
+    // off, rather than a run of blanks.
+    await ref.read(quotesLoadedProvider.future);
+    if (!mounted) return;
+    final assignedQuote = ref.read(quoteBankProvider).nextQuote();
 
     final weather =
         await weatherService.refreshIfNeeded() ??
@@ -919,8 +959,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (!mounted) return;
 
     final finalized = entry.copyWith(
-      quoteId: assignedQuote?.id,
-      customQuote: assignedQuote?.text,
+      quoteId: assignedQuote.id,
+      customQuote: assignedQuote.text,
       weatherIcon: weather?.icon ?? entry.weatherIcon,
     );
 
@@ -1950,8 +1990,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final displayEntries = _buildDisplayEntries(entries);
     _reconcileSelectedEntryFromProvider(entries);
     final displayJournals = _displayJournals(journals);
-    final journalFilter = displayJournals.any((j) => j.id == _journalFilter)
-        ? _journalFilter
+    final desiredFilter = _pendingRestoreJournalId ?? _journalFilter;
+    final journalFilter = displayJournals.any((j) => j.id == desiredFilter)
+        ? desiredFilter
         : displayJournals.isNotEmpty
         ? displayJournals.first.id
         : legacyJournalId;
@@ -1961,8 +2002,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         setState(() => _journalFilter = journalFilter);
       });
     }
+    // Journals opted out of the combined list are dropped here rather than in
+    // the provider: the provider's per-scope cache is shared with the counts
+    // and the tag pool, which the opt-out deliberately doesn't touch.
+    final excludedFromAllView = {
+      for (final journal in displayJournals)
+        if (!journal.includeInAllView) journal.id,
+    };
     var filtered = _viewAllJournals
-        ? List<JournalEntry>.from(displayEntries)
+        ? displayEntries
+              .where((e) => !excludedFromAllView.contains(e.journalId))
+              .toList()
         : displayEntries.where((e) => e.journalId == entryListScope).toList();
 
     if (_shouldScrollToSelected) {
@@ -1991,6 +2041,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           ? _journalFlagColor(accentJournal)
           : Theme.of(context).colorScheme.primary.toARGB32(),
     );
+    // Which journal's per-journal toggles the editor chrome obeys. In the
+    // all-journals view the rows come from several journals at once, so it
+    // follows the entry actually open; with nothing selected it falls back to
+    // the journal a new entry would be filed under.
+    final chromeJournal =
+        accentJournal ??
+        displayJournals.cast<Journal?>().firstWhere(
+          (j) => j!.id == journalFilter,
+          orElse: () => null,
+        );
+    final showMoodBar = chromeJournal?.showMood ?? true;
+    final showWeatherPicker = chromeJournal?.showWeather ?? true;
+    final showEntryQuote =
+        (settings?.showQuotes ?? true) && (chromeJournal?.showQuotes ?? true);
     final selectedVisible = filtered.any(
       (entry) => entry.id == _selectedEntryId,
     );
@@ -2225,8 +2289,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                         addListLabel: 'Add journal',
                                         manageMenuEntriesFor: (journalId) =>
                                             journalId == legacyJournalId
-                                            ? defaultEntityManageMenuEntries
-                                            : entityManageMenuEntries,
+                                            ? defaultConfigurableManageMenuEntries
+                                            : configurableManageMenuEntries,
                                         onManage: (journalId, action) =>
                                             _handleJournalManage(
                                               journalId!,
@@ -2391,49 +2455,59 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             // live controls simply do nothing there.
                             Row(
                               children: [
-                                Text(
-                                  'Mood',
-                                  style: TextStyle(color: accentColor),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: MoodGradientSlider(
-                                    value: _mood ?? 5,
-                                    accent: accentColor,
-                                    onChanged: (value) {
+                                // With the mood bar hidden the slider's
+                                // Expanded goes with it, so a Spacer takes
+                                // over its stretch — otherwise the date pill
+                                // and trash slide left into the empty space
+                                // instead of staying where they always are.
+                                if (showMoodBar) ...[
+                                  Text(
+                                    'Mood',
+                                    style: TextStyle(color: accentColor),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: MoodGradientSlider(
+                                      value: _mood ?? 5,
+                                      accent: accentColor,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _mood = value;
+                                          _metadataDirty = true;
+                                        });
+                                        _scheduleMetadataSave();
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ] else
+                                  const Spacer(),
+                                if (showWeatherPicker) ...[
+                                  PopupMenuButton<VoyagerMenuCatalogEntry>(
+                                    tooltip: 'Weather',
+                                    icon: Icon(
+                                      _weatherData(_weatherIcon),
+                                      color: accentColor,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 40,
+                                      minHeight: 40,
+                                    ),
+                                    onSelected: (entry) {
                                       setState(() {
-                                        _mood = value;
+                                        _weatherIcon = entry.weatherIconValue;
                                         _metadataDirty = true;
                                       });
                                       _scheduleMetadataSave();
                                     },
+                                    itemBuilder: (context) => buildCatalogMenu(
+                                      context,
+                                      from: weatherMenuEntries,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                PopupMenuButton<VoyagerMenuCatalogEntry>(
-                                  tooltip: 'Weather',
-                                  icon: Icon(
-                                    _weatherData(_weatherIcon),
-                                    color: accentColor,
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 40,
-                                    minHeight: 40,
-                                  ),
-                                  onSelected: (entry) {
-                                    setState(() {
-                                      _weatherIcon = entry.weatherIconValue;
-                                      _metadataDirty = true;
-                                    });
-                                    _scheduleMetadataSave();
-                                  },
-                                  itemBuilder: (context) => buildCatalogMenu(
-                                    context,
-                                    from: weatherMenuEntries,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
+                                  const SizedBox(width: 8),
+                                ],
                                 Builder(
                                   builder: (ctx) {
                                     // Now, with nothing selected: the date a
@@ -2493,8 +2567,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     _logJournal(event, details: details),
                               ),
                             ),
-                            if (settings?.showQuotes == true &&
-                                _selectedEntry != null)
+                            if (showEntryQuote && _selectedEntry != null)
                               _EntryQuote(
                                 quote: _selectedEntry!.customQuote,
                                 onTap: _editQuote,

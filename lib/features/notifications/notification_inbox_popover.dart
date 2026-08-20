@@ -20,7 +20,6 @@ import 'package:voyager/core/widgets/notification_urgency_dot.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 import 'package:voyager/core/widgets/voyager_checkbox.dart';
-import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
@@ -51,7 +50,10 @@ class NotificationInboxPopover extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(onClearAll: () => _clearAll(ref)),
+              _Header(
+                onClearAll: () => _clearAll(ref),
+                onRestoreAll: () => _restoreAll(ref),
+              ),
               const Divider(height: 1),
               const _PinnedNotesSection(),
               const Divider(height: 1),
@@ -76,12 +78,24 @@ class NotificationInboxPopover extends ConsumerWidget {
     }
     ref.invalidate(notificationDismissalsProvider);
   }
+
+  /// The inverse of [_clearAll]: puts every hidden item back in the feed.
+  Future<void> _restoreAll(WidgetRef ref) async {
+    final hidden = await ref.read(hiddenNotificationFeedProvider.future);
+    if (hidden.isEmpty) return;
+    final repo = ref.read(notificationRepositoryProvider);
+    for (final item in hidden) {
+      await repo.undismiss(item.dismissalKey);
+    }
+    ref.invalidate(notificationDismissalsProvider);
+  }
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onClearAll});
+  const _Header({required this.onClearAll, required this.onRestoreAll});
 
   final VoidCallback onClearAll;
+  final VoidCallback onRestoreAll;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +111,19 @@ class _Header extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          Tooltip(
+            message: 'Restore all',
+            child: InkResponse(
+              onTap: onRestoreAll,
+              radius: 18,
+              child: Icon(
+                PhosphorIconsRegular.arrowCounterClockwise,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
           Tooltip(
             message: 'Clear all',
             child: InkResponse(
@@ -319,6 +346,172 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
   }
 }
 
+/// Where a pinned-note row keeps its text, measured from the row's own edges.
+///
+/// A row shows the note as a [Text] and edits it as a [TextField], and neither
+/// one puts its glyphs at its content padding: this is the inset both are
+/// worked back to, so the words don't move when the row is clicked. See
+/// [_kPinnedNoteTextPadding] and [_pinnedNoteFieldPadding].
+const EdgeInsets _kPinnedNoteTextInset = EdgeInsets.symmetric(
+  horizontal: 8,
+  vertical: 4,
+);
+
+/// [_kPinnedNoteTextInset] as padding around the display [Text], undoing the
+/// two insets the field adds on its own: the decorator's input gap on the
+/// left, and RenderEditable's caret strip on the right — that one comes out of
+/// the width the field *wraps* at, so without it a note long enough to wrap
+/// re-flows on the way into the editor.
+final EdgeInsets _kPinnedNoteTextPadding = withCaretMargin(
+  withInputGap(_kPinnedNoteTextInset),
+);
+
+/// [_kPinnedNoteTextInset] as content padding for the field the row turns into.
+///
+/// InputDecorator lays its text out half a visual-density offset *above* the
+/// content padding and takes the whole offset back out of its own height (see
+/// [withDensityShift]) — negative on desktop. Paying that back here leaves the
+/// field's text on the line the [Text] was using, and the row at the height it
+/// already had, on either density.
+EdgeInsets _pinnedNoteFieldPadding(ThemeData theme) {
+  final shift = theme.visualDensity.baseSizeAdjustment.dy / 2.0;
+  return _kPinnedNoteTextInset.copyWith(
+    top: _kPinnedNoteTextInset.top - shift,
+    bottom: _kPinnedNoteTextInset.bottom - shift,
+  );
+}
+
+/// The elbow drawn beside a line the text spilled onto by itself, in the
+/// gutter [_kPinnedNoteTextInset] leaves to the left of the glyphs: 4px wide
+/// and 4px clear of the first letter, which puts it past the 1.2px border the
+/// row grows while it is being edited.
+const double _kWrapMarkWidth = 4;
+const double _kWrapMarkRise = 5;
+const double _kWrapMarkGap = 4;
+const double _kWrapMarkStroke = 1.1;
+
+/// Marks the lines [text] wrapped onto by itself, so a soft wrap reads
+/// differently from a line the user ended with Shift+Enter.
+///
+/// Sits over [child] rather than inside it because neither state of the row
+/// can hold it: Flutter has no text-indent, and the only way to move a
+/// [TextField]'s wrapped line would be to put a real newline in the note. The
+/// mark is painted from the same layout the text got instead, which is why it
+/// lands identically whether the row is showing the note or editing it — see
+/// [_kPinnedNoteTextPadding], which both states are worked back to.
+class _WrapMarks extends StatelessWidget {
+  const _WrapMarks({
+    required this.text,
+    required this.style,
+    required this.child,
+    this.controller,
+  });
+
+  /// The note as the row is showing it. Ignored while [controller] is given.
+  final String text;
+
+  /// The style the text is actually laid out in — the display [Text]'s, or
+  /// the field's, which may carry extra line height for the squiggles.
+  final TextStyle style;
+  final Widget child;
+
+  /// The field's controller while the row is being edited: the marks follow
+  /// the text as it is typed, and only the marks rebuild for it.
+  final TextEditingController? controller;
+
+  Widget _paint(BuildContext context, String text, Widget? child) {
+    return CustomPaint(
+      // In front: the field fills its box, and a mark painted behind it would
+      // be the one thing about the row that changed on the way into the editor.
+      foregroundPainter: _WrapMarkPainter(
+        text: text,
+        style: style,
+        textScaler: MediaQuery.textScalerOf(context),
+        textDirection: Directionality.of(context),
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35),
+      ),
+      child: child,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = this.controller;
+    if (controller == null) return _paint(context, text, child);
+    return AnimatedBuilder(
+      animation: controller,
+      child: child,
+      builder: (context, child) => _paint(context, controller.text, child),
+    );
+  }
+}
+
+class _WrapMarkPainter extends CustomPainter {
+  const _WrapMarkPainter({
+    required this.text,
+    required this.style,
+    required this.textScaler,
+    required this.textDirection,
+    required this.color,
+  });
+
+  final String text;
+  final TextStyle style;
+  final TextScaler textScaler;
+  final TextDirection textDirection;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // The row's whole width less the insets both states keep — so this lays
+    // the note out at the width it really wrapped at, in either state.
+    final wrapWidth = size.width - _kPinnedNoteTextPadding.horizontal;
+    if (text.isEmpty || wrapWidth <= 0) return;
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textScaler: textScaler,
+      textDirection: textDirection,
+    )..layout(maxWidth: wrapWidth);
+    final lines = painter.computeLineMetrics();
+    painter.dispose();
+    if (lines.length < 2) return;
+
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _kWrapMarkStroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final right = _kPinnedNoteTextPadding.left - _kWrapMarkGap;
+    for (var i = 1; i < lines.length; i++) {
+      // A line the user ended themselves reports a hard break; a line that
+      // simply ran out of room does not. The mark belongs to what follows it.
+      if (lines[i - 1].hardBreak) continue;
+      final line = lines[i];
+      final middle =
+          _kPinnedNoteTextPadding.top +
+          line.baseline -
+          line.ascent +
+          line.height / 2;
+      canvas.drawPath(
+        Path()
+          ..moveTo(right - _kWrapMarkWidth, middle - _kWrapMarkRise)
+          ..lineTo(right - _kWrapMarkWidth, middle)
+          ..lineTo(right, middle),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WrapMarkPainter old) =>
+      text != old.text ||
+      style != old.style ||
+      textScaler != old.textScaler ||
+      textDirection != old.textDirection ||
+      color != old.color;
+}
+
 class _PinnedNoteRow extends StatefulWidget {
   const _PinnedNoteRow({
     super.key,
@@ -343,6 +536,14 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
   bool _hovered = false;
   bool _isEditing = false;
+
+  /// The text of an edit that has been committed but not yet read back.
+  ///
+  /// Storing a note is asynchronous, so between leaving the editor and the
+  /// rewritten note arriving from the database this row's [widget.note] still
+  /// carries the *pre-edit* text. Showing that is what made a reminder flick
+  /// back to its old shape for a few frames on save.
+  String? _pendingText;
 
   @override
   void initState() {
@@ -383,8 +584,11 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   @override
   void didUpdateWidget(covariant _PinnedNoteRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.note.text != oldWidget.note.text && !_isEditing) {
-      _editController.text = widget.note.text;
+    if (widget.note.text != oldWidget.note.text) {
+      // Whatever the new text is — the edit landing, or a change from
+      // somewhere else — the stored note is now the fresher of the two.
+      _pendingText = null;
+      if (!_isEditing) _editController.text = widget.note.text;
     }
   }
 
@@ -396,6 +600,10 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
     _editFocusNode.dispose();
     super.dispose();
   }
+
+  /// The note's text as this row should show it: the edit still in flight if
+  /// there is one, the stored note otherwise.
+  String get _text => _pendingText ?? widget.note.text;
 
   void _forceSpellCheck() {
     if (!mounted || !_isEditing) return;
@@ -409,10 +617,8 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   void _startEditing() {
     setState(() {
       _isEditing = true;
-      _editController.text = widget.note.text;
-      _editController.selection = TextSelection.collapsed(
-        offset: widget.note.text.length,
-      );
+      _editController.text = _text;
+      _editController.selection = TextSelection.collapsed(offset: _text.length);
     });
     _editFocusNode.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
@@ -421,12 +627,16 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
   Future<void> _submitEdit() async {
     if (!_isEditing) return;
     final newText = _editController.text.trim();
+    final changed = newText.isNotEmpty && newText != _text;
     setState(() {
       _isEditing = false;
+      // An emptied note is a delete: it plays its exit animation with the
+      // text it already had, so there is nothing to hold over for it.
+      if (changed) _pendingText = newText;
     });
     if (newText.isEmpty) {
       await _handleDelete();
-    } else if (newText != widget.note.text) {
+    } else if (changed) {
       await widget.onUpdate(newText);
     }
   }
@@ -445,99 +655,94 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
     ).animate(CurvedAnimation(parent: _exit, curve: Curves.easeInCubic));
     final theme = Theme.of(context);
 
+    final noteStyle =
+        theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle();
+
     Widget content;
     if (_isEditing) {
-      const fieldContentPadding = EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 6,
-      );
-      final textStyle = withSquiggleRoom(
-        theme.textTheme.bodySmall?.copyWith(fontSize: 10) ?? const TextStyle(),
-      );
-      content = Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: VimTextScope(
-          enabled:
-              VimEnabledScope.of(context) &&
-              vimSuitsField(keyboardType: TextInputType.multiline),
-          controller: _editController,
-          multiline: true,
-          builder: (context, vim) {
-            final overlayPadding = vimOverlayPadding(
-              contentPadding: fieldContentPadding,
-              density: theme.visualDensity,
-              cursorWidth: vim.overlayCaretWidth,
-              outlineGap: true,
-              outlineCenter: true,
-            );
-            return VimOverlayHost(
-              session: vim.session,
-              snippetSession: vim.snippetSession,
-              overlayPaintsSelection: vim.overlayPaintsSelection,
+      final fieldContentPadding = _pinnedNoteFieldPadding(theme);
+      final textStyle = withSquiggleRoom(noteStyle);
+      content = VimTextScope(
+        enabled:
+            VimEnabledScope.of(context) &&
+            vimSuitsField(keyboardType: TextInputType.multiline),
+        controller: _editController,
+        multiline: true,
+        builder: (context, vim) {
+          final overlayPadding = vimOverlayPadding(
+            contentPadding: fieldContentPadding,
+            density: theme.visualDensity,
+            cursorWidth: vim.overlayCaretWidth,
+            outlineGap: true,
+            outlineCenter: true,
+          );
+          return VimOverlayHost(
+            session: vim.session,
+            snippetSession: vim.snippetSession,
+            overlayPaintsSelection: vim.overlayPaintsSelection,
+            controller: _editController,
+            focusNode: _editFocusNode,
+            style: textStyle,
+            accentColor: theme.colorScheme.primary,
+            overlayPadding: overlayPadding,
+            underlay: SpellCheckSquiggleLayer(
               controller: _editController,
               focusNode: _editFocusNode,
               style: textStyle,
-              accentColor: theme.colorScheme.primary,
-              overlayPadding: overlayPadding,
-              underlay: SpellCheckSquiggleLayer(
+              suppressActiveWord: vim.suppressSpellcheckActiveWord,
+            ),
+            child: wrapWithSecondaryTapWordSelect(
+              fieldKey: _fieldKey,
+              child: TextField(
+                key: _fieldKey,
                 controller: _editController,
+                cursorColor: vim.overlayCaretColor(theme.colorScheme.primary),
+                cursorWidth: vim.overlayCaretWidth,
+                undoController: vim.undoController,
                 focusNode: _editFocusNode,
+                maxLines: null,
+                minLines: 1,
+                scrollPadding: kVoyagerFieldScrollPadding,
+                contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
+                  context,
+                ),
+                keyboardType: TextInputType.multiline,
+                onSubmitted: (_) => unawaited(_submitEdit()),
                 style: textStyle,
-                suppressActiveWord: vim.suppressSpellcheckActiveWord,
-              ),
-              child: wrapWithSecondaryTapWordSelect(
-                fieldKey: _fieldKey,
-                child: TextField(
-                  key: _fieldKey,
-                  controller: _editController,
-                  cursorColor: vim.overlayCaretColor(theme.colorScheme.primary),
-                  cursorWidth: vim.overlayCaretWidth,
-                  undoController: vim.undoController,
-                  focusNode: _editFocusNode,
-                  maxLines: null,
-                  minLines: 1,
-                  scrollPadding: kVoyagerFieldScrollPadding,
-                  contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
-                  spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
-                    context,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: fieldContentPadding,
+                  filled: true,
+                  fillColor: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.05,
                   ),
-                  keyboardType: TextInputType.multiline,
-                  onSubmitted: (_) => unawaited(_submitEdit()),
-                  style: textStyle,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: fieldContentPadding,
-                    filled: true,
-                    fillColor: theme.colorScheme.onSurface.withValues(
-                      alpha: 0.05,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                      width: 1.2,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                        width: 1.2,
-                      ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                      width: 1.2,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                        width: 1.2,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                        width: 1.2,
-                      ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                      width: 1.2,
                     ),
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       );
     } else {
       content = Tooltip(
@@ -548,15 +753,19 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
           // The row-wide highlight below already covers this on hover.
           hoverColor: Colors.transparent,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Text(
-              widget.note.text,
-              style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
-            ),
+            padding: _kPinnedNoteTextPadding,
+            child: Text(_text, style: noteStyle),
           ),
         ),
       );
     }
+
+    content = _WrapMarks(
+      text: _text,
+      style: _isEditing ? withSquiggleRoom(noteStyle) : noteStyle,
+      controller: _isEditing ? _editController : null,
+      child: content,
+    );
 
     return SizeTransition(
       sizeFactor: size,
@@ -570,8 +779,8 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
           onExit: (_) {
             if (_hovered) setState(() => _hovered = false);
           },
-          // A single rectangle covers the whole row — text and the delete
-          // X alike — instead of each control showing its own hover patch.
+          // The row highlight covers the text; the delete X has its own
+          // hover fill, matching the feed dismiss control.
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             decoration: BoxDecoration(
@@ -584,18 +793,17 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
             child: Row(
               children: [
                 Expanded(child: content),
-                if (!_isEditing)
+                // The delete X keeps its slot while the row is being edited,
+                // just without the control in it. It is the tallest thing in
+                // the row, so it — not the text or the field — is what sets
+                // the row's height; dropping it on the way into the editor
+                // shrank the row out from under the click that opened it.
+                if (_isEditing)
+                  SizedBox.square(dimension: _inboxDismissSlotSize)
+                else
                   _HoverRevealed(
                     revealed: _hovered,
-                    child: InkWell(
-                      onTap: _handleDelete,
-                      borderRadius: BorderRadius.circular(12),
-                      hoverColor: Colors.transparent,
-                      child: const Padding(
-                        padding: EdgeInsets.all(5),
-                        child: Icon(PhosphorIconsRegular.x, size: 14),
-                      ),
-                    ),
+                    child: _InboxDismissButton(onPressed: _handleDelete),
                   ),
               ],
             ),
@@ -919,18 +1127,14 @@ class _FeedRowState extends ConsumerState<_FeedRow>
                           ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       // Fades in on hover, but stays a real target on touch,
                       // where hover never fires: an invisible-yet-tappable
                       // dismiss in the corner of every notification is worse
                       // than a visible one.
                       _HoverRevealed(
                         revealed: _hovered,
-                        child: IconButton(
-                          icon: const Icon(PhosphorIconsRegular.x, size: 14),
-                          padding: EdgeInsets.zero,
-                          constraints: kMinTouchTarget,
-                          onPressed: _dismiss,
-                        ),
+                        child: _InboxDismissButton(onPressed: _dismiss),
                       ),
                     ],
                   ),
@@ -1518,6 +1722,42 @@ class _NotificationPopoverWarmupState extends State<NotificationPopoverWarmup> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Side of the inbox dismiss ✕ hover overlay. The 14px glyph sits in this
+/// square; [kMinTouchTarget] (48) spilled a grey patch past the row highlight.
+/// 30 still leaves 8px of slop around the icon. Android keeps 48 so a
+/// fingertip still has somewhere to land.
+const double _kInboxDismissSize = 30;
+
+double get _inboxDismissSlotSize => isAndroid ? 48 : _kInboxDismissSize;
+
+/// Compact dismiss ✕ used on inbox reminder and feed rows.
+class _InboxDismissButton extends StatelessWidget {
+  const _InboxDismissButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(PhosphorIconsRegular.x, size: 14),
+      padding: EdgeInsets.zero,
+      // `constraints` alone would not have shrunk it: IconButton's default
+      // padded tap target wraps the whole thing back out to 48 whatever the
+      // constraints say, which is the oversized hover fill.
+      style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      constraints: isAndroid
+          ? kMinTouchTarget
+          : const BoxConstraints.tightFor(
+              width: _kInboxDismissSize,
+              height: _kInboxDismissSize,
+            ),
+      onPressed: onPressed,
     );
   }
 }

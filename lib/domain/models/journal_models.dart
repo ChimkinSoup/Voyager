@@ -11,6 +11,10 @@ class Journal extends SoftDeletable {
     this.colorValue,
     this.guidedJournaling = false,
     this.promptCycleDays = 7,
+    this.showMood = true,
+    this.showWeather = true,
+    this.showQuotes = true,
+    this.includeInAllView = true,
   });
 
   final String name;
@@ -18,11 +22,30 @@ class Journal extends SoftDeletable {
   final bool guidedJournaling;
   final int promptCycleDays;
 
+  /// Per-journal editor chrome. Each one hides its control on the journal page
+  /// without touching what an entry stores, so toggling one back on shows the
+  /// values that were being tracked all along.
+  final bool showMood;
+  final bool showWeather;
+
+  /// Gated by the global [AppSettings.showQuotes] as well — the global switch
+  /// is the master, this one narrows it per journal.
+  final bool showQuotes;
+
+  /// Whether this journal's entries appear in the combined "All journals"
+  /// list. Excluding a journal hides it from that list only; its entries stay
+  /// in search, analytics and the tag pool.
+  final bool includeInAllView;
+
   Journal copyWith({
     String? name,
     int? colorValue,
     bool? guidedJournaling,
     int? promptCycleDays,
+    bool? showMood,
+    bool? showWeather,
+    bool? showQuotes,
+    bool? includeInAllView,
     DateTime? deletedAt,
     bool bumpVersion = true,
   }) {
@@ -36,6 +59,10 @@ class Journal extends SoftDeletable {
       colorValue: colorValue ?? this.colorValue,
       guidedJournaling: guidedJournaling ?? this.guidedJournaling,
       promptCycleDays: promptCycleDays ?? this.promptCycleDays,
+      showMood: showMood ?? this.showMood,
+      showWeather: showWeather ?? this.showWeather,
+      showQuotes: showQuotes ?? this.showQuotes,
+      includeInAllView: includeInAllView ?? this.includeInAllView,
     );
   }
 }

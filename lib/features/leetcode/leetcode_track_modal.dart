@@ -1027,7 +1027,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                           ),
                         ],
                       ),
-                      for (var i = 0; i < _solutionEditors.length; i++)
+                      for (var i = 0; i < _solutionEditors.length; i++) ...[
+                        const SizedBox(height: 12),
                         _SolutionFields(
                           // Keyed on the group rather than the index, so
                           // removing one carries each surviving group's field
@@ -1045,6 +1046,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                             _handleDraftEdit();
                           },
                         ),
+                      ],
                       const SizedBox(height: 24),
                       GlassButton(
                         onPressed: canSave ? _save : null,
@@ -1208,7 +1210,7 @@ class _SolutionFields extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (number != null)
@@ -1228,9 +1230,7 @@ class _SolutionFields extends StatelessWidget {
                 tooltip: 'Remove solution',
               ),
             ],
-          )
-        else
-          const SizedBox(height: 10),
+          ),
         VoyagerTextField(
           controller: editors.algorithm,
           accentColor: accentColor,
@@ -1296,6 +1296,24 @@ class _SolutionFields extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    // A lone solution is already unambiguous, so it stays on the modal's own
+    // background. Once there are several, each gets a panel behind all of its
+    // boxes — alternating between two tints, so however many there are, no two
+    // touching groups share one and the seam between them is visible without
+    // having to read the headings. Editor-only: the flashcard and detail views
+    // build their own solution layout and are untouched by this.
+    if (number == null) return body;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.onSurface.withValues(
+          alpha: number!.isOdd ? 0.03 : 0.06,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: body,
     );
   }
 }

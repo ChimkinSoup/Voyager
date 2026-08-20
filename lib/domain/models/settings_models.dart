@@ -47,6 +47,8 @@ class AppSettings {
     this.deviceId,
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
+    this.defaultJournalId,
+    this.defaultTodoListId,
     this.journalShowAllEntries = false,
     this.todoShowAllTasks = false,
     this.weatherLocationLabel,
@@ -118,6 +120,13 @@ class AppSettings {
     this.dreamNotesPinned = false,
     this.leetcodeUsername,
     this.showNeetCode150 = true,
+    this.leetCodeHideDifficulty = false,
+    this.leetCodeHideTags = false,
+    this.leetCodeHideQuestionName = false,
+    this.leetCodeHideDescription = false,
+    this.leetCodeHideExamples = false,
+    this.leetCodeHideComplexity = false,
+    this.leetCodeHideCode = false,
     this.weightUnit = WeightUnit.lb,
     this.workoutRestTimerEnabled = false,
     this.workoutRestSeconds = 90,
@@ -208,6 +217,16 @@ class AppSettings {
   final String? deviceId;
   final String? lastViewedJournalId;
   final String? lastViewedTodoListId;
+
+  /// The journal the journal page always opens into. When set it wins over
+  /// both [lastViewedJournalId] and [journalShowAllEntries]; null restores
+  /// whatever was last open.
+  final String? defaultJournalId;
+
+  /// The todo list the todo page always opens into. When set it wins over both
+  /// [lastViewedTodoListId] and [todoShowAllTasks]; null restores whatever was
+  /// last open.
+  final String? defaultTodoListId;
 
   /// Whether the page was left in its "All journals" / "All tasks" view. Held
   /// apart from the ids above so restoring the all-view doesn't lose track of
@@ -308,6 +327,23 @@ class AppSettings {
   /// Whether the LeetCode dashboard shows the NeetCode 150 progress ring.
   final bool showNeetCode150;
 
+  /// What a LeetCode Study or Cram session leaves off the card. Each one
+  /// blanks a part the user would rather recall than be shown; none of them
+  /// touch the Review Deck's grid, which is a browsing view where a hidden
+  /// title would only make a problem harder to find.
+  final bool leetCodeHideDifficulty;
+  final bool leetCodeHideTags;
+
+  /// Hides the number and the title together — they read as one line on the
+  /// card, and a number alone still names the problem.
+  final bool leetCodeHideQuestionName;
+  final bool leetCodeHideDescription;
+  final bool leetCodeHideExamples;
+
+  /// Back-of-card hides: the Time/Space line, and the solution code.
+  final bool leetCodeHideComplexity;
+  final bool leetCodeHideCode;
+
   /// Display unit for every weight in the workout tracker. Storage stays in
   /// kilograms, so flipping this converts what's shown without rewriting a
   /// single logged set.
@@ -377,6 +413,8 @@ class AppSettings {
     String? deviceId,
     String? lastViewedJournalId,
     String? lastViewedTodoListId,
+    String? defaultJournalId,
+    String? defaultTodoListId,
     bool? journalShowAllEntries,
     bool? todoShowAllTasks,
     String? weatherLocationLabel,
@@ -448,6 +486,13 @@ class AppSettings {
     bool? dreamNotesPinned,
     String? leetcodeUsername,
     bool? showNeetCode150,
+    bool? leetCodeHideDifficulty,
+    bool? leetCodeHideTags,
+    bool? leetCodeHideQuestionName,
+    bool? leetCodeHideDescription,
+    bool? leetCodeHideExamples,
+    bool? leetCodeHideComplexity,
+    bool? leetCodeHideCode,
     WeightUnit? weightUnit,
     bool? workoutRestTimerEnabled,
     int? workoutRestSeconds,
@@ -469,6 +514,8 @@ class AppSettings {
     bool clearWeatherForecastJson = false,
     bool clearLastViewedJournalId = false,
     bool clearLastViewedTodoListId = false,
+    bool clearDefaultJournalId = false,
+    bool clearDefaultTodoListId = false,
     bool clearJournalEntryListWidth = false,
     bool clearCustomStartupPage = false,
     bool clearLastSeenNavPage = false,
@@ -524,6 +571,12 @@ class AppSettings {
       lastViewedTodoListId: clearLastViewedTodoListId
           ? null
           : (lastViewedTodoListId ?? this.lastViewedTodoListId),
+      defaultJournalId: clearDefaultJournalId
+          ? null
+          : (defaultJournalId ?? this.defaultJournalId),
+      defaultTodoListId: clearDefaultTodoListId
+          ? null
+          : (defaultTodoListId ?? this.defaultTodoListId),
       journalShowAllEntries:
           journalShowAllEntries ?? this.journalShowAllEntries,
       todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
@@ -660,6 +713,18 @@ class AppSettings {
           ? null
           : (leetcodeUsername ?? this.leetcodeUsername),
       showNeetCode150: showNeetCode150 ?? this.showNeetCode150,
+      leetCodeHideDifficulty:
+          leetCodeHideDifficulty ?? this.leetCodeHideDifficulty,
+      leetCodeHideTags: leetCodeHideTags ?? this.leetCodeHideTags,
+      leetCodeHideQuestionName:
+          leetCodeHideQuestionName ?? this.leetCodeHideQuestionName,
+      leetCodeHideDescription:
+          leetCodeHideDescription ?? this.leetCodeHideDescription,
+      leetCodeHideExamples:
+          leetCodeHideExamples ?? this.leetCodeHideExamples,
+      leetCodeHideComplexity:
+          leetCodeHideComplexity ?? this.leetCodeHideComplexity,
+      leetCodeHideCode: leetCodeHideCode ?? this.leetCodeHideCode,
       weightUnit: weightUnit ?? this.weightUnit,
       workoutRestTimerEnabled:
           workoutRestTimerEnabled ?? this.workoutRestTimerEnabled,

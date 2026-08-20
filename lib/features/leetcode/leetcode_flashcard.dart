@@ -174,8 +174,12 @@ class _CardFront extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider).valueOrNull;
     final description = problem.description?.trim();
-    final hasDescription = description != null && description.isNotEmpty;
+    final hasDescription =
+        description != null &&
+        description.isNotEmpty &&
+        !(settings?.leetCodeHideDescription ?? false);
     // The examples' size, and the base the statement is scaled up from — same
     // colour and leading, so the two still read as one block rather than two
     // differently-weighted ones.
@@ -192,6 +196,51 @@ class _CardFront extends ConsumerWidget {
       fontSize: (bodyStyle.fontSize ?? 12) * 1.25,
       color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
     );
+    // Each hidden block takes its separator with it, so a card missing its
+    // title does not open on 16 points of nothing.
+    final blocks = <Widget>[];
+    void addBlock(Widget block) {
+      if (blocks.isNotEmpty) blocks.add(const SizedBox(height: 16));
+      blocks.add(block);
+    }
+
+    if (!(settings?.leetCodeHideQuestionName ?? false)) {
+      addBlock(
+        GestureDetector(
+          key: titleKey,
+          behavior: HitTestBehavior.opaque,
+          onTap: onTitleTap,
+          child: Text(
+            '${problem.questionFrontendId ?? ''} ${problem.title}'.trim(),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineMedium,
+          ),
+        ),
+      );
+    }
+    if (hasDescription) {
+      addBlock(
+        LeetCodeProseText(
+          description,
+          textAlign: TextAlign.start,
+          style: statementStyle,
+          language: problem.codeLanguage,
+        ),
+      );
+    }
+    if (problem.examples.isNotEmpty &&
+        !(settings?.leetCodeHideExamples ?? false)) {
+      addBlock(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: LeetCodeExamplesView(
+            examples: problem.examples,
+            bodyStyle: bodyStyle,
+          ),
+        ),
+      );
+    }
+
     return _glassContainer(
       theme: theme,
       nearSolid: MediaQuery.maybeOf(context)?.highContrast ?? false,
@@ -199,65 +248,37 @@ class _CardFront extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: colorForLeetCodeDifficulty(
-                  problem.difficulty,
-                ).withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                labelForLeetCodeDifficulty(problem.difficulty),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorForLeetCodeDifficulty(problem.difficulty),
+          if (!(settings?.leetCodeHideDifficulty ?? false)) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colorForLeetCodeDifficulty(
+                    problem.difficulty,
+                  ).withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  labelForLeetCodeDifficulty(problem.difficulty),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorForLeetCodeDifficulty(problem.difficulty),
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 8),
+          ],
           Expanded(
             child: VoyagerScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  GestureDetector(
-                    key: titleKey,
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onTitleTap,
-                    child: Text(
-                      '${problem.questionFrontendId ?? ''} ${problem.title}'
-                          .trim(),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium,
-                    ),
-                  ),
-                  if (hasDescription) ...[
-                    const SizedBox(height: 16),
-                    LeetCodeProseText(
-                      description,
-                      textAlign: TextAlign.start,
-                      style: statementStyle,
-                      language: problem.codeLanguage,
-                    ),
-                  ],
-                  if (problem.examples.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: LeetCodeExamplesView(
-                        examples: problem.examples,
-                        bodyStyle: bodyStyle,
-                      ),
-                    ),
-                  ],
-                ],
+                children: blocks,
               ),
             ),
           ),
-          if (problem.tags.isNotEmpty) ...[
+          if (problem.tags.isNotEmpty &&
+              !(settings?.leetCodeHideTags ?? false)) ...[
             const SizedBox(height: 12),
             Wrap(
               alignment: WrapAlignment.center,
@@ -286,6 +307,7 @@ class _CardBack extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider).valueOrNull;
     return _glassContainer(
       theme: theme,
       nearSolid: MediaQuery.maybeOf(context)?.highContrast ?? false,
@@ -295,15 +317,16 @@ class _CardBack extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
-              key: titleKey,
-              behavior: HitTestBehavior.opaque,
-              onTap: onTitleTap,
-              child: Text(
-                '${problem.questionFrontendId ?? ''} ${problem.title}'.trim(),
-                style: theme.textTheme.titleMedium,
+            if (!(settings?.leetCodeHideQuestionName ?? false))
+              GestureDetector(
+                key: titleKey,
+                behavior: HitTestBehavior.opaque,
+                onTap: onTitleTap,
+                child: Text(
+                  '${problem.questionFrontendId ?? ''} ${problem.title}'.trim(),
+                  style: theme.textTheme.titleMedium,
+                ),
               ),
-            ),
             for (var i = 0; i < problem.solutions.length; i++)
               _BackSolution(
                 solution: problem.solutions[i],
@@ -311,6 +334,8 @@ class _CardBack extends ConsumerWidget {
                 // unlabelled — the back reads as a single write-up rather than
                 // as a list of length one.
                 number: problem.solutions.length > 1 ? i + 1 : null,
+                hideComplexity: settings?.leetCodeHideComplexity ?? false,
+                hideCode: settings?.leetCodeHideCode ?? false,
               ),
           ],
         ),
@@ -323,10 +348,17 @@ class _CardBack extends ConsumerWidget {
 /// costs, the walkthrough, the code. Notes are the one field left off — they
 /// live in the detail view, where there's room to read them.
 class _BackSolution extends StatelessWidget {
-  const _BackSolution({required this.solution, required this.number});
+  const _BackSolution({
+    required this.solution,
+    required this.number,
+    required this.hideComplexity,
+    required this.hideCode,
+  });
 
   final LeetCodeSolution solution;
   final int? number;
+  final bool hideComplexity;
+  final bool hideCode;
 
   @override
   Widget build(BuildContext context) {
@@ -355,8 +387,9 @@ class _BackSolution extends StatelessWidget {
             language: language,
           ),
         ],
-        if (solution.timeComplexity != null ||
-            solution.spaceComplexity != null) ...[
+        if (!hideComplexity &&
+            (solution.timeComplexity != null ||
+                solution.spaceComplexity != null)) ...[
           const SizedBox(height: 12),
           Row(
             children: [
@@ -389,7 +422,7 @@ class _BackSolution extends StatelessWidget {
             language: language,
           ),
         ],
-        if (solution.code.isNotEmpty) ...[
+        if (solution.code.isNotEmpty && !hideCode) ...[
           const SizedBox(height: 12),
           Text('Code', style: theme.textTheme.labelLarge),
           const SizedBox(height: 4),

@@ -20,6 +20,20 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
+/// Geometry of the floating close ✕ and the gap the form leaves under it.
+///
+/// The ✕ is absolutely positioned over the form, so its tap target has to be
+/// budgeted for by hand — nothing lays out around it. [_kCloseButtonClearance]
+/// is the top spacer inside the form's own 14px padding, sized so row 1 begins
+/// [_kCloseButtonGap] below the bottom of the ✕'s target and neither the
+/// hitboxes nor the hover highlights of the two ever meet.
+const double _kCloseButtonTop = 4;
+const double _kCloseButtonSize = 32;
+const double _kCloseButtonGap = 4;
+const double _kPanelPaddingTop = 14;
+const double _kCloseButtonClearance =
+    _kCloseButtonTop + _kCloseButtonSize + _kCloseButtonGap - _kPanelPaddingTop;
+
 /// Inline event add/edit panel for the calendar sidebar (no dialog).
 class CalendarEventPanel extends ConsumerStatefulWidget {
   const CalendarEventPanel({
@@ -334,7 +348,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       ),
     );
     final panel = Padding(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      padding: const EdgeInsets.fromLTRB(14, _kPanelPaddingTop, 14, 14),
       child: Theme(
         data: eventTheme,
         child: EnterToSubmitScope(
@@ -343,7 +357,13 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 14),
+              // Headroom for the close ✕ that floats over this column's
+              // top-right (see the Stack below). It has to clear the ✕'s tap
+              // target, not just its glyph: the all-day toggle at the end of
+              // row 1 is a full 48px target, so anything the ✕ reaches into
+              // is a region where the two overlap and the ✕ — painted last —
+              // silently wins the click.
+              const SizedBox(height: _kCloseButtonClearance),
               // ── Row 1: title + all-day icon ───────────────────────────
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -637,14 +657,29 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       children: [
         panel,
         Positioned(
-          top: 5,
-          right: 9,
+          top: _kCloseButtonTop,
+          right: 6,
           child: IconButton(
             onPressed: _discard,
             icon: const Icon(Icons.close, size: 16),
             tooltip: 'Close',
             padding: EdgeInsets.zero,
-            constraints: kMinTouchTarget,
+            // Deliberately smaller than [kMinTouchTarget]: this button floats
+            // over the top of the form rather than sitting in a row of its
+            // own, so every pixel it claims is a pixel taken off the control
+            // beneath it. 32 still leaves 8px of slop around the 16px glyph.
+            //
+            // `constraints` alone would not have shrunk it: IconButton's
+            // default padded tap target wraps the whole thing back out to 48
+            // whatever the constraints say, which is where the ✕'s reach into
+            // the all-day toggle came from in the first place.
+            style: IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            constraints: const BoxConstraints.tightFor(
+              width: _kCloseButtonSize,
+              height: _kCloseButtonSize,
+            ),
           ),
         ),
       ],
