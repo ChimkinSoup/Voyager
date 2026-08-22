@@ -66,6 +66,7 @@ class _Device {
       leetCodeRepository: DriftLeetCodeRepository(db),
       studyRepository: DriftStudyRepository(db),
       workoutRepository: DriftWorkoutRepository(db),
+      jobRepository: DriftJobRepository(db),
       calendarRepository: calendars,
       trackerRepository: DriftTrackerRepository(db),
       financeRepository: DriftFinanceRepository(db),

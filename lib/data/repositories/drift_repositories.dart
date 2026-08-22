@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -15,6 +16,8 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
+import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
@@ -93,16 +96,23 @@ class DriftJournalRepository implements JournalRepository {
     _syncActivity?.recordLocalSave(FirestoreCollections.journals);
   }
 
+  /// One statement, and [version] is bumped with it — same reasoning as
+  /// [softDeleteEntry], which these rows are pushed the same way as. Written
+  /// as raw SQL because a drift companion can only carry literal values, and
+  /// `version + 1` is an expression over the existing row.
   @override
   Future<void> softDeleteEntriesInJournal(String journalId) async {
     final now = utcNow();
-    await (_db.update(_db.journalEntriesTable)
-          ..where((t) => t.journalId.equals(journalId)))
-        .write(
-      JournalEntriesTableCompanion(
-        deletedAt: Value(now),
-        updatedAt: Value(now),
-      ),
+    await _db.customUpdate(
+      'UPDATE journal_entries_table '
+      'SET deleted_at = ?, updated_at = ?, version = version + 1 '
+      'WHERE journal_id = ?',
+      variables: [
+        Variable.withDateTime(now),
+        Variable.withDateTime(now),
+        Variable.withString(journalId),
+      ],
+      updates: {_db.journalEntriesTable},
     );
     _syncActivity?.recordLocalSave(FirestoreCollections.journalEntries);
   }
@@ -117,18 +127,24 @@ class DriftJournalRepository implements JournalRepository {
     await _db.delete(_db.journalEntriesTable).go();
   }
 
+  /// Bumps [version] for the same reason [softDeleteEntriesInJournal] does:
+  /// these rows are pushed straight after this runs, and a payload that does
+  /// not outrank the remote copy is dropped by the next device to pull.
   @override
   Future<void> reassignEntriesJournal(
     String fromJournalId,
     String toJournalId,
   ) async {
-    await (_db.update(
-      _db.journalEntriesTable,
-    )..where((t) => t.journalId.equals(fromJournalId))).write(
-      JournalEntriesTableCompanion(
-        journalId: Value(toJournalId),
-        updatedAt: Value(utcNow()),
-      ),
+    await _db.customUpdate(
+      'UPDATE journal_entries_table '
+      'SET journal_id = ?, updated_at = ?, version = version + 1 '
+      'WHERE journal_id = ?',
+      variables: [
+        Variable.withString(toJournalId),
+        Variable.withDateTime(utcNow()),
+        Variable.withString(fromJournalId),
+      ],
+      updates: {_db.journalEntriesTable},
     );
     _syncActivity?.recordLocalSave(FirestoreCollections.journalEntries);
   }
@@ -228,17 +244,19 @@ class DriftJournalRepository implements JournalRepository {
     }
   }
 
+  /// Bumps [version] along with [deletedAt], so the tombstone the row holds is
+  /// newer than whatever the remote copy already has.
+  ///
+  /// Leaving the version alone made the delete losable: the pushed tombstone
+  /// carries version N+1 (`copyWith` bumps it), the local row stayed at N, and
+  /// the next device to pull compared its own higher version against the
+  /// tombstone's, decided the remote had lost, and pushed a live row back —
+  /// resurrecting the entry everywhere.
   @override
   Future<void> softDeleteEntry(String id) async {
-    await (_db.update(
-      _db.journalEntriesTable,
-    )..where((t) => t.id.equals(id))).write(
-      JournalEntriesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.journalEntries);
+    final current = await getEntry(id);
+    if (current == null) return;
+    await upsertEntry(current.copyWith(deletedAt: utcNow()));
   }
 
   @override
@@ -709,6 +727,8 @@ class DriftTodoRepository implements TodoRepository {
     sortOrder: r.sortOrder,
     preStarSortOrder: r.preStarSortOrder,
     dueDateSetAt: r.dueDateSetAt,
+    recurrence: RecurrenceRule.parse(r.recurrence),
+    recurrenceAnchor: r.recurrenceAnchor,
     parentTaskId: r.parentTaskId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -736,6 +756,8 @@ class DriftTodoRepository implements TodoRepository {
             sortOrder: Value(task.sortOrder),
             preStarSortOrder: Value(task.preStarSortOrder),
             dueDateSetAt: Value(task.dueDateSetAt),
+            recurrence: Value(task.recurrence.toStorage()),
+            recurrenceAnchor: Value(task.recurrenceAnchor),
             createdAt: Value(task.createdAt),
             updatedAt: Value(task.updatedAt),
             version: Value(task.version),
@@ -770,6 +792,8 @@ class DriftTodoRepository implements TodoRepository {
               sortOrder: Value(task.sortOrder),
               preStarSortOrder: Value(task.preStarSortOrder),
               dueDateSetAt: Value(task.dueDateSetAt),
+              recurrence: Value(task.recurrence.toStorage()),
+              recurrenceAnchor: Value(task.recurrenceAnchor),
               createdAt: Value(task.createdAt),
               updatedAt: Value(task.updatedAt),
               version: Value(task.version),
@@ -955,7 +979,11 @@ class DriftCalendarRepository implements CalendarRepository {
             notes: Value(event.notes),
             source: Value(event.source.name),
             externalId: Value(event.externalId),
-            recurrence: Value(event.recurrence.name),
+            recurrence: Value(event.recurrence.toStorage()),
+            recurrenceEndDate: Value(event.recurrenceEndDate),
+            exceptionDates: Value(encodeExceptionDates(event.exceptionDates)),
+            recurrenceParentId: Value(event.recurrenceParentId),
+            recurrenceDate: Value(event.recurrenceDate),
             createdAt: Value(event.createdAt),
             updatedAt: Value(event.updatedAt),
             version: Value(event.version),
@@ -1026,8 +1054,11 @@ class DriftCalendarRepository implements CalendarRepository {
     notes: row.notes,
     source: EventSource.values.byName(row.source),
     externalId: row.externalId,
-    recurrence:
-        recurrenceFromStorage(row.recurrence),
+    recurrence: recurrenceFromStorage(row.recurrence),
+    recurrenceEndDate: row.recurrenceEndDate,
+    exceptionDates: decodeExceptionDates(row.exceptionDates),
+    recurrenceParentId: row.recurrenceParentId,
+    recurrenceDate: row.recurrenceDate,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -2186,6 +2217,10 @@ class DriftSettingsRepository implements SettingsRepository {
       minorPetalColors: row.minorPetalColorsJson == null
           ? const []
           : List<int>.from(jsonDecode(row.minorPetalColorsJson!) as List),
+      jobsHiddenColumns: row.jobsHiddenColumnsJson == null
+          ? const []
+          : List<String>.from(jsonDecode(row.jobsHiddenColumnsJson!) as List),
+      jobsIncludeArchived: row.jobsIncludeArchived,
       startupPageMode: StartupPageMode.values.byName(row.startupPageMode),
       customStartupPage: row.customStartupPage,
       lastSeenNavPage: row.lastSeenNavPage,
@@ -2397,6 +2432,12 @@ class DriftSettingsRepository implements SettingsRepository {
                   ? null
                   : jsonEncode(settings.navPageOrder),
             ),
+            jobsHiddenColumnsJson: Value(
+              settings.jobsHiddenColumns.isEmpty
+                  ? null
+                  : jsonEncode(settings.jobsHiddenColumns),
+            ),
+            jobsIncludeArchived: Value(settings.jobsIncludeArchived),
             startupPageMode: Value(settings.startupPageMode.name),
             customStartupPage: Value(settings.customStartupPage),
             lastSeenNavPage: Value(settings.lastSeenNavPage),
@@ -3794,6 +3835,585 @@ class DriftWorkoutRepository implements WorkoutRepository {
     plannedReps: row.plannedReps,
     completed: row.completed,
     completedAt: row.completedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+}
+
+class DriftJobRepository implements JobRepository {
+  DriftJobRepository(this._db, {SyncActivityController? syncActivity})
+    : _syncActivity = syncActivity;
+
+  final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<void> ensureSeeded() async {
+    final now = utcNow();
+
+    // Tombstones count as "present": clearing the stage list out is a choice,
+    // and re-seeding on next launch would silently undo it.
+    final stageRows = await _db.select(_db.jobStagesTable).get();
+    if (stageRows.isEmpty) {
+      for (var i = 0; i < jobSeedStages.length; i++) {
+        await upsertStage(
+          JobStage(
+            id: newId(),
+            name: jobSeedStages[i],
+            sortOrder: i,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          recordLocalActivity: false,
+        );
+      }
+    }
+
+    final companyRows = await _db.select(_db.jobCompaniesTable).get();
+    if (companyRows.isEmpty) {
+      await _db.batch((batch) {
+        batch.insertAll(_db.jobCompaniesTable, [
+          for (final name in jobSeedCompanies)
+            JobCompaniesTableCompanion.insert(
+              id: newId(),
+              name: name,
+              createdAt: now,
+              updatedAt: now,
+            ),
+        ]);
+      });
+    }
+  }
+
+  @override
+  Future<List<JobApplication>> listApplications({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.jobApplicationsTable).get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapApplication(row),
+    ];
+  }
+
+  @override
+  Future<JobApplication?> getApplication(String id) async {
+    final row = await (_db.select(
+      _db.jobApplicationsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapApplication(row);
+  }
+
+  @override
+  Future<void> upsertApplication(
+    JobApplication application, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.jobApplicationsTable)
+        .insertOnConflictUpdate(_applicationCompanion(application));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobApplications);
+    }
+  }
+
+  @override
+  Future<({JobApplication application, List<JobStatusEvent> events})>
+  deleteApplication(String id) async {
+    final existing = await getApplication(id);
+    final now = utcNow();
+    // Everything the user typed is blanked, not just hidden. The row survives
+    // only as a tombstone the other devices need in order to learn about the
+    // deletion at all — `watchCollection` drops Firestore document removals,
+    // so an actually-deleted document is invisible to every other device and
+    // would be pushed back by the first one that still holds it.
+    final tombstone =
+        (existing ??
+                JobApplication(
+                  id: id,
+                  company: '',
+                  title: '',
+                  status: '',
+                  dateApplied: now,
+                  createdAt: now,
+                  updatedAt: now,
+                ))
+            .copyWith(
+              company: '',
+              title: '',
+              status: '',
+              clearApplicationUrl: true,
+              clearNotes: true,
+              clearSeasonId: true,
+              deletedAt: now,
+            );
+    await upsertApplication(tombstone, recordLocalActivity: false);
+
+    final events = await listStatusEvents(id);
+    final tombstonedEvents = [
+      for (final event in events) event.copyWith(deletedAt: now),
+    ];
+    for (final event in tombstonedEvents) {
+      await upsertStatusEvent(event, recordLocalActivity: false);
+    }
+
+    _syncActivity?.recordLocalSave(FirestoreCollections.jobApplications);
+    return (application: tombstone, events: tombstonedEvents);
+  }
+
+  @override
+  Future<List<JobStatusEvent>> listStatusEvents(
+    String applicationId, {
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.jobStatusEventsTable)
+              ..where((t) => t.applicationId.equals(applicationId))
+              ..orderBy([(t) => OrderingTerm.asc(t.changedAt)]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapStatusEvent(row),
+    ];
+  }
+
+  @override
+  Future<void> upsertStatusEvent(
+    JobStatusEvent event, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.jobStatusEventsTable)
+        .insertOnConflictUpdate(_statusEventCompanion(event));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobStatusEvents);
+    }
+  }
+
+  @override
+  Future<List<JobStage>> listStages({bool includeDeleted = false}) async {
+    final rows =
+        await (_db.select(_db.jobStagesTable)
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapStage(row),
+    ];
+  }
+
+  @override
+  Future<void> upsertStage(
+    JobStage stage, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.jobStagesTable)
+        .insertOnConflictUpdate(_stageCompanion(stage));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobStages);
+    }
+  }
+
+  @override
+  Future<void> softDeleteStage(String id) async {
+    await (_db.update(
+      _db.jobStagesTable,
+    )..where((t) => t.id.equals(id))).write(
+      JobStagesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.jobStages);
+  }
+
+  @override
+  Future<List<JobStage>> reorderStages(List<String> orderedIds) async {
+    final stages = await listStages();
+    final byId = {for (final stage in stages) stage.id: stage};
+    final written = <JobStage>[];
+    for (var i = 0; i < orderedIds.length; i++) {
+      final stage = byId[orderedIds[i]];
+      if (stage == null || stage.sortOrder == i) continue;
+      written.add(stage.copyWith(sortOrder: i));
+    }
+    if (written.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final stage in written) {
+        batch.update(
+          _db.jobStagesTable,
+          _stageCompanion(stage),
+          where: (t) => t.id.equals(stage.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.jobStages);
+    return written;
+  }
+
+  @override
+  Future<List<JobCompany>> listCompanies({bool includeDeleted = false}) async {
+    final rows = await _db.select(_db.jobCompaniesTable).get();
+    final companies = [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapCompany(row),
+    ];
+    companies.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    return companies;
+  }
+
+  @override
+  Future<void> upsertCompany(
+    JobCompany company, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.jobCompaniesTable)
+        .insertOnConflictUpdate(_companyCompanion(company));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobCompanies);
+    }
+  }
+
+  @override
+  Future<void> softDeleteCompany(String id) async {
+    await (_db.update(
+      _db.jobCompaniesTable,
+    )..where((t) => t.id.equals(id))).write(
+      JobCompaniesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.jobCompanies);
+  }
+
+  @override
+  Future<JobCompany?> ensureCompany(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return null;
+    final existing = await listCompanies();
+    final key = jobCompanyKey(trimmed);
+    if (existing.any((c) => jobCompanyKey(c.name) == key)) return null;
+    final now = utcNow();
+    final company = JobCompany(
+      id: newId(),
+      name: trimmed,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await upsertCompany(company);
+    return company;
+  }
+
+  @override
+  Future<List<JobCategory>> listCategories({
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.jobCategoriesTable)
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapCategory(row),
+    ];
+  }
+
+  @override
+  Future<void> upsertCategory(
+    JobCategory category, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.jobCategoriesTable)
+        .insertOnConflictUpdate(_categoryCompanion(category));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobCategories);
+    }
+  }
+
+  @override
+  Future<List<JobCompany>> softDeleteCategory(String id) async {
+    final now = utcNow();
+    await (_db.update(
+      _db.jobCategoriesTable,
+    )..where((t) => t.id.equals(id))).write(
+      JobCategoriesTableCompanion(
+        deletedAt: Value(now),
+        updatedAt: Value(now),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.jobCategories);
+
+    // Companies are cleared rather than left pointing at a tombstone: an
+    // unresolvable categoryId and no categoryId render identically (neutral),
+    // but only the cleared one survives the category row being purged.
+    final orphaned = [
+      for (final company in await listCompanies())
+        if (company.categoryId == id) company.copyWith(clearCategoryId: true),
+    ];
+    for (final company in orphaned) {
+      await upsertCompany(company, recordLocalActivity: false);
+    }
+    if (orphaned.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobCompanies);
+    }
+    return orphaned;
+  }
+
+  @override
+  Future<List<JobSeason>> listSeasons({bool includeDeleted = false}) async {
+    final rows =
+        await (_db.select(_db.jobSeasonsTable)
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapSeason(row),
+    ];
+  }
+
+  @override
+  Future<void> upsertSeason(
+    JobSeason season, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.jobSeasonsTable)
+        .insertOnConflictUpdate(_seasonCompanion(season));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobSeasons);
+    }
+  }
+
+  @override
+  Future<List<JobApplication>> softDeleteSeason(String id) async {
+    final now = utcNow();
+    await (_db.update(
+      _db.jobSeasonsTable,
+    )..where((t) => t.id.equals(id))).write(
+      JobSeasonsTableCompanion(deletedAt: Value(now), updatedAt: Value(now)),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.jobSeasons);
+
+    // Back to active rather than stranded: an application whose season is gone
+    // would otherwise be hidden from the default list with nothing left in the
+    // UI to explain why or to un-archive it.
+    final released = [
+      for (final application in await listApplications())
+        if (application.seasonId == id)
+          application.copyWith(clearSeasonId: true),
+    ];
+    for (final application in released) {
+      await upsertApplication(application, recordLocalActivity: false);
+    }
+    if (released.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobApplications);
+    }
+    return released;
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.jobStatusEventsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.jobApplicationsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.jobStagesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.jobCompaniesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.jobCategoriesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.jobSeasonsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+  }
+
+  @override
+  Future<List<JobApplication>> getAllApplications({
+    bool includeDeleted = true,
+  }) => listApplications(includeDeleted: includeDeleted);
+
+  @override
+  Future<List<JobStatusEvent>> getAllStatusEvents({
+    bool includeDeleted = true,
+  }) async {
+    final rows = await _db.select(_db.jobStatusEventsTable).get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapStatusEvent(row),
+    ];
+  }
+
+  @override
+  Future<List<JobStage>> getAllStages({bool includeDeleted = true}) =>
+      listStages(includeDeleted: includeDeleted);
+
+  @override
+  Future<List<JobCompany>> getAllCompanies({bool includeDeleted = true}) =>
+      listCompanies(includeDeleted: includeDeleted);
+
+  @override
+  Future<List<JobCategory>> getAllCategories({bool includeDeleted = true}) =>
+      listCategories(includeDeleted: includeDeleted);
+
+  @override
+  Future<List<JobSeason>> getAllSeasons({bool includeDeleted = true}) =>
+      listSeasons(includeDeleted: includeDeleted);
+
+  JobApplicationsTableCompanion _applicationCompanion(
+    JobApplication application,
+  ) => JobApplicationsTableCompanion(
+    id: Value(application.id),
+    company: Value(application.company),
+    title: Value(application.title),
+    status: Value(application.status),
+    dateApplied: Value(application.dateApplied),
+    applicationUrl: Value(application.applicationUrl),
+    notes: Value(application.notes),
+    seasonId: Value(application.seasonId),
+    createdAt: Value(application.createdAt),
+    updatedAt: Value(application.updatedAt),
+    version: Value(application.version),
+    deletedAt: Value(application.deletedAt),
+  );
+
+  JobStatusEventsTableCompanion _statusEventCompanion(JobStatusEvent event) =>
+      JobStatusEventsTableCompanion(
+        id: Value(event.id),
+        applicationId: Value(event.applicationId),
+        fromStatus: Value(event.fromStatus),
+        toStatus: Value(event.toStatus),
+        changedAt: Value(event.changedAt),
+        createdAt: Value(event.createdAt),
+        updatedAt: Value(event.updatedAt),
+        version: Value(event.version),
+        deletedAt: Value(event.deletedAt),
+      );
+
+  JobStagesTableCompanion _stageCompanion(JobStage stage) =>
+      JobStagesTableCompanion(
+        id: Value(stage.id),
+        name: Value(stage.name),
+        sortOrder: Value(stage.sortOrder),
+        createdAt: Value(stage.createdAt),
+        updatedAt: Value(stage.updatedAt),
+        version: Value(stage.version),
+        deletedAt: Value(stage.deletedAt),
+      );
+
+  JobCompaniesTableCompanion _companyCompanion(JobCompany company) =>
+      JobCompaniesTableCompanion(
+        id: Value(company.id),
+        name: Value(company.name),
+        categoryId: Value(company.categoryId),
+        createdAt: Value(company.createdAt),
+        updatedAt: Value(company.updatedAt),
+        version: Value(company.version),
+        deletedAt: Value(company.deletedAt),
+      );
+
+  JobCategoriesTableCompanion _categoryCompanion(JobCategory category) =>
+      JobCategoriesTableCompanion(
+        id: Value(category.id),
+        name: Value(category.name),
+        colorValue: Value(category.colorValue),
+        sortOrder: Value(category.sortOrder),
+        createdAt: Value(category.createdAt),
+        updatedAt: Value(category.updatedAt),
+        version: Value(category.version),
+        deletedAt: Value(category.deletedAt),
+      );
+
+  JobSeasonsTableCompanion _seasonCompanion(JobSeason season) =>
+      JobSeasonsTableCompanion(
+        id: Value(season.id),
+        name: Value(season.name),
+        sortOrder: Value(season.sortOrder),
+        createdAt: Value(season.createdAt),
+        updatedAt: Value(season.updatedAt),
+        version: Value(season.version),
+        deletedAt: Value(season.deletedAt),
+      );
+
+  JobApplication _mapApplication(JobApplicationsTableData row) =>
+      JobApplication(
+        id: row.id,
+        company: row.company,
+        title: row.title,
+        status: row.status,
+        dateApplied: row.dateApplied,
+        applicationUrl: row.applicationUrl,
+        notes: row.notes,
+        seasonId: row.seasonId,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  JobStatusEvent _mapStatusEvent(JobStatusEventsTableData row) =>
+      JobStatusEvent(
+        id: row.id,
+        applicationId: row.applicationId,
+        fromStatus: row.fromStatus,
+        toStatus: row.toStatus,
+        changedAt: row.changedAt,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  JobStage _mapStage(JobStagesTableData row) => JobStage(
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  JobCompany _mapCompany(JobCompaniesTableData row) => JobCompany(
+    id: row.id,
+    name: row.name,
+    categoryId: row.categoryId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  JobCategory _mapCategory(JobCategoriesTableData row) => JobCategory(
+    id: row.id,
+    name: row.name,
+    colorValue: row.colorValue,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  JobSeason _mapSeason(JobSeasonsTableData row) => JobSeason(
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sortOrder,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,

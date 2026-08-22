@@ -90,6 +90,7 @@ List<BackupCollection> buildBackupCollections({
   required NotificationRepository notificationRepository,
   required BucketListRepository bucketListRepository,
   required SettingsRepository settingsRepository,
+  required JobRepository jobRepository,
 }) {
   return [
     BackupCollection(
@@ -583,6 +584,93 @@ List<BackupCollection> buildBackupCollections({
         final item = mergeBucketListItemFromRemote(data, id);
         await bucketListRepository.upsertItem(item, recordLocalActivity: false);
         return item;
+      },
+    ),
+    // Stages, categories and seasons before applications and companies: the
+    // things that reference them read better on restore if their target
+    // already exists, even though none of these are enforced foreign keys.
+    BackupCollection(
+      name: FirestoreCollections.jobStages,
+      read: () async => [
+        for (final stage in await jobRepository.getAllStages())
+          BackupRecord(id: stage.id, data: jobStageToFirestore(stage)),
+      ],
+      restore: (id, data) async {
+        final stage = mergeJobStageFromRemote(data, id);
+        await jobRepository.upsertStage(stage, recordLocalActivity: false);
+        return stage;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.jobCategories,
+      read: () async => [
+        for (final category in await jobRepository.getAllCategories())
+          BackupRecord(id: category.id, data: jobCategoryToFirestore(category)),
+      ],
+      restore: (id, data) async {
+        final category = mergeJobCategoryFromRemote(data, id);
+        await jobRepository.upsertCategory(
+          category,
+          recordLocalActivity: false,
+        );
+        return category;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.jobSeasons,
+      read: () async => [
+        for (final season in await jobRepository.getAllSeasons())
+          BackupRecord(id: season.id, data: jobSeasonToFirestore(season)),
+      ],
+      restore: (id, data) async {
+        final season = mergeJobSeasonFromRemote(data, id);
+        await jobRepository.upsertSeason(season, recordLocalActivity: false);
+        return season;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.jobCompanies,
+      read: () async => [
+        for (final company in await jobRepository.getAllCompanies())
+          BackupRecord(id: company.id, data: jobCompanyToFirestore(company)),
+      ],
+      restore: (id, data) async {
+        final company = mergeJobCompanyFromRemote(data, id);
+        await jobRepository.upsertCompany(company, recordLocalActivity: false);
+        return company;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.jobApplications,
+      read: () async => [
+        for (final application in await jobRepository.getAllApplications())
+          BackupRecord(
+            id: application.id,
+            data: jobApplicationToFirestore(application),
+          ),
+      ],
+      restore: (id, data) async {
+        final application = mergeJobApplicationFromRemote(data, id);
+        await jobRepository.upsertApplication(
+          application,
+          recordLocalActivity: false,
+        );
+        return application;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.jobStatusEvents,
+      read: () async => [
+        for (final event in await jobRepository.getAllStatusEvents())
+          BackupRecord(id: event.id, data: jobStatusEventToFirestore(event)),
+      ],
+      restore: (id, data) async {
+        final event = mergeJobStatusEventFromRemote(data, id);
+        await jobRepository.upsertStatusEvent(
+          event,
+          recordLocalActivity: false,
+        );
+        return event;
       },
     ),
     BackupCollection(

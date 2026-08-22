@@ -157,6 +157,16 @@ class TodoTasksTable extends Table {
 
   IntColumn get preStarSortOrder => integer().nullable()();
   DateTimeColumn get dueDateSetAt => dateTime().nullable()();
+
+  /// Repeat pattern. See [RecurrenceRule.toStorage].
+  TextColumn get recurrence => text().withDefault(const Constant('none'))();
+
+  /// The due date the pattern is measured from, frozen when the repeat was set.
+  ///
+  /// Not just [dueDate]: rolling a "monthly on the 31st" task forward lands it
+  /// on Feb 28, and re-anchoring there would drag every later occurrence to the
+  /// 28th. Holding the original anchor is what lets March return to the 31st.
+  DateTimeColumn get recurrenceAnchor => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -194,6 +204,19 @@ class CalendarEventsTable extends Table {
   TextColumn get externalId => text().nullable()();
   TextColumn get recurrence =>
       text().withDefault(const Constant('none'))();
+
+  /// Inclusive last local date an occurrence may start on. Set when a series is
+  /// truncated by "this and all future events".
+  DateTimeColumn get recurrenceEndDate => dateTime().nullable()();
+
+  /// Comma-separated `yyyy-MM-dd` occurrence starts this series skips, written
+  /// by "this event only" deletes and edits.
+  TextColumn get exceptionDates => text().withDefault(const Constant(''))();
+
+  /// Set on a row that is one occurrence detached from a series: the id of the
+  /// series it came from, and the occurrence start it stands in for.
+  TextColumn get recurrenceParentId => text().nullable()();
+  DateTimeColumn get recurrenceDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -597,6 +620,15 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(true))();
   BoolColumn get showAnnualizedSubscriptionCost =>
       boolean().withDefault(const Constant(false))();
+
+  /// Jobs table columns the user has switched off, as a JSON list of column
+  /// ids. Stores the hidden set rather than the visible one so a column added
+  /// to a later build shows up by default instead of silently staying off.
+  TextColumn get jobsHiddenColumnsJson => text().nullable()();
+
+  /// Whether the Jobs page starts with archived applications shown (§3.1).
+  BoolColumn get jobsIncludeArchived =>
+      boolean().withDefault(const Constant(false))();
   RealColumn get dreamSplitWidth => real().nullable()();
   BoolColumn get showDreamStatistics =>
       boolean().withDefault(const Constant(false))();
@@ -931,6 +963,103 @@ class StudyReviewLogTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Job applications. `company` and `status` are free strings rather than
+/// foreign keys: deleting a stage or a company suggestion must leave the
+/// applications that referenced it readable, not dangling.
+class JobApplicationsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get company => text()();
+  TextColumn get title => text()();
+  TextColumn get status => text()();
+  DateTimeColumn get dateApplied => dateTime()();
+  TextColumn get applicationUrl => text().nullable()();
+  TextColumn get notes => text().nullable()();
+
+  /// Null while active; the season this application was archived into once set.
+  TextColumn get seasonId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Append-only status timeline. Stores the display strings as they read when
+/// the move happened, so renaming a stage never rewrites history.
+class JobStatusEventsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get applicationId => text()();
+  TextColumn get fromStatus => text().nullable()();
+  TextColumn get toStatus => text()();
+  DateTimeColumn get changedAt => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Pipeline stages. [sortOrder] is display order only — transitions are
+/// unconstrained in both directions.
+class JobStagesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The company typeahead list. [categoryId] carries the at-most-one-category
+/// assignment directly rather than through a join table.
+class JobCompaniesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get categoryId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class JobCategoriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get colorValue => integer()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class JobSeasonsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     JournalsTable,
@@ -969,13 +1098,19 @@ class StudyReviewLogTable extends Table {
     WorkoutPlanEntriesTable,
     WorkoutSessionsTable,
     WorkoutSetLogsTable,
+    JobApplicationsTable,
+    JobStatusEventsTable,
+    JobStagesTable,
+    JobCompaniesTable,
+    JobCategoriesTable,
+    JobSeasonsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 82;
+  int get schemaVersion => 84;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1903,6 +2038,46 @@ class AppDatabase extends _$AppDatabase {
           migrator,
           settingsTable.defaultTodoListId,
         );
+      }
+      if (from < 83) {
+        for (final column in [
+          calendarEventsTable.recurrenceEndDate,
+          calendarEventsTable.exceptionDates,
+          calendarEventsTable.recurrenceParentId,
+          calendarEventsTable.recurrenceDate,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'calendar_events_table',
+            calendarEventsTable,
+            column,
+          );
+        }
+        for (final column in [
+          todoTasksTable.recurrence,
+          todoTasksTable.recurrenceAnchor,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'todo_tasks_table',
+            todoTasksTable,
+            column,
+          );
+        }
+      }
+      if (from < 84) {
+        await migrator.createTable(jobApplicationsTable);
+        await migrator.createTable(jobStatusEventsTable);
+        await migrator.createTable(jobStagesTable);
+        await migrator.createTable(jobCompaniesTable);
+        await migrator.createTable(jobCategoriesTable);
+        await migrator.createTable(jobSeasonsTable);
+        for (final column in [
+          settingsTable.jobsHiddenColumnsJson,
+          settingsTable.jobsIncludeArchived,
+        ]) {
+          await _addSettingsColumnIfNotExists(migrator, column);
+        }
       }
     },
   );

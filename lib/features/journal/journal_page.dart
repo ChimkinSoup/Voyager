@@ -685,8 +685,23 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             setState(() => _revertJournalDeletedUiState(journalId));
           },
         );
+        // Held until the provider has actually produced a list without the
+        // journal. `deleteJournalList` only *invalidates* — invalidation is
+        // synchronous, the refetch is not, and `journalsProvider` is a
+        // keepAlive future whose consumer skips the loading state, so the
+        // previous value (still carrying the deleted journal) is served for at
+        // least one more frame. Dropping the hide the instant it returned made
+        // the journal flash back into the dropdown; without a setState, for a
+        // number of frames that depended on unrelated activity.
         if (deleted && mounted) {
-          _optimisticallyHiddenJournalIds.remove(journalId);
+          final refreshed = await ref.read(journalsProvider.future);
+          if (!mounted) return;
+          final stillListed = refreshed.any(
+            (j) => j.id == journalId && j.deletedAt == null,
+          );
+          if (!stillListed) {
+            setState(() => _optimisticallyHiddenJournalIds.remove(journalId));
+          }
         }
       default:
         break;
@@ -841,7 +856,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     required Map<String, int>? persistedCounts,
     required String entryListScope,
     required List<JournalEntry> displayEntries,
-    required bool entriesLoading,
     required Set<String> dbEntryIds,
   }) {
     // If database counts are loaded, they are our source of truth
@@ -917,14 +931,26 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       title: '',
       body: '',
       entryDate: now,
+      // The default is stamped here, once, where choosing it is the deliberate
+      // act of creating an entry — not on every selection, which used to write
+      // 'sunny' onto any legacy or imported row merely because the user opened
+      // it and typed a character.
+      weatherIcon: weather?.icon ?? 'sunny',
       timestamp: now,
-      weatherIcon: weather?.icon,
       createdAt: now,
       updatedAt: now,
     );
 
     _registerPendingEntry(entry);
     _suppressAutoSelect = true;
+    // Write-through before anything async. [_finalizeNewEntry] has to wait on
+    // the quote bank and on a weather refresh that can reach Firestore and the
+    // weather API, which on a cold start or a bad network is seconds to tens of
+    // seconds — and until this row exists, the entry lives only in
+    // [_pendingEntries] and [_entryBodyDrafts]. Killing the app inside that
+    // window lost everything typed, and every autosave in it threw out of
+    // [JournalWriteCoordinator.saveEntry] with no baseline row to read.
+    final seeded = ref.read(journalRepositoryProvider).upsertEntry(entry);
     _logJournal('CREATE_ENTRY', entry: entry);
     _writeEntryListScrollStorage(0);
     unawaited(_loadEntry(entry));
@@ -935,47 +961,52 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _titleFocusNode.requestFocus();
     });
 
-    unawaited(_finalizeNewEntry(entry, settings));
+    unawaited(seeded.then((_) => _finalizeNewEntry(entry, settings)));
   }
 
+  /// Fills in the fields a new entry can only learn asynchronously.
+  ///
+  /// Applied as a delta against whatever is on disk by the time the awaits
+  /// finish, and deliberately without a `mounted` guard around the write:
+  /// the row already exists (see [_createEntryOptimistic]), the user may well
+  /// have typed into it during the wait, and the previous full-row
+  /// `upsertEntry` of the pristine snapshot would have reverted that text —
+  /// or, if the page had been disposed, skipped the write altogether.
   Future<void> _finalizeNewEntry(
     JournalEntry entry,
     AppSettings settings,
   ) async {
-    final journalRepo = ref.read(journalRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
     final weatherService = ref.read(weatherServiceProvider);
 
     // Assigned even when quotes are hidden — globally or for this journal —
     // so turning them back on shows a quote on entries written while they were
     // off, rather than a run of blanks.
     await ref.read(quotesLoadedProvider.future);
-    if (!mounted) return;
     final assignedQuote = ref.read(quoteBankProvider).nextQuote();
 
     final weather =
         await weatherService.refreshIfNeeded() ??
         weatherService.readCachedSnapshot(settings);
-    if (!mounted) return;
 
-    final finalized = entry.copyWith(
-      quoteId: assignedQuote.id,
-      customQuote: assignedQuote.text,
-      weatherIcon: weather?.icon ?? entry.weatherIcon,
+    final coordinator = _writeCoordinatorOrNull();
+    if (coordinator == null) return;
+    await coordinator.saveEntry(
+      entryId: entry.id,
+      applyDelta: (base) => base.copyWith(
+        quoteId: assignedQuote.id,
+        customQuote: assignedQuote.text,
+        weatherIcon: weather?.icon ?? base.weatherIcon,
+        bumpVersion: false,
+      ),
+      onSuccess: (finalized) {
+        if (_pendingEntries.containsKey(finalized.id)) {
+          _pendingEntries[finalized.id] = finalized;
+        }
+        if (_selectedEntryId == finalized.id && mounted) {
+          setState(() => _selectedEntry = finalized);
+        }
+      },
     );
-
-    await journalRepo.upsertEntry(finalized);
-    remoteSync.pushJournalEntryNow(finalized);
-    if (!mounted) return;
-
-    _invalidateJournalEntryCaches();
-
-    if (_pendingEntries.containsKey(finalized.id)) {
-      _pendingEntries[finalized.id] = finalized;
-    }
-    if (_selectedEntryId == finalized.id) {
-      setState(() => _selectedEntry = finalized);
-    }
   }
 
   void _reconcileSelectedEntryFromProvider(List<JournalEntry> entries) {
@@ -1026,7 +1057,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           );
           _titleController.text = fresh.title;
           _mood = fresh.mood;
-          _weatherIcon = fresh.weatherIcon ?? 'sunny';
+          _weatherIcon = fresh.weatherIcon;
         });
         _listTitlePreview.value = fresh.title;
       });
@@ -1057,10 +1088,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     });
   }
 
+  /// Runs a flush, queueing behind one already in flight rather than being
+  /// answered with it.
+  ///
+  /// [_flushActiveEntryEditsImpl] snapshots the title, mood, weather and body
+  /// at its start and then awaits a pending-merge apply, a local save and a
+  /// Firestore write — so anything typed during those awaits is invisible to
+  /// it. Returning the in-flight future told the second caller its work was
+  /// already done, which lost every keystroke made in that window whenever the
+  /// second caller was a teardown (back button, entry switch, dispose). The
+  /// extra pass is cheap: [_persistEntryEdits] short-circuits when the text
+  /// already matches disk.
   Future<void> _flushActiveEntryEdits({required bool refreshList}) async {
-    if (_flushInProgress != null) {
-      await _flushInProgress;
-      return;
+    final inFlight = _flushInProgress;
+    if (inFlight != null) {
+      await inFlight.catchError((Object _) {});
     }
 
     final flush = _flushActiveEntryEditsImpl(refreshList: refreshList);
@@ -1081,7 +1123,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (entryId == null || entry == null) return;
 
     _metadataSaveTimer?.cancel();
-    _editorKey.currentState?.cancelPendingPersist();
+    // The body autosave's debounce is owned by the page, not the editor. It
+    // used to survive the flush, so a queued [_saveBodyDraft] could fire after
+    // the flush finished and the selection had already moved on, writing
+    // against whatever entry was selected by then.
+    _bodySaveTimer?.cancel();
 
     final title = _titleController.text;
     final mood = _mood;
@@ -1278,7 +1324,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _selectedEntry = displayEntry;
     _titleController.text = displayEntry.title;
     _mood = displayEntry.mood;
-    _weatherIcon = displayEntry.weatherIcon ?? 'sunny';
+    // Not defaulted to 'sunny' here. Both save paths write `_weatherIcon`
+    // back, so normalizing on selection stamped the default onto every entry
+    // with no icon of its own — anything written before the weather feature,
+    // imported, or created while the cache was cold — as a side effect of
+    // opening it and typing one character, bumping the version and pushing the
+    // row. The default belongs at creation, where choosing it is deliberate
+    // (see [_createEntryOptimistic]); the icon button renders a fallback glyph
+    // through `weatherIconData(null)` either way, so the placeholder is still
+    // visible without being persisted.
+    _weatherIcon = displayEntry.weatherIcon;
     _metadataDirty = false;
   }
 
@@ -1367,6 +1422,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         baseline.mood == mood &&
         baseline.weatherIcon == weatherIcon &&
         _sameTags(baseline.tags, tags)) {
+      // Dropped here as well as on a successful save — the whole point of this
+      // branch is that the draft and disk now agree, and a draft left behind
+      // stops agreeing the moment a *remote* edit changes the row.
+      // [_entryWithDraftBody] prefers the draft unconditionally, so the stale
+      // copy would be laid back over the pulled body the next time the entry
+      // was reselected, and then persisted and pushed as the local truth.
+      _entryBodyDrafts.remove(entry.id);
       _logJournal(
         'PERSIST_ENTRY_SKIPPED',
         entry: baseline,
@@ -1398,15 +1460,19 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             entry: updated,
             details: 'v=${updated.version} bodyLen=${updated.body.length}',
           );
-          if (_selectedEntryId == entry.id) {
+          // `mounted` gates the notifier writes too, not just the setState:
+          // [dispose] disposes both notifiers and only then starts its final
+          // flush, and `_selectedEntryId` is still set when this callback runs,
+          // so assigning to them asserted `used after being disposed` on every
+          // teardown with pending edits — inside an unawaited future, where it
+          // surfaced as an unhandled async error rather than at the call site.
+          if (_selectedEntryId == entry.id && mounted) {
             _listTitlePreview.value = updated.title;
             _listBodyPreview.value = updated.body;
-            if (mounted) {
-              setState(() {
-                _selectedEntry = updated;
-                _metadataDirty = false;
-              });
-            }
+            setState(() {
+              _selectedEntry = updated;
+              _metadataDirty = false;
+            });
           }
         },
       );
@@ -1422,6 +1488,28 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     }
   }
 
+  /// Writes the metadata row's fields as a delta, through the same coordinator
+  /// [_persistEntryEdits] uses.
+  ///
+  /// It used to build a finished `baseline.copyWith(...)` from a snapshot read
+  /// *before* `saveJournalEntryThenScheduleUpload` was called — outside the
+  /// per-document queue — and hand that whole row to the save. Two things fell
+  /// out of that, both of which the delta form fixes:
+  ///
+  /// The queue drops a save whose generation has been superseded, which is only
+  /// safe when every writer on the key persists the same snapshot. This one and
+  /// the body autosave persist *disjoint* field sets, so a body save followed
+  /// inside the same debounce window by a title edit had its turn skipped and
+  /// was then overwritten by this function's pre-edit `baseline.body` — losing
+  /// whatever had just been typed.
+  ///
+  /// And reading the baseline outside the critical section meant anything that
+  /// landed between the read and the queued write — an autosave, an inbound
+  /// pull, a pending-text merge, an outbox replay — was reverted by the stale
+  /// snapshot and re-uploaded as the local truth.
+  ///
+  /// The read below survives only as a skip test: deciding not to queue a
+  /// no-op can't overwrite anything.
   Future<void> _saveMetadataForEntry({
     required String entryId,
     required JournalEntry entry,
@@ -1430,9 +1518,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     required String? weatherIcon,
     bool refreshList = false,
   }) async {
+    final coordinator = _writeCoordinatorOrNull();
     final repo = _journalRepoOrNull();
-    final remoteSync = _syncServiceOrNull();
-    if (repo == null || remoteSync == null) return;
+    if (coordinator == null || repo == null) return;
 
     final stored = await repo.getEntry(entryId);
     final baseline = stored ?? entry;
@@ -1452,32 +1540,49 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       return;
     }
 
-    final updated = baseline.copyWith(
-      title: title,
-      mood: mood,
-      weatherIcon: weatherIcon,
-    );
-
-    await remoteSync.saveJournalEntryThenScheduleUpload(
-      entryId: entryId,
-      saveLocal: () async {
-        await repo.upsertEntry(updated);
-        _logJournal(
-          'METADATA_PERSIST_SAVED',
-          entry: updated,
-          details: 'v=${updated.version}',
-        );
-        if (_selectedEntryId == entryId) {
-          _listTitlePreview.value = updated.title;
-          if (mounted) {
+    try {
+      await coordinator.saveEntry(
+        entryId: entryId,
+        bumpVersion: true,
+        // This page refreshes its own lists through [_refreshEntryLists],
+        // narrower than the coordinator's app-wide sweep. Same call as
+        // [_persistEntryEdits] makes, for the same reason.
+        refreshCaches: false,
+        // `base.body` is carried through untouched, which is what makes this
+        // writer commutative with the body autosave.
+        applyDelta: (base) => base.copyWith(
+          title: title,
+          mood: mood,
+          weatherIcon: weatherIcon,
+          bumpVersion: false,
+        ),
+        onSuccess: (updated) {
+          _logJournal(
+            'METADATA_PERSIST_SAVED',
+            entry: updated,
+            details: 'v=${updated.version}',
+          );
+          // Guarded for the same reason as [_persistEntryEdits]' callback:
+          // the notifiers are disposed before the teardown flush runs.
+          if (_selectedEntryId == entryId && mounted) {
+            _listTitlePreview.value = updated.title;
             setState(() {
               _selectedEntry = updated;
               _metadataDirty = false;
             });
           }
-        }
-      },
-    );
+        },
+      );
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'JournalPage',
+          context: ErrorDescription('while persisting journal entry metadata'),
+        ),
+      );
+    }
     // Same reasoning as [_persistEntryEdits]: the only metadata the list shows
     // is the title, and the row on screen already followed it through
     // [_listTitlePreview] inside the save above. See [_refreshEntryLists].
@@ -1597,15 +1702,24 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _jumpToTarget(target);
   }
 
-  void _jumpToTarget(double target) {
+  /// Walks the list down towards [target], materializing rows as it goes.
+  ///
+  /// [attempt] is what stops it. `target` is an estimate built from hardcoded
+  /// per-row heights that are not tied to the rendered `ListTile` at all, so a
+  /// theme, density or text-scale change can push it past the real
+  /// `maxScrollExtent` of a fully materialized list — and the retry, whose only
+  /// exit was `target <= maxScrollExtent`, then re-armed itself every frame:
+  /// one `jumpTo` per vsync forever, pinning the list at the bottom. Not a
+  /// hang, which is why it would present as a janky list stuck at the end.
+  void _jumpToTarget(double target, {int attempt = 0}) {
     if (!mounted || !_entryListScrollController.hasClients) return;
     final pos = _entryListScrollController.position;
 
-    if (target > pos.maxScrollExtent && pos.maxScrollExtent > 0) {
+    if (attempt < 8 && target > pos.maxScrollExtent && pos.maxScrollExtent > 0) {
       // Force layout by jumping to current max extent, then repeat next frame
       pos.jumpTo(pos.maxScrollExtent);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _jumpToTarget(target);
+        if (mounted) _jumpToTarget(target, attempt: attempt + 1);
       });
     } else {
       // We reached the target area, or hit the absolute end
@@ -1624,6 +1738,26 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     }
   }
 
+  /// Soft-deletes [entryId] and pushes the row that write actually produced.
+  ///
+  /// The push used to be built from the in-memory `_selectedEntry` with
+  /// `copyWith(deletedAt: ...)`, which bumps to *that snapshot's* version + 1.
+  /// `_selectedEntry` is refreshed only through `onSuccess` callbacks and the
+  /// reconcilers, all of which have bail-out paths, so whenever it lagged the
+  /// row on disk the tombstone went out at a version Firestore had already
+  /// passed. The next device to pull then read the tombstone as the loser,
+  /// ignored the delete, and pushed its own higher-versioned live document
+  /// back — resurrecting the entry everywhere. Reading the row back after
+  /// [JournalRepository.softDeleteEntry] (which now bumps the version itself)
+  /// keeps the pushed tombstone monotonic.
+  Future<void> _softDeleteAndPushTombstone(String entryId) async {
+    final repo = ref.read(journalRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    await repo.softDeleteEntry(entryId);
+    final tombstone = await repo.getEntry(entryId);
+    if (tombstone != null) remoteSync.pushJournalEntryNow(tombstone);
+  }
+
   Future<void> _deleteEntry() async {
     final entry = _selectedEntry;
     if (entry == null) return;
@@ -1636,10 +1770,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _logJournal('DELETE_ENTRY', details: 'id=${entry.id}');
     await _flushActiveEntryEdits(refreshList: false);
     if (!mounted) return;
-    await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
-    ref
-        .read(remoteSyncServiceProvider)
-        .pushJournalEntryNow(entry.copyWith(deletedAt: utcNow()));
+    await _softDeleteAndPushTombstone(entry.id);
+    if (!mounted) return;
     final emptied = _selectReplacementForRemovedEntry(entry);
     _removePendingEntry(entry.id);
     _invalidateJournalEntryCaches();
@@ -1718,10 +1850,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       await _flushActiveEntryEdits(refreshList: false);
       if (!mounted) return;
     }
-    await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
-    ref
-        .read(remoteSyncServiceProvider)
-        .pushJournalEntryNow(entry.copyWith(deletedAt: utcNow()));
+    await _softDeleteAndPushTombstone(entry.id);
+    if (!mounted) return;
     var emptied = false;
     if (wasSelected) {
       emptied = _selectReplacementForRemovedEntry(entry);
@@ -1738,6 +1868,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     String journalId,
   ) async {
     if (entry.journalId == journalId) return;
+    // Every other selection change on this page flushes first; the two move
+    // handlers were the exception. Without it the `journalId` write below
+    // carries `existing.body` from disk (missing the in-flight keystrokes),
+    // the rebuild swaps the editor onto the replacement entry, and the pending
+    // body debounce — which re-reads `_selectedEntryId` when it fires — then
+    // persists the *replacement's* text. The moved entry's draft survives in
+    // `_entryBodyDrafts` for the rest of the session, which is what makes the
+    // loss invisible until the app is restarted.
+    if (_selectedEntryId == entry.id) {
+      await _flushActiveEntryEdits(refreshList: false);
+      if (!mounted) return;
+    }
     final repo = ref.read(journalRepositoryProvider);
     final existing = await repo.getEntry(entry.id);
     if (existing == null) return;
@@ -1808,17 +1950,33 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           _EditQuoteDialog(initialQuote: entry.customQuote ?? ''),
     );
     if (quote == null) return;
-    final updated = entry.copyWith(customQuote: quote.trim());
-    await ref.read(journalRepositoryProvider).upsertEntry(updated);
-    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
-    if (!mounted) return;
-    setState(() => _selectedEntry = updated);
-    _invalidateJournalEntryCaches();
+    // Through the coordinator, like every other field edit: this dialog is
+    // modal and can sit open for minutes while autosaves, remote pulls and
+    // pending-merge writes land underneath it. Building the write from the
+    // in-memory `_selectedEntry` reverted `body`, `title`, `mood`, `tags` and
+    // `entryDate` to whatever they were when it opened, and pushed the
+    // reverted row — and it bypassed the per-document save queue entirely, so
+    // it could interleave with a queued save rather than ordering behind it.
+    await _writeCoordinatorOrNull()?.saveEntry(
+      entryId: entry.id,
+      bumpVersion: true,
+      applyDelta: (base) =>
+          base.copyWith(customQuote: quote.trim(), bumpVersion: false),
+      onSuccess: (updated) {
+        if (mounted) setState(() => _selectedEntry = updated);
+      },
+    );
   }
 
   Future<void> _moveEntryToJournal(String journalId) async {
     final entry = _selectedEntry;
     if (entry == null || entry.journalId == journalId) return;
+    // See [_moveEntryItemToJournal]: the re-read below has to include whatever
+    // is still sitting unsaved in the editor.
+    if (_selectedEntryId == entry.id) {
+      await _flushActiveEntryEdits(refreshList: false);
+      if (!mounted) return;
+    }
     final repo = ref.read(journalRepositoryProvider);
     final existing = await repo.getEntry(entry.id);
     if (existing == null) return;
@@ -1922,31 +2080,50 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         : entryListScope;
     final entriesAsync = ref.watch(journalListEntriesProvider(entriesScope));
 
+    // The second of the page's two paths from the provider into the open
+    // editor. [_reconcileSelectedEntryFromProvider] covers the same provider
+    // but cannot push a changed body into a *mounted* editor — the editor only
+    // re-reads `entry.body` when the entry id changes — so this one stays for
+    // live-sync pulls that land while the entry is open.
+    //
+    // It now carries the same guards as that reconciler, which it had none of.
+    // Without them it clobbered a half-typed title (dropping the IME composing
+    // region, and leaving `_metadataDirty` set so the pending debounce wrote
+    // the *replaced* title back as if the user had typed it), overwrote a
+    // focused editor, and left `_entryBodyDrafts` untouched — manufacturing
+    // the stale-draft state that resurrects old text over a remote merge.
     ref.listen(journalListEntriesProvider(entriesScope), (previous, next) {
+      if (!mounted) return;
       final entries = next.valueOrNull;
-      if (entries != null && _selectedEntryId != null) {
-        final updated = entries
-            .where((e) => e.id == _selectedEntryId)
-            .firstOrNull;
-        if (updated != null && _selectedEntry != null) {
-          if (updated.updatedAt.isAfter(_selectedEntry!.updatedAt) ||
-              updated.version > _selectedEntry!.version) {
-            if (mounted) {
-              setState(() {
-                _selectedEntry = updated;
-                if (_titleController.text != updated.title) {
-                  _titleController.text = updated.title;
-                }
-                _listTitlePreview.value = updated.title;
-                _listBodyPreview.value = updated.body;
-                _mood = updated.mood;
-                _weatherIcon = updated.weatherIcon;
-              });
-              _editorKey.currentState?.setBodyText(updated.body);
-            }
-          }
-        }
+      final selectedId = _selectedEntryId;
+      if (entries == null || selectedId == null) return;
+      if (_pendingEntries.containsKey(selectedId)) return;
+      if (_editorKey.currentState?.hasFocus ?? false) return;
+      if (_titleFocusNode.hasFocus || _metadataDirty) return;
+      if (_entryBodyDrafts.containsKey(selectedId)) return;
+
+      final updated = entries.where((e) => e.id == selectedId).firstOrNull;
+      final current = _selectedEntry;
+      if (updated == null || current == null) return;
+      if (!updated.updatedAt.isAfter(current.updatedAt) &&
+          updated.version <= current.version) {
+        return;
       }
+
+      setState(() {
+        _selectedEntry = updated;
+        if (_titleController.text != updated.title) {
+          _titleController.text = updated.title;
+        }
+        _listTitlePreview.value = updated.title;
+        _listBodyPreview.value = updated.body;
+        _mood = updated.mood;
+        _weatherIcon = updated.weatherIcon;
+      });
+      // recordAsEdit, because this text arrives from SQLite by a route the
+      // character-op session knows nothing about — a non-CRDT LWW pull, an
+      // outbox replay, an import. See [_PlainJournalEditorState.setBodyText].
+      _editorKey.currentState?.setBodyText(updated.body, recordAsEdit: true);
     });
 
     return journalsAsync.when(
@@ -2093,7 +2270,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           persistedCounts: countsByJournal,
           entryListScope: entriesScope,
           displayEntries: displayEntries,
-          entriesLoading: entriesLoading,
           dbEntryIds: dbEntryIds,
         ),
     };
@@ -2129,6 +2305,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final liveRowIds = {for (final e in filtered) e.id};
     _rowWidgetCache.removeWhere((id, _) => !liveRowIds.contains(id));
     _rowSignatureCache.removeWhere((id, _) => !liveRowIds.contains(id));
+
+    // And the same for the optimistic-hide set. Once the provider has stopped
+    // returning an id, the hide it was standing in for has landed and holding
+    // the id does nothing but cost a `contains` per entry per build — the set
+    // was otherwise only ever cleared wholesale on a journal switch, so a
+    // session spent deleting inside one journal grew it without bound. Skipped
+    // while the scope's entries are still loading, when an empty list would
+    // otherwise unhide everything for a frame.
+    if (!entriesLoading && _optimisticallyHiddenEntryIds.isNotEmpty) {
+      final knownIds = {for (final e in entries) e.id};
+      _optimisticallyHiddenEntryIds.removeWhere((id) => !knownIds.contains(id));
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2468,7 +2656,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: MoodGradientSlider(
-                                      value: _mood ?? 5,
+                                      value: _mood,
                                       accent: accentColor,
                                       onChanged: (value) {
                                         setState(() {
@@ -2868,10 +3056,42 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   SettingsRepository? _settingsRepo;
   PendingTextMergeListener? _pendingTextMergeListener;
 
+  /// The document id this state currently holds a pending-text-merge listener
+  /// and an editing flag for. Tracked rather than derived from `widget.entry`,
+  /// because during an entry switch the widget has already moved on while the
+  /// registrations still belong to the outgoing entry.
+  String? _attachedEntryId;
+
   bool get hasFocus => widget.focusNode.hasFocus;
 
-  void setBodyText(String body) {
+  /// Replaces the editor's text.
+  ///
+  /// [recordAsEdit] re-anchors the character-op session on the way past. The
+  /// session assumes the `before` text handed to `recordJournalTextChange`
+  /// always matches its own current text — the invariant `_handleBodyKey` is
+  /// careful to preserve — and moving [_lastText] to the new string without
+  /// telling the registry breaks it: the next keystroke is then diffed against
+  /// the pre-replacement string, producing ops at positions that do not exist
+  /// in the session's log, and the two devices interleave characters on the
+  /// next merge.
+  ///
+  /// Pass it whenever [body] came from somewhere the registry has not seen
+  /// (an LWW pull, an outbox replay, an import). The post-merge call in
+  /// [_JournalPageState._flushActiveEntryEditsImpl] leaves it false: those ops
+  /// came off the remote chain and are already in the registry.
+  void setBodyText(String body, {bool recordAsEdit = false}) {
+    final before = _controller.text;
     _controller.text = body;
+    if (recordAsEdit && before != body) {
+      final entryId = widget.entry?.id;
+      if (entryId != null) {
+        _remoteSync?.recordJournalTextChange(
+          entryId: entryId,
+          before: before,
+          after: body,
+        );
+      }
+    }
     _lastText = body;
     _tags = extractTags(body);
   }
@@ -2907,7 +3127,40 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         documentId: entry.id,
         listener: _pendingTextMergeListener!,
       );
+      _attachedEntryId = entry.id;
     }
+  }
+
+  /// Removes the pending-text-merge listener and clears the editing flag for
+  /// [entryId].
+  ///
+  /// Both used to be undone after the awaited flush in [_switchEntryWidget],
+  /// so a state disposed during that await short-circuited past them: the old
+  /// registration outlived the state (retaining it, its controller and the
+  /// entry's whole body, and firing a listener on an unmounted state for every
+  /// later merge on that document), and the old id stayed in
+  /// `_activelyEditedDocuments` — which makes `pullJournalEntries` buffer every
+  /// future remote body change for it instead of applying one, with nothing
+  /// left to drain the buffer. [dispose] could not clean up after it either,
+  /// because by then `widget.entry` named the *new* entry.
+  void _detachEntry(String? entryId) {
+    if (entryId == null) return;
+    final remoteSync = _remoteSync;
+    if (remoteSync == null) return;
+    final listener = _pendingTextMergeListener;
+    if (listener != null) {
+      remoteSync.removePendingTextMergeListener(
+        collection: FirestoreCollections.journalEntries,
+        documentId: entryId,
+        listener: listener,
+      );
+    }
+    remoteSync.setDocumentEditing(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entryId,
+      isEditing: false,
+    );
+    if (_attachedEntryId == entryId) _attachedEntryId = null;
   }
 
   void _handlePendingTextMerge(PendingTextMergeEvent event) {
@@ -2960,6 +3213,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   }
 
   Future<void> _switchEntryWidget(_PlainJournalEditor oldWidget) async {
+    // Detached before the await, not after it, so a dispose landing inside the
+    // flush cannot strand the outgoing entry's registrations. See [_detachEntry].
+    _detachEntry(oldWidget.entry?.id);
+
     final pendingFlush = widget.waitForFlush?.call();
     if (pendingFlush != null) {
       await pendingFlush;
@@ -2967,16 +3224,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
 
     if (!mounted) return;
     final remoteSync = _remoteSync;
-    if (oldWidget.entry != null &&
-        remoteSync != null &&
-        _pendingTextMergeListener != null) {
-      remoteSync.removePendingTextMergeListener(
-        collection: FirestoreCollections.journalEntries,
-        documentId: oldWidget.entry!.id,
-        listener: _pendingTextMergeListener!,
-      );
-    }
-    _setEditingFlag(oldWidget.entry, false);
     _tagTimer?.cancel();
     _controller.text = widget.entry?.body ?? '';
     _lastText = _controller.text;
@@ -2996,6 +3243,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         documentId: entry.id,
         initialText: _controller.text,
       );
+      _attachedEntryId = entry.id;
     }
     if (mounted) setState(() {});
   }
@@ -3003,22 +3251,9 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   @override
   void dispose() {
     _tagTimer?.cancel();
-    final entry = widget.entry;
-    final remoteSync = _remoteSync;
-    if (entry != null && remoteSync != null) {
-      if (_pendingTextMergeListener != null) {
-        remoteSync.removePendingTextMergeListener(
-          collection: FirestoreCollections.journalEntries,
-          documentId: entry.id,
-          listener: _pendingTextMergeListener!,
-        );
-      }
-      remoteSync.setDocumentEditing(
-        collection: FirestoreCollections.journalEntries,
-        documentId: entry.id,
-        isEditing: false,
-      );
-    }
+    // Keyed off what is actually registered rather than `widget.entry`, which
+    // during a switch already names the incoming entry.
+    _detachEntry(_attachedEntryId);
     widget.focusNode.removeListener(_handleFocusChanged);
     _controller.dispose();
     super.dispose();
@@ -3028,8 +3263,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (!mounted) return;
     _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
   }
-
-  void cancelPendingPersist() {}
 
   String get currentBodyText => _controller.text;
 

@@ -763,8 +763,14 @@ class _AllDayShelfColumn extends StatelessWidget {
                 ? calendarEntryContextMenu(
                     builder: entryMenuBuilder,
                     entry: columnEvents[i]!.isFullDay
-                        ? CalendarDayEntry.allDayEvent(columnEvents[i]!)
-                        : CalendarDayEntry.timedEvent(columnEvents[i]!),
+                        ? CalendarDayEntry.allDayEvent(
+                            columnEvents[i]!,
+                            day: day,
+                          )
+                        : CalendarDayEntry.timedEvent(
+                            columnEvents[i]!,
+                            day: day,
+                          ),
                     child: CalendarWeekEventBlock(
                       key: ValueKey('allday-${columnEvents[i]!.id}-$i'),
                       event: columnEvents[i]!,

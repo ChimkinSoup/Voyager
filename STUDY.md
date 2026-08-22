@@ -14,7 +14,7 @@
 	- Title and stats of the deck should be at the top (Stats include total cards and number of cards due for review)
 	- Directly below the title, there are two glass action buttons. One to start reviewing (By default with SRS) and one for cram mode
 	- Control Bar: A sleek row of utility icons right above the card list:
-		- Search (Keyword filter), import JSON, and a multi-select toggle. Right aligned is a "Add card" button
+		- Search (Keyword filter), import cards (paste `front|back` lines), and a multi-select toggle. Right aligned is a "Add card" button
 	- The remaining 70% of the screen is a scrollable list of every card in the desk. Each row shows a preview of the front, and if you click it a small animation plays that shows the back of the card. This animation only plays out for the specific card in the preview deck. On each card (Regardless of whether the front or back of the card is showing) will be a small dot whose color represents its SRS mastery
 ### Multi-Select and Batch Actions
 - Selection Mode: Tapping the multi-select toggle (Or long pressing on a card) reveals checkboxes on every preview card. Clicking one selects it. The user is still able to click on the preview card (But not the checkmark) to check the other side of the card.

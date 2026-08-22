@@ -8,38 +8,96 @@ class MoodGradientSlider extends StatelessWidget {
     required this.onChanged,
   });
 
-  final int value;
+  /// `null` means *not recorded*, which is deliberately not the same thing as
+  /// a mood of 5. Analytics excludes unrecorded moods from its average, so a
+  /// null rendered as a filled thumb at the midpoint made the page and the
+  /// chart disagree about the same entry. It renders hollow instead, with the
+  /// track left unfilled and the value indicator reading '—'.
+  final int? value;
   final Color accent;
   final ValueChanged<int> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return SliderTheme(
-      data: SliderTheme.of(context).copyWith(
-        trackHeight: 8,
-        activeTrackColor: Colors.transparent,
-        inactiveTrackColor: Colors.transparent,
-        overlayColor: accent.withValues(alpha: 0.16),
-        thumbColor: accent,
-        valueIndicatorColor: accent,
-        trackShape: GradientSliderTrackShape(
-          // White at the low-mood end in both themes, not a theme-derived wash
-          // — on cream that wash resolved to `onSurface`, which read as a
-          // black-to-accent ramp rather than the intended pale one.
-          gradient: LinearGradient(
-            colors: [Colors.white, accent],
-          ),
-          inactiveColor: Theme.of(context).colorScheme.surface,
+    final recorded = value;
+    final surface = Theme.of(context).colorScheme.surface;
+    var sliderTheme = SliderTheme.of(context).copyWith(
+      trackHeight: 8,
+      activeTrackColor: Colors.transparent,
+      inactiveTrackColor: Colors.transparent,
+      overlayColor: accent.withValues(alpha: 0.16),
+      thumbColor: accent,
+      valueIndicatorColor: accent,
+      trackShape: GradientSliderTrackShape(
+        // White at the low-mood end in both themes, not a theme-derived wash
+        // — on cream that wash resolved to `onSurface`, which read as a
+        // black-to-accent ramp rather than the intended pale one.
+        gradient: LinearGradient(
+          colors: [Colors.white, accent],
         ),
+        inactiveColor: surface,
+        showActive: recorded != null,
       ),
+    );
+    if (recorded == null) {
+      sliderTheme = sliderTheme.copyWith(
+        thumbShape: HollowSliderThumbShape(fillColor: surface),
+      );
+    }
+    return SliderTheme(
+      data: sliderTheme,
       child: Slider(
         min: 0,
         max: 10,
         divisions: 10,
-        label: '$value',
-        value: value.toDouble(),
+        label: recorded?.toString() ?? '—',
+        // Parked at the midpoint while unrecorded so the thumb has somewhere
+        // to sit; the hollow shape and empty track are what say it is unset.
+        value: (recorded ?? 5).toDouble(),
         onChanged: (next) => onChanged(next.round()),
       ),
+    );
+  }
+}
+
+/// The thumb for a slider whose value has not been recorded: a ring in the
+/// accent colour rather than a disc, so it reads as a placeholder position.
+class HollowSliderThumbShape extends SliderComponentShape {
+  const HollowSliderThumbShape({required this.fillColor, this.radius = 10});
+
+  final Color fillColor;
+  final double radius;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return Size.fromRadius(radius);
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    final color = sliderTheme.thumbColor ?? fillColor;
+    canvas.drawCircle(center, radius - 1, Paint()..color = fillColor);
+    canvas.drawCircle(
+      center,
+      radius - 1,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
     );
   }
 }
@@ -48,10 +106,15 @@ class GradientSliderTrackShape extends SliderTrackShape with BaseSliderTrackShap
   const GradientSliderTrackShape({
     required this.gradient,
     required this.inactiveColor,
+    this.showActive = true,
   });
 
   final LinearGradient gradient;
   final Color inactiveColor;
+
+  /// False leaves the whole track in [inactiveColor] — what an unrecorded
+  /// value looks like, where a filled ramp would claim a mood was chosen.
+  final bool showActive;
 
   @override
   Rect getPreferredRect({
@@ -101,7 +164,7 @@ class GradientSliderTrackShape extends SliderTrackShape with BaseSliderTrackShap
       thumbCenter.dx.clamp(rect.left, rect.right),
       rect.bottom,
     );
-    if (activeRect.width > 0) {
+    if (showActive && activeRect.width > 0) {
       final activePaint = Paint()
         ..shader = gradient.createShader(activeRect);
       context.canvas.drawRRect(

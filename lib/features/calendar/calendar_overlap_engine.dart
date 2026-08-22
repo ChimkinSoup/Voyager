@@ -73,7 +73,7 @@ List<_OverlapItem> _overlapItemsForDay({
     final start = event.start.toLocal();
     items.add(
       _OverlapItem(
-        entry: CalendarDayEntry.timedEvent(event),
+        entry: CalendarDayEntry.timedEvent(event, day: day),
         startMinutes: _minutesFromMidnight(start),
         endMinutes: _eventEndMinutes(event, day),
         index: index++,
@@ -87,7 +87,7 @@ List<_OverlapItem> _overlapItemsForDay({
     final startMinutes = _minutesFromMidnight(start);
     items.add(
       _OverlapItem(
-        entry: CalendarDayEntry.todo(marker),
+        entry: CalendarDayEntry.todo(marker, day: day),
         startMinutes: startMinutes,
         endMinutes: startMinutes + taskMinutes,
         index: index++,

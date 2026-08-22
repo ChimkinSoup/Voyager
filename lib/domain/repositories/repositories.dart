@@ -2,6 +2,7 @@ import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
@@ -438,6 +439,91 @@ abstract class SettingsRepository {
     bool recordLocalActivity = true,
   });
   Future<void> softDeleteCustomQuote(String id);
+}
+
+/// Job applications and everything the Jobs page configures around them:
+/// pipeline stages, the company typeahead, category colours and archive
+/// seasons.
+///
+/// Applications are the one entity in the app the user hard-deletes (§7.4).
+/// The sync layer has no way to propagate a Firestore document removal — see
+/// [deleteApplication] — so "hard" is implemented as a content-wiped tombstone
+/// that [purgeExpiredDeleted] drops for good once it has had time to reach
+/// every device.
+abstract class JobRepository {
+  /// Creates the seed stages and the seed company list the first time the page
+  /// is opened. Gated on each table being completely empty, tombstones
+  /// included, so deleting every stage does not resurrect the seeds. Idempotent.
+  Future<void> ensureSeeded();
+
+  Future<List<JobApplication>> listApplications({bool includeDeleted = false});
+  Future<JobApplication?> getApplication(String id);
+  Future<void> upsertApplication(
+    JobApplication application, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Hard delete from the user's point of view: the row keeps only its id and
+  /// sync bookkeeping, every content field is blanked, and the status timeline
+  /// goes with it. Returns the tombstoned application and the tombstoned
+  /// events so the caller can push all of them.
+  Future<({JobApplication application, List<JobStatusEvent> events})>
+  deleteApplication(String id);
+
+  Future<List<JobStatusEvent>> listStatusEvents(
+    String applicationId, {
+    bool includeDeleted = false,
+  });
+  Future<void> upsertStatusEvent(
+    JobStatusEvent event, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<List<JobStage>> listStages({bool includeDeleted = false});
+  Future<void> upsertStage(JobStage stage, {bool recordLocalActivity = true});
+  Future<void> softDeleteStage(String id);
+
+  /// Rewrites [sortOrder] across [orderedIds] in one transaction. Returns the
+  /// stages it wrote so the caller can push them.
+  Future<List<JobStage>> reorderStages(List<String> orderedIds);
+
+  Future<List<JobCompany>> listCompanies({bool includeDeleted = false});
+  Future<void> upsertCompany(
+    JobCompany company, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteCompany(String id);
+
+  /// Adds [name] to the suggestion list unless an entry already matches it
+  /// case-insensitively. Returns the new entry, or null when one already
+  /// existed — so callers only push when there is something to push.
+  Future<JobCompany?> ensureCompany(String name);
+
+  Future<List<JobCategory>> listCategories({bool includeDeleted = false});
+  Future<void> upsertCategory(
+    JobCategory category, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Tombstones the category and clears it off every company filed under it.
+  /// Returns the companies it rewrote so the caller can push them.
+  Future<List<JobCompany>> softDeleteCategory(String id);
+
+  Future<List<JobSeason>> listSeasons({bool includeDeleted = false});
+  Future<void> upsertSeason(JobSeason season, {bool recordLocalActivity = true});
+
+  /// Tombstones the season and un-archives everything in it, so no application
+  /// is ever stranded pointing at a season that no longer exists. Returns the
+  /// applications it rewrote.
+  Future<List<JobApplication>> softDeleteSeason(String id);
+
+  Future<void> purgeExpiredDeleted(DateTime now);
+  Future<List<JobApplication>> getAllApplications({bool includeDeleted = true});
+  Future<List<JobStatusEvent>> getAllStatusEvents({bool includeDeleted = true});
+  Future<List<JobStage>> getAllStages({bool includeDeleted = true});
+  Future<List<JobCompany>> getAllCompanies({bool includeDeleted = true});
+  Future<List<JobCategory>> getAllCategories({bool includeDeleted = true});
+  Future<List<JobSeason>> getAllSeasons({bool includeDeleted = true});
 }
 
 abstract class AuthRepository {

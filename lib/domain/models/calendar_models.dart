@@ -1,6 +1,10 @@
+import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
-enum EventRecurrence { none, daily, weekly, monthly, yearly }
+// [EventRecurrence] used to be declared here. It now lives alongside
+// [RecurrenceRule], which wraps it, and is re-exported so the many files that
+// import calendar_models.dart for it keep compiling unchanged.
+export 'package:voyager/domain/models/recurrence_rule.dart';
 
 class Calendar extends SoftDeletable {
   const Calendar({
@@ -50,7 +54,11 @@ class CalendarEvent extends SoftDeletable {
     this.notes = '',
     this.source = EventSource.local,
     this.externalId,
-    this.recurrence = EventRecurrence.none,
+    this.recurrence = RecurrenceRule.none,
+    this.recurrenceEndDate,
+    this.exceptionDates = const [],
+    this.recurrenceParentId,
+    this.recurrenceDate,
   });
 
   final String calendarId;
@@ -62,7 +70,34 @@ class CalendarEvent extends SoftDeletable {
   final String notes;
   final EventSource source;
   final String? externalId;
-  final EventRecurrence recurrence;
+
+  /// How this event repeats. [start] is the anchor; [end] − [start] is the span
+  /// every occurrence carries, so a multi-day event repeats as a whole block.
+  final RecurrenceRule recurrence;
+
+  /// Inclusive last local date the pattern may produce an occurrence start on,
+  /// or null for an open-ended series.
+  ///
+  /// Set by "this and all future events": truncating the original series here
+  /// is what lets the split-off tail become its own event without the two
+  /// overlapping.
+  final DateTime? recurrenceEndDate;
+
+  /// Occurrence start dates (date-only, local) that this series skips.
+  ///
+  /// A "this event only" delete adds the date here; a "this event only" edit
+  /// adds it *and* writes a detached override row pointing back at this one.
+  final List<DateTime> exceptionDates;
+
+  /// For a detached override row: the id of the series it was split out of.
+  final String? recurrenceParentId;
+
+  /// For a detached override row: the occurrence start date in the parent
+  /// series that this row replaces. Paired with [recurrenceParentId].
+  final DateTime? recurrenceDate;
+
+  /// Whether this row is a single occurrence detached from a series.
+  bool get isRecurrenceOverride => recurrenceParentId != null;
 
   CalendarEvent copyWith({
     String? calendarId,
@@ -73,7 +108,14 @@ class CalendarEvent extends SoftDeletable {
     int? colorValue,
     String? notes,
     DateTime? deletedAt,
-    EventRecurrence? recurrence,
+    RecurrenceRule? recurrence,
+    DateTime? recurrenceEndDate,
+    bool clearRecurrenceEndDate = false,
+    List<DateTime>? exceptionDates,
+    String? recurrenceParentId,
+    bool clearRecurrenceParentId = false,
+    DateTime? recurrenceDate,
+    bool clearRecurrenceDate = false,
     bool bumpVersion = true,
   }) {
     return CalendarEvent(
@@ -92,6 +134,16 @@ class CalendarEvent extends SoftDeletable {
       source: source,
       externalId: externalId,
       recurrence: recurrence ?? this.recurrence,
+      recurrenceEndDate: clearRecurrenceEndDate
+          ? null
+          : (recurrenceEndDate ?? this.recurrenceEndDate),
+      exceptionDates: exceptionDates ?? this.exceptionDates,
+      recurrenceParentId: clearRecurrenceParentId
+          ? null
+          : (recurrenceParentId ?? this.recurrenceParentId),
+      recurrenceDate: clearRecurrenceDate
+          ? null
+          : (recurrenceDate ?? this.recurrenceDate),
     );
   }
 }

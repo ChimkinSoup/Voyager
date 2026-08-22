@@ -13,6 +13,7 @@ import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/repeat_selector_popover.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -69,11 +70,12 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   late DateTime _start;
   late DateTime _end;
   late int _colorValue;
-  late EventRecurrence _recurrence;
+  late RecurrenceRule _recurrence;
   late String _calendarId;
   String? _titleError;
   bool _isDatePopoverOpen = false;
   bool _isTimePopoverOpen = false;
+  bool _isRepeatPopoverOpen = false;
   bool _intentionalDiscard = false;
   bool _closingAfterSave = false;
   late final FocusNode _allDayFocusNode;
@@ -161,7 +163,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _end = e?.end ?? _start.add(const Duration(hours: 1));
     _calendarId = e?.calendarId ?? widget.initialCalendarId;
     _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
-    _recurrence = e?.recurrence ?? EventRecurrence.none;
+    _recurrence = e?.recurrence ?? RecurrenceRule.none;
     _scheduleTitleFocusIfNeeded();
   }
 
@@ -203,7 +205,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _end = e?.end ?? _start.add(const Duration(hours: 1));
       _calendarId = e?.calendarId ?? widget.initialCalendarId;
       _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
-      _recurrence = e?.recurrence ?? EventRecurrence.none;
+      _recurrence = e?.recurrence ?? RecurrenceRule.none;
       _titleError = null;
     }
     if (widget.focusTitleOnOpen && !oldWidget.focusTitleOnOpen) {
@@ -304,6 +306,29 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     }
     // After closing the time popover, ensure nothing has focus
     // so EnterToSubmitScope can catch the next Enter keypress.
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  Future<void> _openRepeatPopover(BuildContext buttonContext) async {
+    setState(() => _isRepeatPopoverOpen = true);
+    final rule = await showContextualPopover<RecurrenceRule>(
+      context: context,
+      buttonContext: buttonContext,
+      width: kRepeatPopoverWidth,
+      accentColor: Color(_colorValue),
+      builder: (ctx) => RepeatSelectorPopover(
+        initialRule: _recurrence,
+        anchor: _start,
+        accentColor: Color(_colorValue),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _isRepeatPopoverOpen = false;
+      if (rule != null) _recurrence = rule;
+    });
+    // Same reason as the time popover: leave nothing focused so the panel's
+    // [EnterToSubmitScope] catches the next Enter.
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
@@ -484,123 +509,146 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                 ),
               ],
               const SizedBox(height: 10),
-              // ── Row 2: date/time pills (full width) ───────────────────
-              VoyagerScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Builder(
-                      builder: (buttonContext) {
-                        final isMultiDay = _start.year != _end.year ||
-                            _start.month != _end.month ||
-                            _start.day != _end.day;
-                        final dateFormat = isMultiDay
-                            ? DateFormat('MMM d')
-                            : DateFormat('EEE, MMM d');
-                        final label = isMultiDay
-                            ? '${dateFormat.format(_start)} → ${dateFormat.format(_end)}'
-                            : dateFormat.format(_start);
-                        return SelectorPill(
-                          dense: true,
-                          ellipsize: false,
-                          isActive: _isDatePopoverOpen,
-                          label: label,
-                          accentColor: accent,
-                          onTap: () async {
-                            setState(() => _isDatePopoverOpen = true);
-                            final dateRange =
-                                await showContextualPopover<DateTimeRange>(
-                              context: context,
-                              buttonContext: buttonContext,
-                              width: 320,
-                              height: 380,
-                              accentColor: accent,
-                              builder: (ctx) => DateSelectorPopover(
-                                initialStartDate: _start,
-                                initialEndDate: _end,
+              // ── Row 2: date/time pills + repeat ───────────────────────
+              //
+              // The pills scroll and the repeat button does not. A multi-day
+              // event with a time range ("Mar 30 → Apr 2", "10:00 AM →
+              // 11:00 AM") is the widest this row ever gets; letting the
+              // repeat button share the scroll view would push it off the
+              // right edge exactly when it is hardest to reach, so it is
+              // pinned outside and the pills scroll under it instead.
+              Row(
+                children: [
+                  Expanded(
+                    child: VoyagerScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Builder(
+                            builder: (buttonContext) {
+                              final isMultiDay = _start.year != _end.year ||
+                                  _start.month != _end.month ||
+                                  _start.day != _end.day;
+                              final dateFormat = isMultiDay
+                                  ? DateFormat('MMM d')
+                                  : DateFormat('EEE, MMM d');
+                              final label = isMultiDay
+                                  ? '${dateFormat.format(_start)} → ${dateFormat.format(_end)}'
+                                  : dateFormat.format(_start);
+                              return SelectorPill(
+                                dense: true,
+                                ellipsize: false,
+                                isActive: _isDatePopoverOpen,
+                                label: label,
                                 accentColor: accent,
-                              ),
-                            );
-                            if (!mounted) return;
-                            setState(() => _isDatePopoverOpen = false);
-                            if (dateRange != null) {
-                              setState(() {
-                                _start = DateTime(
-                                  dateRange.start.year,
-                                  dateRange.start.month,
-                                  dateRange.start.day,
-                                  _start.hour,
-                                  _start.minute,
-                                );
-                                _end = DateTime(
-                                  dateRange.end.year,
-                                  dateRange.end.month,
-                                  dateRange.end.day,
-                                  _end.hour,
-                                  _end.minute,
-                                );
-                              });
-                            }
-                          },
-                        );
-                      },
-                    ),
-                    if (!_isFullDay) ...[
-                      const SizedBox(width: 6),
-                      Builder(
-                        builder: (buttonContext) => SelectorPill(
-                          dense: true,
-                          ellipsize: false,
-                          isActive: _isTimePopoverOpen,
-                          accentColor: accent,
-                          onTap: () => _openTimePopover(buttonContext),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                TimeOfDay.fromDateTime(_start).format(context),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface,
-                                      fontWeight: FontWeight.w500,
+                                onTap: () async {
+                                  setState(() => _isDatePopoverOpen = true);
+                                  final dateRange =
+                                      await showContextualPopover<DateTimeRange>(
+                                    context: context,
+                                    buttonContext: buttonContext,
+                                    width: 320,
+                                    height: 380,
+                                    accentColor: accent,
+                                    builder: (ctx) => DateSelectorPopover(
+                                      initialStartDate: _start,
+                                      initialEndDate: _end,
+                                      accentColor: accent,
                                     ),
-                              ),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 2),
-                                child: Icon(
-                                  Icons.arrow_forward,
-                                  size: 10,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(alpha: 0.5),
+                                  );
+                                  if (!mounted) return;
+                                  setState(() => _isDatePopoverOpen = false);
+                                  if (dateRange != null) {
+                                    setState(() {
+                                      _start = DateTime(
+                                        dateRange.start.year,
+                                        dateRange.start.month,
+                                        dateRange.start.day,
+                                        _start.hour,
+                                        _start.minute,
+                                      );
+                                      _end = DateTime(
+                                        dateRange.end.year,
+                                        dateRange.end.month,
+                                        dateRange.end.day,
+                                        _end.hour,
+                                        _end.minute,
+                                      );
+                                    });
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                          if (!_isFullDay) ...[
+                            const SizedBox(width: 6),
+                            Builder(
+                              builder: (buttonContext) => SelectorPill(
+                                dense: true,
+                                ellipsize: false,
+                                isActive: _isTimePopoverOpen,
+                                accentColor: accent,
+                                onTap: () => _openTimePopover(buttonContext),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      TimeOfDay.fromDateTime(_start).format(context),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.symmetric(horizontal: 2),
+                                      child: Icon(
+                                        Icons.arrow_forward,
+                                        size: 10,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                    Text(
+                                      TimeOfDay.fromDateTime(_end).format(context),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Text(
-                                TimeOfDay.fromDateTime(_end).format(context),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Builder(
+                    builder: (buttonContext) => RepeatIconButton(
+                      rule: _recurrence,
+                      anchor: _start,
+                      accentColor: accent,
+                      isOpen: _isRepeatPopoverOpen,
+                      onPressed: () => _openRepeatPopover(buttonContext),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
                 // ── Row 3: notes ─────────────────────────────────────────

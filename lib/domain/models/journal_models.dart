@@ -208,10 +208,14 @@ String firstSentencePreview(String body) {
   final trimmed = body.trim();
   if (trimmed.isEmpty) return '';
 
+  // Capped on both paths, not just the fallback: a list row lays this out in
+  // a `maxLines: 1` Text, so an entry whose first sentence runs for a whole
+  // paragraph would pay the full text-layout cost per row, per rebuild, only
+  // to draw an ellipsis.
   final match = _firstSentenceExp.firstMatch(trimmed);
-  if (match != null) return match.group(1)!.trim();
-
-  final line = trimmed.split('\n').first.trim();
-  if (line.length <= 120) return line;
-  return '${line.substring(0, 117)}...';
+  final raw = match != null
+      ? match.group(1)!.trim()
+      : trimmed.split('\n').first.trim();
+  if (raw.length <= 120) return raw;
+  return '${raw.substring(0, 117)}...';
 }

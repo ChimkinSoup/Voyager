@@ -11,29 +11,33 @@ class CalendarDayEntry {
     this.event,
     this.todo,
     required this.sortTime,
+    this.day,
   });
 
-  factory CalendarDayEntry.allDayEvent(CalendarEvent event) {
+  factory CalendarDayEntry.allDayEvent(CalendarEvent event, {DateTime? day}) {
     return CalendarDayEntry._(
       kind: CalendarDayEntryKind.allDayEvent,
       event: event,
       sortTime: event.start.toLocal(),
+      day: day,
     );
   }
 
-  factory CalendarDayEntry.timedEvent(CalendarEvent event) {
+  factory CalendarDayEntry.timedEvent(CalendarEvent event, {DateTime? day}) {
     return CalendarDayEntry._(
       kind: CalendarDayEntryKind.timedEvent,
       event: event,
       sortTime: event.start.toLocal(),
+      day: day,
     );
   }
 
-  factory CalendarDayEntry.todo(CalendarTodoMarker marker) {
+  factory CalendarDayEntry.todo(CalendarTodoMarker marker, {DateTime? day}) {
     return CalendarDayEntry._(
       kind: CalendarDayEntryKind.todo,
       todo: marker,
       sortTime: marker.dueDate.toLocal(),
+      day: day,
     );
   }
 
@@ -41,6 +45,13 @@ class CalendarDayEntry {
   final CalendarEvent? event;
   final CalendarTodoMarker? todo;
   final DateTime sortTime;
+
+  /// The calendar day this entry was drawn on.
+  ///
+  /// A recurring event is one row rendered on many days, so the row alone
+  /// cannot say *which* occurrence the user clicked. This is what the edit and
+  /// delete scope prompts resolve the occurrence from.
+  final DateTime? day;
 
   bool get isAllDay => kind == CalendarDayEntryKind.allDayEvent;
   bool get isTodo => kind == CalendarDayEntryKind.todo;
@@ -70,15 +81,15 @@ List<CalendarDayEntry> calendarDayEntriesForDay({
   for (final event in events) {
     if (!calendarEventOnDay(event, day)) continue;
     if (event.isFullDay) {
-      allDay.add(CalendarDayEntry.allDayEvent(event));
+      allDay.add(CalendarDayEntry.allDayEvent(event, day: day));
     } else {
-      timed.add(CalendarDayEntry.timedEvent(event));
+      timed.add(CalendarDayEntry.timedEvent(event, day: day));
     }
   }
 
   for (final marker in todos) {
     if (!calendarTodoOnDay(marker, day)) continue;
-    timed.add(CalendarDayEntry.todo(marker));
+    timed.add(CalendarDayEntry.todo(marker, day: day));
   }
 
   allDay.sort((a, b) => a.sortTime.compareTo(b.sortTime));

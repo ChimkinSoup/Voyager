@@ -13,6 +13,8 @@ import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/domain/services/calendar_recurrence_editing.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/rounded_dropdown.dart';
@@ -60,6 +62,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   _CalendarSidebarKind _sidebarKind = _CalendarSidebarKind.none;
   CalendarEvent? _sidebarEvent;
+
+  /// The day the open event panel was launched from.
+  ///
+  /// A recurring event is one row shown on many days; this is what the save
+  /// path resolves the edited occurrence from, so "this event only" splits off
+  /// the instance the user actually clicked.
+  DateTime? _sidebarOccurrenceDay;
 
   /// Last pointer-down position (global screen coordinates).
   /// Used to anchor day/slot-tap popups near the cursor.
@@ -117,7 +126,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarDayIndicator>? _weekMorphIndicators;
   List<CalendarTodoMarker>? _weekMorphTodos;
 
-  static const _eventPopupWidth = 300.0;
+  // Wide enough for the widest row 2 can get — a multi-day date range, a time
+  // range, and the pinned repeat button — without the pills having to scroll.
+  static const _eventPopupWidth = 344.0;
   static const _popupWidth = 380.0;
   static const _baseZoomDuration = Duration(milliseconds: 600);
   static const _baseWeekMorphDuration = Duration(milliseconds: 600);
@@ -418,6 +429,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     required DateTime date,
     bool focusTitle = true,
   }) async {
+    final occurrenceDay = event == null
+        ? DateUtils.dateOnly(date)
+        : (calendarOccurrenceStartOn(event, date) ??
+            DateUtils.dateOnly(event.start.toLocal()));
+    _sidebarOccurrenceDay = occurrenceDay;
     final settings =
         ref.read(settingsProvider).valueOrNull ?? const AppSettings();
     final calendars = ref.read(calendarsProvider).valueOrNull ?? const [];
@@ -444,7 +460,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       accentColor: accentColor,
       builder: (ctx) => CalendarEventPanel(
         key: ValueKey(event?.id ?? 'new-${date.millisecondsSinceEpoch}'),
-        event: event,
+        // A repeating event is one row drawn on many days; the panel shows the
+        // occurrence that was clicked rather than the series anchor, so opening
+        // the March instance of a weekly event does not read "January".
+        event: event == null ? null : occurrenceView(event, occurrenceDay),
         initialDate: date,
         calendars: calendars,
         initialCalendarId: initialCalendarId,
@@ -473,6 +492,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     setState(() {
       _sidebarKind = _CalendarSidebarKind.todo;
       _sidebarEvent = null;
+      _sidebarOccurrenceDay = null;
     });
     await _showTodoPopup(task: task, rect: rect);
     if (mounted) _resetSidebar();
@@ -518,20 +538,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _openTodoSidebar(entry.todo!);
       return;
     }
-    _openEventSidebar(event: entry.event);
+    _openEventSidebar(event: entry.event, day: entry.day);
   }
 
   void _resetSidebar() {
     setState(() {
       _sidebarKind = _CalendarSidebarKind.none;
       _sidebarEvent = null;
+      _sidebarOccurrenceDay = null;
     });
   }
 
   Future<void> _saveSidebarEvent(Map<String, dynamic> result) async {
     final event = _sidebarEvent;
+    final occurrenceDay = _sidebarOccurrenceDay;
     final now = utcNow();
-    final saved = CalendarEvent(
+    // The panel was handed an occurrence view, so its start/end are expressed
+    // at [occurrenceDay], not at the series anchor. The scope decides whether
+    // they stay there or get mapped back.
+    final edited = CalendarEvent(
       id: event?.id ?? newId(),
       calendarId:
           result['calendarId'] as String? ??
@@ -545,16 +570,83 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       colorValue: result['colorValue'] as int,
       notes: result['notes'] as String,
       recurrence:
-          result['recurrence'] as EventRecurrence? ?? EventRecurrence.none,
+          result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
+      recurrenceEndDate: event?.recurrenceEndDate,
+      exceptionDates: event?.exceptionDates ?? const [],
+      recurrenceParentId: event?.recurrenceParentId,
+      recurrenceDate: event?.recurrenceDate,
       source: event?.source ?? EventSource.local,
       externalId: event?.externalId,
       createdAt: event?.createdAt ?? now,
       updatedAt: now,
     );
-    await ref.read(calendarRepositoryProvider).upsertEvent(saved);
+
+    final repo = ref.read(calendarRepositoryProvider);
+
+    // One row, no prompt: a new event, a one-off, or a row that is already a
+    // single detached occurrence.
+    if (event == null ||
+        !event.recurrence.repeats ||
+        event.isRecurrenceOverride ||
+        occurrenceDay == null) {
+      await repo.upsertEvent(edited);
+      ref.invalidate(calendarEventsProvider);
+      if (mounted) _resetSidebar();
+      return;
+    }
+
+    // Closing the popup by clicking away saves too, so an untouched repeating
+    // event would otherwise pop the scope prompt on every glance at it.
+    if (!_eventContentChanged(occurrenceView(event, occurrenceDay), edited)) {
+      if (mounted) _resetSidebar();
+      return;
+    }
+
+    if (!mounted) return;
+    final scope = await showRecurrenceScopeDialog(
+      context,
+      title: 'Change repeating event?',
+      isDelete: false,
+    );
+    if (scope == null || !mounted) {
+      if (mounted) _resetSidebar();
+      return;
+    }
+
+    final resolved = scope == RecurrenceEditScope.allEvents
+        ? rebaseToAnchor(edited, event, occurrenceDay)
+        : edited;
+    final writes = editRecurringEvent(
+      master: event,
+      edited: resolved,
+      occurrenceDate: occurrenceDay,
+      scope: scope,
+      newId: newId,
+    );
+    for (final row in writes.upserts) {
+      await repo.upsertEvent(row);
+    }
+    for (final id in writes.softDeletes) {
+      await repo.softDeleteEvent(id);
+    }
     ref.invalidate(calendarEventsProvider);
     if (mounted) _resetSidebar();
   }
+
+  /// Whether anything the user can type or pick differs between two events.
+  ///
+  /// Deliberately ignores [CalendarEvent.updatedAt] and [version]: [edited] is
+  /// freshly minted on every save, so comparing those would report a change for
+  /// an event nobody touched.
+  bool _eventContentChanged(CalendarEvent before, CalendarEvent after) =>
+      before.title != after.title ||
+      before.notes != after.notes ||
+      before.start != after.start ||
+      before.end != after.end ||
+      before.isFullDay != after.isFullDay ||
+      before.colorValue != after.colorValue ||
+      before.calendarId != after.calendarId ||
+      before.recurrence != after.recurrence;
 
   // ---------------------------------------------------------------------------
   // Right-click context menu for calendar entries (events + todos)
@@ -628,7 +720,40 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     await _persistEventColor(event, _defaultColorForCalendar(event.calendarId));
   }
 
-  Future<void> _deleteEvent(CalendarEvent event) async {
+  Future<void> _deleteEvent(CalendarEvent event, {DateTime? day}) async {
+    final repo = ref.read(calendarRepositoryProvider);
+
+    // A repeating series asks which occurrences to drop instead of confirming;
+    // the three choices are themselves the confirmation.
+    if (event.recurrence.repeats && !event.isRecurrenceOverride) {
+      final occurrence =
+          calendarOccurrenceStartOn(event, day ?? _focused) ??
+          DateUtils.dateOnly(event.start.toLocal());
+      final scope = await showRecurrenceScopeDialog(
+        context,
+        title: event.title.trim().isEmpty
+            ? 'Delete repeating event?'
+            : 'Delete "${event.title}"?',
+        isDelete: true,
+      );
+      if (scope == null || !mounted) return;
+      final writes = deleteRecurringEvent(event, occurrence, scope);
+      for (final row in writes.upserts) {
+        await repo.upsertEvent(row);
+      }
+      for (final id in writes.softDeletes) {
+        await repo.softDeleteEvent(id);
+      }
+      // Occurrences previously split off with "this event only" are separate
+      // rows, so nothing above touches them. Left alone they would outlive the
+      // series they came from and reappear as stray one-off events.
+      for (final id in await _orphanedOverrideIds(event, occurrence, scope)) {
+        await repo.softDeleteEvent(id);
+      }
+      ref.invalidate(calendarEventsProvider);
+      return;
+    }
+
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete event?',
@@ -637,8 +762,31 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           : '"${event.title}" will be moved to trash.',
     );
     if (!confirmed || !mounted) return;
-    await ref.read(calendarRepositoryProvider).softDeleteEvent(event.id);
+    await repo.softDeleteEvent(event.id);
     ref.invalidate(calendarEventsProvider);
+  }
+
+  /// Override rows of [master] that a delete at [scope] should take with it.
+  ///
+  /// "This event only" removes a single occurrence, which by definition is not
+  /// one that was already detached, so it orphans nothing.
+  Future<List<String>> _orphanedOverrideIds(
+    CalendarEvent master,
+    DateTime occurrence,
+    RecurrenceEditScope scope,
+  ) async {
+    if (scope == RecurrenceEditScope.thisEvent) return const [];
+    final all = await ref
+        .read(calendarRepositoryProvider)
+        .listEvents(calendarId: master.calendarId);
+    return [
+      for (final candidate in all)
+        if (candidate.recurrenceParentId == master.id &&
+            (scope == RecurrenceEditScope.allEvents ||
+                !(candidate.recurrenceDate ?? candidate.start)
+                    .isBefore(occurrence)))
+          candidate.id,
+    ];
   }
 
   Future<void> _deleteTodoTask(CalendarTodoMarker marker) async {

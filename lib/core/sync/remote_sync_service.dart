@@ -26,6 +26,7 @@ import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
@@ -47,6 +48,7 @@ class RemoteSyncService {
     required LeetCodeRepository leetCodeRepository,
     required StudyRepository studyRepository,
     required WorkoutRepository workoutRepository,
+    required JobRepository jobRepository,
     required CalendarRepository calendarRepository,
     required TrackerRepository trackerRepository,
     required FinanceRepository financeRepository,
@@ -70,6 +72,7 @@ class RemoteSyncService {
        _leetCodeRepository = leetCodeRepository,
        _studyRepository = studyRepository,
        _workoutRepository = workoutRepository,
+       _jobRepository = jobRepository,
        _calendarRepository = calendarRepository,
        _trackerRepository = trackerRepository,
        _financeRepository = financeRepository,
@@ -93,6 +96,7 @@ class RemoteSyncService {
   final LeetCodeRepository _leetCodeRepository;
   final StudyRepository _studyRepository;
   final WorkoutRepository _workoutRepository;
+  final JobRepository _jobRepository;
   final CalendarRepository _calendarRepository;
   final TrackerRepository _trackerRepository;
   final FinanceRepository _financeRepository;
@@ -1020,6 +1024,36 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.jobApplications:
+        return pullJobApplications(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.jobStatusEvents:
+        return pullJobStatusEvents(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.jobStages:
+        return pullJobStages(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.jobCompanies:
+        return pullJobCompanies(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.jobCategories:
+        return pullJobCategories(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.jobSeasons:
+        return pullJobSeasons(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.customQuotes:
         return pullCustomQuotes(
           documentIds: documentIds,
@@ -1272,6 +1306,132 @@ class RemoteSyncService {
           merged,
           recordLocalActivity: false,
         );
+      },
+    );
+  }
+
+  Future<bool> pullJobApplications({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.jobApplications,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _jobRepository.getApplication(id);
+        final merged = mergeJobApplicationFromRemote(data, id, local: local);
+        await _jobRepository.upsertApplication(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullJobStatusEvents({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.jobStatusEvents,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        // Timeline entries are append-only and keyed by their own uuid, so
+        // there is nothing to look up a local copy for — the remote row either
+        // is this row or does not exist here yet.
+        final merged = mergeJobStatusEventFromRemote(data, id);
+        await _jobRepository.upsertStatusEvent(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullJobStages({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.jobStages,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final stages = await _jobRepository.getAllStages();
+        final local = stages.cast<JobStage?>().firstWhere(
+          (s) => s!.id == id,
+          orElse: () => null,
+        );
+        final merged = mergeJobStageFromRemote(data, id, local: local);
+        await _jobRepository.upsertStage(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullJobCompanies({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.jobCompanies,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final companies = await _jobRepository.getAllCompanies();
+        final local = companies.cast<JobCompany?>().firstWhere(
+          (c) => c!.id == id,
+          orElse: () => null,
+        );
+        final merged = mergeJobCompanyFromRemote(data, id, local: local);
+        await _jobRepository.upsertCompany(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullJobCategories({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.jobCategories,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final categories = await _jobRepository.getAllCategories();
+        final local = categories.cast<JobCategory?>().firstWhere(
+          (c) => c!.id == id,
+          orElse: () => null,
+        );
+        final merged = mergeJobCategoryFromRemote(data, id, local: local);
+        await _jobRepository.upsertCategory(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullJobSeasons({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.jobSeasons,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final seasons = await _jobRepository.getAllSeasons();
+        final local = seasons.cast<JobSeason?>().firstWhere(
+          (s) => s!.id == id,
+          orElse: () => null,
+        );
+        final merged = mergeJobSeasonFromRemote(data, id, local: local);
+        await _jobRepository.upsertSeason(merged, recordLocalActivity: false);
       },
     );
   }
@@ -1858,6 +2018,166 @@ class RemoteSyncService {
     );
   }
 
+  void pushJobApplication(JobApplication application) {
+    cancelDocument(FirestoreCollections.jobApplications, application.id);
+    unawaited(
+      _uploadRecordNow(
+        collection: FirestoreCollections.jobApplications,
+        localId: application.id,
+        payload: jobApplicationToFirestore(application),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushJobApplication], for the operations that
+  /// rewrite many applications at once — deleting a season un-archives
+  /// everything filed under it.
+  Future<void> pushJobApplicationsBatch(
+    List<JobApplication> applications,
+  ) async {
+    if (applications.isEmpty) return;
+    for (final application in applications) {
+      cancelDocument(FirestoreCollections.jobApplications, application.id);
+    }
+    final payloads = {
+      for (final application in applications)
+        application.id: jobApplicationToFirestore(application),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(
+        FirestoreCollections.jobApplications,
+        entry.key,
+        entry.value,
+      );
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.jobApplications,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
+    );
+  }
+
+  void pushJobStatusEvent(JobStatusEvent event) {
+    cancelDocument(FirestoreCollections.jobStatusEvents, event.id);
+    unawaited(
+      _uploadRecordNow(
+        collection: FirestoreCollections.jobStatusEvents,
+        localId: event.id,
+        payload: jobStatusEventToFirestore(event),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushJobStatusEvent]. Deleting an application
+  /// tombstones its whole timeline in one go.
+  Future<void> pushJobStatusEventsBatch(List<JobStatusEvent> events) async {
+    if (events.isEmpty) return;
+    for (final event in events) {
+      cancelDocument(FirestoreCollections.jobStatusEvents, event.id);
+    }
+    final payloads = {
+      for (final event in events) event.id: jobStatusEventToFirestore(event),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(
+        FirestoreCollections.jobStatusEvents,
+        entry.key,
+        entry.value,
+      );
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.jobStatusEvents,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
+    );
+  }
+
+  void pushJobStage(JobStage stage) {
+    cancelDocument(FirestoreCollections.jobStages, stage.id);
+    unawaited(
+      _uploadRecordNow(
+        collection: FirestoreCollections.jobStages,
+        localId: stage.id,
+        payload: jobStageToFirestore(stage),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushJobStage]: one drag in the stage list
+  /// renumbers every stage it moved past.
+  Future<void> pushJobStagesBatch(List<JobStage> stages) async {
+    if (stages.isEmpty) return;
+    for (final stage in stages) {
+      cancelDocument(FirestoreCollections.jobStages, stage.id);
+    }
+    final payloads = {
+      for (final stage in stages) stage.id: jobStageToFirestore(stage),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(FirestoreCollections.jobStages, entry.key, entry.value);
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.jobStages,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
+    );
+  }
+
+  void pushJobCompany(JobCompany company) {
+    cancelDocument(FirestoreCollections.jobCompanies, company.id);
+    unawaited(
+      _uploadRecordNow(
+        collection: FirestoreCollections.jobCompanies,
+        localId: company.id,
+        payload: jobCompanyToFirestore(company),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushJobCompany]: deleting a category clears it
+  /// off every company that was filed under it, and the seed list is written
+  /// in one go on first run.
+  Future<void> pushJobCompaniesBatch(List<JobCompany> companies) async {
+    if (companies.isEmpty) return;
+    for (final company in companies) {
+      cancelDocument(FirestoreCollections.jobCompanies, company.id);
+    }
+    final payloads = {
+      for (final company in companies)
+        company.id: jobCompanyToFirestore(company),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(FirestoreCollections.jobCompanies, entry.key, entry.value);
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.jobCompanies,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
+    );
+  }
+
+  void pushJobCategory(JobCategory category) {
+    cancelDocument(FirestoreCollections.jobCategories, category.id);
+    unawaited(
+      _uploadRecordNow(
+        collection: FirestoreCollections.jobCategories,
+        localId: category.id,
+        payload: jobCategoryToFirestore(category),
+      ),
+    );
+  }
+
+  void pushJobSeason(JobSeason season) {
+    cancelDocument(FirestoreCollections.jobSeasons, season.id);
+    unawaited(
+      _uploadRecordNow(
+        collection: FirestoreCollections.jobSeasons,
+        localId: season.id,
+        payload: jobSeasonToFirestore(season),
+      ),
+    );
+  }
+
   void pushStudyReviewLog(StudyReviewLog log) {
     cancelDocument(FirestoreCollections.studyReviewLog, log.id);
     unawaited(_uploadStudyReviewLogNow(log));
@@ -2075,6 +2395,17 @@ class RemoteSyncService {
     }
   }
 
+  /// [entry] is uploaded as-is unless a version bump is actually asked for.
+  ///
+  /// `copyWith` has no way to preserve [JournalEntry.updatedAt] — it always
+  /// stamps `now` — so calling it purely to leave the version alone used to
+  /// publish a document whose `updatedAt` was the *upload* time rather than
+  /// the *edit* time. That made the remote copy unconditionally newer than the
+  /// row it came from, and since the autosave path uploads at an unchanged
+  /// version, `remoteVersionWins` falls through to the `updatedAt` tie-break
+  /// and resolved every later pull in the remote's favour — reverting offline
+  /// edits made after the upload. The bump-requesting callers (conflict
+  /// resolution, first publish) do want a fresh revision, so they still copy.
   Future<void> _uploadJournalEntryNow(
     JournalEntry entry, {
     bool bumpVersion = false,
@@ -2082,7 +2413,9 @@ class RemoteSyncService {
     return _uploadCrdtDocumentNow(
       collection: FirestoreCollections.journalEntries,
       documentId: entry.id,
-      payload: journalEntryToFirestore(entry.copyWith(bumpVersion: bumpVersion)),
+      payload: journalEntryToFirestore(
+        bumpVersion ? entry.copyWith(bumpVersion: true) : entry,
+      ),
     );
   }
 
@@ -2513,6 +2846,24 @@ class RemoteSyncService {
       case FirestoreCollections.workoutSetLogs:
         if (record is! WorkoutSetLog) return null;
         return (id: record.id, payload: workoutSetLogToFirestore(record));
+      case FirestoreCollections.jobApplications:
+        if (record is! JobApplication) return null;
+        return (id: record.id, payload: jobApplicationToFirestore(record));
+      case FirestoreCollections.jobStatusEvents:
+        if (record is! JobStatusEvent) return null;
+        return (id: record.id, payload: jobStatusEventToFirestore(record));
+      case FirestoreCollections.jobStages:
+        if (record is! JobStage) return null;
+        return (id: record.id, payload: jobStageToFirestore(record));
+      case FirestoreCollections.jobCompanies:
+        if (record is! JobCompany) return null;
+        return (id: record.id, payload: jobCompanyToFirestore(record));
+      case FirestoreCollections.jobCategories:
+        if (record is! JobCategory) return null;
+        return (id: record.id, payload: jobCategoryToFirestore(record));
+      case FirestoreCollections.jobSeasons:
+        if (record is! JobSeason) return null;
+        return (id: record.id, payload: jobSeasonToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -2995,6 +3346,12 @@ class RemoteSyncService {
     await pullPinnedNotes();
     await pullDismissedNotifications();
     await pullBucketListItems();
+    await pullJobStages();
+    await pullJobSeasons();
+    await pullJobCategories();
+    await pullJobCompanies();
+    await pullJobApplications();
+    await pullJobStatusEvents();
     await pullTagColors();
     await pullCustomWords();
   }
@@ -3185,6 +3542,12 @@ class LiveSyncController {
     FirestoreCollections.pinnedNotes,
     FirestoreCollections.dismissedNotifications,
     FirestoreCollections.bucketListItems,
+    FirestoreCollections.jobApplications,
+    FirestoreCollections.jobStatusEvents,
+    FirestoreCollections.jobStages,
+    FirestoreCollections.jobCompanies,
+    FirestoreCollections.jobCategories,
+    FirestoreCollections.jobSeasons,
     FirestoreCollections.tagColors,
     FirestoreCollections.customWords,
     FirestoreCollections.settings,

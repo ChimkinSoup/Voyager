@@ -2999,6 +2999,30 @@ class $TodoTasksTableTable extends TodoTasksTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _recurrenceMeta = const VerificationMeta(
+    'recurrence',
+  );
+  @override
+  late final GeneratedColumn<String> recurrence = GeneratedColumn<String>(
+    'recurrence',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('none'),
+  );
+  static const VerificationMeta _recurrenceAnchorMeta = const VerificationMeta(
+    'recurrenceAnchor',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recurrenceAnchor =
+      GeneratedColumn<DateTime>(
+        'recurrence_anchor',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3057,6 +3081,8 @@ class $TodoTasksTableTable extends TodoTasksTable
     sortOrder,
     preStarSortOrder,
     dueDateSetAt,
+    recurrence,
+    recurrenceAnchor,
     createdAt,
     updatedAt,
     version,
@@ -3152,6 +3178,21 @@ class $TodoTasksTableTable extends TodoTasksTable
         ),
       );
     }
+    if (data.containsKey('recurrence')) {
+      context.handle(
+        _recurrenceMeta,
+        recurrence.isAcceptableOrUnknown(data['recurrence']!, _recurrenceMeta),
+      );
+    }
+    if (data.containsKey('recurrence_anchor')) {
+      context.handle(
+        _recurrenceAnchorMeta,
+        recurrenceAnchor.isAcceptableOrUnknown(
+          data['recurrence_anchor']!,
+          _recurrenceAnchorMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3233,6 +3274,14 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}due_date_set_at'],
       ),
+      recurrence: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recurrence'],
+      )!,
+      recurrenceAnchor: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}recurrence_anchor'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3271,6 +3320,16 @@ class TodoTasksTableData extends DataClass
   final int sortOrder;
   final int? preStarSortOrder;
   final DateTime? dueDateSetAt;
+
+  /// Repeat pattern. See [RecurrenceRule.toStorage].
+  final String recurrence;
+
+  /// The due date the pattern is measured from, frozen when the repeat was set.
+  ///
+  /// Not just [dueDate]: rolling a "monthly on the 31st" task forward lands it
+  /// on Feb 28, and re-anchoring there would drag every later occurrence to the
+  /// 28th. Holding the original anchor is what lets March return to the 31st.
+  final DateTime? recurrenceAnchor;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -3287,6 +3346,8 @@ class TodoTasksTableData extends DataClass
     required this.sortOrder,
     this.preStarSortOrder,
     this.dueDateSetAt,
+    required this.recurrence,
+    this.recurrenceAnchor,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -3315,6 +3376,10 @@ class TodoTasksTableData extends DataClass
     }
     if (!nullToAbsent || dueDateSetAt != null) {
       map['due_date_set_at'] = Variable<DateTime>(dueDateSetAt);
+    }
+    map['recurrence'] = Variable<String>(recurrence);
+    if (!nullToAbsent || recurrenceAnchor != null) {
+      map['recurrence_anchor'] = Variable<DateTime>(recurrenceAnchor);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3348,6 +3413,10 @@ class TodoTasksTableData extends DataClass
       dueDateSetAt: dueDateSetAt == null && nullToAbsent
           ? const Value.absent()
           : Value(dueDateSetAt),
+      recurrence: Value(recurrence),
+      recurrenceAnchor: recurrenceAnchor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recurrenceAnchor),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -3374,6 +3443,10 @@ class TodoTasksTableData extends DataClass
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       preStarSortOrder: serializer.fromJson<int?>(json['preStarSortOrder']),
       dueDateSetAt: serializer.fromJson<DateTime?>(json['dueDateSetAt']),
+      recurrence: serializer.fromJson<String>(json['recurrence']),
+      recurrenceAnchor: serializer.fromJson<DateTime?>(
+        json['recurrenceAnchor'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -3395,6 +3468,8 @@ class TodoTasksTableData extends DataClass
       'sortOrder': serializer.toJson<int>(sortOrder),
       'preStarSortOrder': serializer.toJson<int?>(preStarSortOrder),
       'dueDateSetAt': serializer.toJson<DateTime?>(dueDateSetAt),
+      'recurrence': serializer.toJson<String>(recurrence),
+      'recurrenceAnchor': serializer.toJson<DateTime?>(recurrenceAnchor),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -3414,6 +3489,8 @@ class TodoTasksTableData extends DataClass
     int? sortOrder,
     Value<int?> preStarSortOrder = const Value.absent(),
     Value<DateTime?> dueDateSetAt = const Value.absent(),
+    String? recurrence,
+    Value<DateTime?> recurrenceAnchor = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -3432,6 +3509,10 @@ class TodoTasksTableData extends DataClass
         ? preStarSortOrder.value
         : this.preStarSortOrder,
     dueDateSetAt: dueDateSetAt.present ? dueDateSetAt.value : this.dueDateSetAt,
+    recurrence: recurrence ?? this.recurrence,
+    recurrenceAnchor: recurrenceAnchor.present
+        ? recurrenceAnchor.value
+        : this.recurrenceAnchor,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -3456,6 +3537,12 @@ class TodoTasksTableData extends DataClass
       dueDateSetAt: data.dueDateSetAt.present
           ? data.dueDateSetAt.value
           : this.dueDateSetAt,
+      recurrence: data.recurrence.present
+          ? data.recurrence.value
+          : this.recurrence,
+      recurrenceAnchor: data.recurrenceAnchor.present
+          ? data.recurrenceAnchor.value
+          : this.recurrenceAnchor,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -3477,6 +3564,8 @@ class TodoTasksTableData extends DataClass
           ..write('sortOrder: $sortOrder, ')
           ..write('preStarSortOrder: $preStarSortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
+          ..write('recurrence: $recurrence, ')
+          ..write('recurrenceAnchor: $recurrenceAnchor, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -3498,6 +3587,8 @@ class TodoTasksTableData extends DataClass
     sortOrder,
     preStarSortOrder,
     dueDateSetAt,
+    recurrence,
+    recurrenceAnchor,
     createdAt,
     updatedAt,
     version,
@@ -3518,6 +3609,8 @@ class TodoTasksTableData extends DataClass
           other.sortOrder == this.sortOrder &&
           other.preStarSortOrder == this.preStarSortOrder &&
           other.dueDateSetAt == this.dueDateSetAt &&
+          other.recurrence == this.recurrence &&
+          other.recurrenceAnchor == this.recurrenceAnchor &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -3536,6 +3629,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<int> sortOrder;
   final Value<int?> preStarSortOrder;
   final Value<DateTime?> dueDateSetAt;
+  final Value<String> recurrence;
+  final Value<DateTime?> recurrenceAnchor;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -3553,6 +3648,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.sortOrder = const Value.absent(),
     this.preStarSortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
+    this.recurrence = const Value.absent(),
+    this.recurrenceAnchor = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -3571,6 +3668,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.sortOrder = const Value.absent(),
     this.preStarSortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
+    this.recurrence = const Value.absent(),
+    this.recurrenceAnchor = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -3593,6 +3692,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<int>? sortOrder,
     Expression<int>? preStarSortOrder,
     Expression<DateTime>? dueDateSetAt,
+    Expression<String>? recurrence,
+    Expression<DateTime>? recurrenceAnchor,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -3611,6 +3712,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (sortOrder != null) 'sort_order': sortOrder,
       if (preStarSortOrder != null) 'pre_star_sort_order': preStarSortOrder,
       if (dueDateSetAt != null) 'due_date_set_at': dueDateSetAt,
+      if (recurrence != null) 'recurrence': recurrence,
+      if (recurrenceAnchor != null) 'recurrence_anchor': recurrenceAnchor,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -3631,6 +3734,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<int>? sortOrder,
     Value<int?>? preStarSortOrder,
     Value<DateTime?>? dueDateSetAt,
+    Value<String>? recurrence,
+    Value<DateTime?>? recurrenceAnchor,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -3649,6 +3754,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       sortOrder: sortOrder ?? this.sortOrder,
       preStarSortOrder: preStarSortOrder ?? this.preStarSortOrder,
       dueDateSetAt: dueDateSetAt ?? this.dueDateSetAt,
+      recurrence: recurrence ?? this.recurrence,
+      recurrenceAnchor: recurrenceAnchor ?? this.recurrenceAnchor,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -3693,6 +3800,12 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     if (dueDateSetAt.present) {
       map['due_date_set_at'] = Variable<DateTime>(dueDateSetAt.value);
     }
+    if (recurrence.present) {
+      map['recurrence'] = Variable<String>(recurrence.value);
+    }
+    if (recurrenceAnchor.present) {
+      map['recurrence_anchor'] = Variable<DateTime>(recurrenceAnchor.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3725,6 +3838,8 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('sortOrder: $sortOrder, ')
           ..write('preStarSortOrder: $preStarSortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
+          ..write('recurrence: $recurrence, ')
+          ..write('recurrenceAnchor: $recurrenceAnchor, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -4324,6 +4439,53 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('none'),
   );
+  static const VerificationMeta _recurrenceEndDateMeta = const VerificationMeta(
+    'recurrenceEndDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recurrenceEndDate =
+      GeneratedColumn<DateTime>(
+        'recurrence_end_date',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _exceptionDatesMeta = const VerificationMeta(
+    'exceptionDates',
+  );
+  @override
+  late final GeneratedColumn<String> exceptionDates = GeneratedColumn<String>(
+    'exception_dates',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _recurrenceParentIdMeta =
+      const VerificationMeta('recurrenceParentId');
+  @override
+  late final GeneratedColumn<String> recurrenceParentId =
+      GeneratedColumn<String>(
+        'recurrence_parent_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _recurrenceDateMeta = const VerificationMeta(
+    'recurrenceDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recurrenceDate =
+      GeneratedColumn<DateTime>(
+        'recurrence_date',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -4382,6 +4544,10 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     source,
     externalId,
     recurrence,
+    recurrenceEndDate,
+    exceptionDates,
+    recurrenceParentId,
+    recurrenceDate,
     createdAt,
     updatedAt,
     version,
@@ -4470,6 +4636,42 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         recurrence.isAcceptableOrUnknown(data['recurrence']!, _recurrenceMeta),
       );
     }
+    if (data.containsKey('recurrence_end_date')) {
+      context.handle(
+        _recurrenceEndDateMeta,
+        recurrenceEndDate.isAcceptableOrUnknown(
+          data['recurrence_end_date']!,
+          _recurrenceEndDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('exception_dates')) {
+      context.handle(
+        _exceptionDatesMeta,
+        exceptionDates.isAcceptableOrUnknown(
+          data['exception_dates']!,
+          _exceptionDatesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('recurrence_parent_id')) {
+      context.handle(
+        _recurrenceParentIdMeta,
+        recurrenceParentId.isAcceptableOrUnknown(
+          data['recurrence_parent_id']!,
+          _recurrenceParentIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('recurrence_date')) {
+      context.handle(
+        _recurrenceDateMeta,
+        recurrenceDate.isAcceptableOrUnknown(
+          data['recurrence_date']!,
+          _recurrenceDateMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -4554,6 +4756,22 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         DriftSqlType.string,
         data['${effectivePrefix}recurrence'],
       )!,
+      recurrenceEndDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}recurrence_end_date'],
+      ),
+      exceptionDates: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}exception_dates'],
+      )!,
+      recurrenceParentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recurrence_parent_id'],
+      ),
+      recurrenceDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}recurrence_date'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4592,6 +4810,19 @@ class CalendarEventsTableData extends DataClass
   final String source;
   final String? externalId;
   final String recurrence;
+
+  /// Inclusive last local date an occurrence may start on. Set when a series is
+  /// truncated by "this and all future events".
+  final DateTime? recurrenceEndDate;
+
+  /// Comma-separated `yyyy-MM-dd` occurrence starts this series skips, written
+  /// by "this event only" deletes and edits.
+  final String exceptionDates;
+
+  /// Set on a row that is one occurrence detached from a series: the id of the
+  /// series it came from, and the occurrence start it stands in for.
+  final String? recurrenceParentId;
+  final DateTime? recurrenceDate;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -4608,6 +4839,10 @@ class CalendarEventsTableData extends DataClass
     required this.source,
     this.externalId,
     required this.recurrence,
+    this.recurrenceEndDate,
+    required this.exceptionDates,
+    this.recurrenceParentId,
+    this.recurrenceDate,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -4629,6 +4864,16 @@ class CalendarEventsTableData extends DataClass
       map['external_id'] = Variable<String>(externalId);
     }
     map['recurrence'] = Variable<String>(recurrence);
+    if (!nullToAbsent || recurrenceEndDate != null) {
+      map['recurrence_end_date'] = Variable<DateTime>(recurrenceEndDate);
+    }
+    map['exception_dates'] = Variable<String>(exceptionDates);
+    if (!nullToAbsent || recurrenceParentId != null) {
+      map['recurrence_parent_id'] = Variable<String>(recurrenceParentId);
+    }
+    if (!nullToAbsent || recurrenceDate != null) {
+      map['recurrence_date'] = Variable<DateTime>(recurrenceDate);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -4653,6 +4898,16 @@ class CalendarEventsTableData extends DataClass
           ? const Value.absent()
           : Value(externalId),
       recurrence: Value(recurrence),
+      recurrenceEndDate: recurrenceEndDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recurrenceEndDate),
+      exceptionDates: Value(exceptionDates),
+      recurrenceParentId: recurrenceParentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recurrenceParentId),
+      recurrenceDate: recurrenceDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recurrenceDate),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -4679,6 +4934,14 @@ class CalendarEventsTableData extends DataClass
       source: serializer.fromJson<String>(json['source']),
       externalId: serializer.fromJson<String?>(json['externalId']),
       recurrence: serializer.fromJson<String>(json['recurrence']),
+      recurrenceEndDate: serializer.fromJson<DateTime?>(
+        json['recurrenceEndDate'],
+      ),
+      exceptionDates: serializer.fromJson<String>(json['exceptionDates']),
+      recurrenceParentId: serializer.fromJson<String?>(
+        json['recurrenceParentId'],
+      ),
+      recurrenceDate: serializer.fromJson<DateTime?>(json['recurrenceDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -4700,6 +4963,10 @@ class CalendarEventsTableData extends DataClass
       'source': serializer.toJson<String>(source),
       'externalId': serializer.toJson<String?>(externalId),
       'recurrence': serializer.toJson<String>(recurrence),
+      'recurrenceEndDate': serializer.toJson<DateTime?>(recurrenceEndDate),
+      'exceptionDates': serializer.toJson<String>(exceptionDates),
+      'recurrenceParentId': serializer.toJson<String?>(recurrenceParentId),
+      'recurrenceDate': serializer.toJson<DateTime?>(recurrenceDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -4719,6 +4986,10 @@ class CalendarEventsTableData extends DataClass
     String? source,
     Value<String?> externalId = const Value.absent(),
     String? recurrence,
+    Value<DateTime?> recurrenceEndDate = const Value.absent(),
+    String? exceptionDates,
+    Value<String?> recurrenceParentId = const Value.absent(),
+    Value<DateTime?> recurrenceDate = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -4735,6 +5006,16 @@ class CalendarEventsTableData extends DataClass
     source: source ?? this.source,
     externalId: externalId.present ? externalId.value : this.externalId,
     recurrence: recurrence ?? this.recurrence,
+    recurrenceEndDate: recurrenceEndDate.present
+        ? recurrenceEndDate.value
+        : this.recurrenceEndDate,
+    exceptionDates: exceptionDates ?? this.exceptionDates,
+    recurrenceParentId: recurrenceParentId.present
+        ? recurrenceParentId.value
+        : this.recurrenceParentId,
+    recurrenceDate: recurrenceDate.present
+        ? recurrenceDate.value
+        : this.recurrenceDate,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -4761,6 +5042,18 @@ class CalendarEventsTableData extends DataClass
       recurrence: data.recurrence.present
           ? data.recurrence.value
           : this.recurrence,
+      recurrenceEndDate: data.recurrenceEndDate.present
+          ? data.recurrenceEndDate.value
+          : this.recurrenceEndDate,
+      exceptionDates: data.exceptionDates.present
+          ? data.exceptionDates.value
+          : this.exceptionDates,
+      recurrenceParentId: data.recurrenceParentId.present
+          ? data.recurrenceParentId.value
+          : this.recurrenceParentId,
+      recurrenceDate: data.recurrenceDate.present
+          ? data.recurrenceDate.value
+          : this.recurrenceDate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -4782,6 +5075,10 @@ class CalendarEventsTableData extends DataClass
           ..write('source: $source, ')
           ..write('externalId: $externalId, ')
           ..write('recurrence: $recurrence, ')
+          ..write('recurrenceEndDate: $recurrenceEndDate, ')
+          ..write('exceptionDates: $exceptionDates, ')
+          ..write('recurrenceParentId: $recurrenceParentId, ')
+          ..write('recurrenceDate: $recurrenceDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -4803,6 +5100,10 @@ class CalendarEventsTableData extends DataClass
     source,
     externalId,
     recurrence,
+    recurrenceEndDate,
+    exceptionDates,
+    recurrenceParentId,
+    recurrenceDate,
     createdAt,
     updatedAt,
     version,
@@ -4823,6 +5124,10 @@ class CalendarEventsTableData extends DataClass
           other.source == this.source &&
           other.externalId == this.externalId &&
           other.recurrence == this.recurrence &&
+          other.recurrenceEndDate == this.recurrenceEndDate &&
+          other.exceptionDates == this.exceptionDates &&
+          other.recurrenceParentId == this.recurrenceParentId &&
+          other.recurrenceDate == this.recurrenceDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -4842,6 +5147,10 @@ class CalendarEventsTableCompanion
   final Value<String> source;
   final Value<String?> externalId;
   final Value<String> recurrence;
+  final Value<DateTime?> recurrenceEndDate;
+  final Value<String> exceptionDates;
+  final Value<String?> recurrenceParentId;
+  final Value<DateTime?> recurrenceDate;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -4859,6 +5168,10 @@ class CalendarEventsTableCompanion
     this.source = const Value.absent(),
     this.externalId = const Value.absent(),
     this.recurrence = const Value.absent(),
+    this.recurrenceEndDate = const Value.absent(),
+    this.exceptionDates = const Value.absent(),
+    this.recurrenceParentId = const Value.absent(),
+    this.recurrenceDate = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -4877,6 +5190,10 @@ class CalendarEventsTableCompanion
     this.source = const Value.absent(),
     this.externalId = const Value.absent(),
     this.recurrence = const Value.absent(),
+    this.recurrenceEndDate = const Value.absent(),
+    this.exceptionDates = const Value.absent(),
+    this.recurrenceParentId = const Value.absent(),
+    this.recurrenceDate = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -4900,6 +5217,10 @@ class CalendarEventsTableCompanion
     Expression<String>? source,
     Expression<String>? externalId,
     Expression<String>? recurrence,
+    Expression<DateTime>? recurrenceEndDate,
+    Expression<String>? exceptionDates,
+    Expression<String>? recurrenceParentId,
+    Expression<DateTime>? recurrenceDate,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -4918,6 +5239,11 @@ class CalendarEventsTableCompanion
       if (source != null) 'source': source,
       if (externalId != null) 'external_id': externalId,
       if (recurrence != null) 'recurrence': recurrence,
+      if (recurrenceEndDate != null) 'recurrence_end_date': recurrenceEndDate,
+      if (exceptionDates != null) 'exception_dates': exceptionDates,
+      if (recurrenceParentId != null)
+        'recurrence_parent_id': recurrenceParentId,
+      if (recurrenceDate != null) 'recurrence_date': recurrenceDate,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -4938,6 +5264,10 @@ class CalendarEventsTableCompanion
     Value<String>? source,
     Value<String?>? externalId,
     Value<String>? recurrence,
+    Value<DateTime?>? recurrenceEndDate,
+    Value<String>? exceptionDates,
+    Value<String?>? recurrenceParentId,
+    Value<DateTime?>? recurrenceDate,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -4956,6 +5286,10 @@ class CalendarEventsTableCompanion
       source: source ?? this.source,
       externalId: externalId ?? this.externalId,
       recurrence: recurrence ?? this.recurrence,
+      recurrenceEndDate: recurrenceEndDate ?? this.recurrenceEndDate,
+      exceptionDates: exceptionDates ?? this.exceptionDates,
+      recurrenceParentId: recurrenceParentId ?? this.recurrenceParentId,
+      recurrenceDate: recurrenceDate ?? this.recurrenceDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -5000,6 +5334,18 @@ class CalendarEventsTableCompanion
     if (recurrence.present) {
       map['recurrence'] = Variable<String>(recurrence.value);
     }
+    if (recurrenceEndDate.present) {
+      map['recurrence_end_date'] = Variable<DateTime>(recurrenceEndDate.value);
+    }
+    if (exceptionDates.present) {
+      map['exception_dates'] = Variable<String>(exceptionDates.value);
+    }
+    if (recurrenceParentId.present) {
+      map['recurrence_parent_id'] = Variable<String>(recurrenceParentId.value);
+    }
+    if (recurrenceDate.present) {
+      map['recurrence_date'] = Variable<DateTime>(recurrenceDate.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -5032,6 +5378,10 @@ class CalendarEventsTableCompanion
           ..write('source: $source, ')
           ..write('externalId: $externalId, ')
           ..write('recurrence: $recurrence, ')
+          ..write('recurrenceEndDate: $recurrenceEndDate, ')
+          ..write('exceptionDates: $exceptionDates, ')
+          ..write('recurrenceParentId: $recurrenceParentId, ')
+          ..write('recurrenceDate: $recurrenceDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -7933,6 +8283,31 @@ class $SettingsTableTable extends SettingsTable
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _jobsHiddenColumnsJsonMeta =
+      const VerificationMeta('jobsHiddenColumnsJson');
+  @override
+  late final GeneratedColumn<String> jobsHiddenColumnsJson =
+      GeneratedColumn<String>(
+        'jobs_hidden_columns_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _jobsIncludeArchivedMeta =
+      const VerificationMeta('jobsIncludeArchived');
+  @override
+  late final GeneratedColumn<bool> jobsIncludeArchived = GeneratedColumn<bool>(
+    'jobs_include_archived',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("jobs_include_archived" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _dreamSplitWidthMeta = const VerificationMeta(
     'dreamSplitWidth',
   );
@@ -8342,6 +8717,8 @@ class $SettingsTableTable extends SettingsTable
     lastSeenNavPage,
     todoCompletedSectionExpanded,
     showAnnualizedSubscriptionCost,
+    jobsHiddenColumnsJson,
+    jobsIncludeArchived,
     dreamSplitWidth,
     showDreamStatistics,
     dreamNotesPinned,
@@ -9236,6 +9613,24 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('jobs_hidden_columns_json')) {
+      context.handle(
+        _jobsHiddenColumnsJsonMeta,
+        jobsHiddenColumnsJson.isAcceptableOrUnknown(
+          data['jobs_hidden_columns_json']!,
+          _jobsHiddenColumnsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('jobs_include_archived')) {
+      context.handle(
+        _jobsIncludeArchivedMeta,
+        jobsIncludeArchived.isAcceptableOrUnknown(
+          data['jobs_include_archived']!,
+          _jobsIncludeArchivedMeta,
+        ),
+      );
+    }
     if (data.containsKey('dream_split_width')) {
       context.handle(
         _dreamSplitWidthMeta,
@@ -9842,6 +10237,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}show_annualized_subscription_cost'],
       )!,
+      jobsHiddenColumnsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}jobs_hidden_columns_json'],
+      ),
+      jobsIncludeArchived: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}jobs_include_archived'],
+      )!,
       dreamSplitWidth: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}dream_split_width'],
@@ -10058,6 +10461,14 @@ class SettingsTableData extends DataClass
   final String? lastSeenNavPage;
   final bool todoCompletedSectionExpanded;
   final bool showAnnualizedSubscriptionCost;
+
+  /// Jobs table columns the user has switched off, as a JSON list of column
+  /// ids. Stores the hidden set rather than the visible one so a column added
+  /// to a later build shows up by default instead of silently staying off.
+  final String? jobsHiddenColumnsJson;
+
+  /// Whether the Jobs page starts with archived applications shown (§3.1).
+  final bool jobsIncludeArchived;
   final double? dreamSplitWidth;
   final bool showDreamStatistics;
   final bool dreamNotesPinned;
@@ -10201,6 +10612,8 @@ class SettingsTableData extends DataClass
     this.lastSeenNavPage,
     required this.todoCompletedSectionExpanded,
     required this.showAnnualizedSubscriptionCost,
+    this.jobsHiddenColumnsJson,
+    required this.jobsIncludeArchived,
     this.dreamSplitWidth,
     required this.showDreamStatistics,
     required this.dreamNotesPinned,
@@ -10451,6 +10864,10 @@ class SettingsTableData extends DataClass
     map['show_annualized_subscription_cost'] = Variable<bool>(
       showAnnualizedSubscriptionCost,
     );
+    if (!nullToAbsent || jobsHiddenColumnsJson != null) {
+      map['jobs_hidden_columns_json'] = Variable<String>(jobsHiddenColumnsJson);
+    }
+    map['jobs_include_archived'] = Variable<bool>(jobsIncludeArchived);
     if (!nullToAbsent || dreamSplitWidth != null) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth);
     }
@@ -10640,6 +11057,10 @@ class SettingsTableData extends DataClass
           : Value(lastSeenNavPage),
       todoCompletedSectionExpanded: Value(todoCompletedSectionExpanded),
       showAnnualizedSubscriptionCost: Value(showAnnualizedSubscriptionCost),
+      jobsHiddenColumnsJson: jobsHiddenColumnsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jobsHiddenColumnsJson),
+      jobsIncludeArchived: Value(jobsIncludeArchived),
       dreamSplitWidth: dreamSplitWidth == null && nullToAbsent
           ? const Value.absent()
           : Value(dreamSplitWidth),
@@ -10903,6 +11324,12 @@ class SettingsTableData extends DataClass
       showAnnualizedSubscriptionCost: serializer.fromJson<bool>(
         json['showAnnualizedSubscriptionCost'],
       ),
+      jobsHiddenColumnsJson: serializer.fromJson<String?>(
+        json['jobsHiddenColumnsJson'],
+      ),
+      jobsIncludeArchived: serializer.fromJson<bool>(
+        json['jobsIncludeArchived'],
+      ),
       dreamSplitWidth: serializer.fromJson<double?>(json['dreamSplitWidth']),
       showDreamStatistics: serializer.fromJson<bool>(
         json['showDreamStatistics'],
@@ -11125,6 +11552,10 @@ class SettingsTableData extends DataClass
       'showAnnualizedSubscriptionCost': serializer.toJson<bool>(
         showAnnualizedSubscriptionCost,
       ),
+      'jobsHiddenColumnsJson': serializer.toJson<String?>(
+        jobsHiddenColumnsJson,
+      ),
+      'jobsIncludeArchived': serializer.toJson<bool>(jobsIncludeArchived),
       'dreamSplitWidth': serializer.toJson<double?>(dreamSplitWidth),
       'showDreamStatistics': serializer.toJson<bool>(showDreamStatistics),
       'dreamNotesPinned': serializer.toJson<bool>(dreamNotesPinned),
@@ -11257,6 +11688,8 @@ class SettingsTableData extends DataClass
     Value<String?> lastSeenNavPage = const Value.absent(),
     bool? todoCompletedSectionExpanded,
     bool? showAnnualizedSubscriptionCost,
+    Value<String?> jobsHiddenColumnsJson = const Value.absent(),
+    bool? jobsIncludeArchived,
     Value<double?> dreamSplitWidth = const Value.absent(),
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
@@ -11454,6 +11887,10 @@ class SettingsTableData extends DataClass
         todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
     showAnnualizedSubscriptionCost:
         showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
+    jobsHiddenColumnsJson: jobsHiddenColumnsJson.present
+        ? jobsHiddenColumnsJson.value
+        : this.jobsHiddenColumnsJson,
+    jobsIncludeArchived: jobsIncludeArchived ?? this.jobsIncludeArchived,
     dreamSplitWidth: dreamSplitWidth.present
         ? dreamSplitWidth.value
         : this.dreamSplitWidth,
@@ -11783,6 +12220,12 @@ class SettingsTableData extends DataClass
           data.showAnnualizedSubscriptionCost.present
           ? data.showAnnualizedSubscriptionCost.value
           : this.showAnnualizedSubscriptionCost,
+      jobsHiddenColumnsJson: data.jobsHiddenColumnsJson.present
+          ? data.jobsHiddenColumnsJson.value
+          : this.jobsHiddenColumnsJson,
+      jobsIncludeArchived: data.jobsIncludeArchived.present
+          ? data.jobsIncludeArchived.value
+          : this.jobsIncludeArchived,
       dreamSplitWidth: data.dreamSplitWidth.present
           ? data.dreamSplitWidth.value
           : this.dreamSplitWidth,
@@ -11979,6 +12422,8 @@ class SettingsTableData extends DataClass
           ..write(
             'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost, ',
           )
+          ..write('jobsHiddenColumnsJson: $jobsHiddenColumnsJson, ')
+          ..write('jobsIncludeArchived: $jobsIncludeArchived, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
@@ -12107,6 +12552,8 @@ class SettingsTableData extends DataClass
     lastSeenNavPage,
     todoCompletedSectionExpanded,
     showAnnualizedSubscriptionCost,
+    jobsHiddenColumnsJson,
+    jobsIncludeArchived,
     dreamSplitWidth,
     showDreamStatistics,
     dreamNotesPinned,
@@ -12253,6 +12700,8 @@ class SettingsTableData extends DataClass
               this.todoCompletedSectionExpanded &&
           other.showAnnualizedSubscriptionCost ==
               this.showAnnualizedSubscriptionCost &&
+          other.jobsHiddenColumnsJson == this.jobsHiddenColumnsJson &&
+          other.jobsIncludeArchived == this.jobsIncludeArchived &&
           other.dreamSplitWidth == this.dreamSplitWidth &&
           other.showDreamStatistics == this.showDreamStatistics &&
           other.dreamNotesPinned == this.dreamNotesPinned &&
@@ -12378,6 +12827,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> lastSeenNavPage;
   final Value<bool> todoCompletedSectionExpanded;
   final Value<bool> showAnnualizedSubscriptionCost;
+  final Value<String?> jobsHiddenColumnsJson;
+  final Value<bool> jobsIncludeArchived;
   final Value<double?> dreamSplitWidth;
   final Value<bool> showDreamStatistics;
   final Value<bool> dreamNotesPinned;
@@ -12501,6 +12952,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastSeenNavPage = const Value.absent(),
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.showAnnualizedSubscriptionCost = const Value.absent(),
+    this.jobsHiddenColumnsJson = const Value.absent(),
+    this.jobsIncludeArchived = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
@@ -12625,6 +13078,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastSeenNavPage = const Value.absent(),
     this.todoCompletedSectionExpanded = const Value.absent(),
     this.showAnnualizedSubscriptionCost = const Value.absent(),
+    this.jobsHiddenColumnsJson = const Value.absent(),
+    this.jobsIncludeArchived = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
@@ -12749,6 +13204,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? lastSeenNavPage,
     Expression<bool>? todoCompletedSectionExpanded,
     Expression<bool>? showAnnualizedSubscriptionCost,
+    Expression<String>? jobsHiddenColumnsJson,
+    Expression<bool>? jobsIncludeArchived,
     Expression<double>? dreamSplitWidth,
     Expression<bool>? showDreamStatistics,
     Expression<bool>? dreamNotesPinned,
@@ -12941,6 +13398,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'todo_completed_section_expanded': todoCompletedSectionExpanded,
       if (showAnnualizedSubscriptionCost != null)
         'show_annualized_subscription_cost': showAnnualizedSubscriptionCost,
+      if (jobsHiddenColumnsJson != null)
+        'jobs_hidden_columns_json': jobsHiddenColumnsJson,
+      if (jobsIncludeArchived != null)
+        'jobs_include_archived': jobsIncludeArchived,
       if (dreamSplitWidth != null) 'dream_split_width': dreamSplitWidth,
       if (showDreamStatistics != null)
         'show_dream_statistics': showDreamStatistics,
@@ -13078,6 +13539,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? lastSeenNavPage,
     Value<bool>? todoCompletedSectionExpanded,
     Value<bool>? showAnnualizedSubscriptionCost,
+    Value<String?>? jobsHiddenColumnsJson,
+    Value<bool>? jobsIncludeArchived,
     Value<double?>? dreamSplitWidth,
     Value<bool>? showDreamStatistics,
     Value<bool>? dreamNotesPinned,
@@ -13249,6 +13712,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
       showAnnualizedSubscriptionCost:
           showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
+      jobsHiddenColumnsJson:
+          jobsHiddenColumnsJson ?? this.jobsHiddenColumnsJson,
+      jobsIncludeArchived: jobsIncludeArchived ?? this.jobsIncludeArchived,
       dreamSplitWidth: dreamSplitWidth ?? this.dreamSplitWidth,
       showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
       dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
@@ -13692,6 +14158,14 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         showAnnualizedSubscriptionCost.value,
       );
     }
+    if (jobsHiddenColumnsJson.present) {
+      map['jobs_hidden_columns_json'] = Variable<String>(
+        jobsHiddenColumnsJson.value,
+      );
+    }
+    if (jobsIncludeArchived.present) {
+      map['jobs_include_archived'] = Variable<bool>(jobsIncludeArchived.value);
+    }
     if (dreamSplitWidth.present) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth.value);
     }
@@ -13906,6 +14380,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write(
             'showAnnualizedSubscriptionCost: $showAnnualizedSubscriptionCost, ',
           )
+          ..write('jobsHiddenColumnsJson: $jobsHiddenColumnsJson, ')
+          ..write('jobsIncludeArchived: $jobsIncludeArchived, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
@@ -28765,6 +29241,3198 @@ class WorkoutSetLogsTableCompanion
   }
 }
 
+class $JobApplicationsTableTable extends JobApplicationsTable
+    with TableInfo<$JobApplicationsTableTable, JobApplicationsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JobApplicationsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _companyMeta = const VerificationMeta(
+    'company',
+  );
+  @override
+  late final GeneratedColumn<String> company = GeneratedColumn<String>(
+    'company',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dateAppliedMeta = const VerificationMeta(
+    'dateApplied',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dateApplied = GeneratedColumn<DateTime>(
+    'date_applied',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _applicationUrlMeta = const VerificationMeta(
+    'applicationUrl',
+  );
+  @override
+  late final GeneratedColumn<String> applicationUrl = GeneratedColumn<String>(
+    'application_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _seasonIdMeta = const VerificationMeta(
+    'seasonId',
+  );
+  @override
+  late final GeneratedColumn<String> seasonId = GeneratedColumn<String>(
+    'season_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    company,
+    title,
+    status,
+    dateApplied,
+    applicationUrl,
+    notes,
+    seasonId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'job_applications_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JobApplicationsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('company')) {
+      context.handle(
+        _companyMeta,
+        company.isAcceptableOrUnknown(data['company']!, _companyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_companyMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('date_applied')) {
+      context.handle(
+        _dateAppliedMeta,
+        dateApplied.isAcceptableOrUnknown(
+          data['date_applied']!,
+          _dateAppliedMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dateAppliedMeta);
+    }
+    if (data.containsKey('application_url')) {
+      context.handle(
+        _applicationUrlMeta,
+        applicationUrl.isAcceptableOrUnknown(
+          data['application_url']!,
+          _applicationUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('season_id')) {
+      context.handle(
+        _seasonIdMeta,
+        seasonId.isAcceptableOrUnknown(data['season_id']!, _seasonIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JobApplicationsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JobApplicationsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      company: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}company'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      dateApplied: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}date_applied'],
+      )!,
+      applicationUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}application_url'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      seasonId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}season_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $JobApplicationsTableTable createAlias(String alias) {
+    return $JobApplicationsTableTable(attachedDatabase, alias);
+  }
+}
+
+class JobApplicationsTableData extends DataClass
+    implements Insertable<JobApplicationsTableData> {
+  final String id;
+  final String company;
+  final String title;
+  final String status;
+  final DateTime dateApplied;
+  final String? applicationUrl;
+  final String? notes;
+
+  /// Null while active; the season this application was archived into once set.
+  final String? seasonId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const JobApplicationsTableData({
+    required this.id,
+    required this.company,
+    required this.title,
+    required this.status,
+    required this.dateApplied,
+    this.applicationUrl,
+    this.notes,
+    this.seasonId,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['company'] = Variable<String>(company);
+    map['title'] = Variable<String>(title);
+    map['status'] = Variable<String>(status);
+    map['date_applied'] = Variable<DateTime>(dateApplied);
+    if (!nullToAbsent || applicationUrl != null) {
+      map['application_url'] = Variable<String>(applicationUrl);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || seasonId != null) {
+      map['season_id'] = Variable<String>(seasonId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  JobApplicationsTableCompanion toCompanion(bool nullToAbsent) {
+    return JobApplicationsTableCompanion(
+      id: Value(id),
+      company: Value(company),
+      title: Value(title),
+      status: Value(status),
+      dateApplied: Value(dateApplied),
+      applicationUrl: applicationUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(applicationUrl),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      seasonId: seasonId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(seasonId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory JobApplicationsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JobApplicationsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      company: serializer.fromJson<String>(json['company']),
+      title: serializer.fromJson<String>(json['title']),
+      status: serializer.fromJson<String>(json['status']),
+      dateApplied: serializer.fromJson<DateTime>(json['dateApplied']),
+      applicationUrl: serializer.fromJson<String?>(json['applicationUrl']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      seasonId: serializer.fromJson<String?>(json['seasonId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'company': serializer.toJson<String>(company),
+      'title': serializer.toJson<String>(title),
+      'status': serializer.toJson<String>(status),
+      'dateApplied': serializer.toJson<DateTime>(dateApplied),
+      'applicationUrl': serializer.toJson<String?>(applicationUrl),
+      'notes': serializer.toJson<String?>(notes),
+      'seasonId': serializer.toJson<String?>(seasonId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  JobApplicationsTableData copyWith({
+    String? id,
+    String? company,
+    String? title,
+    String? status,
+    DateTime? dateApplied,
+    Value<String?> applicationUrl = const Value.absent(),
+    Value<String?> notes = const Value.absent(),
+    Value<String?> seasonId = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => JobApplicationsTableData(
+    id: id ?? this.id,
+    company: company ?? this.company,
+    title: title ?? this.title,
+    status: status ?? this.status,
+    dateApplied: dateApplied ?? this.dateApplied,
+    applicationUrl: applicationUrl.present
+        ? applicationUrl.value
+        : this.applicationUrl,
+    notes: notes.present ? notes.value : this.notes,
+    seasonId: seasonId.present ? seasonId.value : this.seasonId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  JobApplicationsTableData copyWithCompanion(
+    JobApplicationsTableCompanion data,
+  ) {
+    return JobApplicationsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      company: data.company.present ? data.company.value : this.company,
+      title: data.title.present ? data.title.value : this.title,
+      status: data.status.present ? data.status.value : this.status,
+      dateApplied: data.dateApplied.present
+          ? data.dateApplied.value
+          : this.dateApplied,
+      applicationUrl: data.applicationUrl.present
+          ? data.applicationUrl.value
+          : this.applicationUrl,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      seasonId: data.seasonId.present ? data.seasonId.value : this.seasonId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobApplicationsTableData(')
+          ..write('id: $id, ')
+          ..write('company: $company, ')
+          ..write('title: $title, ')
+          ..write('status: $status, ')
+          ..write('dateApplied: $dateApplied, ')
+          ..write('applicationUrl: $applicationUrl, ')
+          ..write('notes: $notes, ')
+          ..write('seasonId: $seasonId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    company,
+    title,
+    status,
+    dateApplied,
+    applicationUrl,
+    notes,
+    seasonId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JobApplicationsTableData &&
+          other.id == this.id &&
+          other.company == this.company &&
+          other.title == this.title &&
+          other.status == this.status &&
+          other.dateApplied == this.dateApplied &&
+          other.applicationUrl == this.applicationUrl &&
+          other.notes == this.notes &&
+          other.seasonId == this.seasonId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class JobApplicationsTableCompanion
+    extends UpdateCompanion<JobApplicationsTableData> {
+  final Value<String> id;
+  final Value<String> company;
+  final Value<String> title;
+  final Value<String> status;
+  final Value<DateTime> dateApplied;
+  final Value<String?> applicationUrl;
+  final Value<String?> notes;
+  final Value<String?> seasonId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const JobApplicationsTableCompanion({
+    this.id = const Value.absent(),
+    this.company = const Value.absent(),
+    this.title = const Value.absent(),
+    this.status = const Value.absent(),
+    this.dateApplied = const Value.absent(),
+    this.applicationUrl = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.seasonId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JobApplicationsTableCompanion.insert({
+    required String id,
+    required String company,
+    required String title,
+    required String status,
+    required DateTime dateApplied,
+    this.applicationUrl = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.seasonId = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       company = Value(company),
+       title = Value(title),
+       status = Value(status),
+       dateApplied = Value(dateApplied),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<JobApplicationsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? company,
+    Expression<String>? title,
+    Expression<String>? status,
+    Expression<DateTime>? dateApplied,
+    Expression<String>? applicationUrl,
+    Expression<String>? notes,
+    Expression<String>? seasonId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (company != null) 'company': company,
+      if (title != null) 'title': title,
+      if (status != null) 'status': status,
+      if (dateApplied != null) 'date_applied': dateApplied,
+      if (applicationUrl != null) 'application_url': applicationUrl,
+      if (notes != null) 'notes': notes,
+      if (seasonId != null) 'season_id': seasonId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JobApplicationsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? company,
+    Value<String>? title,
+    Value<String>? status,
+    Value<DateTime>? dateApplied,
+    Value<String?>? applicationUrl,
+    Value<String?>? notes,
+    Value<String?>? seasonId,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return JobApplicationsTableCompanion(
+      id: id ?? this.id,
+      company: company ?? this.company,
+      title: title ?? this.title,
+      status: status ?? this.status,
+      dateApplied: dateApplied ?? this.dateApplied,
+      applicationUrl: applicationUrl ?? this.applicationUrl,
+      notes: notes ?? this.notes,
+      seasonId: seasonId ?? this.seasonId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (company.present) {
+      map['company'] = Variable<String>(company.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (dateApplied.present) {
+      map['date_applied'] = Variable<DateTime>(dateApplied.value);
+    }
+    if (applicationUrl.present) {
+      map['application_url'] = Variable<String>(applicationUrl.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (seasonId.present) {
+      map['season_id'] = Variable<String>(seasonId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobApplicationsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('company: $company, ')
+          ..write('title: $title, ')
+          ..write('status: $status, ')
+          ..write('dateApplied: $dateApplied, ')
+          ..write('applicationUrl: $applicationUrl, ')
+          ..write('notes: $notes, ')
+          ..write('seasonId: $seasonId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $JobStatusEventsTableTable extends JobStatusEventsTable
+    with TableInfo<$JobStatusEventsTableTable, JobStatusEventsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JobStatusEventsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _applicationIdMeta = const VerificationMeta(
+    'applicationId',
+  );
+  @override
+  late final GeneratedColumn<String> applicationId = GeneratedColumn<String>(
+    'application_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fromStatusMeta = const VerificationMeta(
+    'fromStatus',
+  );
+  @override
+  late final GeneratedColumn<String> fromStatus = GeneratedColumn<String>(
+    'from_status',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _toStatusMeta = const VerificationMeta(
+    'toStatus',
+  );
+  @override
+  late final GeneratedColumn<String> toStatus = GeneratedColumn<String>(
+    'to_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _changedAtMeta = const VerificationMeta(
+    'changedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> changedAt = GeneratedColumn<DateTime>(
+    'changed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    applicationId,
+    fromStatus,
+    toStatus,
+    changedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'job_status_events_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JobStatusEventsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('application_id')) {
+      context.handle(
+        _applicationIdMeta,
+        applicationId.isAcceptableOrUnknown(
+          data['application_id']!,
+          _applicationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_applicationIdMeta);
+    }
+    if (data.containsKey('from_status')) {
+      context.handle(
+        _fromStatusMeta,
+        fromStatus.isAcceptableOrUnknown(data['from_status']!, _fromStatusMeta),
+      );
+    }
+    if (data.containsKey('to_status')) {
+      context.handle(
+        _toStatusMeta,
+        toStatus.isAcceptableOrUnknown(data['to_status']!, _toStatusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_toStatusMeta);
+    }
+    if (data.containsKey('changed_at')) {
+      context.handle(
+        _changedAtMeta,
+        changedAt.isAcceptableOrUnknown(data['changed_at']!, _changedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_changedAtMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JobStatusEventsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JobStatusEventsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      applicationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}application_id'],
+      )!,
+      fromStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}from_status'],
+      ),
+      toStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}to_status'],
+      )!,
+      changedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}changed_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $JobStatusEventsTableTable createAlias(String alias) {
+    return $JobStatusEventsTableTable(attachedDatabase, alias);
+  }
+}
+
+class JobStatusEventsTableData extends DataClass
+    implements Insertable<JobStatusEventsTableData> {
+  final String id;
+  final String applicationId;
+  final String? fromStatus;
+  final String toStatus;
+  final DateTime changedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const JobStatusEventsTableData({
+    required this.id,
+    required this.applicationId,
+    this.fromStatus,
+    required this.toStatus,
+    required this.changedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['application_id'] = Variable<String>(applicationId);
+    if (!nullToAbsent || fromStatus != null) {
+      map['from_status'] = Variable<String>(fromStatus);
+    }
+    map['to_status'] = Variable<String>(toStatus);
+    map['changed_at'] = Variable<DateTime>(changedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  JobStatusEventsTableCompanion toCompanion(bool nullToAbsent) {
+    return JobStatusEventsTableCompanion(
+      id: Value(id),
+      applicationId: Value(applicationId),
+      fromStatus: fromStatus == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fromStatus),
+      toStatus: Value(toStatus),
+      changedAt: Value(changedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory JobStatusEventsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JobStatusEventsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      applicationId: serializer.fromJson<String>(json['applicationId']),
+      fromStatus: serializer.fromJson<String?>(json['fromStatus']),
+      toStatus: serializer.fromJson<String>(json['toStatus']),
+      changedAt: serializer.fromJson<DateTime>(json['changedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'applicationId': serializer.toJson<String>(applicationId),
+      'fromStatus': serializer.toJson<String?>(fromStatus),
+      'toStatus': serializer.toJson<String>(toStatus),
+      'changedAt': serializer.toJson<DateTime>(changedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  JobStatusEventsTableData copyWith({
+    String? id,
+    String? applicationId,
+    Value<String?> fromStatus = const Value.absent(),
+    String? toStatus,
+    DateTime? changedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => JobStatusEventsTableData(
+    id: id ?? this.id,
+    applicationId: applicationId ?? this.applicationId,
+    fromStatus: fromStatus.present ? fromStatus.value : this.fromStatus,
+    toStatus: toStatus ?? this.toStatus,
+    changedAt: changedAt ?? this.changedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  JobStatusEventsTableData copyWithCompanion(
+    JobStatusEventsTableCompanion data,
+  ) {
+    return JobStatusEventsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      applicationId: data.applicationId.present
+          ? data.applicationId.value
+          : this.applicationId,
+      fromStatus: data.fromStatus.present
+          ? data.fromStatus.value
+          : this.fromStatus,
+      toStatus: data.toStatus.present ? data.toStatus.value : this.toStatus,
+      changedAt: data.changedAt.present ? data.changedAt.value : this.changedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobStatusEventsTableData(')
+          ..write('id: $id, ')
+          ..write('applicationId: $applicationId, ')
+          ..write('fromStatus: $fromStatus, ')
+          ..write('toStatus: $toStatus, ')
+          ..write('changedAt: $changedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    applicationId,
+    fromStatus,
+    toStatus,
+    changedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JobStatusEventsTableData &&
+          other.id == this.id &&
+          other.applicationId == this.applicationId &&
+          other.fromStatus == this.fromStatus &&
+          other.toStatus == this.toStatus &&
+          other.changedAt == this.changedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class JobStatusEventsTableCompanion
+    extends UpdateCompanion<JobStatusEventsTableData> {
+  final Value<String> id;
+  final Value<String> applicationId;
+  final Value<String?> fromStatus;
+  final Value<String> toStatus;
+  final Value<DateTime> changedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const JobStatusEventsTableCompanion({
+    this.id = const Value.absent(),
+    this.applicationId = const Value.absent(),
+    this.fromStatus = const Value.absent(),
+    this.toStatus = const Value.absent(),
+    this.changedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JobStatusEventsTableCompanion.insert({
+    required String id,
+    required String applicationId,
+    this.fromStatus = const Value.absent(),
+    required String toStatus,
+    required DateTime changedAt,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       applicationId = Value(applicationId),
+       toStatus = Value(toStatus),
+       changedAt = Value(changedAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<JobStatusEventsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? applicationId,
+    Expression<String>? fromStatus,
+    Expression<String>? toStatus,
+    Expression<DateTime>? changedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (applicationId != null) 'application_id': applicationId,
+      if (fromStatus != null) 'from_status': fromStatus,
+      if (toStatus != null) 'to_status': toStatus,
+      if (changedAt != null) 'changed_at': changedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JobStatusEventsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? applicationId,
+    Value<String?>? fromStatus,
+    Value<String>? toStatus,
+    Value<DateTime>? changedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return JobStatusEventsTableCompanion(
+      id: id ?? this.id,
+      applicationId: applicationId ?? this.applicationId,
+      fromStatus: fromStatus ?? this.fromStatus,
+      toStatus: toStatus ?? this.toStatus,
+      changedAt: changedAt ?? this.changedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (applicationId.present) {
+      map['application_id'] = Variable<String>(applicationId.value);
+    }
+    if (fromStatus.present) {
+      map['from_status'] = Variable<String>(fromStatus.value);
+    }
+    if (toStatus.present) {
+      map['to_status'] = Variable<String>(toStatus.value);
+    }
+    if (changedAt.present) {
+      map['changed_at'] = Variable<DateTime>(changedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobStatusEventsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('applicationId: $applicationId, ')
+          ..write('fromStatus: $fromStatus, ')
+          ..write('toStatus: $toStatus, ')
+          ..write('changedAt: $changedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $JobStagesTableTable extends JobStagesTable
+    with TableInfo<$JobStagesTableTable, JobStagesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JobStagesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'job_stages_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JobStagesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JobStagesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JobStagesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $JobStagesTableTable createAlias(String alias) {
+    return $JobStagesTableTable(attachedDatabase, alias);
+  }
+}
+
+class JobStagesTableData extends DataClass
+    implements Insertable<JobStagesTableData> {
+  final String id;
+  final String name;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const JobStagesTableData({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  JobStagesTableCompanion toCompanion(bool nullToAbsent) {
+    return JobStagesTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory JobStagesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JobStagesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  JobStagesTableData copyWith({
+    String? id,
+    String? name,
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => JobStagesTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  JobStagesTableData copyWithCompanion(JobStagesTableCompanion data) {
+    return JobStagesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobStagesTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JobStagesTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const JobStagesTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JobStagesTableCompanion.insert({
+    required String id,
+    required String name,
+    this.sortOrder = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<JobStagesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JobStagesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return JobStagesTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobStagesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $JobCompaniesTableTable extends JobCompaniesTable
+    with TableInfo<$JobCompaniesTableTable, JobCompaniesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JobCompaniesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    categoryId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'job_companies_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JobCompaniesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JobCompaniesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JobCompaniesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $JobCompaniesTableTable createAlias(String alias) {
+    return $JobCompaniesTableTable(attachedDatabase, alias);
+  }
+}
+
+class JobCompaniesTableData extends DataClass
+    implements Insertable<JobCompaniesTableData> {
+  final String id;
+  final String name;
+  final String? categoryId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const JobCompaniesTableData({
+    required this.id,
+    required this.name,
+    this.categoryId,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || categoryId != null) {
+      map['category_id'] = Variable<String>(categoryId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  JobCompaniesTableCompanion toCompanion(bool nullToAbsent) {
+    return JobCompaniesTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      categoryId: categoryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(categoryId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory JobCompaniesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JobCompaniesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      categoryId: serializer.fromJson<String?>(json['categoryId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'categoryId': serializer.toJson<String?>(categoryId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  JobCompaniesTableData copyWith({
+    String? id,
+    String? name,
+    Value<String?> categoryId = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => JobCompaniesTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    categoryId: categoryId.present ? categoryId.value : this.categoryId,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  JobCompaniesTableData copyWithCompanion(JobCompaniesTableCompanion data) {
+    return JobCompaniesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobCompaniesTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    categoryId,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JobCompaniesTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.categoryId == this.categoryId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class JobCompaniesTableCompanion
+    extends UpdateCompanion<JobCompaniesTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> categoryId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const JobCompaniesTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JobCompaniesTableCompanion.insert({
+    required String id,
+    required String name,
+    this.categoryId = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<JobCompaniesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? categoryId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (categoryId != null) 'category_id': categoryId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JobCompaniesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? categoryId,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return JobCompaniesTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      categoryId: categoryId ?? this.categoryId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobCompaniesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $JobCategoriesTableTable extends JobCategoriesTable
+    with TableInfo<$JobCategoriesTableTable, JobCategoriesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JobCategoriesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    colorValue,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'job_categories_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JobCategoriesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_colorValueMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JobCategoriesTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JobCategoriesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $JobCategoriesTableTable createAlias(String alias) {
+    return $JobCategoriesTableTable(attachedDatabase, alias);
+  }
+}
+
+class JobCategoriesTableData extends DataClass
+    implements Insertable<JobCategoriesTableData> {
+  final String id;
+  final String name;
+  final int colorValue;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const JobCategoriesTableData({
+    required this.id,
+    required this.name,
+    required this.colorValue,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['color_value'] = Variable<int>(colorValue);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  JobCategoriesTableCompanion toCompanion(bool nullToAbsent) {
+    return JobCategoriesTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      colorValue: Value(colorValue),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory JobCategoriesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JobCategoriesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  JobCategoriesTableData copyWith({
+    String? id,
+    String? name,
+    int? colorValue,
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => JobCategoriesTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    colorValue: colorValue ?? this.colorValue,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  JobCategoriesTableData copyWithCompanion(JobCategoriesTableCompanion data) {
+    return JobCategoriesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobCategoriesTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    colorValue,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JobCategoriesTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.colorValue == this.colorValue &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class JobCategoriesTableCompanion
+    extends UpdateCompanion<JobCategoriesTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> colorValue;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const JobCategoriesTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JobCategoriesTableCompanion.insert({
+    required String id,
+    required String name,
+    required int colorValue,
+    this.sortOrder = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       colorValue = Value(colorValue),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<JobCategoriesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? colorValue,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (colorValue != null) 'color_value': colorValue,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JobCategoriesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? colorValue,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return JobCategoriesTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobCategoriesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $JobSeasonsTableTable extends JobSeasonsTable
+    with TableInfo<$JobSeasonsTableTable, JobSeasonsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JobSeasonsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'job_seasons_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JobSeasonsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JobSeasonsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JobSeasonsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $JobSeasonsTableTable createAlias(String alias) {
+    return $JobSeasonsTableTable(attachedDatabase, alias);
+  }
+}
+
+class JobSeasonsTableData extends DataClass
+    implements Insertable<JobSeasonsTableData> {
+  final String id;
+  final String name;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const JobSeasonsTableData({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  JobSeasonsTableCompanion toCompanion(bool nullToAbsent) {
+    return JobSeasonsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory JobSeasonsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JobSeasonsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  JobSeasonsTableData copyWith({
+    String? id,
+    String? name,
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => JobSeasonsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  JobSeasonsTableData copyWithCompanion(JobSeasonsTableCompanion data) {
+    return JobSeasonsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobSeasonsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JobSeasonsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const JobSeasonsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JobSeasonsTableCompanion.insert({
+    required String id,
+    required String name,
+    this.sortOrder = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<JobSeasonsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JobSeasonsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return JobSeasonsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobSeasonsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -28834,6 +32502,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $WorkoutSessionsTableTable(this);
   late final $WorkoutSetLogsTableTable workoutSetLogsTable =
       $WorkoutSetLogsTableTable(this);
+  late final $JobApplicationsTableTable jobApplicationsTable =
+      $JobApplicationsTableTable(this);
+  late final $JobStatusEventsTableTable jobStatusEventsTable =
+      $JobStatusEventsTableTable(this);
+  late final $JobStagesTableTable jobStagesTable = $JobStagesTableTable(this);
+  late final $JobCompaniesTableTable jobCompaniesTable =
+      $JobCompaniesTableTable(this);
+  late final $JobCategoriesTableTable jobCategoriesTable =
+      $JobCategoriesTableTable(this);
+  late final $JobSeasonsTableTable jobSeasonsTable = $JobSeasonsTableTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -28875,6 +32555,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     workoutPlanEntriesTable,
     workoutSessionsTable,
     workoutSetLogsTable,
+    jobApplicationsTable,
+    jobStatusEventsTable,
+    jobStagesTable,
+    jobCompaniesTable,
+    jobCategoriesTable,
+    jobSeasonsTable,
   ];
   @override
   DriftDatabaseOptions get options =>
@@ -30289,6 +33975,8 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       Value<int> sortOrder,
       Value<int?> preStarSortOrder,
       Value<DateTime?> dueDateSetAt,
+      Value<String> recurrence,
+      Value<DateTime?> recurrenceAnchor,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -30308,6 +33996,8 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<int> sortOrder,
       Value<int?> preStarSortOrder,
       Value<DateTime?> dueDateSetAt,
+      Value<String> recurrence,
+      Value<DateTime?> recurrenceAnchor,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -30376,6 +34066,16 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<DateTime> get dueDateSetAt => $composableBuilder(
     column: $table.dueDateSetAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recurrence => $composableBuilder(
+    column: $table.recurrence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recurrenceAnchor => $composableBuilder(
+    column: $table.recurrenceAnchor,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -30464,6 +34164,16 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recurrence => $composableBuilder(
+    column: $table.recurrence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get recurrenceAnchor => $composableBuilder(
+    column: $table.recurrenceAnchor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -30533,6 +34243,16 @@ class $$TodoTasksTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get recurrence => $composableBuilder(
+    column: $table.recurrence,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get recurrenceAnchor => $composableBuilder(
+    column: $table.recurrenceAnchor,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -30594,6 +34314,8 @@ class $$TodoTasksTableTableTableManager
                 Value<int> sortOrder = const Value.absent(),
                 Value<int?> preStarSortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
+                Value<String> recurrence = const Value.absent(),
+                Value<DateTime?> recurrenceAnchor = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -30611,6 +34333,8 @@ class $$TodoTasksTableTableTableManager
                 sortOrder: sortOrder,
                 preStarSortOrder: preStarSortOrder,
                 dueDateSetAt: dueDateSetAt,
+                recurrence: recurrence,
+                recurrenceAnchor: recurrenceAnchor,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -30630,6 +34354,8 @@ class $$TodoTasksTableTableTableManager
                 Value<int> sortOrder = const Value.absent(),
                 Value<int?> preStarSortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
+                Value<String> recurrence = const Value.absent(),
+                Value<DateTime?> recurrenceAnchor = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -30647,6 +34373,8 @@ class $$TodoTasksTableTableTableManager
                 sortOrder: sortOrder,
                 preStarSortOrder: preStarSortOrder,
                 dueDateSetAt: dueDateSetAt,
+                recurrence: recurrence,
+                recurrenceAnchor: recurrenceAnchor,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -30937,6 +34665,10 @@ typedef $$CalendarEventsTableTableCreateCompanionBuilder =
       Value<String> source,
       Value<String?> externalId,
       Value<String> recurrence,
+      Value<DateTime?> recurrenceEndDate,
+      Value<String> exceptionDates,
+      Value<String?> recurrenceParentId,
+      Value<DateTime?> recurrenceDate,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -30956,6 +34688,10 @@ typedef $$CalendarEventsTableTableUpdateCompanionBuilder =
       Value<String> source,
       Value<String?> externalId,
       Value<String> recurrence,
+      Value<DateTime?> recurrenceEndDate,
+      Value<String> exceptionDates,
+      Value<String?> recurrenceParentId,
+      Value<DateTime?> recurrenceDate,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -31024,6 +34760,26 @@ class $$CalendarEventsTableTableFilterComposer
 
   ColumnFilters<String> get recurrence => $composableBuilder(
     column: $table.recurrence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recurrenceEndDate => $composableBuilder(
+    column: $table.recurrenceEndDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get exceptionDates => $composableBuilder(
+    column: $table.exceptionDates,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recurrenceParentId => $composableBuilder(
+    column: $table.recurrenceParentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recurrenceDate => $composableBuilder(
+    column: $table.recurrenceDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -31112,6 +34868,26 @@ class $$CalendarEventsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get recurrenceEndDate => $composableBuilder(
+    column: $table.recurrenceEndDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get exceptionDates => $composableBuilder(
+    column: $table.exceptionDates,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recurrenceParentId => $composableBuilder(
+    column: $table.recurrenceParentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get recurrenceDate => $composableBuilder(
+    column: $table.recurrenceDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -31183,6 +34959,26 @@ class $$CalendarEventsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get recurrenceEndDate => $composableBuilder(
+    column: $table.recurrenceEndDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get exceptionDates => $composableBuilder(
+    column: $table.exceptionDates,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get recurrenceParentId => $composableBuilder(
+    column: $table.recurrenceParentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get recurrenceDate => $composableBuilder(
+    column: $table.recurrenceDate,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -31250,6 +35046,10 @@ class $$CalendarEventsTableTableTableManager
                 Value<String> source = const Value.absent(),
                 Value<String?> externalId = const Value.absent(),
                 Value<String> recurrence = const Value.absent(),
+                Value<DateTime?> recurrenceEndDate = const Value.absent(),
+                Value<String> exceptionDates = const Value.absent(),
+                Value<String?> recurrenceParentId = const Value.absent(),
+                Value<DateTime?> recurrenceDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -31267,6 +35067,10 @@ class $$CalendarEventsTableTableTableManager
                 source: source,
                 externalId: externalId,
                 recurrence: recurrence,
+                recurrenceEndDate: recurrenceEndDate,
+                exceptionDates: exceptionDates,
+                recurrenceParentId: recurrenceParentId,
+                recurrenceDate: recurrenceDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -31286,6 +35090,10 @@ class $$CalendarEventsTableTableTableManager
                 Value<String> source = const Value.absent(),
                 Value<String?> externalId = const Value.absent(),
                 Value<String> recurrence = const Value.absent(),
+                Value<DateTime?> recurrenceEndDate = const Value.absent(),
+                Value<String> exceptionDates = const Value.absent(),
+                Value<String?> recurrenceParentId = const Value.absent(),
+                Value<DateTime?> recurrenceDate = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -31303,6 +35111,10 @@ class $$CalendarEventsTableTableTableManager
                 source: source,
                 externalId: externalId,
                 recurrence: recurrence,
+                recurrenceEndDate: recurrenceEndDate,
+                exceptionDates: exceptionDates,
+                recurrenceParentId: recurrenceParentId,
+                recurrenceDate: recurrenceDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -32216,6 +36028,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> lastSeenNavPage,
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> showAnnualizedSubscriptionCost,
+      Value<String?> jobsHiddenColumnsJson,
+      Value<bool> jobsIncludeArchived,
       Value<double?> dreamSplitWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
@@ -32341,6 +36155,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> lastSeenNavPage,
       Value<bool> todoCompletedSectionExpanded,
       Value<bool> showAnnualizedSubscriptionCost,
+      Value<String?> jobsHiddenColumnsJson,
+      Value<bool> jobsIncludeArchived,
       Value<double?> dreamSplitWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
@@ -32871,6 +36687,16 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get showAnnualizedSubscriptionCost => $composableBuilder(
     column: $table.showAnnualizedSubscriptionCost,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get jobsHiddenColumnsJson => $composableBuilder(
+    column: $table.jobsHiddenColumnsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get jobsIncludeArchived => $composableBuilder(
+    column: $table.jobsIncludeArchived,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -33504,6 +37330,16 @@ class $$SettingsTableTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<String> get jobsHiddenColumnsJson => $composableBuilder(
+    column: $table.jobsHiddenColumnsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get jobsIncludeArchived => $composableBuilder(
+    column: $table.jobsIncludeArchived,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
     builder: (column) => ColumnOrderings(column),
@@ -34124,6 +37960,16 @@ class $$SettingsTableTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<String> get jobsHiddenColumnsJson => $composableBuilder(
+    column: $table.jobsHiddenColumnsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get jobsIncludeArchived => $composableBuilder(
+    column: $table.jobsIncludeArchived,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
     builder: (column) => column,
@@ -34391,6 +38237,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> showAnnualizedSubscriptionCost =
                     const Value.absent(),
+                Value<String?> jobsHiddenColumnsJson = const Value.absent(),
+                Value<bool> jobsIncludeArchived = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
@@ -34517,6 +38365,8 @@ class $$SettingsTableTableTableManager
                 lastSeenNavPage: lastSeenNavPage,
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
+                jobsHiddenColumnsJson: jobsHiddenColumnsJson,
+                jobsIncludeArchived: jobsIncludeArchived,
                 dreamSplitWidth: dreamSplitWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
@@ -34661,6 +38511,8 @@ class $$SettingsTableTableTableManager
                 Value<bool> todoCompletedSectionExpanded = const Value.absent(),
                 Value<bool> showAnnualizedSubscriptionCost =
                     const Value.absent(),
+                Value<String?> jobsHiddenColumnsJson = const Value.absent(),
+                Value<bool> jobsIncludeArchived = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
@@ -34787,6 +38639,8 @@ class $$SettingsTableTableTableManager
                 lastSeenNavPage: lastSeenNavPage,
                 todoCompletedSectionExpanded: todoCompletedSectionExpanded,
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
+                jobsHiddenColumnsJson: jobsHiddenColumnsJson,
+                jobsIncludeArchived: jobsIncludeArchived,
                 dreamSplitWidth: dreamSplitWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
@@ -42495,6 +46349,1672 @@ typedef $$WorkoutSetLogsTableTableProcessedTableManager =
       WorkoutSetLogsTableData,
       PrefetchHooks Function()
     >;
+typedef $$JobApplicationsTableTableCreateCompanionBuilder =
+    JobApplicationsTableCompanion Function({
+      required String id,
+      required String company,
+      required String title,
+      required String status,
+      required DateTime dateApplied,
+      Value<String?> applicationUrl,
+      Value<String?> notes,
+      Value<String?> seasonId,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$JobApplicationsTableTableUpdateCompanionBuilder =
+    JobApplicationsTableCompanion Function({
+      Value<String> id,
+      Value<String> company,
+      Value<String> title,
+      Value<String> status,
+      Value<DateTime> dateApplied,
+      Value<String?> applicationUrl,
+      Value<String?> notes,
+      Value<String?> seasonId,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$JobApplicationsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $JobApplicationsTableTable> {
+  $$JobApplicationsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get company => $composableBuilder(
+    column: $table.company,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dateApplied => $composableBuilder(
+    column: $table.dateApplied,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get applicationUrl => $composableBuilder(
+    column: $table.applicationUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get seasonId => $composableBuilder(
+    column: $table.seasonId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JobApplicationsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $JobApplicationsTableTable> {
+  $$JobApplicationsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get company => $composableBuilder(
+    column: $table.company,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dateApplied => $composableBuilder(
+    column: $table.dateApplied,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get applicationUrl => $composableBuilder(
+    column: $table.applicationUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get seasonId => $composableBuilder(
+    column: $table.seasonId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JobApplicationsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JobApplicationsTableTable> {
+  $$JobApplicationsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get company =>
+      $composableBuilder(column: $table.company, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get dateApplied => $composableBuilder(
+    column: $table.dateApplied,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get applicationUrl => $composableBuilder(
+    column: $table.applicationUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get seasonId =>
+      $composableBuilder(column: $table.seasonId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$JobApplicationsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JobApplicationsTableTable,
+          JobApplicationsTableData,
+          $$JobApplicationsTableTableFilterComposer,
+          $$JobApplicationsTableTableOrderingComposer,
+          $$JobApplicationsTableTableAnnotationComposer,
+          $$JobApplicationsTableTableCreateCompanionBuilder,
+          $$JobApplicationsTableTableUpdateCompanionBuilder,
+          (
+            JobApplicationsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $JobApplicationsTableTable,
+              JobApplicationsTableData
+            >,
+          ),
+          JobApplicationsTableData,
+          PrefetchHooks Function()
+        > {
+  $$JobApplicationsTableTableTableManager(
+    _$AppDatabase db,
+    $JobApplicationsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JobApplicationsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JobApplicationsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$JobApplicationsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> company = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> dateApplied = const Value.absent(),
+                Value<String?> applicationUrl = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<String?> seasonId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobApplicationsTableCompanion(
+                id: id,
+                company: company,
+                title: title,
+                status: status,
+                dateApplied: dateApplied,
+                applicationUrl: applicationUrl,
+                notes: notes,
+                seasonId: seasonId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String company,
+                required String title,
+                required String status,
+                required DateTime dateApplied,
+                Value<String?> applicationUrl = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<String?> seasonId = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobApplicationsTableCompanion.insert(
+                id: id,
+                company: company,
+                title: title,
+                status: status,
+                dateApplied: dateApplied,
+                applicationUrl: applicationUrl,
+                notes: notes,
+                seasonId: seasonId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JobApplicationsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JobApplicationsTableTable,
+      JobApplicationsTableData,
+      $$JobApplicationsTableTableFilterComposer,
+      $$JobApplicationsTableTableOrderingComposer,
+      $$JobApplicationsTableTableAnnotationComposer,
+      $$JobApplicationsTableTableCreateCompanionBuilder,
+      $$JobApplicationsTableTableUpdateCompanionBuilder,
+      (
+        JobApplicationsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $JobApplicationsTableTable,
+          JobApplicationsTableData
+        >,
+      ),
+      JobApplicationsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$JobStatusEventsTableTableCreateCompanionBuilder =
+    JobStatusEventsTableCompanion Function({
+      required String id,
+      required String applicationId,
+      Value<String?> fromStatus,
+      required String toStatus,
+      required DateTime changedAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$JobStatusEventsTableTableUpdateCompanionBuilder =
+    JobStatusEventsTableCompanion Function({
+      Value<String> id,
+      Value<String> applicationId,
+      Value<String?> fromStatus,
+      Value<String> toStatus,
+      Value<DateTime> changedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$JobStatusEventsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $JobStatusEventsTableTable> {
+  $$JobStatusEventsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get applicationId => $composableBuilder(
+    column: $table.applicationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fromStatus => $composableBuilder(
+    column: $table.fromStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toStatus => $composableBuilder(
+    column: $table.toStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get changedAt => $composableBuilder(
+    column: $table.changedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JobStatusEventsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $JobStatusEventsTableTable> {
+  $$JobStatusEventsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get applicationId => $composableBuilder(
+    column: $table.applicationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fromStatus => $composableBuilder(
+    column: $table.fromStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toStatus => $composableBuilder(
+    column: $table.toStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get changedAt => $composableBuilder(
+    column: $table.changedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JobStatusEventsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JobStatusEventsTableTable> {
+  $$JobStatusEventsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get applicationId => $composableBuilder(
+    column: $table.applicationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get fromStatus => $composableBuilder(
+    column: $table.fromStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toStatus =>
+      $composableBuilder(column: $table.toStatus, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get changedAt =>
+      $composableBuilder(column: $table.changedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$JobStatusEventsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JobStatusEventsTableTable,
+          JobStatusEventsTableData,
+          $$JobStatusEventsTableTableFilterComposer,
+          $$JobStatusEventsTableTableOrderingComposer,
+          $$JobStatusEventsTableTableAnnotationComposer,
+          $$JobStatusEventsTableTableCreateCompanionBuilder,
+          $$JobStatusEventsTableTableUpdateCompanionBuilder,
+          (
+            JobStatusEventsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $JobStatusEventsTableTable,
+              JobStatusEventsTableData
+            >,
+          ),
+          JobStatusEventsTableData,
+          PrefetchHooks Function()
+        > {
+  $$JobStatusEventsTableTableTableManager(
+    _$AppDatabase db,
+    $JobStatusEventsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JobStatusEventsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JobStatusEventsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$JobStatusEventsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> applicationId = const Value.absent(),
+                Value<String?> fromStatus = const Value.absent(),
+                Value<String> toStatus = const Value.absent(),
+                Value<DateTime> changedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobStatusEventsTableCompanion(
+                id: id,
+                applicationId: applicationId,
+                fromStatus: fromStatus,
+                toStatus: toStatus,
+                changedAt: changedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String applicationId,
+                Value<String?> fromStatus = const Value.absent(),
+                required String toStatus,
+                required DateTime changedAt,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobStatusEventsTableCompanion.insert(
+                id: id,
+                applicationId: applicationId,
+                fromStatus: fromStatus,
+                toStatus: toStatus,
+                changedAt: changedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JobStatusEventsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JobStatusEventsTableTable,
+      JobStatusEventsTableData,
+      $$JobStatusEventsTableTableFilterComposer,
+      $$JobStatusEventsTableTableOrderingComposer,
+      $$JobStatusEventsTableTableAnnotationComposer,
+      $$JobStatusEventsTableTableCreateCompanionBuilder,
+      $$JobStatusEventsTableTableUpdateCompanionBuilder,
+      (
+        JobStatusEventsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $JobStatusEventsTableTable,
+          JobStatusEventsTableData
+        >,
+      ),
+      JobStatusEventsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$JobStagesTableTableCreateCompanionBuilder =
+    JobStagesTableCompanion Function({
+      required String id,
+      required String name,
+      Value<int> sortOrder,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$JobStagesTableTableUpdateCompanionBuilder =
+    JobStagesTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$JobStagesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $JobStagesTableTable> {
+  $$JobStagesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JobStagesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $JobStagesTableTable> {
+  $$JobStagesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JobStagesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JobStagesTableTable> {
+  $$JobStagesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$JobStagesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JobStagesTableTable,
+          JobStagesTableData,
+          $$JobStagesTableTableFilterComposer,
+          $$JobStagesTableTableOrderingComposer,
+          $$JobStagesTableTableAnnotationComposer,
+          $$JobStagesTableTableCreateCompanionBuilder,
+          $$JobStagesTableTableUpdateCompanionBuilder,
+          (
+            JobStagesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $JobStagesTableTable,
+              JobStagesTableData
+            >,
+          ),
+          JobStagesTableData,
+          PrefetchHooks Function()
+        > {
+  $$JobStagesTableTableTableManager(
+    _$AppDatabase db,
+    $JobStagesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JobStagesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JobStagesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$JobStagesTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobStagesTableCompanion(
+                id: id,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<int> sortOrder = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobStagesTableCompanion.insert(
+                id: id,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JobStagesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JobStagesTableTable,
+      JobStagesTableData,
+      $$JobStagesTableTableFilterComposer,
+      $$JobStagesTableTableOrderingComposer,
+      $$JobStagesTableTableAnnotationComposer,
+      $$JobStagesTableTableCreateCompanionBuilder,
+      $$JobStagesTableTableUpdateCompanionBuilder,
+      (
+        JobStagesTableData,
+        BaseReferences<_$AppDatabase, $JobStagesTableTable, JobStagesTableData>,
+      ),
+      JobStagesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$JobCompaniesTableTableCreateCompanionBuilder =
+    JobCompaniesTableCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> categoryId,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$JobCompaniesTableTableUpdateCompanionBuilder =
+    JobCompaniesTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> categoryId,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$JobCompaniesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $JobCompaniesTableTable> {
+  $$JobCompaniesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JobCompaniesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $JobCompaniesTableTable> {
+  $$JobCompaniesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JobCompaniesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JobCompaniesTableTable> {
+  $$JobCompaniesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$JobCompaniesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JobCompaniesTableTable,
+          JobCompaniesTableData,
+          $$JobCompaniesTableTableFilterComposer,
+          $$JobCompaniesTableTableOrderingComposer,
+          $$JobCompaniesTableTableAnnotationComposer,
+          $$JobCompaniesTableTableCreateCompanionBuilder,
+          $$JobCompaniesTableTableUpdateCompanionBuilder,
+          (
+            JobCompaniesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $JobCompaniesTableTable,
+              JobCompaniesTableData
+            >,
+          ),
+          JobCompaniesTableData,
+          PrefetchHooks Function()
+        > {
+  $$JobCompaniesTableTableTableManager(
+    _$AppDatabase db,
+    $JobCompaniesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JobCompaniesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JobCompaniesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$JobCompaniesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> categoryId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobCompaniesTableCompanion(
+                id: id,
+                name: name,
+                categoryId: categoryId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> categoryId = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobCompaniesTableCompanion.insert(
+                id: id,
+                name: name,
+                categoryId: categoryId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JobCompaniesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JobCompaniesTableTable,
+      JobCompaniesTableData,
+      $$JobCompaniesTableTableFilterComposer,
+      $$JobCompaniesTableTableOrderingComposer,
+      $$JobCompaniesTableTableAnnotationComposer,
+      $$JobCompaniesTableTableCreateCompanionBuilder,
+      $$JobCompaniesTableTableUpdateCompanionBuilder,
+      (
+        JobCompaniesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $JobCompaniesTableTable,
+          JobCompaniesTableData
+        >,
+      ),
+      JobCompaniesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$JobCategoriesTableTableCreateCompanionBuilder =
+    JobCategoriesTableCompanion Function({
+      required String id,
+      required String name,
+      required int colorValue,
+      Value<int> sortOrder,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$JobCategoriesTableTableUpdateCompanionBuilder =
+    JobCategoriesTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> colorValue,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$JobCategoriesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $JobCategoriesTableTable> {
+  $$JobCategoriesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JobCategoriesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $JobCategoriesTableTable> {
+  $$JobCategoriesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JobCategoriesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JobCategoriesTableTable> {
+  $$JobCategoriesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$JobCategoriesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JobCategoriesTableTable,
+          JobCategoriesTableData,
+          $$JobCategoriesTableTableFilterComposer,
+          $$JobCategoriesTableTableOrderingComposer,
+          $$JobCategoriesTableTableAnnotationComposer,
+          $$JobCategoriesTableTableCreateCompanionBuilder,
+          $$JobCategoriesTableTableUpdateCompanionBuilder,
+          (
+            JobCategoriesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $JobCategoriesTableTable,
+              JobCategoriesTableData
+            >,
+          ),
+          JobCategoriesTableData,
+          PrefetchHooks Function()
+        > {
+  $$JobCategoriesTableTableTableManager(
+    _$AppDatabase db,
+    $JobCategoriesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JobCategoriesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JobCategoriesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$JobCategoriesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobCategoriesTableCompanion(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required int colorValue,
+                Value<int> sortOrder = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobCategoriesTableCompanion.insert(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JobCategoriesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JobCategoriesTableTable,
+      JobCategoriesTableData,
+      $$JobCategoriesTableTableFilterComposer,
+      $$JobCategoriesTableTableOrderingComposer,
+      $$JobCategoriesTableTableAnnotationComposer,
+      $$JobCategoriesTableTableCreateCompanionBuilder,
+      $$JobCategoriesTableTableUpdateCompanionBuilder,
+      (
+        JobCategoriesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $JobCategoriesTableTable,
+          JobCategoriesTableData
+        >,
+      ),
+      JobCategoriesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$JobSeasonsTableTableCreateCompanionBuilder =
+    JobSeasonsTableCompanion Function({
+      required String id,
+      required String name,
+      Value<int> sortOrder,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$JobSeasonsTableTableUpdateCompanionBuilder =
+    JobSeasonsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$JobSeasonsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $JobSeasonsTableTable> {
+  $$JobSeasonsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JobSeasonsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $JobSeasonsTableTable> {
+  $$JobSeasonsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JobSeasonsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JobSeasonsTableTable> {
+  $$JobSeasonsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$JobSeasonsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JobSeasonsTableTable,
+          JobSeasonsTableData,
+          $$JobSeasonsTableTableFilterComposer,
+          $$JobSeasonsTableTableOrderingComposer,
+          $$JobSeasonsTableTableAnnotationComposer,
+          $$JobSeasonsTableTableCreateCompanionBuilder,
+          $$JobSeasonsTableTableUpdateCompanionBuilder,
+          (
+            JobSeasonsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $JobSeasonsTableTable,
+              JobSeasonsTableData
+            >,
+          ),
+          JobSeasonsTableData,
+          PrefetchHooks Function()
+        > {
+  $$JobSeasonsTableTableTableManager(
+    _$AppDatabase db,
+    $JobSeasonsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JobSeasonsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JobSeasonsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$JobSeasonsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobSeasonsTableCompanion(
+                id: id,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<int> sortOrder = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobSeasonsTableCompanion.insert(
+                id: id,
+                name: name,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JobSeasonsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JobSeasonsTableTable,
+      JobSeasonsTableData,
+      $$JobSeasonsTableTableFilterComposer,
+      $$JobSeasonsTableTableOrderingComposer,
+      $$JobSeasonsTableTableAnnotationComposer,
+      $$JobSeasonsTableTableCreateCompanionBuilder,
+      $$JobSeasonsTableTableUpdateCompanionBuilder,
+      (
+        JobSeasonsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $JobSeasonsTableTable,
+          JobSeasonsTableData
+        >,
+      ),
+      JobSeasonsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -42581,4 +48101,16 @@ class $AppDatabaseManager {
       $$WorkoutSessionsTableTableTableManager(_db, _db.workoutSessionsTable);
   $$WorkoutSetLogsTableTableTableManager get workoutSetLogsTable =>
       $$WorkoutSetLogsTableTableTableManager(_db, _db.workoutSetLogsTable);
+  $$JobApplicationsTableTableTableManager get jobApplicationsTable =>
+      $$JobApplicationsTableTableTableManager(_db, _db.jobApplicationsTable);
+  $$JobStatusEventsTableTableTableManager get jobStatusEventsTable =>
+      $$JobStatusEventsTableTableTableManager(_db, _db.jobStatusEventsTable);
+  $$JobStagesTableTableTableManager get jobStagesTable =>
+      $$JobStagesTableTableTableManager(_db, _db.jobStagesTable);
+  $$JobCompaniesTableTableTableManager get jobCompaniesTable =>
+      $$JobCompaniesTableTableTableManager(_db, _db.jobCompaniesTable);
+  $$JobCategoriesTableTableTableManager get jobCategoriesTable =>
+      $$JobCategoriesTableTableTableManager(_db, _db.jobCategoriesTable);
+  $$JobSeasonsTableTableTableManager get jobSeasonsTable =>
+      $$JobSeasonsTableTableTableManager(_db, _db.jobSeasonsTable);
 }

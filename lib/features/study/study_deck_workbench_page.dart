@@ -12,7 +12,7 @@ import 'package:voyager/features/study/study_breadcrumb.dart';
 import 'package:voyager/features/study/study_card_editor_modal.dart';
 import 'package:voyager/features/study/study_card_tile.dart';
 import 'package:voyager/features/study/study_cram_page.dart';
-import 'package:voyager/features/study/study_import_json_modal.dart';
+import 'package:voyager/features/study/study_import_text_modal.dart';
 import 'package:voyager/features/study/study_move_modal.dart';
 import 'package:voyager/features/study/study_providers.dart';
 import 'package:voyager/features/study/study_session_page.dart';
@@ -165,9 +165,9 @@ class _StudyDeckWorkbenchPageState
                       const SizedBox(width: 8),
                       GlassButton(
                         dense: true,
-                        tooltip: 'Import JSON',
+                        tooltip: 'Import cards',
                         icon: const Icon(PhosphorIconsRegular.uploadSimple),
-                        onPressed: () => showStudyImportJsonModal(context, ref, deckId),
+                        onPressed: () => showStudyImportTextModal(context, ref, deckId),
                       ),
                       const SizedBox(width: 8),
                       GlassButton(

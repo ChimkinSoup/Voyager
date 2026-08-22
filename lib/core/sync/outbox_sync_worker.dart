@@ -307,6 +307,41 @@ class OutboxSyncWorker {
           DriftWorkoutRepository(_db).getSetLog,
           workoutSetLogToFirestore,
         );
+      case FirestoreCollections.jobApplications:
+        return byId(
+          DriftJobRepository(_db).getApplication,
+          jobApplicationToFirestore,
+        );
+      case FirestoreCollections.jobStatusEvents:
+        return fromList(
+          await DriftJobRepository(_db).getAllStatusEvents(),
+          (event) => event.id,
+          jobStatusEventToFirestore,
+        );
+      case FirestoreCollections.jobStages:
+        return fromList(
+          await DriftJobRepository(_db).getAllStages(),
+          (stage) => stage.id,
+          jobStageToFirestore,
+        );
+      case FirestoreCollections.jobCompanies:
+        return fromList(
+          await DriftJobRepository(_db).getAllCompanies(),
+          (company) => company.id,
+          jobCompanyToFirestore,
+        );
+      case FirestoreCollections.jobCategories:
+        return fromList(
+          await DriftJobRepository(_db).getAllCategories(),
+          (category) => category.id,
+          jobCategoryToFirestore,
+        );
+      case FirestoreCollections.jobSeasons:
+        return fromList(
+          await DriftJobRepository(_db).getAllSeasons(),
+          (season) => season.id,
+          jobSeasonToFirestore,
+        );
       case FirestoreCollections.customQuotes:
         return byId(
           DriftSettingsRepository(_db).getCustomQuote,
