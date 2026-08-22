@@ -255,21 +255,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
     });
   }
 
-  // Whether the task list should actually be narrowed to make room for the
-  // panel right now. Flipped straight to true the instant opening starts
-  // (see _openEditPanel) — before the reveal animation's first tick — and
-  // straight back to false the instant closing starts (see
-  // _closeEditPanel), also before that animation's first tick. Both flips
-  // land at a moment when the change is visually a no-op: on open, nothing
-  // has been drawn into that space yet, so narrowing the list first and
-  // then letting the panel reveal into the now-stable gap costs nothing
-  // extra; on close, the panel is still sitting at full width right on top
-  // of that space, so the list snapping back underneath it is invisible
-  // until the panel actually starts sliding away. Either way the task
-  // list's width only ever changes at instants when the framework doesn't
-  // have to paint the transition, and the animation itself (see the
-  // Positioned pair below) never touches the list's constraints.
-  bool _panelSqueezed = false;
   final _taskController = TextEditingController();
   final _taskFocusNode = FocusNode();
   final _taskScrollController = _StableViewScrollController();
@@ -506,29 +491,27 @@ class _TodoPageState extends ConsumerState<TodoPage>
       ? _todoEditPanelDuration * 10
       : _todoEditPanelDuration;
 
+  /// How far the task list is inset from the right for a given reveal
+  /// progress, so the list's right edge and the panel's left edge stay on the
+  /// same pixel for the whole animation.
+  ///
+  /// Clamped because [VoyagerSpring.drawerCurve] is underdamped (damping 0.8)
+  /// and overshoots past 1.0 near the end of the open. Unclamped, the list
+  /// would inset further than the panel is wide and open a transparent strip
+  /// between the two right as it settles.
+  static double _panelInset(double t) =>
+      _todoEditPanelWidth * t.clamp(0.0, 1.0);
+
   void _openEditPanel(TodoTask task) {
-    // Squeeze synchronously, before the reveal animation's first tick —
-    // nothing has been drawn into the reserved space yet, so the list
-    // narrowing here costs nothing visually. The panel then reveals into
-    // that already-stable gap instead of the list narrowing underneath it
-    // partway through (or after) the reveal.
     setState(() {
       _editPanelTask = task;
       _selectedTaskId = task.id;
-      _panelSqueezed = true;
     });
     _panelController.duration = _panelAnimationDuration;
     _panelController.forward();
   }
 
   void _closeEditPanel() {
-    // Unsqueeze synchronously, before the reverse animation's first tick —
-    // the panel is still at its full resting width at this exact instant, so
-    // the task list snapping back to full width underneath it is invisible
-    // (still covered). It only becomes visible as the panel actually slides
-    // away over the next frames, by which point the list is already at its
-    // final width and never has to move again.
-    setState(() => _panelSqueezed = false);
     _panelController.duration = _panelAnimationDuration;
     _panelController.reverse();
   }
@@ -2190,26 +2173,42 @@ class _TodoPageState extends ConsumerState<TodoPage>
               children: [
                 const SyncConflictBanner(),
                 Expanded(
-                  // A Stack, not a Row: the task list's Positioned right
-                  // inset is driven by _panelSqueezed, not by
-                  // _panelAnimation.value directly, so it only changes once
-                  // per open/close (see _panelSqueezed's declaration for why).
-                  // The list is already narrowed by the time the panel's
-                  // reveal animation plays on open, and already back to full
-                  // width (still hidden under the panel) by the time its
-                  // reverse animation plays on close — either way the panel,
-                  // itself a separate, always-real-size Positioned unlike
-                  // the SizedOverflowBox this replaced, is the only thing
-                  // moving during the animation, and stays properly
-                  // clickable throughout since its hit-test bounds always
-                  // match what's actually visible.
+                  // A Stack, not a Row: the panel stays its own
+                  // always-real-size Positioned (unlike the SizedOverflowBox
+                  // this replaced), so its hit-test bounds always match what
+                  // is actually visible and it stays properly clickable
+                  // throughout the reveal. The list's inset is animated
+                  // independently below rather than falling out of a Row's
+                  // flex, which keeps the two from fighting over the same
+                  // layout pass.
                   child: Stack(
                     children: [
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        right: _panelSqueezed ? _todoEditPanelWidth : 0,
+                      // The list gives up exactly as much width as the panel
+                      // has taken, every frame, so the two reflow in lockstep
+                      // and never overlap while the reveal is mid-flight.
+                      //
+                      // The list is passed as AnimatedBuilder's `child` so it
+                      // is built once per page build and NOT rebuilt per
+                      // frame — the builder only re-wraps it in a Positioned
+                      // with a new inset, which costs a relayout of the
+                      // mounted rows and nothing more. Keeping it in `child`
+                      // is load-bearing: this subtree is the page's entire
+                      // sort/filter/group result, and rebuilding it 60-120
+                      // times per reveal is the one thing this layout
+                      // genuinely cannot afford. (Building a Positioned from
+                      // inside a builder is fine — a ParentDataWidget applies
+                      // to the nearest descendant render object and looks up
+                      // to the nearest RenderObjectWidget ancestor, which is
+                      // still the Stack.)
+                      AnimatedBuilder(
+                        animation: _panelAnimation,
+                        builder: (context, child) => Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          right: _panelInset(_panelAnimation.value),
+                          child: child!,
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Column(
@@ -2339,15 +2338,20 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                 child: KeepAliveCustomScrollView(
                                   storageKey: ShellPageStorageKeys.todoTaskList,
                                   controller: _taskScrollController,
-                                  // Was 10000.0 — that forces layout of dozens of
-                                  // off-screen rows on every rebuild, including
-                                  // the full-page rebuild the deferred
-                                  // completion write triggers ~900ms after each
-                                  // toggle (see _flushPendingCompletionSaves).
-                                  // 2000 still keeps several screens' worth of
-                                  // rows warm for keep-alive scrolling without
-                                  // paying to lay out the whole list every time.
-                                  cacheExtent: 2000.0,
+                                  // Was 10000.0, then 2000.0 — every mounted
+                                  // row is laid out again on any change to the
+                                  // list's constraints, so this number is a
+                                  // direct multiplier on both the full-page
+                                  // rebuild the deferred completion write
+                                  // triggers ~900ms after each toggle (see
+                                  // _flushPendingCompletionSaves) and, now,
+                                  // every frame of the edit panel's reveal,
+                                  // which animates the list's width. 600 is
+                                  // roughly one extra screen of warm rows each
+                                  // way: still enough that a normal scroll
+                                  // doesn't rebuild rows under the user, but
+                                  // ~3x cheaper per relayout than 2000.
+                                  cacheExtent: 600.0,
                                   slivers: [
                                     if (active.isNotEmpty)
                                       // Deliberately a plain SliverList: "All
