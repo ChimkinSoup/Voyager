@@ -9,6 +9,8 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/repositories/weather_api_client.dart';
 import 'package:voyager/features/journal/journal_page.dart';
 
 import '../fakes/fake_weather_api_client.dart';
@@ -31,12 +33,22 @@ const journalHarnessSecondName = 'Second';
 /// second journal with one entry, so a test can tell the two apart in the
 /// all-journals list. [defaultJournalId] seeds the journal the page is
 /// supposed to open into regardless of what was last viewed.
+///
+/// [configureSettings] rewrites the seeded settings row after the fields above
+/// are applied — how a test gives the page a weather location, for instance.
+/// [weatherApiClient] replaces the default fake outright, so a test can hold
+/// the new-entry weather refresh open. [seedEntries] replaces the single
+/// seeded entry, for tests that need particular bodies or more than one row in
+/// the journal on screen.
 Future<AppDatabase> pumpJournalPage(
   WidgetTester tester, {
   bool showAllJournals = false,
   Journal Function(Journal journal)? configureJournal,
   bool seedSecondJournal = false,
   String? defaultJournalId,
+  AppSettings Function(AppSettings settings)? configureSettings,
+  WeatherApiClient? weatherApiClient,
+  List<JournalEntry> Function(DateTime now)? seedEntries,
   List<Override> Function(AppDatabase db)? extraOverrides,
 }) async {
   final db = AppDatabase.inMemory();
@@ -78,33 +90,40 @@ Future<AppDatabase> pumpJournalPage(
       ),
     );
   }
-  await repo.upsertEntry(
-    JournalEntry(
-      id: 'harness-entry',
-      journalId: journalHarnessId,
-      title: 'Seeded entry',
-      body: '',
-      entryDate: now,
-      timestamp: now,
-      createdAt: now,
-      updatedAt: now,
-    ),
-  );
+  final seeded =
+      seedEntries?.call(now) ??
+      [
+        JournalEntry(
+          id: 'harness-entry',
+          journalId: journalHarnessId,
+          title: 'Seeded entry',
+          body: '',
+          entryDate: now,
+          timestamp: now,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ];
+  for (final entry in seeded) {
+    await repo.upsertEntry(entry);
+  }
 
   final settingsRepo = DriftSettingsRepository(db);
-  await settingsRepo.saveSettings(
-    (await settingsRepo.getSettings()).copyWith(
-      lastViewedJournalId: journalHarnessId,
-      journalShowAllEntries: showAllJournals,
-      defaultJournalId: defaultJournalId,
-    ),
+  var settings = (await settingsRepo.getSettings()).copyWith(
+    lastViewedJournalId: journalHarnessId,
+    journalShowAllEntries: showAllJournals,
+    defaultJournalId: defaultJournalId,
   );
+  if (configureSettings != null) settings = configureSettings(settings);
+  await settingsRepo.saveSettings(settings);
 
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
-      weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      weatherApiClientProvider.overrideWithValue(
+        weatherApiClient ?? FakeWeatherApiClient(),
+      ),
       ...?extraOverrides?.call(db),
     ],
   );

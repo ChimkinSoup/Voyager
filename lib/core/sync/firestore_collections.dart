@@ -31,6 +31,12 @@ abstract final class FirestoreCollections {
   static const pinnedNotes = 'pinned_notes';
   static const dismissedNotifications = 'dismissed_notifications';
   static const bucketListItems = 'bucket_list_items';
+  static const jobApplications = 'job_applications';
+  static const jobStatusEvents = 'job_status_events';
+  static const jobStages = 'job_stages';
+  static const jobCompanies = 'job_companies';
+  static const jobCategories = 'job_categories';
+  static const jobSeasons = 'job_seasons';
   static const tagColors = 'tag_colors';
   static const customWords = 'custom_words';
   static const syncOperations = 'sync_operations';
@@ -80,6 +86,12 @@ abstract final class FirestoreCollections {
     pinnedNotes,
     dismissedNotifications,
     bucketListItems,
+    jobApplications,
+    jobStatusEvents,
+    jobStages,
+    jobCompanies,
+    jobCategories,
+    jobSeasons,
     tagColors,
     customWords,
   };

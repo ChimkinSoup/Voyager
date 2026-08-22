@@ -13,6 +13,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
@@ -132,6 +133,7 @@ List<BackupCollection> collectionsFor(AppDatabase db) => buildBackupCollections(
   leetCodeRepository: DriftLeetCodeRepository(db),
   studyRepository: DriftStudyRepository(db),
   workoutRepository: DriftWorkoutRepository(db),
+  jobRepository: DriftJobRepository(db),
   calendarRepository: DriftCalendarRepository(db),
   trackerRepository: DriftTrackerRepository(db),
   financeRepository: DriftFinanceRepository(db),
@@ -181,6 +183,7 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
   final notificationRepo = DriftNotificationRepository(db);
   final bucketListRepo = DriftBucketListRepository(db);
   final settingsRepo = DriftSettingsRepository(db);
+  final jobRepo = DriftJobRepository(db);
 
   await journalRepo.upsertJournal(
     Journal(
@@ -503,6 +506,59 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await jobRepo.upsertStage(
+    JobStage(
+      id: 'stage-1',
+      name: 'Applied',
+      sortOrder: 0,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await jobRepo.upsertCategory(
+    JobCategory(
+      id: 'job-category-1',
+      name: 'Big Tech',
+      colorValue: 0xFF3366CC,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await jobRepo.upsertSeason(
+    JobSeason(id: 'season-1', name: 'Fall 2025', createdAt: now, updatedAt: now),
+  );
+  await jobRepo.upsertCompany(
+    JobCompany(
+      id: 'job-company-1',
+      name: 'Datadog',
+      categoryId: 'job-category-1',
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await jobRepo.upsertApplication(
+    JobApplication(
+      id: 'application-1',
+      company: 'Datadog',
+      title: 'Software Engineer',
+      status: 'Applied',
+      dateApplied: now,
+      applicationUrl: 'https://example.com/job',
+      notes: 'Referred by #alex',
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await jobRepo.upsertStatusEvent(
+    JobStatusEvent(
+      id: 'status-event-1',
+      applicationId: 'application-1',
+      toStatus: 'Applied',
+      changedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await settingsRepo.setTagColor('food', 0xFF00FF00);
   await settingsRepo.addCustomWord('voyagerish');
 }
@@ -619,6 +675,12 @@ void main() {
         'pinned_notes_table',
         'dismissed_notifications_table',
         'bucket_list_items_table',
+        'job_applications_table',
+        'job_status_events_table',
+        'job_stages_table',
+        'job_companies_table',
+        'job_categories_table',
+        'job_seasons_table',
         'tag_colors_table',
         'custom_words_table',
         // Not a collection of records, but exported as its own document.
@@ -971,6 +1033,7 @@ void main() {
           leetCodeRepository: DriftLeetCodeRepository(db),
           studyRepository: DriftStudyRepository(db),
           workoutRepository: DriftWorkoutRepository(db),
+          jobRepository: DriftJobRepository(db),
           calendarRepository: DriftCalendarRepository(db),
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
@@ -1189,6 +1252,7 @@ void main() {
           leetCodeRepository: leetCodeRepo,
           studyRepository: studyRepo,
           workoutRepository: DriftWorkoutRepository(db),
+          jobRepository: DriftJobRepository(db),
           calendarRepository: DriftCalendarRepository(db),
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
@@ -1270,6 +1334,7 @@ void main() {
           leetCodeRepository: DriftLeetCodeRepository(db),
           studyRepository: DriftStudyRepository(db),
           workoutRepository: DriftWorkoutRepository(db),
+          jobRepository: DriftJobRepository(db),
           calendarRepository: DriftCalendarRepository(db),
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),

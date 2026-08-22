@@ -7,9 +7,11 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
@@ -824,6 +826,282 @@ WorkoutSetLog mergeWorkoutSetLogFromRemote(
   );
 }
 
+Map<String, dynamic> jobApplicationToFirestore(JobApplication application) => {
+  'id': application.id,
+  'company': application.company,
+  'title': application.title,
+  'status': application.status,
+  'dateApplied': _dateToFirestoreRequired(application.dateApplied),
+  'applicationUrl': application.applicationUrl,
+  'notes': application.notes,
+  'seasonId': application.seasonId,
+  'createdAt': _dateToFirestoreRequired(application.createdAt),
+  'updatedAt': _dateToFirestoreRequired(application.updatedAt),
+  'version': application.version,
+  'deletedAt': _dateToFirestore(application.deletedAt),
+};
+
+JobApplication mergeJobApplicationFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  JobApplication? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  // `seasonId` and the two optional text fields fall back to null rather than
+  // to the local value: un-archiving and clearing a URL are both expressed as
+  // the field going away, and inheriting the local value would make either
+  // change impossible to sync.
+  return JobApplication(
+    id: id,
+    company: data['company'] as String? ?? local?.company ?? '',
+    title: data['title'] as String? ?? local?.title ?? '',
+    status: data['status'] as String? ?? local?.status ?? '',
+    dateApplied:
+        parseFirestoreDate(data['dateApplied']) ??
+        local?.dateApplied ??
+        remoteUpdated,
+    applicationUrl: data['applicationUrl'] as String?,
+    notes: data['notes'] as String?,
+    seasonId: data['seasonId'] as String?,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> jobStatusEventToFirestore(JobStatusEvent event) => {
+  'id': event.id,
+  'applicationId': event.applicationId,
+  'fromStatus': event.fromStatus,
+  'toStatus': event.toStatus,
+  'changedAt': _dateToFirestoreRequired(event.changedAt),
+  'createdAt': _dateToFirestoreRequired(event.createdAt),
+  'updatedAt': _dateToFirestoreRequired(event.updatedAt),
+  'version': event.version,
+  'deletedAt': _dateToFirestore(event.deletedAt),
+};
+
+JobStatusEvent mergeJobStatusEventFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  JobStatusEvent? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return JobStatusEvent(
+    id: id,
+    applicationId:
+        data['applicationId'] as String? ?? local?.applicationId ?? '',
+    fromStatus: data['fromStatus'] as String? ?? local?.fromStatus,
+    toStatus: data['toStatus'] as String? ?? local?.toStatus ?? '',
+    changedAt:
+        parseFirestoreDate(data['changedAt']) ??
+        local?.changedAt ??
+        remoteUpdated,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> jobStageToFirestore(JobStage stage) => {
+  'id': stage.id,
+  'name': stage.name,
+  'sortOrder': stage.sortOrder,
+  'createdAt': _dateToFirestoreRequired(stage.createdAt),
+  'updatedAt': _dateToFirestoreRequired(stage.updatedAt),
+  'version': stage.version,
+  'deletedAt': _dateToFirestore(stage.deletedAt),
+};
+
+JobStage mergeJobStageFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  JobStage? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return JobStage(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> jobCompanyToFirestore(JobCompany company) => {
+  'id': company.id,
+  'name': company.name,
+  'categoryId': company.categoryId,
+  'createdAt': _dateToFirestoreRequired(company.createdAt),
+  'updatedAt': _dateToFirestoreRequired(company.updatedAt),
+  'version': company.version,
+  'deletedAt': _dateToFirestore(company.deletedAt),
+};
+
+JobCompany mergeJobCompanyFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  JobCompany? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  // Null rather than the local value: deleting a category clears it off every
+  // company, and that clearing has to be able to reach the other devices.
+  return JobCompany(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    categoryId: data['categoryId'] as String?,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> jobCategoryToFirestore(JobCategory category) => {
+  'id': category.id,
+  'name': category.name,
+  'colorValue': category.colorValue,
+  'sortOrder': category.sortOrder,
+  'createdAt': _dateToFirestoreRequired(category.createdAt),
+  'updatedAt': _dateToFirestoreRequired(category.updatedAt),
+  'version': category.version,
+  'deletedAt': _dateToFirestore(category.deletedAt),
+};
+
+JobCategory mergeJobCategoryFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  JobCategory? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return JobCategory(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ?? local?.colorValue ?? 0,
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> jobSeasonToFirestore(JobSeason season) => {
+  'id': season.id,
+  'name': season.name,
+  'sortOrder': season.sortOrder,
+  'createdAt': _dateToFirestoreRequired(season.createdAt),
+  'updatedAt': _dateToFirestoreRequired(season.updatedAt),
+  'version': season.version,
+  'deletedAt': _dateToFirestore(season.deletedAt),
+};
+
+JobSeason mergeJobSeasonFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  JobSeason? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return JobSeason(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
 Map<String, dynamic> journalEntryToFirestore(JournalEntry entry) => {
   'id': entry.id,
   'journalId': journalReferenceIdForFirestore(entry.journalId),
@@ -999,6 +1277,8 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'sortOrder': task.sortOrder,
   'preStarSortOrder': task.preStarSortOrder,
   'dueDateSetAt': _dateToFirestore(task.dueDateSetAt),
+  'recurrence': task.recurrence.toStorage(),
+  'recurrenceAnchor': _dateToFirestore(task.recurrenceAnchor),
   'parentTaskId': task.parentTaskId,
   'createdAt': _dateToFirestoreRequired(task.createdAt),
   'updatedAt': _dateToFirestoreRequired(task.updatedAt),
@@ -1081,6 +1361,16 @@ TodoTask mergeTodoTaskFromRemote(
             ? data['parentTaskId'] as String?
             : local?.parentTaskId)
         : local!.parentTaskId,
+    recurrence: metadataRemoteWins
+        ? (data.containsKey('recurrence')
+            ? RecurrenceRule.parse(data['recurrence'] as String?)
+            : (local?.recurrence ?? RecurrenceRule.none))
+        : local!.recurrence,
+    recurrenceAnchor: metadataRemoteWins
+        ? (data.containsKey('recurrenceAnchor')
+            ? parseFirestoreDate(data['recurrenceAnchor'])
+            : local?.recurrenceAnchor)
+        : local!.recurrenceAnchor,
     createdAt: parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
@@ -1275,7 +1565,11 @@ Map<String, dynamic> calendarEventToFirestore(CalendarEvent event) => {
   'notes': event.notes,
   'source': event.source.name,
   'externalId': event.externalId,
-  'recurrence': event.recurrence.name,
+  'recurrence': event.recurrence.toStorage(),
+  'recurrenceEndDate': _dateToFirestore(event.recurrenceEndDate),
+  'exceptionDates': encodeExceptionDates(event.exceptionDates),
+  'recurrenceParentId': event.recurrenceParentId,
+  'recurrenceDate': _dateToFirestore(event.recurrenceDate),
   'createdAt': _dateToFirestoreRequired(event.createdAt),
   'updatedAt': _dateToFirestoreRequired(event.updatedAt),
   'version': event.version,
@@ -1314,11 +1608,23 @@ CalendarEvent mergeCalendarEventFromRemote(
       local?.source ?? EventSource.local,
     ),
     externalId: data['externalId'] as String? ?? local?.externalId,
-    recurrence: _enumFromName(
-      EventRecurrence.values,
-      data['recurrence'],
-      local?.recurrence ?? EventRecurrence.none,
-    ),
+    recurrence: data.containsKey('recurrence')
+        ? RecurrenceRule.parse(data['recurrence'] as String?)
+        : (local?.recurrence ?? RecurrenceRule.none),
+    recurrenceEndDate:
+        parseFirestoreDate(data['recurrenceEndDate']) ??
+        (data.containsKey('recurrenceEndDate')
+            ? null
+            : local?.recurrenceEndDate),
+    exceptionDates: data.containsKey('exceptionDates')
+        ? decodeExceptionDates(data['exceptionDates'] as String?)
+        : (local?.exceptionDates ?? const []),
+    recurrenceParentId: data.containsKey('recurrenceParentId')
+        ? data['recurrenceParentId'] as String?
+        : local?.recurrenceParentId,
+    recurrenceDate:
+        parseFirestoreDate(data['recurrenceDate']) ??
+        (data.containsKey('recurrenceDate') ? null : local?.recurrenceDate),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2112,6 +2418,8 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'weatherChartCurveTension': s.weatherChartCurveTension,
   'colorPalette': s.colorPalette,
   'navPageOrder': s.navPageOrder,
+  'jobsHiddenColumns': s.jobsHiddenColumns,
+  'jobsIncludeArchived': s.jobsIncludeArchived,
   'startupPageMode': s.startupPageMode.name,
   'customStartupPage': s.customStartupPage,
   'lastSeenNavPage': s.lastSeenNavPage,
@@ -2309,6 +2617,8 @@ AppSettings mergeSettingsFromRemote(
     colorPalette: _remoteIntList(data, 'colorPalette'),
     navPageOrder: _stringListOrNull(data['navPageOrder']),
     clearNavPageOrder: _remoteClears(data, 'navPageOrder'),
+    jobsHiddenColumns: _stringListOrNull(data['jobsHiddenColumns']),
+    jobsIncludeArchived: data['jobsIncludeArchived'] as bool?,
     startupPageMode: _enumFromName(
       StartupPageMode.values,
       data['startupPageMode'],

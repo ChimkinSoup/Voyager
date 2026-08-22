@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
@@ -27,19 +28,32 @@ class LeetCodeRecentCompletions extends StatelessWidget {
         ),
       );
     }
+    // Dashboard-only: the same question tracked twice is worth a quiet word
+    // here, but not while the user is mid-review in the deck or a session.
+    final duplicateCounts = leetCodeDuplicateCounts(problems);
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: problems.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) => _CompletionRow(problem: problems[index]),
+      itemBuilder: (context, index) {
+        final problem = problems[index];
+        return _CompletionRow(
+          problem: problem,
+          duplicateCount: duplicateCounts[leetCodeIdentityKey(problem)],
+        );
+      },
     );
   }
 }
 
 class _CompletionRow extends ConsumerStatefulWidget {
-  const _CompletionRow({required this.problem});
+  const _CompletionRow({required this.problem, this.duplicateCount});
 
   final LeetCodeProblem problem;
+
+  /// How many tracked problems share this one's identity, or null when it is
+  /// the only copy. Always at least 2 when set.
+  final int? duplicateCount;
 
   @override
   ConsumerState<_CompletionRow> createState() => _CompletionRowState();
@@ -95,6 +109,10 @@ class _CompletionRowState extends ConsumerState<_CompletionRow> {
                               style: theme.textTheme.bodyLarge,
                             ),
                           ),
+                          if (widget.duplicateCount != null) ...[
+                            const SizedBox(width: 6),
+                            _DuplicateMarker(count: widget.duplicateCount!),
+                          ],
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -135,6 +153,30 @@ class _CompletionRowState extends ConsumerState<_CompletionRow> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The faint "you've tracked this one more than once" mark on a feed row.
+///
+/// Deliberately inert — no tap target. It carries the theme's error red at
+/// low alpha so it reads as something to look at without shouting, and
+/// explains itself on hover.
+class _DuplicateMarker extends StatelessWidget {
+  const _DuplicateMarker({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: 'Tracked $count times — possible duplicate',
+      child: Icon(
+        PhosphorIconsRegular.copy,
+        size: 13,
+        color: theme.colorScheme.error.withValues(alpha: 0.45),
       ),
     );
   }

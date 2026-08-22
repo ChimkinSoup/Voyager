@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/domain/services/calendar_recurrence_editing.dart';
 
 Future<bool> showConfirmDialog(
   BuildContext context, {
@@ -81,4 +82,53 @@ Future<DeleteContainerChoice> showDeleteContainerDialog(
     ),
   );
   return result ?? DeleteContainerChoice.cancel;
+}
+
+/// Asks which slice of a recurring series an edit or delete applies to.
+///
+/// Returns null when the user backs out. [isDelete] only swaps the wording and
+/// the destructive colour — the three choices are the same either way, so the
+/// prompt reads identically whichever action opened it.
+Future<RecurrenceEditScope?> showRecurrenceScopeDialog(
+  BuildContext context, {
+  required String title,
+  required bool isDelete,
+}) async {
+  return showVoyagerDialog<RecurrenceEditScope>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(
+        isDelete
+            ? 'This is a repeating event. Which occurrences should be deleted?'
+            : 'This is a repeating event. Which occurrences should be changed?',
+      ),
+      actions: [
+        GlassButton(
+          onPressed: () => Navigator.pop(context),
+          label: 'Cancel',
+          dense: true,
+        ),
+        GlassButton(
+          onPressed: () =>
+              Navigator.pop(context, RecurrenceEditScope.thisEvent),
+          label: 'This event only',
+          dense: true,
+        ),
+        GlassButton(
+          onPressed: () =>
+              Navigator.pop(context, RecurrenceEditScope.thisAndFuture),
+          label: 'This and all future events',
+          dense: true,
+        ),
+        GlassButton(
+          onPressed: () =>
+              Navigator.pop(context, RecurrenceEditScope.allEvents),
+          label: 'All events',
+          color: isDelete ? Theme.of(context).colorScheme.error : null,
+          dense: true,
+        ),
+      ],
+    ),
+  );
 }

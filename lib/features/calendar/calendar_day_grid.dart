@@ -630,8 +630,14 @@ class CalendarDayCell extends StatelessWidget {
                                           );
                                       final event = events[i]!;
                                       final eventEntry = event.isFullDay
-                                          ? CalendarDayEntry.allDayEvent(event)
-                                          : CalendarDayEntry.timedEvent(event);
+                                          ? CalendarDayEntry.allDayEvent(
+                                              event,
+                                              day: date,
+                                            )
+                                          : CalendarDayEntry.timedEvent(
+                                              event,
+                                              day: date,
+                                            );
                                       return calendarEntryContextMenu(
                                         builder: entryMenuBuilder,
                                         entry: eventEntry,
@@ -687,6 +693,7 @@ class CalendarDayCell extends StatelessWidget {
                     ? null
                     : (badgeContext) => _showOverflowEventsPopover(
                         badgeContext: badgeContext,
+                        day: date,
                         overflowEvents: overflowEvents,
                         editingEventId: editingEventId,
                         onEntryTap: onEntryTap!,
@@ -709,6 +716,7 @@ class CalendarDayCell extends StatelessWidget {
                         : () {
                             _showTodoPopover(
                               badgeContext: todoContext,
+                              day: date,
                               todos: todoMarkers,
                               onEntryTap: onEntryTap!,
                               entryMenuBuilder: entryMenuBuilder,
@@ -772,6 +780,7 @@ class CalendarDayCell extends StatelessWidget {
                       : () {
                           _showTodoPopover(
                             badgeContext: todoContext,
+                            day: date,
                             todos: todoMarkers,
                             onEntryTap: onEntryTap!,
                           );
@@ -1791,6 +1800,7 @@ class _EventFocusRingPainter extends CustomPainter {
 Future<void> _showOverflowEventsPopover({
   required BuildContext badgeContext,
   required List<CalendarEvent> overflowEvents,
+  required DateTime day,
   required void Function(CalendarDayEntry entry) onEntryTap,
   String? editingEventId,
   CalendarEntryMenuBuilder? entryMenuBuilder,
@@ -1801,6 +1811,7 @@ Future<void> _showOverflowEventsPopover({
     width: 240,
     builder: (popoverContext) {
       return CalendarDayOverflowEventsPopover(
+        day: day,
         events: overflowEvents,
         editingEventId: editingEventId,
         entryMenuBuilder: entryMenuBuilder,
@@ -1808,8 +1819,8 @@ Future<void> _showOverflowEventsPopover({
           Navigator.of(popoverContext).pop();
           onEntryTap(
             event.isFullDay
-                ? CalendarDayEntry.allDayEvent(event)
-                : CalendarDayEntry.timedEvent(event),
+                ? CalendarDayEntry.allDayEvent(event, day: day)
+                : CalendarDayEntry.timedEvent(event, day: day),
           );
         },
       );
@@ -1820,6 +1831,7 @@ Future<void> _showOverflowEventsPopover({
 Future<void> _showTodoPopover({
   required BuildContext badgeContext,
   required List<CalendarTodoMarker> todos,
+  required DateTime day,
   required void Function(CalendarDayEntry entry) onEntryTap,
   CalendarEntryMenuBuilder? entryMenuBuilder,
 }) {
@@ -1829,11 +1841,12 @@ Future<void> _showTodoPopover({
     width: 240,
     builder: (popoverContext) {
       return CalendarDayTodoPopover(
+        day: day,
         todos: todos,
         entryMenuBuilder: entryMenuBuilder,
         onTodoTap: (todo) {
           Navigator.of(popoverContext).pop();
-          onEntryTap(CalendarDayEntry.todo(todo));
+          onEntryTap(CalendarDayEntry.todo(todo, day: day));
         },
       );
     },
@@ -1845,9 +1858,13 @@ class CalendarDayTodoPopover extends StatelessWidget {
     super.key,
     required this.todos,
     required this.onTodoTap,
+    required this.day,
     this.entryMenuBuilder,
   });
 
+  /// The day cell this popover belongs to, carried into every entry so a
+  /// recurring item stays identifiable as one occurrence.
+  final DateTime day;
   final List<CalendarTodoMarker> todos;
   final ValueChanged<CalendarTodoMarker> onTodoTap;
   final CalendarEntryMenuBuilder? entryMenuBuilder;
@@ -1865,7 +1882,7 @@ class CalendarDayTodoPopover extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: calendarEntryContextMenu(
                 builder: entryMenuBuilder,
-                entry: CalendarDayEntry.todo(todo),
+                entry: CalendarDayEntry.todo(todo, day: day),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -1891,10 +1908,13 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
     super.key,
     required this.events,
     required this.onEventTap,
+    required this.day,
     this.editingEventId,
     this.entryMenuBuilder,
   });
 
+  /// The day cell this popover belongs to. See [CalendarDayTodoPopover.day].
+  final DateTime day;
   final List<CalendarEvent> events;
   final ValueChanged<CalendarEvent> onEventTap;
   final String? editingEventId;
@@ -1914,8 +1934,8 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
               child: calendarEntryContextMenu(
                 builder: entryMenuBuilder,
                 entry: event.isFullDay
-                    ? CalendarDayEntry.allDayEvent(event)
-                    : CalendarDayEntry.timedEvent(event),
+                    ? CalendarDayEntry.allDayEvent(event, day: day)
+                    : CalendarDayEntry.timedEvent(event, day: day),
                 child: CalendarInteractiveEventTap(
                   eventColor: Color(event.colorValue),
                   borderRadius: BorderRadius.circular(6),

@@ -11,6 +11,7 @@ import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 
 Future<String?> promptJournalName(
   BuildContext context,
@@ -78,7 +79,7 @@ Future<Journal?> createJournalList(
     context,
     title: 'New journal',
     palette: palette,
-    initialColor: defaultColor,
+    initialColor: assigner.nextColor(),
     usedColors: allJournals
         .where((j) => j.colorValue != null)
         .map((j) => j.colorValue!)
@@ -127,28 +128,33 @@ void _invalidateJournalDeleteProviders(WidgetRef ref, String journalId) {
   ref.invalidate(journalsProvider);
 }
 
+/// Pushes the rows the local delete just wrote, re-read from SQLite rather
+/// than reconstructed from the snapshots taken before it.
+///
+/// Those snapshots predate `softDeleteEntriesInJournal` /
+/// `reassignEntriesJournal`, so `copyWith` on them produced a document at
+/// whatever version the row held *then* — which can be behind what Firestore
+/// already holds, in which case the next device to pull decides the remote
+/// lost and pushes a live row back, resurrecting the entry. Reading the rows
+/// back makes every pushed document monotonic and carries the version bump
+/// those two repository methods now apply.
 Future<void> _syncJournalDeleteRemote({
   required RemoteSyncService remoteSync,
+  required JournalRepository repository,
   required Journal journal,
   required DeleteContainerChoice choice,
   required int entryCount,
-  required List<JournalEntry> entriesBeforeDelete,
+  required List<String> affectedEntryIds,
   Journal? fallbackJournalToPush,
 }) async {
   if (fallbackJournalToPush != null) {
     remoteSync.pushJournal(fallbackJournalToPush);
   }
 
-  if (choice == DeleteContainerChoice.deleteAll && entryCount > 0) {
-    final now = utcNow();
-    for (final entry in entriesBeforeDelete) {
-      remoteSync.pushJournalEntryNow(entry.copyWith(deletedAt: now));
-    }
-  } else if (choice == DeleteContainerChoice.moveToDefault && entryCount > 0) {
-    for (final entry in entriesBeforeDelete) {
-      remoteSync.pushJournalEntryNow(
-        entry.copyWith(journalId: legacyJournalId),
-      );
+  if (choice != DeleteContainerChoice.cancel && entryCount > 0) {
+    for (final id in affectedEntryIds) {
+      final stored = await repository.getEntry(id);
+      if (stored != null) remoteSync.pushJournalEntryNow(stored);
     }
   }
 
@@ -169,6 +175,12 @@ Future<bool> deleteJournalList(
 }) async {
   if (journal.id == legacyJournalId) return false;
 
+  // Read before the first await: the `orElse` below runs after two of them,
+  // and reaching for `Theme.of(context)` there throws if the page was torn
+  // down mid-delete — which the catch reports as a delete failure that never
+  // happened, leaving the journal half-deleted.
+  final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
+
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${journal.name}"?',
@@ -184,11 +196,12 @@ Future<bool> deleteJournalList(
   final repo = ref.read(journalRepositoryProvider);
   final remoteSync = ref.read(remoteSyncServiceProvider);
   Journal? fallbackJournalToPush;
-  var entriesBeforeDelete = const <JournalEntry>[];
+  var affectedEntryIds = const <String>[];
 
   try {
     if (entryCount > 0) {
-      entriesBeforeDelete = await repo.listEntries(journalId: journal.id);
+      final entries = await repo.listEntries(journalId: journal.id);
+      affectedEntryIds = [for (final entry in entries) entry.id];
     }
 
     if (choice == DeleteContainerChoice.deleteAll && entryCount > 0) {
@@ -201,7 +214,7 @@ Future<bool> deleteJournalList(
           return Journal(
             id: legacyJournalId,
             name: 'Journal',
-            colorValue: Theme.of(context).colorScheme.primary.toARGB32(),
+            colorValue: fallbackColor,
             createdAt: now,
             updatedAt: now,
           );
@@ -245,10 +258,11 @@ Future<bool> deleteJournalList(
   unawaited(
     _syncJournalDeleteRemote(
       remoteSync: remoteSync,
+      repository: repo,
       journal: journal,
       choice: choice,
       entryCount: entryCount,
-      entriesBeforeDelete: entriesBeforeDelete,
+      affectedEntryIds: affectedEntryIds,
       fallbackJournalToPush: fallbackJournalToPush,
     ).catchError((Object error, StackTrace stackTrace) {
       FlutterError.reportError(

@@ -331,6 +331,35 @@ String leetCodeTitleSlug(String title) {
       .replaceAll(RegExp(r'^-+|-+$'), '');
 }
 
+/// The key two tracked problems have to share to be the same LeetCode
+/// question.
+///
+/// A stored [LeetCodeProblem.titleSlug] wins when a GraphQL lookup supplied
+/// one, so renaming one copy doesn't hide it from the other; a problem tracked
+/// by hand falls back to slugifying its title, which is what the lookup would
+/// have stored anyway. Empty for a title that slugifies to nothing.
+String leetCodeIdentityKey(LeetCodeProblem problem) {
+  final stored = problem.titleSlug;
+  if (stored != null && stored.isNotEmpty) return stored;
+  return leetCodeTitleSlug(problem.title);
+}
+
+/// How many of [problems] share each identity key, keeping only the keys held
+/// by more than one — i.e. the same question tracked twice.
+///
+/// Problems with an empty key are left out rather than piled together: a title
+/// that slugifies to nothing says nothing about which question it is.
+Map<String, int> leetCodeDuplicateCounts(Iterable<LeetCodeProblem> problems) {
+  final counts = <String, int>{};
+  for (final problem in problems) {
+    final key = leetCodeIdentityKey(problem);
+    if (key.isEmpty) continue;
+    counts.update(key, (count) => count + 1, ifAbsent: () => 1);
+  }
+  counts.removeWhere((_, count) => count < 2);
+  return counts;
+}
+
 int compareLeetCodeProblemsNewestFirst(LeetCodeProblem a, LeetCodeProblem b) {
   final bySolved = b.solvedAt.compareTo(a.solvedAt);
   if (bySolved != 0) return bySolved;

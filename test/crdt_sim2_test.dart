@@ -67,6 +67,7 @@ void main() {
       leetCodeRepository: DriftLeetCodeRepository(db),
       studyRepository: DriftStudyRepository(db),
       workoutRepository: DriftWorkoutRepository(db),
+      jobRepository: DriftJobRepository(db),
       calendarRepository: DriftCalendarRepository(db),
       trackerRepository: DriftTrackerRepository(db),
       financeRepository: DriftFinanceRepository(db),

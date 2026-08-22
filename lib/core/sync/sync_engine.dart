@@ -399,6 +399,7 @@ class BackgroundSyncOrchestrator {
     required LeetCodeRepository leetCodeRepository,
     required StudyRepository studyRepository,
     required WorkoutRepository workoutRepository,
+    required JobRepository jobRepository,
     required NotificationRepository notificationRepository,
     required BucketListRepository bucketListRepository,
     required SettingsRepository settingsRepository,
@@ -411,6 +412,7 @@ class BackgroundSyncOrchestrator {
        _leetCodeRepository = leetCodeRepository,
        _studyRepository = studyRepository,
        _workoutRepository = workoutRepository,
+       _jobRepository = jobRepository,
        _notificationRepository = notificationRepository,
        _bucketListRepository = bucketListRepository,
        _settingsRepository = settingsRepository;
@@ -424,6 +426,7 @@ class BackgroundSyncOrchestrator {
   final LeetCodeRepository _leetCodeRepository;
   final StudyRepository _studyRepository;
   final WorkoutRepository _workoutRepository;
+  final JobRepository _jobRepository;
   final NotificationRepository _notificationRepository;
   final BucketListRepository _bucketListRepository;
   final SettingsRepository _settingsRepository;
@@ -440,6 +443,11 @@ class BackgroundSyncOrchestrator {
       _leetCodeRepository.purgeExpiredDeleted(cutoff),
       _studyRepository.purgeExpiredDeleted(cutoff),
       _workoutRepository.purgeExpiredDeleted(cutoff),
+      // Job applications are the one entity the user hard-deletes, so their
+      // tombstones are the only record of the deletion the other devices ever
+      // see. Purging on the same retention as everything else is what stops
+      // them accumulating forever.
+      _jobRepository.purgeExpiredDeleted(cutoff),
       // The tombstones that let an unpin, an un-dismissal, a removed bucket
       // list item or a removed dictionary word reach the other devices.
       _notificationRepository.purgeExpiredDeleted(cutoff),

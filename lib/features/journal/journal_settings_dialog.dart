@@ -27,8 +27,24 @@ class _JournalSettingsDialog extends ConsumerWidget {
 
   final String journalId;
 
-  Future<void> _saveJournal(WidgetRef ref, Journal updated) async {
-    await ref.read(journalRepositoryProvider).upsertJournal(updated);
+  /// Applies [apply] to the row as it stands in SQLite, not to the [Journal]
+  /// the frame was built from.
+  ///
+  /// Each write used to send a whole finished object built from the watched
+  /// value, and the rebuild that would refresh that value is a DB round-trip
+  /// away — so a second switch flipped before the refetch landed still held
+  /// the pre-first-switch journal and wrote it back verbatim except for its
+  /// own field, silently reverting the first toggle (and bumping the version
+  /// and pushing the lost update to Firestore on the way).
+  Future<void> _saveJournal(
+    WidgetRef ref,
+    Journal Function(Journal current) apply,
+  ) async {
+    final repo = ref.read(journalRepositoryProvider);
+    final current = await repo.getJournal(journalId);
+    if (current == null) return;
+    final updated = apply(current);
+    await repo.upsertJournal(updated);
     ref.read(remoteSyncServiceProvider).pushJournal(updated);
     ref.invalidate(journalsProvider);
     await ref.read(journalsProvider.future);
@@ -112,7 +128,7 @@ class _JournalSettingsDialog extends ConsumerWidget {
                     'back on and every value is still there.',
                 value: journal.showMood,
                 onChanged: (v) =>
-                    _saveJournal(ref, journal.copyWith(showMood: v)),
+                    _saveJournal(ref, (j) => j.copyWith(showMood: v)),
               ),
               _toggle(
                 context,
@@ -120,7 +136,7 @@ class _JournalSettingsDialog extends ConsumerWidget {
                 title: 'Weather',
                 value: journal.showWeather,
                 onChanged: (v) =>
-                    _saveJournal(ref, journal.copyWith(showWeather: v)),
+                    _saveJournal(ref, (j) => j.copyWith(showWeather: v)),
               ),
               _toggle(
                 context,
@@ -132,7 +148,7 @@ class _JournalSettingsDialog extends ConsumerWidget {
                     : null,
                 value: journal.showQuotes,
                 onChanged: (v) =>
-                    _saveJournal(ref, journal.copyWith(showQuotes: v)),
+                    _saveJournal(ref, (j) => j.copyWith(showQuotes: v)),
               ),
               const Divider(height: 24),
               _toggle(
@@ -144,7 +160,7 @@ class _JournalSettingsDialog extends ConsumerWidget {
                     'in search and analytics.',
                 value: journal.includeInAllView,
                 onChanged: (v) =>
-                    _saveJournal(ref, journal.copyWith(includeInAllView: v)),
+                    _saveJournal(ref, (j) => j.copyWith(includeInAllView: v)),
               ),
               _toggle(
                 context,

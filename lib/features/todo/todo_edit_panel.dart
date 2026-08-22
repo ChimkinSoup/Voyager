@@ -30,6 +30,8 @@ import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/repeat_selector_popover.dart';
+import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -74,6 +76,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late final FocusNode _subtaskFocusNode;
   final GlobalKey _subtaskListKey = GlobalKey();
   DateTime? _dueDate;
+  late RecurrenceRule _recurrence;
+  bool _isRepeatPickerOpen = false;
   List<TodoTask> _subtasks = [];
   RemoteSyncService? _remoteSync;
   PendingTextMergeListener? _pendingTextMergeListener;
@@ -102,6 +106,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _subtaskFocusNode = FocusNode();
     _subtaskFocusNode.onKeyEvent = _handleSubtaskKey;
     _dueDate = widget.task.dueDate;
+    _recurrence = widget.task.recurrence;
     _loadSubtasks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -142,6 +147,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _notesController.text = widget.task.notes ?? '';
       _lastNotesText = _notesController.text;
       _dueDate = widget.task.dueDate;
+    _recurrence = widget.task.recurrence;
       _loadSubtasks();
       _registerPendingNotesListener(widget.task.id);
       _beginEditingSession(ref.read(remoteSyncServiceProvider));
@@ -151,6 +157,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       // _dueDate so the pill updates instantly instead of only after the user
       // reselects the task.
       _dueDate = widget.task.dueDate;
+    _recurrence = widget.task.recurrence;
     }
   }
 
@@ -369,6 +376,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     String? title,
     String? notes,
     DateTime? dueDate,
+    RecurrenceRule? recurrence,
     bool clearDueDate = false,
     String? listId,
     bool reorderDueDate = false,
@@ -396,6 +404,18 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         !widget.task.isSubtask &&
         (reorderDueDate || clearDueDate || effectiveDue != widget.task.dueDate);
 
+    final effectiveRule = recurrence ?? _recurrence;
+    // The anchor is frozen the first time a repeat is set and only moves when
+    // the user reschedules the task by hand. Letting it follow every due date
+    // would re-anchor it on each roll-forward, and a "monthly on the 31st"
+    // task that landed on Feb 28 would stay on the 28th from then on.
+    final rescheduled = dueDate != null || clearDueDate;
+    final anchor = !effectiveRule.repeats
+        ? null
+        : (rescheduled
+              ? effectiveDue
+              : (widget.task.recurrenceAnchor ?? effectiveDue));
+
     final baseUpdate = widget.task.copyWith(
       title: titleText,
       listId: listId,
@@ -403,6 +423,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       clearNotes: notesText.isEmpty,
       dueDate: effectiveDue,
       clearDueDate: clearDueDate,
+      recurrence: effectiveRule,
+      recurrenceAnchor: anchor,
+      clearRecurrenceAnchor: anchor == null,
     );
 
     if (listMoved) {
@@ -491,7 +514,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
           (notesText.isEmpty
               ? widget.task.notes == null
               : notesText == widget.task.notes) &&
-          effectiveDue == widget.task.dueDate;
+          effectiveDue == widget.task.dueDate &&
+          effectiveRule == widget.task.recurrence &&
+          anchor == widget.task.recurrenceAnchor;
       if (!unchanged) {
         await repo.upsertTask(baseUpdate);
         unawaited(
@@ -601,6 +626,32 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       widget.task.copyWith(dueDate: due, dueDateSetAt: utcNow()),
     );
     unawaited(_save(dueDate: due, reorderDueDate: previousDue != due));
+  }
+
+  Future<void> _openRepeatPicker(BuildContext buttonContext) async {
+    setState(() => _isRepeatPickerOpen = true);
+    final rule = await showContextualPopover<RecurrenceRule>(
+      context: context,
+      buttonContext: buttonContext,
+      width: kRepeatPopoverWidth,
+      accentColor: _listAccentColor,
+      builder: (ctx) => RepeatSelectorPopover(
+        initialRule: _recurrence,
+        anchor: (_dueDate ?? DateTime.now()).toLocal(),
+        accentColor: _listAccentColor,
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _isRepeatPickerOpen = false;
+      if (rule != null) _recurrence = rule;
+    });
+    if (rule != null) {
+      widget.onTaskOptimistic?.call(
+        widget.task.copyWith(recurrence: rule),
+      );
+      unawaited(_save(recurrence: rule));
+    }
   }
 
   Future<void> _clearDueDate() async {
@@ -948,84 +999,110 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 ],
               ),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              // The pill and the repeat toggle group on the left; "Reset due
+              // date" is pushed to the right edge by the Expanded, so it reads
+              // as the row's escape hatch rather than as a third setting.
+              Row(
                 children: [
-                  Builder(
-                    builder: (context) {
-                      final localDue = _dueDate?.toLocal();
-                      final hasTime =
-                          localDue != null &&
-                          (localDue.hour != 0 || localDue.minute != 0);
-                      final label = localDue == null
-                          ? 'Set date & time'
-                          : DateFormat(
-                                  'EEE, MMM d',
-                                ).format(_dueDate!.toLocal()) +
-                                (hasTime
-                                    ? ' at ${formatTime12Hour(_dueDate!.toLocal())}'
-                                    : '');
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Builder(
+                            builder: (context) {
+                              final localDue = _dueDate?.toLocal();
+                              final hasTime =
+                                  localDue != null &&
+                                  (localDue.hour != 0 || localDue.minute != 0);
+                              final label = localDue == null
+                                  ? 'Set date & time'
+                                  : DateFormat(
+                                          'EEE, MMM d',
+                                        ).format(_dueDate!.toLocal()) +
+                                        (hasTime
+                                            ? ' at ${formatTime12Hour(_dueDate!.toLocal())}'
+                                            : '');
 
-                      return SelectorPill(
-                        dense: false,
-                        ellipsize: false,
-                        isActive: _isDatePickerOpen,
-                        label: label,
-                        accentColor: listColor,
-                        onTap: () async {
-                          setState(() => _isDatePickerOpen = true);
-
-                          final initialDt = _dueDate != null && hasTime
-                              ? _dueDate!.toLocal()
-                              : (_dueDate != null
-                                    ? _dueDate!.toLocal().copyWith(
-                                        hour: 12,
-                                        minute: 0,
-                                      ) // default time 12:00 PM if none
-                                    : DateTime.now().toLocal());
-
-                          final pickedDt =
-                              await showContextualPopover<DateTime>(
-                                context: context,
-                                buttonContext: context,
-                                width: 500,
-                                height: 380,
+                              return SelectorPill(
+                                dense: false,
+                                isActive: _isDatePickerOpen,
+                                label: label,
                                 accentColor: listColor,
-                                builder: (ctx) => DateTimeSelectorPopover(
-                                  initialDateTime: initialDt,
-                                  accentColor: listColor,
-                                  optionalTime: true,
-                                  initialHasTime: hasTime,
-                                ),
+                                onTap: () async {
+                                  setState(() => _isDatePickerOpen = true);
+
+                                  final initialDt = _dueDate != null && hasTime
+                                      ? _dueDate!.toLocal()
+                                      : (_dueDate != null
+                                            ? _dueDate!.toLocal().copyWith(
+                                                hour: 12,
+                                                minute: 0,
+                                              ) // default time 12:00 PM if none
+                                            : DateTime.now().toLocal());
+
+                                  final pickedDt =
+                                      await showContextualPopover<DateTime>(
+                                        context: context,
+                                        buttonContext: context,
+                                        width: 500,
+                                        height: 380,
+                                        accentColor: listColor,
+                                        builder: (ctx) => DateTimeSelectorPopover(
+                                          initialDateTime: initialDt,
+                                          accentColor: listColor,
+                                          optionalTime: true,
+                                          initialHasTime: hasTime,
+                                        ),
+                                      );
+
+                                  if (mounted)
+                                    setState(() => _isDatePickerOpen = false);
+
+                                  if (pickedDt != null) {
+                                    final newDue = pickedDt.toUtc();
+                                    final previousDue = widget.task.dueDate;
+                                    setState(() => _dueDate = newDue);
+                                    widget.onTaskOptimistic?.call(
+                                      widget.task.copyWith(
+                                        dueDate: newDue,
+                                        dueDateSetAt: utcNow(),
+                                      ),
+                                    );
+                                    unawaited(
+                                      _save(
+                                        dueDate: newDue,
+                                        reorderDueDate: previousDue != newDue,
+                                      ),
+                                    );
+                                  }
+                                },
                               );
-
-                          if (mounted)
-                            setState(() => _isDatePickerOpen = false);
-
-                          if (pickedDt != null) {
-                            final newDue = pickedDt.toUtc();
-                            final previousDue = widget.task.dueDate;
-                            setState(() => _dueDate = newDue);
-                            widget.onTaskOptimistic?.call(
-                              widget.task.copyWith(
-                                dueDate: newDue,
-                                dueDateSetAt: utcNow(),
-                              ),
-                            );
-                            unawaited(
-                              _save(
-                                dueDate: newDue,
-                                reorderDueDate: previousDue != newDue,
-                              ),
-                            );
-                          }
-                        },
-                      );
-                    },
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Builder(
+                          builder: (buttonContext) => RepeatIconButton(
+                            rule: _recurrence,
+                            anchor: (_dueDate ?? DateTime.now()).toLocal(),
+                            accentColor: listColor,
+                            isOpen: _isRepeatPickerOpen,
+                            // A repeat is measured from the due date, so
+                            // without one there is nothing to repeat. The rule
+                            // itself is left alone: clearing a due date parks
+                            // the repeat rather than throwing it away, and
+                            // setting a due date again lights it back up.
+                            enabled: _dueDate != null,
+                            disabledTooltip: 'Set a due date to repeat',
+                            onPressed: () => _openRepeatPicker(buttonContext),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   if (_dueDate != null) ...[
+                    const SizedBox(width: 8),
                     GlassButton(
                       dense: true,
                       onPressed: _clearDueDate,

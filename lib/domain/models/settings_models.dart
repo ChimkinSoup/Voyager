@@ -115,6 +115,8 @@ class AppSettings {
     this.lastSeenNavPage,
     this.todoCompletedSectionExpanded = true,
     this.showAnnualizedSubscriptionCost = false,
+    this.jobsHiddenColumns = const [],
+    this.jobsIncludeArchived = false,
     this.dreamSplitWidth,
     this.showDreamStatistics = false,
     this.dreamNotesPinned = false,
@@ -306,6 +308,14 @@ class AppSettings {
   /// Whether the Bill Radar shows each subscription's annualized cost in faint
   /// text next to it (e.g. "$180/yr" beside a $15/month plan).
   final bool showAnnualizedSubscriptionCost;
+
+  /// Jobs table columns switched off, by column id. The hidden set rather than
+  /// the visible one, so a column added in a later build defaults to shown.
+  final List<String> jobsHiddenColumns;
+
+  /// Whether the Jobs page includes archived applications in the list, the
+  /// sparkline and the Sankey.
+  final bool jobsIncludeArchived;
   final List<int> colorPalette;
 
   /// Adjustable width of the Dream Journal's entry-list pane, mirroring
@@ -481,6 +491,8 @@ class AppSettings {
     String? lastSeenNavPage,
     bool? todoCompletedSectionExpanded,
     bool? showAnnualizedSubscriptionCost,
+    List<String>? jobsHiddenColumns,
+    bool? jobsIncludeArchived,
     double? dreamSplitWidth,
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
@@ -703,6 +715,8 @@ class AppSettings {
           todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
       showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost ??
           this.showAnnualizedSubscriptionCost,
+      jobsHiddenColumns: jobsHiddenColumns ?? this.jobsHiddenColumns,
+      jobsIncludeArchived: jobsIncludeArchived ?? this.jobsIncludeArchived,
       colorPalette: colorPalette ?? this.colorPalette,
       dreamSplitWidth: clearDreamSplitWidth
           ? null

@@ -33,6 +33,8 @@ import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/recurrence_rule.dart';
+import 'package:voyager/domain/services/recurrence_engine.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
@@ -300,6 +302,14 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // doesn't need any of this). Cleared one frame later in _toggleTask.
   final _lingeringActiveIds = <String>{};
   final _completionOverrides = <String, bool>{};
+
+  /// Pending roll-forwards, keyed by task id.
+  ///
+  /// A repeating task that is ticked off plays the whole completion animation
+  /// and then comes back with a later due date. The write is held for the same
+  /// [_todoCompletionSaveDelay] as an ordinary completion so it lands after the
+  /// row has finished collapsing, not in the middle of it.
+  final _rollForwardTimers = <String, Timer>{};
   final _taskOverrides = <String, TodoTask>{};
   final GlobalKey _taskListKey = GlobalKey();
   // Marks the top of the completed section (see _viewportPastActiveSection).
@@ -544,6 +554,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
     // markers off allTodoTasksProvider), so both would outlive this page.
     PendingFlushRegistry.instance.unregister(_flushPendingCompletionSaves);
     unawaited(_flushPendingCompletionSaves());
+    // Same reason as the completion flush: the write hasn't happened yet and
+    // the providers it refreshes outlive this page.
+    for (final taskId in _rollForwardTimers.keys.toList()) {
+      _rollForwardTimers.remove(taskId)?.cancel();
+      unawaited(_applyRecurringRollForward(taskId));
+    }
     _scrollIdleTimer?.cancel();
     _coalescedRefreshTimer?.cancel();
     _taskScrollController.removeListener(_onTaskScrollActivity);
@@ -710,7 +726,91 @@ class _TodoPageState extends ConsumerState<TodoPage>
     // (_TaskRowState._exitDuration) has already played out — same for both
     // directions now — so the save it schedules is already held that long
     // past the tap.
-    _schedulePersistTaskCompletion(task.copyWith(completed: value));
+    if (value && task.repeats) {
+      _scheduleRecurringRollForward(task.id);
+    } else {
+      _schedulePersistTaskCompletion(task.copyWith(completed: value));
+    }
+  }
+
+  /// Ticks a repeating task over to its next occurrence.
+  ///
+  /// [_toggleTask] has already played the optimistic completion, so the row
+  /// shows its check and collapses out of the active section exactly as a
+  /// one-off would. What lands at the end of that animation is a live task
+  /// carrying the next due date rather than a completed one — which is what
+  /// brings the row back.
+  void _scheduleRecurringRollForward(String taskId) {
+    _rollForwardTimers.remove(taskId)?.cancel();
+    _rollForwardTimers[taskId] = Timer(
+      _todoCompletionSaveDelay,
+      () => unawaited(_applyRecurringRollForward(taskId)),
+    );
+  }
+
+  Future<void> _applyRecurringRollForward(String taskId) async {
+    _rollForwardTimers.remove(taskId);
+    // Read through the container, not `ref`: a flush from dispose() outlives
+    // the widget.
+    final repo = _container.read(todoRepositoryProvider);
+    // Re-read rather than trusting the snapshot from tap time: a rename or a
+    // due-date change made while the animation played is already on disk.
+    final latest = await repo.getTask(taskId);
+    if (latest == null) return;
+    final due = latest.dueDate;
+    final anchor = latest.effectiveRecurrenceAnchor;
+    if (due == null || anchor == null || !latest.recurrence.repeats) {
+      // The repeat was cleared mid-animation, so honour the plain completion
+      // the user actually saw rather than silently dropping the write.
+      final completed = latest.copyWith(completed: true);
+      await repo.upsertTask(completed);
+      _container.read(remoteSyncServiceProvider).pushTodoTaskNow(completed);
+      _finishRollForward(taskId, listId: latest.listId, stayedActive: false);
+      return;
+    }
+
+    final next = nextTaskDueDate(
+      dueDate: due,
+      anchor: anchor,
+      rule: latest.recurrence,
+      now: DateTime.now(),
+    );
+    if (next == null) return;
+
+    final rolled = latest.copyWith(
+      completed: false,
+      dueDate: next.toUtc(),
+      dueDateSetAt: utcNow(),
+    );
+    await repo.upsertTask(rolled);
+    _container.read(remoteSyncServiceProvider).pushTodoTaskNow(rolled);
+    _finishRollForward(taskId, listId: rolled.listId, stayedActive: true);
+  }
+
+  /// Drops the optimistic completion so the refreshed row renders live again.
+  ///
+  /// [_reconcileCompletionOverrides] cannot do this: it only clears an override
+  /// that matches what came back, and a roll-forward deliberately writes
+  /// `completed: false` against an override that says true.
+  void _finishRollForward(
+    String taskId, {
+    required String listId,
+    required bool stayedActive,
+  }) {
+    if (mounted) {
+      setState(() {
+        _completionOverrides.remove(taskId);
+        _lingeringActiveIds.remove(taskId);
+        if (stayedActive) _taskOverrides.remove(taskId);
+      });
+    } else {
+      _completionOverrides.remove(taskId);
+      _lingeringActiveIds.remove(taskId);
+      if (stayedActive) _taskOverrides.remove(taskId);
+    }
+    _container.invalidate(todoTasksProvider(listId));
+    _container.invalidate(allTodoTasksProvider);
+    _container.invalidate(todoListStatsProvider);
   }
 
   /// Holds a toggle's writes until the completion animation has settled.

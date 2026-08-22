@@ -1,3 +1,4 @@
+import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
 class TodoListModel extends SoftDeletable {
@@ -57,6 +58,8 @@ class TodoTask extends SoftDeletable {
     this.preStarSortOrder,
     this.dueDateSetAt,
     this.parentTaskId,
+    this.recurrence = RecurrenceRule.none,
+    this.recurrenceAnchor,
   });
 
   final String listId;
@@ -69,6 +72,20 @@ class TodoTask extends SoftDeletable {
   final int? preStarSortOrder;
   final DateTime? dueDateSetAt;
   final String? parentTaskId;
+
+  /// How this task repeats. [dueDate] is the anchor: ticking off a repeating
+  /// task advances the due date to the next occurrence instead of completing
+  /// it, so the task stays live and there is only ever one row per series.
+  final RecurrenceRule recurrence;
+
+  /// The due date [recurrence] is measured from, frozen when the repeat was
+  /// set. Null on tasks that predate the field; callers fall back to [dueDate].
+  final DateTime? recurrenceAnchor;
+
+  /// The date the pattern counts from.
+  DateTime? get effectiveRecurrenceAnchor => recurrenceAnchor ?? dueDate;
+
+  bool get repeats => recurrence.repeats && dueDate != null;
 
   bool get isSubtask => parentTaskId != null;
 
@@ -88,6 +105,9 @@ class TodoTask extends SoftDeletable {
     bool clearDueDateSetAt = false,
     String? parentTaskId,
     bool clearParentTaskId = false,
+    RecurrenceRule? recurrence,
+    DateTime? recurrenceAnchor,
+    bool clearRecurrenceAnchor = false,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -114,6 +134,10 @@ class TodoTask extends SoftDeletable {
       parentTaskId: clearParentTaskId
           ? null
           : (parentTaskId ?? this.parentTaskId),
+      recurrence: recurrence ?? this.recurrence,
+      recurrenceAnchor: clearRecurrenceAnchor
+          ? null
+          : (recurrenceAnchor ?? this.recurrenceAnchor),
     );
   }
 
@@ -133,6 +157,8 @@ class TodoTask extends SoftDeletable {
     'preStarSortOrder': preStarSortOrder,
     'dueDateSetAt': dueDateSetAt?.toUtc().toIso8601String(),
     'parentTaskId': parentTaskId,
+    'recurrence': recurrence.toStorage(),
+    'recurrenceAnchor': recurrenceAnchor?.toUtc().toIso8601String(),
   };
 
   factory TodoTask.fromJson(Map<String, dynamic> json) {
@@ -152,6 +178,10 @@ class TodoTask extends SoftDeletable {
       preStarSortOrder: json['preStarSortOrder'] as int?,
       dueDateSetAt: json['dueDateSetAt'] != null ? DateTime.parse(json['dueDateSetAt'] as String).toUtc() : null,
       parentTaskId: json['parentTaskId'] as String?,
+      recurrence: RecurrenceRule.parse(json['recurrence'] as String?),
+      recurrenceAnchor: json['recurrenceAnchor'] != null
+          ? DateTime.parse(json['recurrenceAnchor'] as String).toUtc()
+          : null,
     );
   }
 }

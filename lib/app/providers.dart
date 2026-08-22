@@ -47,6 +47,7 @@ import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -164,6 +165,13 @@ final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
   );
 });
 
+final jobRepositoryProvider = Provider<JobRepository>((ref) {
+  return DriftJobRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
+});
+
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   return DriftNotificationRepository(
     ref.watch(databaseProvider),
@@ -204,6 +212,7 @@ final backupCollectionsProvider = Provider<List<BackupCollection>>((ref) {
     notificationRepository: ref.watch(notificationRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    jobRepository: ref.watch(jobRepositoryProvider),
   );
 });
 
@@ -338,6 +347,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     leetCodeRepository: ref.watch(leetCodeRepositoryProvider),
     studyRepository: ref.watch(studyRepositoryProvider),
     workoutRepository: ref.watch(workoutRepositoryProvider),
+    jobRepository: ref.watch(jobRepositoryProvider),
     calendarRepository: ref.watch(calendarRepositoryProvider),
     trackerRepository: ref.watch(trackerRepositoryProvider),
     financeRepository: ref.watch(financeRepositoryProvider),
@@ -509,6 +519,7 @@ final backgroundSyncOrchestratorProvider = Provider((ref) {
     leetCodeRepository: ref.watch(leetCodeRepositoryProvider),
     studyRepository: ref.watch(studyRepositoryProvider),
     workoutRepository: ref.watch(workoutRepositoryProvider),
+    jobRepository: ref.watch(jobRepositoryProvider),
     notificationRepository: ref.watch(notificationRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
@@ -978,6 +989,74 @@ void invalidateWorkoutProvidersFrom(WidgetRef ref) {
   }
 }
 
+/// Seeds the stage list and the company typeahead the first time anything
+/// reads them. Every Jobs provider below waits on it, so no page can render
+/// against a half-seeded pipeline.
+final jobSeedProvider = FutureProvider<void>((ref) async {
+  ref.keepAlive();
+  await ref.watch(jobRepositoryProvider).ensureSeeded();
+});
+
+final jobApplicationsProvider = FutureProvider<List<JobApplication>>((
+  ref,
+) async {
+  ref.keepAlive();
+  await ref.watch(jobSeedProvider.future);
+  return ref.watch(jobRepositoryProvider).listApplications();
+});
+
+final jobStagesProvider = FutureProvider<List<JobStage>>((ref) async {
+  ref.keepAlive();
+  await ref.watch(jobSeedProvider.future);
+  return ref.watch(jobRepositoryProvider).listStages();
+});
+
+final jobCompaniesProvider = FutureProvider<List<JobCompany>>((ref) async {
+  ref.keepAlive();
+  await ref.watch(jobSeedProvider.future);
+  return ref.watch(jobRepositoryProvider).listCompanies();
+});
+
+final jobCategoriesProvider = FutureProvider<List<JobCategory>>((ref) async {
+  ref.keepAlive();
+  await ref.watch(jobSeedProvider.future);
+  return ref.watch(jobRepositoryProvider).listCategories();
+});
+
+final jobSeasonsProvider = FutureProvider<List<JobSeason>>((ref) async {
+  ref.keepAlive();
+  await ref.watch(jobSeedProvider.future);
+  return ref.watch(jobRepositoryProvider).listSeasons();
+});
+
+/// One application's status timeline, for the editor panel.
+final jobStatusEventsProvider =
+    FutureProvider.family<List<JobStatusEvent>, String>((ref, id) async {
+      return ref.watch(jobRepositoryProvider).listStatusEvents(id);
+    });
+
+final _jobDataProviders = <ProviderOrFamily>[
+  jobApplicationsProvider,
+  jobStagesProvider,
+  jobCompaniesProvider,
+  jobCategoriesProvider,
+  jobSeasonsProvider,
+  jobStatusEventsProvider,
+];
+
+void invalidateJobProviders(Ref ref) {
+  for (final provider in _jobDataProviders) {
+    ref.invalidate(provider);
+  }
+}
+
+/// Widget-side counterpart of [invalidateJobProviders].
+void invalidateJobProvidersFrom(WidgetRef ref) {
+  for (final provider in _jobDataProviders) {
+    ref.invalidate(provider);
+  }
+}
+
 /// Every read provider a pull of the repository-driven collections can make
 /// stale — calendars, analytics, finance, the notification inbox, the bucket
 /// list, tag colors, custom words and settings.
@@ -1001,6 +1080,7 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   bucketListItemsProvider,
   tagColorsProvider,
   customWordsProvider,
+  ..._jobDataProviders,
   settingsProvider,
 ];
 
