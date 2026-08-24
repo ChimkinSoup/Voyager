@@ -1275,7 +1275,6 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'completed': task.completed,
   'starred': task.starred,
   'sortOrder': task.sortOrder,
-  'preStarSortOrder': task.preStarSortOrder,
   'dueDateSetAt': _dateToFirestore(task.dueDateSetAt),
   'recurrence': task.recurrence.toStorage(),
   'recurrenceAnchor': _dateToFirestore(task.recurrenceAnchor),
@@ -1346,11 +1345,6 @@ TodoTask mergeTodoTaskFromRemote(
     sortOrder: metadataRemoteWins
         ? ((data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0)
         : local!.sortOrder,
-    preStarSortOrder: metadataRemoteWins
-        ? (data.containsKey('preStarSortOrder')
-            ? (data['preStarSortOrder'] as num?)?.toInt()
-            : local?.preStarSortOrder)
-        : local!.preStarSortOrder,
     dueDateSetAt: metadataRemoteWins
         ? (data.containsKey('dueDateSetAt')
             ? parseFirestoreDate(data['dueDateSetAt'])

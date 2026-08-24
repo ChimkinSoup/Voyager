@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
-import 'package:voyager/core/widgets/spell_check_popup.dart';
+import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
+import 'package:voyager/core/widgets/text_field_context_menu.dart';
 
 /// Whether a field configured with these params should get spellcheck.
 /// Covers `maxLines: null` (unbounded), which the widgets' own
@@ -137,11 +138,15 @@ VoyagerSpellCheckService readVoyagerSpellCheckService(BuildContext context) {
 /// dictionary/custom words change — the next spellcheck pass just sees the
 /// updated data automatically.
 SpellCheckConfiguration buildVoyagerSpellCheckConfiguration(
-  BuildContext context,
-) {
+  BuildContext context, {
+  bool snippetsAllowed = true,
+}) {
   return SpellCheckConfiguration(
     spellCheckService: readVoyagerSpellCheckService(context),
-    spellCheckSuggestionsToolbarBuilder: voyagerSpellCheckContextMenuBuilder,
+    spellCheckSuggestionsToolbarBuilder: voyagerTextContextMenuBuilder(
+      context,
+      snippetsAllowed: snippetsAllowed,
+    ),
     // The visible squiggle is painted separately by SpellCheckSquiggleLayer,
     // which can apply a narrower "hide only while actively being typed" rule
     // instead of Flutter's own "hide whenever the cursor is anywhere inside
@@ -185,9 +190,9 @@ void forceSpellCheckDisplay({
 }
 
 /// Same repaint as [forceSpellCheckDisplay], for callers that already hold a
-/// genuine [EditableTextState] (e.g. [SpellCheckPopup], which gets one from
-/// [TextField.contextMenuBuilder]) and don't need the focus-gating or the
-/// `dynamic` reach into [TextField]'s private state.
+/// genuine [EditableTextState] (e.g. [TextFieldContextMenu], which gets one
+/// from [TextField.contextMenuBuilder]) and don't need the focus-gating or
+/// the `dynamic` reach into [TextField]'s private state.
 void paintSpellCheckResultsNow(
   BuildContext context,
   EditableTextState editableState,
@@ -260,21 +265,27 @@ void bringCursorIntoView({required GlobalKey<State<TextField>> fieldKey}) {
   editableState.bringIntoView(selection.extent);
 }
 
-/// Wraps a spellcheck-enabled field's [TextField] so a right-click always
-/// moves the cursor to the clicked word before Flutter decides whether to
-/// show a context menu.
+/// Wraps an eligible field's [TextField] so a right-click always moves the
+/// cursor to the clicked word before Flutter decides whether to show a
+/// context menu.
 ///
 /// Flutter's own secondary-tap handling
 /// (`TextSelectionGestureDetectorBuilder.onSecondaryTap`) only repositions
 /// the cursor when the field doesn't already have focus — once you're
 /// actively editing (the common case), right-clicking a different word
-/// leaves the cursor wherever it was. [voyagerSpellCheckContextMenuBuilder]
-/// looks up the flagged word at the *cursor*, so that stale cursor makes
-/// right-clicking a misspelled word silently show nothing. This forces the
-/// same `RenderEditable.selectWord` Flutter already runs unconditionally for
-/// long-press, on every secondary-button pointer-down. A raw [Listener] is
-/// used (not a [GestureDetector]) so it observes the event without
-/// competing with the field's own gesture recognizers.
+/// leaves the cursor wherever it was. [voyagerTextContextMenuBuilder] reads
+/// both the flagged word and the snippet trigger off the *cursor*, so that
+/// stale cursor makes right-clicking a misspelled word silently show
+/// nothing. This forces the same `RenderEditable.selectWord` Flutter already
+/// runs unconditionally for long-press, on every secondary-button
+/// pointer-down. A raw [Listener] is used (not a [GestureDetector]) so it
+/// observes the event without competing with the field's own gesture
+/// recognizers.
+///
+/// A right-click *inside* an existing selection leaves it alone: that
+/// selection is what "Add snippet" prefills its trigger from (see
+/// [resolveSnippetTrigger]), and every desktop editor keeps a selection you
+/// right-click into rather than collapsing it to one word.
 Widget wrapWithSecondaryTapWordSelect({
   required GlobalKey<State<TextField>> fieldKey,
   required Widget child,
@@ -284,28 +295,75 @@ Widget wrapWithSecondaryTapWordSelect({
       if (event.buttons & kSecondaryMouseButton == 0) return;
       final editableState = editableTextStateOf(fieldKey);
       if (editableState == null) return;
-      editableState.renderEditable
-        ..handleSecondaryTapDown(
-          TapDownDetails(globalPosition: event.position, kind: event.kind),
-        )
-        ..selectWord(cause: SelectionChangedCause.tap);
+      final renderEditable = editableState.renderEditable;
+      renderEditable.handleSecondaryTapDown(
+        TapDownDetails(globalPosition: event.position, kind: event.kind),
+      );
+      final selection = editableState.textEditingValue.selection;
+      if (!selection.isCollapsed) {
+        final tapped = renderEditable.getPositionForPoint(event.position);
+        if (tapped.offset >= selection.start &&
+            tapped.offset <= selection.end) {
+          return;
+        }
+      }
+      renderEditable.selectWord(cause: SelectionChangedCause.tap);
     },
     child: child,
   );
 }
 
-/// Shared `contextMenuBuilder` for spellcheck-enabled fields: shows
-/// [SpellCheckPopup] when the cursor is on a flagged word, otherwise
-/// preserves the app's suppressed native-context-menu behavior.
-Widget voyagerSpellCheckContextMenuBuilder(
-  BuildContext context,
-  EditableTextState editableTextState,
-) {
-  final cursor = editableTextState.textEditingValue.selection.extentOffset;
-  final span = editableTextState.findSuggestionSpanAtCursorIndex(cursor);
-  if (span == null) return const SizedBox.shrink();
-  final text = editableTextState.textEditingValue.text;
-  final hydrated = readVoyagerSpellCheckService(context)
-      .hydrateSuggestions(text, span);
-  return SpellCheckPopup(editableTextState: editableTextState, span: hydrated);
+/// The text "Add snippet" would prefill as the trigger, or null when there is
+/// nothing usable under the pointer.
+///
+/// One rule covers both cases the design calls for: an existing non-collapsed
+/// selection (which [wrapWithSecondaryTapWordSelect] preserves) and the word
+/// a right-click or long-press just selected are both simply "the current
+/// selection". A collapsed caret, or a selection holding nothing but
+/// whitespace, yields no candidate — and so no menu item.
+String? resolveSnippetTrigger(EditableTextState editableTextState) {
+  final value = editableTextState.textEditingValue;
+  final selection = value.selection;
+  if (!selection.isValid || selection.isCollapsed) return null;
+  final text = selection.textInside(value.text);
+  return text.trim().isEmpty ? null : text;
+}
+
+/// The shared `contextMenuBuilder` for Voyager text fields.
+///
+/// Shows [TextFieldContextMenu] when the cursor is on a flagged word, or a
+/// snippet may be created from what's under the pointer, or both — and
+/// otherwise preserves the app's suppressed native-context-menu behavior.
+///
+/// [context] must be the *field's* own, not the menu's: the global "Enable
+/// snippets" switch is read from it, and the toolbar is built into an overlay
+/// that sits above the app's scopes rather than below them.
+///
+/// [snippetsAllowed] is the field's own opt-out — false for the LeetCode code
+/// editor and for the boxes snippets are written in, where offering to make
+/// one more would be wrong.
+EditableTextContextMenuBuilder voyagerTextContextMenuBuilder(
+  BuildContext context, {
+  bool snippetsAllowed = true,
+}) {
+  final canAddSnippet =
+      snippetsAllowed && SnippetEnabledScope.of(context).enabled;
+  return (menuContext, editableTextState) {
+    final cursor = editableTextState.textEditingValue.selection.extentOffset;
+    final span = editableTextState.findSuggestionSpanAtCursorIndex(cursor);
+    final hydrated = span == null
+        ? null
+        : readVoyagerSpellCheckService(
+            menuContext,
+          ).hydrateSuggestions(editableTextState.textEditingValue.text, span);
+    final trigger = canAddSnippet
+        ? resolveSnippetTrigger(editableTextState)
+        : null;
+    if (hydrated == null && trigger == null) return const SizedBox.shrink();
+    return TextFieldContextMenu(
+      editableTextState: editableTextState,
+      span: hydrated,
+      snippetTrigger: trigger,
+    );
+  };
 }

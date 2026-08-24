@@ -559,6 +559,16 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     _handleDraftEdit();
   }
 
+  void _moveSolution(int index, int delta) {
+    final target = index + delta;
+    if (target < 0 || target >= _solutionEditors.length) return;
+    setState(() {
+      final editors = _solutionEditors.removeAt(index);
+      _solutionEditors.insert(target, editors);
+    });
+    _handleDraftEdit();
+  }
+
   /// An example box that feeds the draft from the moment it exists.
   TextEditingController _newExampleController([String text = '']) {
     final controller = TextEditingController(text: text);
@@ -1031,15 +1041,21 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                         const SizedBox(height: 12),
                         _SolutionFields(
                           // Keyed on the group rather than the index, so
-                          // removing one carries each surviving group's field
-                          // state along with its text — see [_ExampleField].
+                          // removing or reordering one carries each surviving
+                          // group's field state along with its text — see
+                          // [_ExampleField].
                           key: ObjectKey(_solutionEditors[i]),
                           editors: _solutionEditors[i],
                           accentColor: accent,
                           // A lone solution needs no name to tell it apart
                           // from the others, so it doesn't get one — and with
-                          // no name there's nothing to remove it from either.
+                          // no name there's nothing to remove or reorder it
+                          // from either.
                           number: _solutionEditors.length > 1 ? i + 1 : null,
+                          canMoveUp: i > 0,
+                          canMoveDown: i < _solutionEditors.length - 1,
+                          onMoveUp: () => _moveSolution(i, -1),
+                          onMoveDown: () => _moveSolution(i, 1),
                           onRemove: () => _removeSolution(i),
                           onLanguageChanged: (lang) {
                             setState(() => _solutionEditors[i].language = lang);
@@ -1189,14 +1205,18 @@ class _SolutionEditors {
 /// One solution's boxes: approach, complexity pair, explanation, code, notes.
 ///
 /// [number] is null while the problem has a single solution — there is nothing
-/// to tell it apart from, so it gets neither a heading nor a remove button and
-/// the form reads exactly as it did before problems could hold alternatives.
+/// to tell it apart from, so it gets neither a heading nor move/remove buttons
+/// and the form reads exactly as it did before problems could hold alternatives.
 class _SolutionFields extends StatelessWidget {
   const _SolutionFields({
     super.key,
     required this.editors,
     required this.accentColor,
     required this.number,
+    required this.canMoveUp,
+    required this.canMoveDown,
+    required this.onMoveUp,
+    required this.onMoveDown,
     required this.onRemove,
     required this.onLanguageChanged,
   });
@@ -1204,6 +1224,10 @@ class _SolutionFields extends StatelessWidget {
   final _SolutionEditors editors;
   final Color accentColor;
   final int? number;
+  final bool canMoveUp;
+  final bool canMoveDown;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
   final VoidCallback onRemove;
   final ValueChanged<String> onLanguageChanged;
 
@@ -1223,6 +1247,18 @@ class _SolutionFields extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              IconButton(
+                onPressed: canMoveUp ? onMoveUp : null,
+                icon: const Icon(PhosphorIconsRegular.arrowUp, size: 16),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Move solution up',
+              ),
+              IconButton(
+                onPressed: canMoveDown ? onMoveDown : null,
+                icon: const Icon(PhosphorIconsRegular.arrowDown, size: 16),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Move solution down',
+              ),
               IconButton(
                 onPressed: onRemove,
                 icon: const Icon(PhosphorIconsRegular.trash, size: 16),

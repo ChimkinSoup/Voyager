@@ -6,27 +6,50 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/quick_add_snippet.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 
-/// Right-click/long-press popup shown over a misspelled word: lists
-/// suggested corrections (tap to replace) plus an "Add to dictionary"
-/// action. Styled to match [ContextMenuPanel], the app's existing
-/// right-click menu look.
-class SpellCheckPopup extends ConsumerStatefulWidget {
-  const SpellCheckPopup({
+/// Right-click/long-press menu for a Voyager text field.
+///
+/// Carries two independent groups, either of which can be absent:
+///
+///  * over a misspelled word ([span]), the suggested corrections (tap to
+///    replace) followed by "Add to dictionary";
+///  * "Add snippet" ([snippetTrigger]), always last, which opens the
+///    quick-add popover on the clicked word or the current selection.
+///
+/// Styled to match [ContextMenuPanel], the app's existing right-click menu
+/// look. Built by [voyagerTextContextMenuBuilder], which is also where the
+/// decision to show nothing at all is made.
+class TextFieldContextMenu extends ConsumerStatefulWidget {
+  const TextFieldContextMenu({
     super.key,
     required this.editableTextState,
     required this.span,
-  });
+    required this.snippetTrigger,
+  }) : assert(
+         span != null || snippetTrigger != null,
+         'An empty menu should not be built at all — see '
+         'voyagerTextContextMenuBuilder.',
+       );
 
   final EditableTextState editableTextState;
-  final SuggestionSpan span;
+
+  /// The misspelling under the cursor, hydrated with suggestions. Null when
+  /// the word is spelled correctly (or the field is not spellchecked).
+  final SuggestionSpan? span;
+
+  /// The text "Add snippet" would prefill as the trigger. Null when the item
+  /// should not be offered — snippets switched off, a field that opts out, or
+  /// nothing usable under the pointer.
+  final String? snippetTrigger;
 
   @override
-  ConsumerState<SpellCheckPopup> createState() => _SpellCheckPopupState();
+  ConsumerState<TextFieldContextMenu> createState() =>
+      _TextFieldContextMenuState();
 }
 
-class _SpellCheckPopupState extends ConsumerState<SpellCheckPopup> {
+class _TextFieldContextMenuState extends ConsumerState<TextFieldContextMenu> {
   final GlobalKey _panelKey = GlobalKey();
   int? _hoveredIndex;
 
@@ -59,7 +82,7 @@ class _SpellCheckPopupState extends ConsumerState<SpellCheckPopup> {
     // 'widget.value.value == nextValue' assertion in undo_history.dart on a
     // later undo. See project_flutter_spellcheck_freeze memory, bug 6.
     final newValue = widget.editableTextState.textEditingValue.replaced(
-      widget.span.range,
+      widget.span!.range,
       replacement,
     );
     widget.editableTextState.userUpdateTextEditingValue(
@@ -70,7 +93,7 @@ class _SpellCheckPopupState extends ConsumerState<SpellCheckPopup> {
   }
 
   Future<void> _addToDictionary() async {
-    final range = widget.span.range;
+    final range = widget.span!.range;
     final word = widget.editableTextState.widget.controller.text
         .substring(range.start, range.end)
         .toLowerCase();
@@ -83,21 +106,49 @@ class _SpellCheckPopupState extends ConsumerState<SpellCheckPopup> {
     widget.editableTextState.hideToolbar();
   }
 
+  /// Opens the quick-add popover against the *field's* context, not this
+  /// menu's: the toolbar is torn down by [hideToolbar] on the way out, and
+  /// the popover route, its toast and the settings dialog all outlive it.
+  void _addSnippet() {
+    final state = widget.editableTextState;
+    final anchor = state.contextMenuAnchors.primaryAnchor;
+    state.hideToolbar();
+    showQuickAddSnippet(
+      context: state.context,
+      anchor: anchor,
+      trigger: widget.snippetTrigger!,
+      restoreFocus: state.widget.focusNode,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final anchor = widget.editableTextState.contextMenuAnchors.primaryAnchor;
+    final span = widget.span;
     final items = <ContextMenuItem>[
-      for (final suggestion in widget.span.suggestions)
-        ContextMenuItem(label: suggestion, onTap: () => _applySuggestion(suggestion)),
-      ContextMenuItem(
-        label: 'Add to dictionary',
-        icon: PhosphorIconsRegular.plusCircle,
-        onTap: _addToDictionary,
-      ),
+      if (span != null) ...[
+        for (final suggestion in span.suggestions)
+          ContextMenuItem(
+            label: suggestion,
+            onTap: () => _applySuggestion(suggestion),
+          ),
+        ContextMenuItem(
+          label: 'Add to dictionary',
+          icon: PhosphorIconsRegular.plusCircle,
+          onTap: _addToDictionary,
+        ),
+      ],
+      // Always last, below everything the spellchecker offers.
+      if (widget.snippetTrigger != null)
+        ContextMenuItem(
+          label: 'Add snippet',
+          icon: PhosphorIconsRegular.textAa,
+          onTap: _addSnippet,
+        ),
     ];
 
     return CustomSingleChildLayout(
-      delegate: _SpellCheckPopupLayoutDelegate(
+      delegate: _TextFieldContextMenuLayoutDelegate(
         anchor: anchor,
         minWidth: _minWidth,
       ),
@@ -122,8 +173,11 @@ class _SpellCheckPopupState extends ConsumerState<SpellCheckPopup> {
   }
 }
 
-class _SpellCheckPopupLayoutDelegate extends SingleChildLayoutDelegate {
-  _SpellCheckPopupLayoutDelegate({required this.anchor, required this.minWidth});
+class _TextFieldContextMenuLayoutDelegate extends SingleChildLayoutDelegate {
+  _TextFieldContextMenuLayoutDelegate({
+    required this.anchor,
+    required this.minWidth,
+  });
 
   final Offset anchor;
   final double minWidth;
@@ -158,6 +212,6 @@ class _SpellCheckPopupLayoutDelegate extends SingleChildLayoutDelegate {
   }
 
   @override
-  bool shouldRelayout(_SpellCheckPopupLayoutDelegate oldDelegate) =>
+  bool shouldRelayout(_TextFieldContextMenuLayoutDelegate oldDelegate) =>
       anchor != oldDelegate.anchor;
 }

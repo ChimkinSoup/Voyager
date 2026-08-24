@@ -6,6 +6,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
+import 'package:voyager/core/snippets/snippet_settings_launcher.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/text/preserve_selection_on_app_resume.dart';
@@ -16,6 +17,7 @@ import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/petal_field.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -111,16 +113,24 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
             enabled: vimEnabled,
             child: SnippetEnabledScope(
               data: snippetScope,
-              child: Stack(
-                children: [
-                  const _AppBackground(),
-                  RepaintBoundary(
-                    child: DefaultTextStyle(
-                      style: AppFonts.style(color: theme.colorScheme.onSurface),
-                      child: child ?? const SizedBox.shrink(),
+              // Lets a field's right-click quick-add reach the full settings
+              // dialog without core importing features — see
+              // [SnippetSettingsLauncher].
+              child: SnippetSettingsLauncher(
+                open: showSnippetsDialog,
+                child: Stack(
+                  children: [
+                    const _AppBackground(),
+                    RepaintBoundary(
+                      child: DefaultTextStyle(
+                        style: AppFonts.style(
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        child: child ?? const SizedBox.shrink(),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

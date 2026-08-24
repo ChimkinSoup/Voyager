@@ -129,6 +129,100 @@ void main() {
       expect(back.start, d(2026, 3, 4, 11));
       expect(back.end, d(2026, 3, 4, 12));
     });
+
+    test('rebaseToAnchor slides the exception dates with the pattern', () {
+      final master = series(
+        start: d(2026, 3, 2, 9),
+        end: d(2026, 3, 2, 10),
+        exceptionDates: [d(2026, 3, 9), d(2026, 3, 23)],
+      );
+      final moved = occurrenceView(master, d(2026, 3, 16)).copyWith(
+        start: d(2026, 3, 18, 9),
+        end: d(2026, 3, 18, 10),
+      );
+      final back = rebaseToAnchor(moved, master, d(2026, 3, 16));
+
+      // Left where they were, the exceptions would no longer land on any
+      // occurrence and both deleted occurrences would come back.
+      expect(back.exceptionDates, [d(2026, 3, 11), d(2026, 3, 25)]);
+      for (final skipped in back.exceptionDates) {
+        expect(calendarEventOccursOnDay(back, skipped), isFalse);
+      }
+      expect(calendarEventOccursOnDay(back, d(2026, 3, 18)), isTrue);
+    });
+
+    test('rebaseToAnchor leaves the exception dates alone when nothing moved',
+        () {
+      final master = series(
+        start: d(2026, 3, 2, 9),
+        end: d(2026, 3, 2, 10),
+        exceptionDates: [d(2026, 3, 9)],
+      );
+      final view = occurrenceView(master, d(2026, 3, 16));
+      final back = rebaseToAnchor(view, master, d(2026, 3, 16));
+      expect(back.exceptionDates, [d(2026, 3, 9)]);
+    });
+
+    test('rebaseToAnchor slides the series end date with the pattern', () {
+      // Weekly Mondays from Mar 2, capped so the last occurrence is Mar 30.
+      final master = series(
+        start: d(2026, 3, 2, 9),
+        end: d(2026, 3, 2, 10),
+        recurrenceEndDate: d(2026, 3, 30),
+      );
+      // The user opened Mar 16 and moved it to Mar 18 — the whole series slides
+      // two days, onto Wednesdays.
+      final moved = occurrenceView(master, d(2026, 3, 16)).copyWith(
+        start: d(2026, 3, 18, 9),
+        end: d(2026, 3, 18, 10),
+      );
+      final back = rebaseToAnchor(moved, master, d(2026, 3, 16));
+
+      expect(back.recurrenceEndDate, d(2026, 4, 1));
+      // Left at Mar 30, the cap would fall before the moved final occurrence
+      // and quietly drop it from the series.
+      expect(calendarEventOccursOnDay(back, d(2026, 4, 1)), isTrue);
+      expect(calendarEventOccursOnDay(back, d(2026, 4, 8)), isFalse);
+    });
+
+    test('rebaseToAnchor leaves an open-ended series open-ended', () {
+      final master = series(start: d(2026, 3, 2, 9), end: d(2026, 3, 2, 10));
+      final moved = occurrenceView(master, d(2026, 3, 16)).copyWith(
+        start: d(2026, 3, 18, 9),
+        end: d(2026, 3, 18, 10),
+      );
+      expect(
+        rebaseToAnchor(moved, master, d(2026, 3, 16)).recurrenceEndDate,
+        isNull,
+      );
+    });
+
+    test('rebaseToAnchor leaves the end date alone when nothing moved', () {
+      final master = series(
+        start: d(2026, 3, 2, 9),
+        end: d(2026, 3, 2, 10),
+        recurrenceEndDate: d(2026, 3, 30),
+      );
+      final view = occurrenceView(master, d(2026, 3, 16));
+      expect(
+        rebaseToAnchor(view, master, d(2026, 3, 16)).recurrenceEndDate,
+        d(2026, 3, 30),
+      );
+    });
+
+    test('recurrenceRebaseShiftDays reports the days the user moved by', () {
+      final master = series(start: d(2026, 3, 2, 9), end: d(2026, 3, 2, 10));
+      final moved = occurrenceView(master, d(2026, 3, 16))
+          .copyWith(start: d(2026, 3, 18, 9));
+      expect(recurrenceRebaseShiftDays(moved, d(2026, 3, 16)), 2);
+      expect(
+        recurrenceRebaseShiftDays(
+          occurrenceView(master, d(2026, 3, 16)),
+          d(2026, 3, 16),
+        ),
+        0,
+      );
+    });
   });
 
   group('edit scope', () {

@@ -46,6 +46,7 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
     required this.onSave,
     required this.onCancel,
     this.focusTitleOnOpen = false,
+    this.initialIsFullDay = true,
   });
 
   final CalendarEvent? event;
@@ -55,6 +56,13 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
   final ValueChanged<Map<String, dynamic>> onSave;
   final VoidCallback onCancel;
   final bool focusTitleOnOpen;
+
+  /// All-day setting for a *new* event; ignored when [event] is non-null.
+  ///
+  /// The entry point states the intent rather than the panel guessing it: a tap
+  /// on a week-view time slot picked a specific half hour, so defaulting that
+  /// to all-day would throw away the only thing the tap said.
+  final bool initialIsFullDay;
 
   @override
   ConsumerState<CalendarEventPanel> createState() => _CalendarEventPanelState();
@@ -151,7 +159,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       }
       return KeyEventResult.ignored;
     };
-    _isFullDay = e?.isFullDay ?? true;
+    _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
     _start = e?.start ??
         DateTime(
           widget.initialDate.year,
@@ -193,7 +201,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _titleController.text = e?.title ?? '';
       _notesController.text = e?.notes ?? '';
       _lastNotesText = _notesController.text;
-      _isFullDay = e?.isFullDay ?? true;
+      _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
       _start = e?.start ??
           DateTime(
             widget.initialDate.year,
@@ -255,6 +263,13 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   }
 
   void _submit() {
+    // The submit scope wraps the whole panel, so Enter fires here even while a
+    // sub-popover is open — and onSave's Navigator.pop() would then pop the
+    // sub-popover instead of the panel, leaving _closingAfterSave latched and
+    // every later edit silently discarded on dismissal.
+    if (_isDatePopoverOpen || _isTimePopoverOpen || _isRepeatPopoverOpen) {
+      return;
+    }
     _trySave();
   }
 
@@ -561,6 +576,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                   setState(() => _isDatePopoverOpen = false);
                                   if (dateRange != null) {
                                     setState(() {
+                                      final duration = _end.difference(_start);
                                       _start = DateTime(
                                         dateRange.start.year,
                                         dateRange.start.month,
@@ -568,13 +584,28 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                         _start.hour,
                                         _start.minute,
                                       );
-                                      _end = DateTime(
+                                      var end = DateTime(
                                         dateRange.end.year,
                                         dateRange.end.month,
                                         dateRange.end.day,
                                         _end.hour,
                                         _end.minute,
                                       );
+                                      // Collapsing a multi-day range onto one
+                                      // day carries both wall clocks onto that
+                                      // date, which can put the end before the
+                                      // start (Mar 1 14:00 → Mar 3 09:00,
+                                      // re-pointed at Mar 5, reads 14:00 →
+                                      // 09:00). Nothing downstream rejects
+                                      // that, so re-derive from the duration.
+                                      if (!end.isAfter(_start)) {
+                                        end = _start.add(
+                                          duration > Duration.zero
+                                              ? duration
+                                              : const Duration(hours: 1),
+                                        );
+                                      }
+                                      _end = end;
                                     });
                                   }
                                 },
@@ -639,15 +670,20 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Builder(
-                    builder: (buttonContext) => RepeatIconButton(
-                      rule: _recurrence,
-                      anchor: _start,
-                      accentColor: accent,
-                      isOpen: _isRepeatPopoverOpen,
-                      onPressed: () => _openRepeatPopover(buttonContext),
+                  // Hidden for a detached occurrence: it is one occurrence of
+                  // its parent series, not a series of its own, and giving it a
+                  // rule of its own makes it render on days the parent's
+                  // exception list does not cover.
+                  if (widget.event?.isRecurrenceOverride != true)
+                    Builder(
+                      builder: (buttonContext) => RepeatIconButton(
+                        rule: _recurrence,
+                        anchor: _start,
+                        accentColor: accent,
+                        isOpen: _isRepeatPopoverOpen,
+                        onPressed: () => _openRepeatPopover(buttonContext),
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 10),

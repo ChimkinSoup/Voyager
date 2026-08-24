@@ -1307,11 +1307,24 @@ final lifeTrackerStatsProvider = FutureProvider<LifeTrackerCachedStats>((
   ref.keepAlive();
   final tasks = await ref.watch(allTodoTasksProvider.future);
   final entries = await ref.watch(allJournalEntriesProvider.future);
+  final journals = await ref.watch(journalsProvider.future);
 
   final tasksConquered = tasks.where((t) => t.completed).length;
 
+  // The average follows the mood bar: a journal with the chrome hidden keeps
+  // its stored moods but stops contributing them, and toggling it back on
+  // re-includes those same values with no entry edits.
+  final moodJournalIds = journals
+      .where((j) => j.showMood)
+      .map((j) => j.id)
+      .toSet();
   final moods = entries
-      .where((e) => e.deletedAt == null && e.mood != null)
+      .where(
+        (e) =>
+            e.deletedAt == null &&
+            e.mood != null &&
+            moodJournalIds.contains(e.journalId),
+      )
       .map((e) => e.mood!)
       .toList();
   final lifetimeMood = moods.isEmpty
@@ -1332,7 +1345,9 @@ class LifeTrackerCachedStats {
 
   final int tasksConquered;
 
-  /// Average of every non-null journal entry mood, or null if none exist yet.
+  /// Average of the non-null entry moods belonging to journals whose mood bar
+  /// is on ([Journal.showMood]), or null if none qualify. Hiding the bar only
+  /// drops a journal from this average — its entries keep their moods.
   final double? lifetimeMood;
 }
 

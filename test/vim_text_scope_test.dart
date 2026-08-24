@@ -372,6 +372,73 @@ void main() {
     expect(VimRegister.text, 'alpha');
   });
 
+  testWidgets('<C-r> aborts a pending operator instead of arming the motion', (
+    tester,
+  ) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha beta gamma');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, 'd');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    // The redo had nothing to redo; what matters is that the `d` went with it,
+    // so the next motion is a move and not a delete.
+    await typeCommand(tester, 'l');
+    expect(controller.text, 'alpha beta gamma');
+  });
+
+  testWidgets('<C-v> aborts a pending operator rather than pasting into it', (
+    tester,
+  ) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha');
+    await press(tester, LogicalKeyboardKey.escape);
+    // The count belongs to the `d`, and `_paste` would otherwise take it.
+    await typeCommand(tester, '2d');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.idle();
+    await tester.pump();
+
+    // Vim aborts a pending command on any key that is not a valid motion or
+    // text object: the paste runs, but as an ordinary paste — one copy, not
+    // the pending command's two — and the `d` does not survive it.
+    expect(controller.text, 'aoutsidelpha');
+    await typeCommand(tester, 'l');
+    expect(controller.text, 'aoutsidelpha');
+  });
+
+  // `<C-d>` is a motion, so it is the one chord that does *not* abort on sight:
+  // it may complete a pending operator, and [_moveVertically] clears whatever
+  // else was half-typed on its way out.
+  testWidgets('<C-d> cancels a half-typed f rather than being swallowed', (
+    tester,
+  ) async {
+    await pumpField(
+      tester,
+      vimEnabled: true,
+      text: 'alpha beta',
+      multiline: true,
+    );
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, 'f');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyD);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    // With the `f` still armed, this `x` would be the character it waited on.
+    controller.selection = const TextSelection.collapsed(offset: 0);
+    await tester.pump();
+    await typeCommand(tester, 'x');
+    expect(controller.text, 'lpha beta');
+  });
+
   /// A field under an ancestor Escape handler, standing in for the dialog or
   /// popover the box is usually sitting inside.
   Future<void> pumpFieldUnderDismissHandler(

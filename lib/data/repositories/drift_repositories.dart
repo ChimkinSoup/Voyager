@@ -647,38 +647,32 @@ class DriftTodoRepository implements TodoRepository {
     }
   }
 
+  // The soft deletes below route through the model rather than writing
+  // deletedAt with a bare UPDATE. A direct write leaves `version` untouched,
+  // and conflict resolution is version-first (see remoteVersionWins): a local
+  // delete stuck at version N loses to any edit made on another device at
+  // N+1, so the next pull restores deletedAt: null and the row comes back.
+  // Going through copyWith/upsert also records the local sync activity that a
+  // direct write skipped entirely.
   @override
   Future<void> softDeleteList(String id) async {
-    await (_db.update(_db.todoListsTable)..where((t) => t.id.equals(id))).write(
-      TodoListsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    final list = (await listLists(
+      includeDeleted: true,
+    )).cast<TodoListModel?>().firstWhere((l) => l!.id == id, orElse: () => null);
+    if (list == null || list.deletedAt != null) return;
+    await upsertList(list.copyWith(deletedAt: utcNow()));
   }
 
   @override
-  Future<void> softDeleteTasksInList(String listId) async {
+  Future<List<TodoTask>> softDeleteTasksInList(String listId) async {
+    // topLevelOnly: false — subtasks carry the same listId, and leaving them
+    // behind would strand them with deletedAt == null and no reachable parent.
+    final tasks = await listTasks(listId, topLevelOnly: false);
+    if (tasks.isEmpty) return const [];
     final now = utcNow();
-    await (_db.update(_db.todoTasksTable)..where((t) => t.listId.equals(listId)))
-        .write(
-      TodoTasksTableCompanion(
-        deletedAt: Value(now),
-        updatedAt: Value(now),
-      ),
-    );
-  }
-
-  @override
-  Future<void> reassignTasksList(String fromListId, String toListId) async {
-    await (_db.update(_db.todoTasksTable)
-          ..where((t) => t.listId.equals(fromListId)))
-        .write(
-      TodoTasksTableCompanion(
-        listId: Value(toListId),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    final deleted = [for (final task in tasks) task.copyWith(deletedAt: now)];
+    await upsertTasksBatch(deleted);
+    return deleted;
   }
 
   @override
@@ -725,7 +719,6 @@ class DriftTodoRepository implements TodoRepository {
     completed: r.completed,
     starred: r.starred,
     sortOrder: r.sortOrder,
-    preStarSortOrder: r.preStarSortOrder,
     dueDateSetAt: r.dueDateSetAt,
     recurrence: RecurrenceRule.parse(r.recurrence),
     recurrenceAnchor: r.recurrenceAnchor,
@@ -754,7 +747,6 @@ class DriftTodoRepository implements TodoRepository {
             completed: Value(task.completed),
             starred: Value(task.starred),
             sortOrder: Value(task.sortOrder),
-            preStarSortOrder: Value(task.preStarSortOrder),
             dueDateSetAt: Value(task.dueDateSetAt),
             recurrence: Value(task.recurrence.toStorage()),
             recurrenceAnchor: Value(task.recurrenceAnchor),
@@ -790,8 +782,7 @@ class DriftTodoRepository implements TodoRepository {
               completed: Value(task.completed),
               starred: Value(task.starred),
               sortOrder: Value(task.sortOrder),
-              preStarSortOrder: Value(task.preStarSortOrder),
-              dueDateSetAt: Value(task.dueDateSetAt),
+                dueDateSetAt: Value(task.dueDateSetAt),
               recurrence: Value(task.recurrence.toStorage()),
               recurrenceAnchor: Value(task.recurrenceAnchor),
               createdAt: Value(task.createdAt),
@@ -809,12 +800,9 @@ class DriftTodoRepository implements TodoRepository {
 
   @override
   Future<void> softDeleteTask(String id) async {
-    await (_db.update(_db.todoTasksTable)..where((t) => t.id.equals(id))).write(
-      TodoTasksTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    final task = await getTask(id);
+    if (task == null || task.deletedAt != null) return;
+    await upsertTask(task.copyWith(deletedAt: utcNow()));
   }
 
   @override

@@ -8,11 +8,14 @@ class MoodGradientSlider extends StatelessWidget {
     required this.onChanged,
   });
 
-  /// `null` means *not recorded*, which is deliberately not the same thing as
-  /// a mood of 5. Analytics excludes unrecorded moods from its average, so a
-  /// null rendered as a filled thumb at the midpoint made the page and the
-  /// chart disagree about the same entry. It renders hollow instead, with the
-  /// track left unfilled and the value indicator reading '—'.
+  /// `null` means *not recorded*: the thumb renders hollow, the track is left
+  /// unfilled and the value indicator reads '—', so the page never claims a
+  /// mood the analytics average is excluding.
+  ///
+  /// Entries no longer arrive here that way — they are created at
+  /// `kDefaultMood` and the v85 migration backfilled the ones that predated
+  /// it. What is left is legacy: an import, or a copy synced down from an
+  /// older build. The unrecorded rendering stays for those.
   final int? value;
   final Color accent;
   final ValueChanged<int> onChanged;

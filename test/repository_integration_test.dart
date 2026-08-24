@@ -224,6 +224,81 @@ void main() {
     expect(tasks, isEmpty);
   });
 
+  test('todo repository soft-deleting a task bumps its version', () async {
+    // Conflict resolution is version-first (see remoteVersionWins), so a
+    // soft delete that leaves version untouched loses to any edit made on
+    // another device — the next pull restores deletedAt: null and the task
+    // comes back. The bare UPDATE this used to run also skipped the
+    // recordLocalSave that every other write performs.
+    final now = utcNow();
+    final list = TodoListModel(
+      id: newId(),
+      name: 'Inbox',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await todoRepo.upsertList(list);
+    final task = TodoTask(
+      id: newId(),
+      listId: list.id,
+      title: 'Task',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await todoRepo.upsertTask(task);
+    final stored = (await todoRepo.getTask(task.id))!;
+
+    await todoRepo.softDeleteTask(task.id);
+
+    final deleted = (await todoRepo.getTask(task.id))!;
+    expect(deleted.deletedAt, isNotNull);
+    expect(deleted.version, greaterThan(stored.version));
+  });
+
+  test(
+    'todo repository soft-deleting a list deletes its subtasks too',
+    () async {
+      final now = utcNow();
+      final list = TodoListModel(
+        id: newId(),
+        name: 'Inbox',
+        createdAt: now,
+        updatedAt: now,
+      );
+      await todoRepo.upsertList(list);
+      final parent = TodoTask(
+        id: newId(),
+        listId: list.id,
+        title: 'Parent',
+        createdAt: now,
+        updatedAt: now,
+      );
+      await todoRepo.upsertTask(parent);
+      final child = TodoTask(
+        id: newId(),
+        listId: list.id,
+        parentTaskId: parent.id,
+        title: 'Child',
+        createdAt: now,
+        updatedAt: now,
+      );
+      await todoRepo.upsertTask(child);
+
+      final written = await todoRepo.softDeleteTasksInList(list.id);
+
+      // The returned rows are what the caller pushes to Firestore, so they
+      // have to be the objects that were stored — not re-copyWith'd snapshots,
+      // which would carry a version the local row never reached.
+      expect(written.map((t) => t.id).toSet(), {parent.id, child.id});
+      for (final row in written) {
+        final stored = (await todoRepo.getTask(row.id))!;
+        expect(stored.deletedAt, isNotNull);
+        expect(stored.version, row.version);
+      }
+      expect(await todoRepo.listSubtasks(parent.id), isEmpty);
+    },
+  );
+
   test('todo repository nextSortOrder inserts below starred tasks', () async {
     final now = utcNow();
     final list = TodoListModel(

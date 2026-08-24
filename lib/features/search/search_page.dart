@@ -341,7 +341,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     // chains through to this handler otherwise.
     _bodyFocusNode = FocusNode();
 
-    _mood = _entry.mood;
+    _mood = _entry.mood ?? kDefaultMood;
     _weatherIcon = _entry.weatherIcon ?? 'sunny';
   }
 
@@ -569,7 +569,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: MoodGradientSlider(
-                        value: _mood ?? 5,
+                        value: _mood,
                         accent: _accentColor,
                         onChanged: (value) => setState(() => _mood = value),
                       ),

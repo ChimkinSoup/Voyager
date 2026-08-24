@@ -2,6 +2,8 @@ import 'dart:math' show max;
 import 'package:flutter/material.dart';
 
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/domain/services/recurrence_engine.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
@@ -43,11 +45,25 @@ class _OverlapItem {
 double _minutesFromMidnight(DateTime time) =>
     time.hour * 60.0 + time.minute + time.second / 60.0;
 
+/// Minute-of-day the occurrence of [event] that covers [day] ends at.
+///
+/// [CalendarEvent.start]/[end] are the *anchor's* instants, so for a repeating
+/// event they sit on some earlier day than [day]. Clamping them against [day]
+/// directly collapses every later occurrence to a 30-minute stub at midnight
+/// and inverts its interval, which then also stops it clustering with anything
+/// it overlaps — so the occurrence is resolved onto [day] first.
 double _eventEndMinutes(CalendarEvent event, DateTime day) {
-  final localStart = event.start.toLocal();
-  final localEnd = event.end.toLocal();
+  final occurrenceStart = calendarOccurrenceStartOn(event, day);
+  if (occurrenceStart == null) {
+    return _minutesFromMidnight(event.start.toLocal()) + 30;
+  }
+  final shift =
+      epochDay(occurrenceStart) -
+      epochDay(DateUtils.dateOnly(event.start.toLocal()));
+  final localStart = addDaysKeepingTime(event.start, shift);
+  final localEnd = addDaysKeepingTime(event.end, shift);
   final dayStart = DateTime(day.year, day.month, day.day);
-  final dayEnd = dayStart.add(const Duration(days: 1));
+  final dayEnd = addDays(dayStart, 1);
 
   final effectiveStart = localStart.isBefore(dayStart) ? dayStart : localStart;
   final effectiveEnd = localEnd.isAfter(dayEnd) ? dayEnd : localEnd;

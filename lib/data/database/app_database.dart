@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/settings_models.dart' show defaultPetalColor;
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -144,6 +145,11 @@ class TodoListsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// The two ways this table is ever queried. Without them every listTasks() and
+// listSubtasks() call is a full table scan — and listTasks() runs per list on
+// several hot paths.
+@TableIndex(name: 'idx_todo_tasks_list_id', columns: {#listId})
+@TableIndex(name: 'idx_todo_tasks_parent_task_id', columns: {#parentTaskId})
 class TodoTasksTable extends Table {
   TextColumn get id => text()();
   TextColumn get listId => text()();
@@ -155,7 +161,6 @@ class TodoTasksTable extends Table {
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
-  IntColumn get preStarSortOrder => integer().nullable()();
   DateTimeColumn get dueDateSetAt => dateTime().nullable()();
 
   /// Repeat pattern. See [RecurrenceRule.toStorage].
@@ -866,6 +871,25 @@ class WorkoutPlansTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Gives every pre-v85 entry the midpoint mood that entries created since then
+/// are stamped with, so the lifetime average and the slider stop distinguishing
+/// "never recorded" from "neutral".
+///
+/// Skips tombstones: a soft-deleted entry has had its content wiped on purpose,
+/// and writing a mood back onto one would resurrect a field the delete cleared.
+///
+/// Bumps `version` alongside the write. The merge in
+/// `firestore_document_mapper.dart` resolves per-entry metadata by version
+/// first, so without the bump the remote copy — still holding a null mood at
+/// the same version — would both re-win on the next pull and register as a
+/// hard metadata collision in `sync_conflict_detector.dart`. `updated_at` is
+/// deliberately left alone: this is a migration, not an edit the user made.
+const String kJournalMoodBackfillSql = '''
+UPDATE journal_entries_table
+SET mood = $kDefaultMood, version = version + 1
+WHERE mood IS NULL AND deleted_at IS NULL
+''';
+
 /// Lifts the pre-v68 per-placement targets up onto the movement they belong
 /// to, so an existing split doesn't reset to 3 × 8 the moment targets go
 /// global.
@@ -1110,7 +1134,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 84;
+  int get schemaVersion => 86;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1140,10 +1164,6 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(todoTasksTable, todoTasksTable.parentTaskId);
         await migrator.addColumn(todoTasksTable, todoTasksTable.starred);
         await migrator.addColumn(todoTasksTable, todoTasksTable.sortOrder);
-        await migrator.addColumn(
-          todoTasksTable,
-          todoTasksTable.preStarSortOrder,
-        );
         await _backfillNullBools();
       }
       if (from < 6) {
@@ -2079,6 +2099,25 @@ class AppDatabase extends _$AppDatabase {
           await _addSettingsColumnIfNotExists(migrator, column);
         }
       }
+      if (from < 85) {
+        await customStatement(kJournalMoodBackfillSql);
+      }
+      if (from < 86) {
+        // preStarSortOrder was written on every star toggle and never read
+        // back: unstarring re-places the task from scratch (see _applyUnstar)
+        // rather than restoring the recorded position.
+        await _dropTodoTaskColumnIfExists(migrator, 'pre_star_sort_order');
+        // Declared via @TableIndex, so createAll() covers fresh databases;
+        // existing ones need them made here.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_todo_tasks_list_id '
+          'ON todo_tasks_table (list_id)',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_todo_tasks_parent_task_id '
+          'ON todo_tasks_table (parent_task_id)',
+        );
+      }
     },
   );
 
@@ -2182,6 +2221,21 @@ class AppDatabase extends _$AppDatabase {
     ).get();
     if (exists.isEmpty) {
       await migrator.addColumn(settingsTable, column);
+    }
+  }
+
+  /// Skips DROP COLUMN when the local DB doesn't have it (e.g. a database old
+  /// enough to predate the column's own ADD, which this migration removed).
+  Future<void> _dropTodoTaskColumnIfExists(
+    Migrator migrator,
+    String columnName,
+  ) async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('todo_tasks_table') WHERE name = ?",
+      variables: [Variable.withString(columnName)],
+    ).get();
+    if (exists.isNotEmpty) {
+      await migrator.dropColumn(todoTasksTable, columnName);
     }
   }
 

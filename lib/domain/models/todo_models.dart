@@ -55,7 +55,6 @@ class TodoTask extends SoftDeletable {
     this.completed = false,
     this.starred = false,
     this.sortOrder = 0,
-    this.preStarSortOrder,
     this.dueDateSetAt,
     this.parentTaskId,
     this.recurrence = RecurrenceRule.none,
@@ -69,7 +68,6 @@ class TodoTask extends SoftDeletable {
   final bool completed;
   final bool starred;
   final int sortOrder;
-  final int? preStarSortOrder;
   final DateTime? dueDateSetAt;
   final String? parentTaskId;
 
@@ -99,8 +97,6 @@ class TodoTask extends SoftDeletable {
     bool? completed,
     bool? starred,
     int? sortOrder,
-    int? preStarSortOrder,
-    bool clearPreStarSortOrder = false,
     DateTime? dueDateSetAt,
     bool clearDueDateSetAt = false,
     String? parentTaskId,
@@ -125,9 +121,6 @@ class TodoTask extends SoftDeletable {
       completed: completed ?? this.completed,
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
-      preStarSortOrder: clearPreStarSortOrder
-          ? null
-          : (preStarSortOrder ?? this.preStarSortOrder),
       dueDateSetAt: clearDueDateSetAt
           ? null
           : (dueDateSetAt ?? this.dueDateSetAt),
@@ -154,7 +147,6 @@ class TodoTask extends SoftDeletable {
     'completed': completed,
     'starred': starred,
     'sortOrder': sortOrder,
-    'preStarSortOrder': preStarSortOrder,
     'dueDateSetAt': dueDateSetAt?.toUtc().toIso8601String(),
     'parentTaskId': parentTaskId,
     'recurrence': recurrence.toStorage(),
@@ -175,7 +167,6 @@ class TodoTask extends SoftDeletable {
       completed: json['completed'] as bool? ?? false,
       starred: json['starred'] as bool? ?? false,
       sortOrder: json['sortOrder'] as int? ?? 0,
-      preStarSortOrder: json['preStarSortOrder'] as int?,
       dueDateSetAt: json['dueDateSetAt'] != null ? DateTime.parse(json['dueDateSetAt'] as String).toUtc() : null,
       parentTaskId: json['parentTaskId'] as String?,
       recurrence: RecurrenceRule.parse(json['recurrence'] as String?),

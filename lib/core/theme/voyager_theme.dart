@@ -351,6 +351,19 @@ class VoyagerTheme {
       ),
       checkboxTheme: CheckboxThemeData(side: BorderSide(color: outlineColor)),
       chipTheme: ChipThemeData(labelStyle: textTheme.labelLarge),
+      // M3 Switch paints the selected thumb as primaryContainer on hover/focus/
+      // press. Our ColorScheme leaves primaryContainer unset, so it falls back
+      // to primary — the same color as the track — and the thumb vanishes into
+      // the accent. Keep onAccent for every selected interaction state.
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (!states.contains(WidgetState.selected)) return null;
+          if (states.contains(WidgetState.disabled)) {
+            return colorScheme.surface;
+          }
+          return onAccent;
+        }),
+      ),
     );
   }
 }

@@ -1,5 +1,10 @@
 import 'package:voyager/domain/models/soft_deletable.dart';
 
+/// The mood every new entry starts at, and what the v85 migration wrote over
+/// the entries that predated it. The scale is 0–10, so this is its midpoint:
+/// an entry the user never touched reads as neutral rather than unrecorded.
+const int kDefaultMood = 5;
+
 class Journal extends SoftDeletable {
   const Journal({
     required super.id,
@@ -25,6 +30,10 @@ class Journal extends SoftDeletable {
   /// Per-journal editor chrome. Each one hides its control on the journal page
   /// without touching what an entry stores, so toggling one back on shows the
   /// values that were being tracked all along.
+  ///
+  /// [showMood] additionally gates aggregation: the Life Tracker's lifetime
+  /// mood average only counts journals with the bar on. Storage is unaffected,
+  /// so the moods come back into the average when the bar returns.
   final bool showMood;
   final bool showWeather;
 
@@ -95,6 +104,11 @@ class JournalEntry extends SoftDeletable {
   final DateTime entryDate;
   final DateTime? timestamp;
   final List<String> tags;
+
+  /// 0–10, defaulting to [kDefaultMood] on creation. Nullable only for rows
+  /// that predate that default and never got the v85 backfill — a remote copy
+  /// synced down from an older build, or an import. Everything that reads a
+  /// mood still has to handle null; nothing new should write one.
   final int? mood;
   final String? quoteId;
   final String? customQuote;
