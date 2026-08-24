@@ -136,7 +136,27 @@ Future<void> _removeSolution(WidgetTester tester, int number) async {
   final row = find
       .ancestor(of: find.text('Solution $number'), matching: find.byType(Row))
       .first;
-  final button = find.descendant(of: row, matching: find.byType(IconButton));
+  final button = find.descendant(
+    of: row,
+    matching: find.byTooltip('Remove solution'),
+  );
+  await tester.ensureVisible(button);
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _moveSolution(
+  WidgetTester tester,
+  int number, {
+  required bool up,
+}) async {
+  final row = find
+      .ancestor(of: find.text('Solution $number'), matching: find.byType(Row))
+      .first;
+  final button = find.descendant(
+    of: row,
+    matching: find.byTooltip(up ? 'Move solution up' : 'Move solution down'),
+  );
   await tester.ensureVisible(button);
   await tester.tap(button);
   await tester.pumpAndSettle();
@@ -161,6 +181,8 @@ void main() {
     expect(find.text('Solution 1'), findsNothing);
     expect(find.text(_algorithmHint), findsOneWidget);
     expect(find.byTooltip('Remove solution'), findsNothing);
+    expect(find.byTooltip('Move solution up'), findsNothing);
+    expect(find.byTooltip('Move solution down'), findsNothing);
     expect(_algorithmText(tester, 0), 'Compare every pair');
   });
 
@@ -218,6 +240,77 @@ void main() {
     expect(find.text('Solution 1'), findsNothing);
     expect(find.text('Solution 2'), findsNothing);
     expect(_algorithmText(tester, 0), 'Hash map of complements');
+  });
+
+  testWidgets('moving a solution up swaps display order', (tester) async {
+    await _openModal(
+      tester,
+      existing: _problem(solutions: const [_bruteForce, _hashMap]),
+    );
+
+    await _moveSolution(tester, 2, up: true);
+
+    expect(_algorithmText(tester, 0), 'Hash map of complements');
+    expect(_algorithmText(tester, 1), 'Compare every pair');
+  });
+
+  testWidgets('moving a solution down swaps display order', (tester) async {
+    await _openModal(
+      tester,
+      existing: _problem(solutions: const [_bruteForce, _hashMap]),
+    );
+
+    await _moveSolution(tester, 1, up: false);
+
+    expect(_algorithmText(tester, 0), 'Hash map of complements');
+    expect(_algorithmText(tester, 1), 'Compare every pair');
+  });
+
+  testWidgets('saving after a reorder writes solutions in the new order', (
+    tester,
+  ) async {
+    final repo = await _openModal(
+      tester,
+      existing: _problem(solutions: const [_bruteForce, _hashMap]),
+    );
+
+    await _moveSolution(tester, 2, up: true);
+    await _save(tester, 'Save changes');
+
+    final saved = repo.saved.single.solutions;
+    expect(saved.map((s) => s.algorithm).toList(), [
+      'Hash map of complements',
+      'Compare every pair',
+    ]);
+    // The problem's own language follows the first solution after reorder.
+    expect(repo.saved.single.codeLanguage, 'cpp');
+  });
+
+  testWidgets('end solutions cannot move past the list edge', (tester) async {
+    await _openModal(
+      tester,
+      existing: _problem(solutions: const [_bruteForce, _hashMap]),
+    );
+
+    IconButton buttonFor(Finder tooltip) => tester.widget<IconButton>(
+      find.ancestor(of: tooltip, matching: find.byType(IconButton)).first,
+    );
+
+    final firstUp = find.descendant(
+      of: find
+          .ancestor(of: find.text('Solution 1'), matching: find.byType(Row))
+          .first,
+      matching: find.byTooltip('Move solution up'),
+    );
+    final lastDown = find.descendant(
+      of: find
+          .ancestor(of: find.text('Solution 2'), matching: find.byType(Row))
+          .first,
+      matching: find.byTooltip('Move solution down'),
+    );
+
+    expect(buttonFor(firstUp).onPressed, isNull);
+    expect(buttonFor(lastDown).onPressed, isNull);
   });
 
   testWidgets('saving writes every solution, dropping the blank ones', (

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
@@ -89,9 +90,25 @@ List<List<CalendarEvent?>> calendarPackWeekEvents(
   List<DateTime> weekDates,
   List<CalendarEvent> allEvents,
 ) {
-  final weekEvents = allEvents.where((e) {
-    return weekDates.any((day) => calendarEventOccursOnDay(e, day));
-  }).toList();
+  // Membership is asked for O(rows x 7) times per event by the packing loop
+  // below, and [calendarEventOccursOnDay] allocates a fresh
+  // [NormalizedCalendarEvent] on every ask — a toLocal(), two dateOnly() calls
+  // and a Set built from the parsed exception list. Normalize once up front and
+  // answer from a per-event membership row instead.
+  final localDays = [
+    for (final date in weekDates) DateUtils.dateOnly(date.toLocal()),
+  ];
+  final occursOn = <String, List<bool>>{};
+  final weekEvents = <CalendarEvent>[];
+  for (final n in normalizeCalendarEvents(allEvents)) {
+    final row = [
+      for (final day in localDays) calendarEventOccursOnDayNormalized(n, day),
+    ];
+    if (row.contains(true)) {
+      occursOn[n.event.id] = row;
+      weekEvents.add(n.event);
+    }
+  }
 
   weekEvents.sort((a, b) {
     final aStart = a.start.toLocal();
@@ -107,11 +124,12 @@ List<List<CalendarEvent?>> calendarPackWeekEvents(
   final result = List<List<CalendarEvent?>>.generate(7, (_) => []);
 
   for (final event in weekEvents) {
+    final occurs = occursOn[event.id]!;
     int availableRow = 0;
     while (true) {
       bool canFit = true;
       for (int c = 0; c < 7; c++) {
-        if (calendarEventOccursOnDay(event, weekDates[c])) {
+        if (occurs[c]) {
           if (result[c].length > availableRow &&
               result[c][availableRow] != null) {
             canFit = false;
@@ -124,7 +142,7 @@ List<List<CalendarEvent?>> calendarPackWeekEvents(
     }
 
     for (int c = 0; c < 7; c++) {
-      if (calendarEventOccursOnDay(event, weekDates[c])) {
+      if (occurs[c]) {
         while (result[c].length <= availableRow) {
           result[c].add(null);
         }
@@ -194,7 +212,9 @@ const calendarTodayHighlightOpacity = 0.34;
 bool calendarDateInWeek(DateTime date, DateTime weekStart) {
   final start = DateUtils.dateOnly(weekStart);
   final day = DateUtils.dateOnly(date);
-  final end = start.add(const Duration(days: 7));
+  // Field arithmetic, not Duration(days: 7): 168 absolute hours overshoots
+  // into the eighth day in a week containing a spring-forward.
+  final end = DateTime(start.year, start.month, start.day + 7);
   return !day.isBefore(start) && day.isBefore(end);
 }
 
@@ -1602,6 +1622,7 @@ class _CalendarInteractiveEventTapState
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late Animation<double> _scale;
+  CurvedAnimation? _curved;
   CalendarEventTapState? _tapState;
   bool _isTapping = false;
   var _configuredMotion = false;
@@ -1654,20 +1675,22 @@ class _CalendarInteractiveEventTapState
       _controller.duration = reduced
           ? Duration.zero
           : const Duration(milliseconds: 140);
-      final curved = CurvedAnimation(
+      _curved?.dispose();
+      _curved = CurvedAnimation(
         parent: _controller,
         curve: reduced ? Curves.linear : VoyagerSpring.snappyCurve,
       );
       _scale = TweenSequence<double>([
         TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.92), weight: 45),
         TweenSequenceItem(tween: Tween(begin: 0.92, end: 1.0), weight: 55),
-      ]).animate(curved);
+      ]).animate(_curved!);
     }
   }
 
   @override
   void dispose() {
     _tapState?.removeListener(_onTapStateChanged);
+    _curved?.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -1699,7 +1722,13 @@ class _CalendarInteractiveEventTapState
       _tapState!.notifyEventTap(eventId: widget.eventId!, widgetRect: rect);
     }
 
-    await _controller.forward(from: 0);
+    // Not `await _controller.forward(...)`: a TickerFuture never completes if
+    // the controller is restarted before the animation ends, which
+    // _onTapStateChanged does for every other segment of the same multi-day
+    // bar. The await would then hang forever, leaving _isTapping latched and
+    // this segment permanently untappable.
+    unawaited(_controller.forward(from: 0));
+    await Future<void>.delayed(_controller.duration ?? Duration.zero);
     if (!mounted) return;
     _isTapping = false;
     widget.onTap!();

@@ -281,11 +281,17 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     final textField = ListEditingUndoGuard(
       child: TextField(
         key: _fieldKey,
-        contextMenuBuilder: spellcheckOn
-            ? voyagerSpellCheckContextMenuBuilder
-            : (context, editableTextState) => const SizedBox.shrink(),
+        // Right-click gets a menu on any field a new snippet could be
+        // written from, single-line ones included.
+        contextMenuBuilder: voyagerTextContextMenuBuilder(
+          context,
+          snippetsAllowed: vim.snippetsAllowed,
+        ),
         spellCheckConfiguration: spellcheckOn
-            ? buildVoyagerSpellCheckConfiguration(context)
+            ? buildVoyagerSpellCheckConfiguration(
+                context,
+                snippetsAllowed: vim.snippetsAllowed,
+              )
             : const SpellCheckConfiguration.disabled(),
         controller: widget.controller,
         focusNode: widget.focusNode,
@@ -383,7 +389,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
           ),
         DefaultTextHeightBehavior(
           textHeightBehavior: textHeightBehavior,
-          child: spellcheckOn
+          child: spellcheckOn || vim.snippetsAllowed
               ? wrapWithSecondaryTapWordSelect(
                   fieldKey: _fieldKey,
                   child: textField,

@@ -2977,17 +2977,6 @@ class $TodoTasksTableTable extends TodoTasksTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
-  static const VerificationMeta _preStarSortOrderMeta = const VerificationMeta(
-    'preStarSortOrder',
-  );
-  @override
-  late final GeneratedColumn<int> preStarSortOrder = GeneratedColumn<int>(
-    'pre_star_sort_order',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _dueDateSetAtMeta = const VerificationMeta(
     'dueDateSetAt',
   );
@@ -3079,7 +3068,6 @@ class $TodoTasksTableTable extends TodoTasksTable
     completed,
     starred,
     sortOrder,
-    preStarSortOrder,
     dueDateSetAt,
     recurrence,
     recurrenceAnchor,
@@ -3158,15 +3146,6 @@ class $TodoTasksTableTable extends TodoTasksTable
       context.handle(
         _sortOrderMeta,
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
-      );
-    }
-    if (data.containsKey('pre_star_sort_order')) {
-      context.handle(
-        _preStarSortOrderMeta,
-        preStarSortOrder.isAcceptableOrUnknown(
-          data['pre_star_sort_order']!,
-          _preStarSortOrderMeta,
-        ),
       );
     }
     if (data.containsKey('due_date_set_at')) {
@@ -3266,10 +3245,6 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
-      preStarSortOrder: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}pre_star_sort_order'],
-      ),
       dueDateSetAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}due_date_set_at'],
@@ -3318,7 +3293,6 @@ class TodoTasksTableData extends DataClass
   final bool completed;
   final bool starred;
   final int sortOrder;
-  final int? preStarSortOrder;
   final DateTime? dueDateSetAt;
 
   /// Repeat pattern. See [RecurrenceRule.toStorage].
@@ -3344,7 +3318,6 @@ class TodoTasksTableData extends DataClass
     required this.completed,
     required this.starred,
     required this.sortOrder,
-    this.preStarSortOrder,
     this.dueDateSetAt,
     required this.recurrence,
     this.recurrenceAnchor,
@@ -3371,9 +3344,6 @@ class TodoTasksTableData extends DataClass
     map['completed'] = Variable<bool>(completed);
     map['starred'] = Variable<bool>(starred);
     map['sort_order'] = Variable<int>(sortOrder);
-    if (!nullToAbsent || preStarSortOrder != null) {
-      map['pre_star_sort_order'] = Variable<int>(preStarSortOrder);
-    }
     if (!nullToAbsent || dueDateSetAt != null) {
       map['due_date_set_at'] = Variable<DateTime>(dueDateSetAt);
     }
@@ -3407,9 +3377,6 @@ class TodoTasksTableData extends DataClass
       completed: Value(completed),
       starred: Value(starred),
       sortOrder: Value(sortOrder),
-      preStarSortOrder: preStarSortOrder == null && nullToAbsent
-          ? const Value.absent()
-          : Value(preStarSortOrder),
       dueDateSetAt: dueDateSetAt == null && nullToAbsent
           ? const Value.absent()
           : Value(dueDateSetAt),
@@ -3441,7 +3408,6 @@ class TodoTasksTableData extends DataClass
       completed: serializer.fromJson<bool>(json['completed']),
       starred: serializer.fromJson<bool>(json['starred']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
-      preStarSortOrder: serializer.fromJson<int?>(json['preStarSortOrder']),
       dueDateSetAt: serializer.fromJson<DateTime?>(json['dueDateSetAt']),
       recurrence: serializer.fromJson<String>(json['recurrence']),
       recurrenceAnchor: serializer.fromJson<DateTime?>(
@@ -3466,7 +3432,6 @@ class TodoTasksTableData extends DataClass
       'completed': serializer.toJson<bool>(completed),
       'starred': serializer.toJson<bool>(starred),
       'sortOrder': serializer.toJson<int>(sortOrder),
-      'preStarSortOrder': serializer.toJson<int?>(preStarSortOrder),
       'dueDateSetAt': serializer.toJson<DateTime?>(dueDateSetAt),
       'recurrence': serializer.toJson<String>(recurrence),
       'recurrenceAnchor': serializer.toJson<DateTime?>(recurrenceAnchor),
@@ -3487,7 +3452,6 @@ class TodoTasksTableData extends DataClass
     bool? completed,
     bool? starred,
     int? sortOrder,
-    Value<int?> preStarSortOrder = const Value.absent(),
     Value<DateTime?> dueDateSetAt = const Value.absent(),
     String? recurrence,
     Value<DateTime?> recurrenceAnchor = const Value.absent(),
@@ -3505,9 +3469,6 @@ class TodoTasksTableData extends DataClass
     completed: completed ?? this.completed,
     starred: starred ?? this.starred,
     sortOrder: sortOrder ?? this.sortOrder,
-    preStarSortOrder: preStarSortOrder.present
-        ? preStarSortOrder.value
-        : this.preStarSortOrder,
     dueDateSetAt: dueDateSetAt.present ? dueDateSetAt.value : this.dueDateSetAt,
     recurrence: recurrence ?? this.recurrence,
     recurrenceAnchor: recurrenceAnchor.present
@@ -3531,9 +3492,6 @@ class TodoTasksTableData extends DataClass
       completed: data.completed.present ? data.completed.value : this.completed,
       starred: data.starred.present ? data.starred.value : this.starred,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
-      preStarSortOrder: data.preStarSortOrder.present
-          ? data.preStarSortOrder.value
-          : this.preStarSortOrder,
       dueDateSetAt: data.dueDateSetAt.present
           ? data.dueDateSetAt.value
           : this.dueDateSetAt,
@@ -3562,7 +3520,6 @@ class TodoTasksTableData extends DataClass
           ..write('completed: $completed, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('preStarSortOrder: $preStarSortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('recurrence: $recurrence, ')
           ..write('recurrenceAnchor: $recurrenceAnchor, ')
@@ -3585,7 +3542,6 @@ class TodoTasksTableData extends DataClass
     completed,
     starred,
     sortOrder,
-    preStarSortOrder,
     dueDateSetAt,
     recurrence,
     recurrenceAnchor,
@@ -3607,7 +3563,6 @@ class TodoTasksTableData extends DataClass
           other.completed == this.completed &&
           other.starred == this.starred &&
           other.sortOrder == this.sortOrder &&
-          other.preStarSortOrder == this.preStarSortOrder &&
           other.dueDateSetAt == this.dueDateSetAt &&
           other.recurrence == this.recurrence &&
           other.recurrenceAnchor == this.recurrenceAnchor &&
@@ -3627,7 +3582,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<bool> completed;
   final Value<bool> starred;
   final Value<int> sortOrder;
-  final Value<int?> preStarSortOrder;
   final Value<DateTime?> dueDateSetAt;
   final Value<String> recurrence;
   final Value<DateTime?> recurrenceAnchor;
@@ -3646,7 +3600,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.completed = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
-    this.preStarSortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
     this.recurrence = const Value.absent(),
     this.recurrenceAnchor = const Value.absent(),
@@ -3666,7 +3619,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.completed = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
-    this.preStarSortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
     this.recurrence = const Value.absent(),
     this.recurrenceAnchor = const Value.absent(),
@@ -3690,7 +3642,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<bool>? completed,
     Expression<bool>? starred,
     Expression<int>? sortOrder,
-    Expression<int>? preStarSortOrder,
     Expression<DateTime>? dueDateSetAt,
     Expression<String>? recurrence,
     Expression<DateTime>? recurrenceAnchor,
@@ -3710,7 +3661,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (completed != null) 'completed': completed,
       if (starred != null) 'starred': starred,
       if (sortOrder != null) 'sort_order': sortOrder,
-      if (preStarSortOrder != null) 'pre_star_sort_order': preStarSortOrder,
       if (dueDateSetAt != null) 'due_date_set_at': dueDateSetAt,
       if (recurrence != null) 'recurrence': recurrence,
       if (recurrenceAnchor != null) 'recurrence_anchor': recurrenceAnchor,
@@ -3732,7 +3682,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<bool>? completed,
     Value<bool>? starred,
     Value<int>? sortOrder,
-    Value<int?>? preStarSortOrder,
     Value<DateTime?>? dueDateSetAt,
     Value<String>? recurrence,
     Value<DateTime?>? recurrenceAnchor,
@@ -3752,7 +3701,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       completed: completed ?? this.completed,
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
-      preStarSortOrder: preStarSortOrder ?? this.preStarSortOrder,
       dueDateSetAt: dueDateSetAt ?? this.dueDateSetAt,
       recurrence: recurrence ?? this.recurrence,
       recurrenceAnchor: recurrenceAnchor ?? this.recurrenceAnchor,
@@ -3794,9 +3742,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
-    if (preStarSortOrder.present) {
-      map['pre_star_sort_order'] = Variable<int>(preStarSortOrder.value);
-    }
     if (dueDateSetAt.present) {
       map['due_date_set_at'] = Variable<DateTime>(dueDateSetAt.value);
     }
@@ -3836,7 +3781,6 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('completed: $completed, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('preStarSortOrder: $preStarSortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
           ..write('recurrence: $recurrence, ')
           ..write('recurrenceAnchor: $recurrenceAnchor, ')
@@ -32514,6 +32458,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $JobSeasonsTableTable jobSeasonsTable = $JobSeasonsTableTable(
     this,
   );
+  late final Index idxTodoTasksListId = Index(
+    'idx_todo_tasks_list_id',
+    'CREATE INDEX idx_todo_tasks_list_id ON todo_tasks_table (list_id)',
+  );
+  late final Index idxTodoTasksParentTaskId = Index(
+    'idx_todo_tasks_parent_task_id',
+    'CREATE INDEX idx_todo_tasks_parent_task_id ON todo_tasks_table (parent_task_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -32561,6 +32513,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     jobCompaniesTable,
     jobCategoriesTable,
     jobSeasonsTable,
+    idxTodoTasksListId,
+    idxTodoTasksParentTaskId,
   ];
   @override
   DriftDatabaseOptions get options =>
@@ -33973,7 +33927,6 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       Value<bool> completed,
       Value<bool> starred,
       Value<int> sortOrder,
-      Value<int?> preStarSortOrder,
       Value<DateTime?> dueDateSetAt,
       Value<String> recurrence,
       Value<DateTime?> recurrenceAnchor,
@@ -33994,7 +33947,6 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<bool> completed,
       Value<bool> starred,
       Value<int> sortOrder,
-      Value<int?> preStarSortOrder,
       Value<DateTime?> dueDateSetAt,
       Value<String> recurrence,
       Value<DateTime?> recurrenceAnchor,
@@ -34056,11 +34008,6 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get preStarSortOrder => $composableBuilder(
-    column: $table.preStarSortOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -34154,11 +34101,6 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get preStarSortOrder => $composableBuilder(
-    column: $table.preStarSortOrder,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get dueDateSetAt => $composableBuilder(
     column: $table.dueDateSetAt,
     builder: (column) => ColumnOrderings(column),
@@ -34232,11 +34174,6 @@ class $$TodoTasksTableTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
-
-  GeneratedColumn<int> get preStarSortOrder => $composableBuilder(
-    column: $table.preStarSortOrder,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<DateTime> get dueDateSetAt => $composableBuilder(
     column: $table.dueDateSetAt,
@@ -34312,7 +34249,6 @@ class $$TodoTasksTableTableTableManager
                 Value<bool> completed = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
-                Value<int?> preStarSortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
                 Value<String> recurrence = const Value.absent(),
                 Value<DateTime?> recurrenceAnchor = const Value.absent(),
@@ -34331,7 +34267,6 @@ class $$TodoTasksTableTableTableManager
                 completed: completed,
                 starred: starred,
                 sortOrder: sortOrder,
-                preStarSortOrder: preStarSortOrder,
                 dueDateSetAt: dueDateSetAt,
                 recurrence: recurrence,
                 recurrenceAnchor: recurrenceAnchor,
@@ -34352,7 +34287,6 @@ class $$TodoTasksTableTableTableManager
                 Value<bool> completed = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
-                Value<int?> preStarSortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
                 Value<String> recurrence = const Value.absent(),
                 Value<DateTime?> recurrenceAnchor = const Value.absent(),
@@ -34371,7 +34305,6 @@ class $$TodoTasksTableTableTableManager
                 completed: completed,
                 starred: starred,
                 sortOrder: sortOrder,
-                preStarSortOrder: preStarSortOrder,
                 dueDateSetAt: dueDateSetAt,
                 recurrence: recurrence,
                 recurrenceAnchor: recurrenceAnchor,

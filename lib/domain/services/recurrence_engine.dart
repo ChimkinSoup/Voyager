@@ -34,6 +34,25 @@ int epochDay(DateTime date) =>
 DateTime addDays(DateTime date, int days) =>
     DateTime(date.year, date.month, date.day + days);
 
+/// [dateTime] shifted by [days] calendar days, keeping its local wall clock.
+///
+/// [addDays]'s counterpart for values that carry a time of day: the same field
+/// arithmetic, so the shift survives a DST transition, but the hour and minute
+/// come along — sliding a series must not move "every Tuesday at 10:00" off
+/// 10:00, and must not flatten it to midnight either.
+DateTime addDaysKeepingTime(DateTime dateTime, int days) {
+  final local = dateTime.toLocal();
+  return DateTime(
+    local.year,
+    local.month,
+    local.day + days,
+    local.hour,
+    local.minute,
+    local.second,
+    local.millisecond,
+  );
+}
+
 int _monthIndex(DateTime date) => date.year * 12 + (date.month - 1);
 
 int _daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
@@ -264,6 +283,26 @@ String recurrenceRuleLabel(RecurrenceRule rule, {DateTime? anchor}) {
 ///
 /// The wall-clock time of [dueDate] is carried over, which is what makes
 /// "repeat at 09:00" hold across the roll.
+/// The recurrence anchor a task should carry after the user reschedules it by
+/// hand.
+///
+/// The anchor is frozen the first time a repeat is set and only moves on a
+/// manual reschedule. Letting it follow every due date would re-anchor it on
+/// each roll-forward, and a "monthly on the 31st" task that landed on Feb 28
+/// would stay on the 28th from then on.
+///
+/// Clearing the due date clears the anchor with it: `repeats` reads false
+/// without a due date, so the pattern goes dormant, and a stale anchor left
+/// behind would silently revive the *old* pattern the moment any new date was
+/// picked.
+DateTime? rescheduledRecurrenceAnchor({
+  required RecurrenceRule rule,
+  required DateTime? newDue,
+}) {
+  if (!rule.repeats || newDue == null) return null;
+  return newDue;
+}
+
 DateTime? nextTaskDueDate({
   required DateTime dueDate,
   required DateTime anchor,

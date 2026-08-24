@@ -296,9 +296,15 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                         maxLines: null,
                         expands: true,
                         scrollPadding: kVoyagerFieldScrollPadding,
-                        contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                        contextMenuBuilder: voyagerTextContextMenuBuilder(
+                          context,
+                          snippetsAllowed: vim.snippetsAllowed,
+                        ),
                         spellCheckConfiguration:
-                            buildVoyagerSpellCheckConfiguration(context),
+                            buildVoyagerSpellCheckConfiguration(
+                              context,
+                              snippetsAllowed: vim.snippetsAllowed,
+                            ),
                         textAlignVertical: TextAlignVertical.top,
                         style: textStyle,
                         decoration: InputDecoration(

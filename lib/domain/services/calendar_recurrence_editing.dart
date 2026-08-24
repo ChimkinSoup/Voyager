@@ -217,19 +217,46 @@ CalendarEvent rebaseToAnchor(
   CalendarEvent master,
   DateTime occurrenceDate,
 ) {
-  final occurrence = DateUtils.dateOnly(occurrenceDate);
   final masterStart = DateUtils.dateOnly(master.start.toLocal());
-  if (occurrence == masterStart) return edited;
-
   final editedStart = DateUtils.dateOnly(edited.start.toLocal());
-  final shift = epochDay(editedStart) - epochDay(occurrence);
+  final shift = recurrenceRebaseShiftDays(edited, occurrenceDate);
   final span =
       epochDay(DateUtils.dateOnly(edited.end.toLocal())) - epochDay(editedStart);
 
   final newStartDate = addDays(masterStart, shift);
+  // [recurrenceEndDate] caps the pattern, so it is measured in the same frame
+  // the occurrences are. Sliding the series without it silently truncates the
+  // tail — move a series that ends Jun 30 forward a week and the last week of
+  // occurrences stops being produced. Null is copyWith's "leave it alone", and
+  // is what both the open-ended and the shift-free case want.
+  final until = edited.recurrenceEndDate;
+  final shiftedUntil = shift == 0 || until == null
+      ? null
+      : addDays(DateUtils.dateOnly(until.toLocal()), shift);
+
   return edited.copyWith(
     start: _onDateKeepingTime(newStartDate, edited.start),
     end: _onDateKeepingTime(addDays(newStartDate, span), edited.end),
+    recurrenceEndDate: shiftedUntil,
+    // An exception names an occurrence *in the pattern* ("the one on Mar 14"),
+    // so once the pattern slides they have to slide with it. Left alone they
+    // stop landing on any occurrence at all and every previously-deleted
+    // occurrence reappears on the new dates.
+    exceptionDates: shift == 0
+        ? edited.exceptionDates
+        : [
+            for (final date in edited.exceptionDates)
+              addDays(DateUtils.dateOnly(date.toLocal()), shift),
+          ],
     bumpVersion: false,
   );
 }
+
+/// Whole days the user moved the occurrence at [occurrenceDate] by.
+///
+/// This is the amount an "all events" edit slides the entire series, so it is
+/// also what the series' detached override rows have to move by to stay pinned
+/// to the occurrences they replace.
+int recurrenceRebaseShiftDays(CalendarEvent edited, DateTime occurrenceDate) =>
+    epochDay(DateUtils.dateOnly(edited.start.toLocal())) -
+    epochDay(DateUtils.dateOnly(occurrenceDate));

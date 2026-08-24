@@ -206,11 +206,8 @@ class TodoSortDebugLogger extends ChangeNotifier {
     final dueSet = task.dueDateSetAt != null
         ? ' dueSet=${task.dueDateSetAt!.toUtc().toIso8601String()}'
         : '';
-    final preStar = task.preStarSortOrder != null
-        ? ' preStar=${task.preStarSortOrder}'
-        : '';
     final completed = task.completed ? ' done' : '';
-    return '$prefix $star id=${task.id} sort=${task.sortOrder} $due$dueSet$preStar'
+    return '$prefix $star id=${task.id} sort=${task.sortOrder} $due$dueSet'
         '$completed title="${task.title}"';
   }
 

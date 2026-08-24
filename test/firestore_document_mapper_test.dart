@@ -163,7 +163,6 @@ void main() {
       completed: true,
       starred: true,
       sortOrder: 3,
-      preStarSortOrder: 1,
       parentTaskId: 'parent-1',
       createdAt: now,
       updatedAt: now,
@@ -176,7 +175,6 @@ void main() {
 
     expect(restored.notes, task.notes);
     expect(restored.starred, isTrue);
-    expect(restored.preStarSortOrder, 1);
     expect(restored.parentTaskId, 'parent-1');
   });
 

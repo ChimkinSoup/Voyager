@@ -73,8 +73,10 @@ abstract class TodoRepository {
   Future<List<TodoListModel>> listLists({bool includeDeleted = false});
   Future<void> upsertList(TodoListModel list, {bool recordLocalActivity = true});
   Future<void> softDeleteList(String id);
-  Future<void> softDeleteTasksInList(String listId);
-  Future<void> reassignTasksList(String fromListId, String toListId);
+
+  /// Soft-deletes every task in [listId], subtasks included, and returns the
+  /// rows as written so the caller can push exactly those to the remote.
+  Future<List<TodoTask>> softDeleteTasksInList(String listId);
 
   Future<List<TodoTask>> listTasks(
     String listId, {

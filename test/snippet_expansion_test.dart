@@ -776,6 +776,59 @@ void main() {
       expect(focusNode.hasFocus, isTrue);
     });
 
+    testWidgets('a key that changed no text cannot vouch for a later write', (
+      tester,
+    ) async {
+      await pumpField(
+        tester,
+        vimEnabled: true,
+        snippets: [snippet('ea', 'X')],
+      );
+      await type(tester, 'e');
+      await press(tester, LogicalKeyboardKey.escape);
+      // `a` enters Insert without typing anything, so the token it records is
+      // spent by the selection-only notification that follows it.
+      await press(tester, _keyFor('a'));
+
+      // A write the user did not make: a sync pull, a redo, a CRDT merge. It
+      // happens to insert the same character the last key press produced, and
+      // used to be treated as typing on the strength of that stale token.
+      controller.value = const TextEditingValue(
+        text: 'ea',
+        selection: TextSelection.collapsed(offset: 2),
+      );
+      await tester.pump();
+      expect(controller.text, 'ea');
+      // Desktop only: where there is no soft keyboard, a character with no key
+      // event behind it is by definition not typing — which is the whole point
+      // of the token. See [_hardwareKeyboardTypes].
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+    testWidgets('Tab in Visual mode leaves the range alone', (tester) async {
+      await pumpField(
+        tester,
+        vimEnabled: true,
+        snippets: [snippet('ee', r'($0)$1')],
+      );
+      await type(tester, 'ee');
+      expect(controller.text, '()');
+      await press(tester, LogicalKeyboardKey.escape);
+      await press(tester, _keyFor('v'));
+      final selection = controller.selection;
+      expect(selection.isCollapsed, isFalse);
+
+      // Advancing a tabstop writes a *collapsed* selection, which Vim would
+      // not see: it would still believe it was in Visual mode with a range,
+      // and the next motion would re-expand from the stale anchor. So Vim
+      // keeps Tab while a range is up.
+      //
+      // (Entering Visual mode has already ended the snippet session by this
+      // point — `_pruneForCaret` clears the stack on any non-collapsed
+      // selection — so this is the outer of two guards, not the only one.)
+      await press(tester, LogicalKeyboardKey.tab);
+      expect(controller.selection, selection);
+    });
+
     testWidgets('Vim Normal Tab still traverses when no session is open', (
       tester,
     ) async {
@@ -798,6 +851,42 @@ void main() {
   });
 
   group('undo', () {
+    /// Ctrl+Z, then long enough for [UndoHistory]'s 500ms trailing throttle to
+    /// push whatever the press left in the field.
+    Future<void> undo(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    testWidgets('a second Ctrl+Z goes past the expansion, not back to it', (
+      tester,
+    ) async {
+      await pumpField(tester, snippets: [snippet('ee', 'expanded')]);
+      // [UndoHistory] pushes on a 500ms trailing throttle, so the empty field
+      // has to reach the stack before the trigger is typed — as it would in
+      // any real editing session, where the user does not type in the same
+      // 500ms they focused the box.
+      await tester.pump(const Duration(seconds: 1));
+
+      await type(tester, 'ee');
+      expect(controller.text, 'expanded');
+      // And the expansion has to reach it before the first press.
+      await tester.pump(const Duration(seconds: 1));
+
+      await undo(tester);
+      expect(controller.text, 'ee');
+
+      // Restoring the trigger by *writing* it back reads to [UndoHistory] as
+      // an ordinary edit, so it pushed rather than popped and this press walked
+      // forward into the expansion again — with every press after it
+      // oscillating between the two, the text before the trigger unreachable.
+      await undo(tester);
+      expect(controller.text, isNot('expanded'));
+      expect(controller.text, '');
+    });
+
     testWidgets('Ctrl+Z puts the trigger back in one step', (tester) async {
       await pumpField(tester, snippets: [snippet('ee', r'($0)$1')]);
       await type(tester, 'ee');

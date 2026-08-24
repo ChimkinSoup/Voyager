@@ -3,6 +3,8 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/domain/services/recurrence_engine.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 
 /// A calendar-visible todo task with list color resolved for rendering.
@@ -499,18 +501,26 @@ class CalendarWeekEventBlock extends StatelessWidget {
     bool isStart = true;
 
     if (day != null) {
-      final startDay = DateUtils.dateOnly(event.start.toLocal());
-      final endDay = DateUtils.dateOnly(event.end.toLocal());
-      final currentDay = DateUtils.dateOnly(day!);
+      // The caps belong to the *occurrence* covering [day], not to the series
+      // anchor. Comparing against the anchor leaves every occurrence of a
+      // repeating multi-day event past the first bridged at both ends — and
+      // since showText is `!bridgeLeft`, its title then never appears at all.
+      final occurrenceStart = calendarOccurrenceStartOn(event, day!);
+      if (occurrenceStart != null) {
+        // epochDay, not difference().inDays: the latter is a day short across a
+        // fall-back transition, which can flatten a real multi-day event.
+        final span =
+            epochDay(DateUtils.dateOnly(event.end.toLocal())) -
+            epochDay(DateUtils.dateOnly(event.start.toLocal()));
+        final currentDay = DateUtils.dateOnly(day!);
 
-      final totalDays = endDay.difference(startDay).inDays + 1;
+        if (span > 0) {
+          isStart = currentDay == occurrenceStart;
+          final isEnd = currentDay == addDays(occurrenceStart, span);
 
-      if (totalDays > 1) {
-        isStart = currentDay.isAtSameMomentAs(startDay);
-        final isEnd = currentDay.isAtSameMomentAs(endDay);
-
-        bridgeLeft = !isStart && !isFirstColumn;
-        bridgeRight = !isEnd && !isLastColumn;
+          bridgeLeft = !isStart && !isFirstColumn;
+          bridgeRight = !isEnd && !isLastColumn;
+        }
       }
     }
 

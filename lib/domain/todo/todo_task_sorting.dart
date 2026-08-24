@@ -422,11 +422,7 @@ List<TodoTask> buildUnstarredOrderAfterClearDueDate(
 }
 
 TodoSortBatch _applyStar(TodoTask task, List<TodoTask> activeTasks) {
-  final preStarSortOrder = normalizeUnstarredSortOrder(task.sortOrder);
-  final starred = task.copyWith(
-    starred: true,
-    preStarSortOrder: preStarSortOrder,
-  );
+  final starred = task.copyWith(starred: true);
 
   return _batchFromOrder(
     activeTasks,
@@ -444,10 +440,7 @@ TodoSortBatch _applyUnstar(TodoTask task, List<TodoTask> activeTasks) {
       .toList()
     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-  final unstarred = task.copyWith(
-    starred: false,
-    clearPreStarSortOrder: true,
-  );
+  final unstarred = task.copyWith(starred: false);
 
   final updates = <TodoTask>[];
   updates.addAll(
@@ -501,7 +494,6 @@ List<TodoTask> _reindex(
     if (previous == null ||
         previous.sortOrder != next.sortOrder ||
         previous.starred != next.starred ||
-        previous.preStarSortOrder != next.preStarSortOrder ||
         previous.dueDate != next.dueDate ||
         previous.dueDateSetAt != next.dueDateSetAt) {
       updates.add(next);

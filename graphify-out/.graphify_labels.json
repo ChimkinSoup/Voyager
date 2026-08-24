@@ -769,5 +769,9 @@
   "767": "weightUnit",
   "768": "word",
   "769": "workoutRestSeconds",
-  "770": "workoutRestTimerEnabled"
+  "770": "workoutRestTimerEnabled",
+  "771": "_MonthWeekMorphLayer",
+  "772": "package:voyager/features/analytics/stat_number_format.dart",
+  "773": "_BucketNoteDialog",
+  "774": "_QuickDelayedDragStartListener"
 }

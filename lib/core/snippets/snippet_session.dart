@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:voyager/core/snippets/snippet_index.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/domain/models/snippet.dart';
 
 /// The tabstops still to visit, published for the dotted-mark overlay.
@@ -136,6 +137,8 @@ class SnippetSession {
     required this.isInsertMode,
     required SnippetIndex index,
     required SnippetExpandKey expandKey,
+    this.isFieldFocused = _alwaysFocused,
+    this.undoController,
     // Not initializing formals: both are rebound by the setters below when the
     // user edits their snippets, so the fields are private and mutable rather
     // than public and final.
@@ -153,6 +156,20 @@ class SnippetSession {
   /// do: input formatters, `onChanged` (autosave and the journal CRDT depend on
   /// seeing every edit), spellcheck and undo history all hang off that path.
   final EditableTextState? Function() resolveEditableState;
+
+  static bool _alwaysFocused() => true;
+
+  /// Whether the host field still holds the keyboard. [resolveEditableState]
+  /// returns null both before the field's first frame and after focus has
+  /// moved on; only the first of those wants the direct-controller fallback in
+  /// [_applyValue]. See `VimSession.isFieldFocused`.
+  final bool Function() isFieldFocused;
+
+  /// The field's undo history, when the host owns one.
+  ///
+  /// [undoLastExpansion] consumes an entry from it rather than writing the
+  /// pre-expansion value back as a fresh edit — see there.
+  final UndoHistoryController? undoController;
 
   /// Whether the field is behaving as an insert surface. Always true with Vim
   /// off; `VimMode.insert` only with Vim on. Expansion is gated on it; advancing
@@ -348,9 +365,39 @@ class SnippetSession {
     // Everything the expansion created goes with it, outer frames included:
     // their regions were measured against text that is about to change length.
     _stack.clear();
-    _applyValue(record.before);
+    _restore(record.before);
     _publishMarks();
     return true;
+  }
+
+  /// Puts [before] back without leaving a fresh entry at the top of the undo
+  /// stack.
+  ///
+  /// Writing it straight through [_applyValue] is what Flutter's [UndoHistory]
+  /// sees as an ordinary edit, so it *pushes* rather than pops: the stack ends
+  /// up `[…, expanded, trigger]`, the next Ctrl+Z walks forward to `expanded`
+  /// again, and the two oscillate for as long as the user keeps pressing —
+  /// the state before the trigger was typed is unreachable. Consuming one
+  /// entry from the field's own history instead is what makes the second press
+  /// continue past the expansion.
+  ///
+  /// The pop can overshoot (the trigger's own keystrokes coalesce with
+  /// whatever was typed in the 500ms before them, and a pop during the pending
+  /// throttle rewinds to the last *pushed* value), so the result is corrected
+  /// afterwards when it does not already read as the pre-expansion text. That
+  /// correction is a push, but a harmless one: it lands on a stack whose top is
+  /// now genuinely older than the expansion.
+  void _restore(TextEditingValue before) {
+    final undo = undoController;
+    // Same UndoHistory assert as Vim's `u` — see [suppressListEditingWrites].
+    suppressListEditingWrites(() {
+      if (undo != null && undo.value.canUndo) undo.undo();
+      final current = textController.value;
+      if (current.text != before.text ||
+          current.selection != before.selection) {
+        _applyValue(before);
+      }
+    });
   }
 
   // ==========================================================================
@@ -367,13 +414,14 @@ class SnippetSession {
     // One key press accounts for at most one text change. Consumed here rather
     // than where it is read so that an edit this session declines to act on
     // still spends it — a stale token must never vouch for a later write.
-    final String? typed;
-    if (previous.text != value.text) {
-      typed = _typedChar;
-      _typedChar = null;
-    } else {
-      typed = null;
-    }
+    // Spent unconditionally: a key that changes nothing but the selection —
+    // every Vim motion, `v`, Escape, an unmapped letter — used to leave the
+    // token set indefinitely, where a later programmatic insert of that same
+    // character could be vouched for as typing and fire an expansion nobody
+    // asked for.
+    final token = _typedChar;
+    _typedChar = null;
+    final String? typed = previous.text != value.text ? token : null;
 
     if (_stack.isNotEmpty && previous.text != value.text) {
       _absorbEdit(previous.text, value.text, value.selection);
@@ -578,11 +626,13 @@ class SnippetSession {
       final state = resolveEditableState();
       if (state != null) {
         state.userUpdateTextEditingValue(value, SelectionChangedCause.keyboard);
-      } else {
+      } else if (isFieldFocused()) {
         // Only reachable before the field's first frame, where there is no
         // state to resolve yet.
         textController.value = value;
       }
+      // Otherwise focus has moved on and the write is stale: dropped rather
+      // than sent to whichever field holds the keyboard now.
     } finally {
       _applying = false;
       _previous = textController.value;

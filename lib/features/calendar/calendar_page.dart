@@ -14,6 +14,8 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/domain/services/recurrence_engine.dart';
+import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/domain/services/calendar_recurrence_editing.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -401,6 +403,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     DateTime? day,
     bool focusTitle = true,
     Rect? anchorRect,
+    bool timedByDefault = false,
   }) {
     final Rect rect;
     if (anchorRect != null) {
@@ -420,6 +423,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       event: event,
       date: day ?? _focused,
       focusTitle: focusTitle,
+      timedByDefault: timedByDefault,
     );
   }
 
@@ -428,6 +432,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     CalendarEvent? event,
     required DateTime date,
     bool focusTitle = true,
+    bool timedByDefault = false,
   }) async {
     final occurrenceDay = event == null
         ? DateUtils.dateOnly(date)
@@ -468,6 +473,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         calendars: calendars,
         initialCalendarId: initialCalendarId,
         focusTitleOnOpen: focusTitle,
+        initialIsFullDay: !timedByDefault,
         onSave: (data) {
           // Close popup first so the user sees immediate feedback, then
           // persist asynchronously.
@@ -498,6 +504,78 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     if (mounted) _resetSidebar();
   }
 
+  /// Re-reads the task lists a write touched.
+  ///
+  /// [allTodoTasksProvider] is an aggregate over the per-list family and reuses
+  /// its cache, so invalidating it alone re-runs its body against the *stale*
+  /// per-list values. The family member the write actually landed in has to be
+  /// invalidated too, or the calendar and the todo page both keep drawing the
+  /// pre-edit row.
+  void _invalidateTodoProviders(Set<String> listIds) {
+    for (final listId in listIds) {
+      ref.invalidate(todoTasksProvider(listId));
+    }
+    ref.invalidate(allTodoTasksProvider);
+    ref.invalidate(calendarTodoMarkersProvider);
+  }
+
+  /// Persists a task edited from the calendar popup.
+  ///
+  /// Rescheduling or moving a task is subject to the same two invariants the
+  /// todo feature maintains, so it routes through the same helpers: the frozen
+  /// recurrence anchor moves only on a manual reschedule (see
+  /// [rescheduledRecurrenceAnchor]), and [sortOrder] has to be rebuilt so the
+  /// task lands in its list's chronological run rather than staying where it
+  /// was.
+  Future<void> _saveTodoTask({
+    required TodoTask before,
+    required TodoTask after,
+  }) async {
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+
+    final rescheduled = after.dueDate != before.dueDate;
+    var next = after;
+    if (rescheduled) {
+      next = next.copyWith(
+        recurrenceAnchor: rescheduledRecurrenceAnchor(
+          rule: next.recurrence,
+          newDue: next.dueDate,
+        ),
+        clearRecurrenceAnchor: next.dueDate == null,
+      );
+    }
+
+    final listMoved = next.listId != before.listId;
+    final List<TodoTask> writes;
+    if (listMoved) {
+      final destActive = activeTopLevelTasks(await repo.listTasks(next.listId));
+      writes = applyTaskListMove(next, destActive).tasks;
+    } else if (rescheduled) {
+      final active = activeTopLevelTasks(await repo.listTasks(next.listId));
+      writes = applyDueDateChange(
+        next,
+        active,
+        dueDate: next.dueDate,
+        clearDueDate: next.dueDate == null,
+      ).tasks;
+    } else {
+      writes = [next];
+    }
+
+    await repo.upsertTasksBatch(writes);
+    // The edited row carries title/notes changes, so it goes up on its own to
+    // keep its char-ops; the rest of the batch is sort-order shuffling only.
+    final edited = writes.where((t) => t.id == next.id).firstOrNull;
+    if (edited != null) {
+      await remoteSync.pushTodoTaskNow(edited);
+    }
+    await remoteSync.pushTodoTasksBatch(
+      writes.where((t) => t.id != next.id).toList(),
+    );
+    _invalidateTodoProviders({before.listId, next.listId});
+  }
+
   Future<void> _showTodoPopup({
     required TodoTask task,
     required Rect rect,
@@ -517,10 +595,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         focusTitleOnOpen: true,
         onSave: (updatedTask) async {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-          await ref.read(todoRepositoryProvider).upsertTask(updatedTask);
-          ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updatedTask);
-          ref.invalidate(calendarTodoMarkersProvider);
-          ref.invalidate(allTodoTasksProvider);
+          await _saveTodoTask(before: task, after: updatedTask);
         },
         onCancel: () {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
@@ -530,7 +605,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   void _openWeekSlotSidebar(DateTime day, DateTime time) {
-    _openEventSidebar(day: time);
+    // The tap picked a half hour in the timeline; a new event seeded from it
+    // has to start out timed or that choice is discarded on save.
+    _openEventSidebar(day: time, timedByDefault: true);
   }
 
   void _handleEntryTap(CalendarDayEntry entry) {
@@ -556,32 +633,54 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // The panel was handed an occurrence view, so its start/end are expressed
     // at [occurrenceDay], not at the series anchor. The scope decides whether
     // they stay there or get mapped back.
-    final edited = CalendarEvent(
-      id: event?.id ?? newId(),
-      calendarId:
-          result['calendarId'] as String? ??
-          event?.calendarId ??
-          _selectedCalendarId ??
-          legacyCalendarId,
-      title: result['title'] as String,
-      start: result['start'] as DateTime,
-      end: result['end'] as DateTime,
-      isFullDay: result['isFullDay'] as bool,
-      colorValue: result['colorValue'] as int,
-      notes: result['notes'] as String,
-      recurrence:
-          result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
-      recurrenceEndDate: event?.recurrenceEndDate,
-      exceptionDates: event?.exceptionDates ?? const [],
-      recurrenceParentId: event?.recurrenceParentId,
-      recurrenceDate: event?.recurrenceDate,
-      source: event?.source ?? EventSource.local,
-      externalId: event?.externalId,
-      createdAt: event?.createdAt ?? now,
-      updatedAt: now,
-    );
+    // An existing row is rebuilt with copyWith, never with the constructor: it
+    // is the only thing that bumps [version], and the constructor would reset
+    // it to 0 — losing every later conflict adjudication for this event — as
+    // well as silently dropping [deletedAt].
+    final edited = event == null
+        ? CalendarEvent(
+            id: newId(),
+            calendarId:
+                result['calendarId'] as String? ??
+                _selectedCalendarId ??
+                legacyCalendarId,
+            title: result['title'] as String,
+            start: result['start'] as DateTime,
+            end: result['end'] as DateTime,
+            isFullDay: result['isFullDay'] as bool,
+            colorValue: result['colorValue'] as int,
+            notes: result['notes'] as String,
+            recurrence:
+                result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
+            createdAt: now,
+            updatedAt: now,
+          )
+        : event.copyWith(
+            calendarId: result['calendarId'] as String?,
+            title: result['title'] as String,
+            start: result['start'] as DateTime,
+            end: result['end'] as DateTime,
+            isFullDay: result['isFullDay'] as bool,
+            colorValue: result['colorValue'] as int,
+            notes: result['notes'] as String,
+            recurrence:
+                result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
+          );
 
     final repo = ref.read(calendarRepositoryProvider);
+
+    // Closing the popup by clicking away saves too, so without this an event
+    // the user only opened to look at would be rewritten, re-pushed to
+    // Firestore and re-dated on every glance — and a repeating one would pop
+    // the scope prompt on top of that.
+    if (event != null &&
+        !_eventContentChanged(
+          occurrenceDay == null ? event : occurrenceView(event, occurrenceDay),
+          edited,
+        )) {
+      if (mounted) _resetSidebar();
+      return;
+    }
 
     // One row, no prompt: a new event, a one-off, or a row that is already a
     // single detached occurrence.
@@ -591,13 +690,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         occurrenceDay == null) {
       await repo.upsertEvent(edited);
       ref.invalidate(calendarEventsProvider);
-      if (mounted) _resetSidebar();
-      return;
-    }
-
-    // Closing the popup by clicking away saves too, so an untouched repeating
-    // event would otherwise pop the scope prompt on every glance at it.
-    if (!_eventContentChanged(occurrenceView(event, occurrenceDay), edited)) {
       if (mounted) _resetSidebar();
       return;
     }
@@ -629,8 +721,39 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     for (final id in writes.softDeletes) {
       await repo.softDeleteEvent(id);
     }
+    if (scope == RecurrenceEditScope.allEvents) {
+      await _shiftOverridesOf(
+        event,
+        recurrenceRebaseShiftDays(edited, occurrenceDay),
+      );
+    }
     ref.invalidate(calendarEventsProvider);
     if (mounted) _resetSidebar();
+  }
+
+  /// Slides every detached occurrence of [master] by [shiftDays].
+  ///
+  /// An override is pinned to a date in its parent's pattern, so moving the
+  /// series with "all events" and leaving the overrides behind orphans each
+  /// one: the master no longer excludes that day, and the series occurrence
+  /// then draws on top of the override that was meant to replace it.
+  Future<void> _shiftOverridesOf(CalendarEvent master, int shiftDays) async {
+    if (shiftDays == 0) return;
+    final repo = ref.read(calendarRepositoryProvider);
+    for (final child in await repo.listEvents()) {
+      final anchorDate = child.recurrenceDate;
+      if (child.recurrenceParentId != master.id || anchorDate == null) continue;
+      await repo.upsertEvent(
+        child.copyWith(
+          recurrenceDate: addDays(
+            DateUtils.dateOnly(anchorDate.toLocal()),
+            shiftDays,
+          ),
+          start: addDaysKeepingTime(child.start, shiftDays),
+          end: addDaysKeepingTime(child.end, shiftDays),
+        ),
+      );
+    }
   }
 
   /// Whether anything the user can type or pick differs between two events.
@@ -776,9 +899,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     RecurrenceEditScope scope,
   ) async {
     if (scope == RecurrenceEditScope.thisEvent) return const [];
-    final all = await ref
-        .read(calendarRepositoryProvider)
-        .listEvents(calendarId: master.calendarId);
+    // Across every calendar, not just the master's: editing a single occurrence
+    // can move that override to another calendar, which would put it out of a
+    // calendar-scoped query's reach and leave it behind as a stray event
+    // pointing at a deleted series. [recurrenceParentId] is the real link.
+    final all = await ref.read(calendarRepositoryProvider).listEvents();
     return [
       for (final candidate in all)
         if (candidate.recurrenceParentId == master.id &&
@@ -805,8 +930,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final deleted = match.copyWith(deletedAt: utcNow());
     await ref.read(todoRepositoryProvider).upsertTask(deleted);
     ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
-    ref.invalidate(calendarTodoMarkersProvider);
-    ref.invalidate(allTodoTasksProvider);
+    _invalidateTodoProviders({deleted.listId});
   }
 
   Future<void> _openEditor({
@@ -815,6 +939,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     Rect? anchorRect,
   }) async {
     _openEventSidebar(event: event, day: day, anchorRect: anchorRect);
+  }
+
+  /// Date the toolbar's "Add event" button seeds a new event with.
+  ///
+  /// [_focused] is normalised per mode — the 1st in month view, January 1 in
+  /// year view — so seeding straight from it silently dates a new event to a
+  /// day the user never picked. Today is what they almost always mean, whenever
+  /// it falls inside the period on screen.
+  DateTime _defaultNewEventDate() {
+    final now = DateTime.now();
+    return switch (_mode) {
+      CalendarViewMode.year =>
+        _focused.year == now.year ? DateUtils.dateOnly(now) : _focused,
+      CalendarViewMode.month =>
+        _focused.year == now.year && _focused.month == now.month
+            ? DateUtils.dateOnly(now)
+            : _focused,
+      CalendarViewMode.week => _focused,
+    };
   }
 
   bool _isOnCurrentPeriod(bool weekStartsMonday) {
@@ -1002,6 +1145,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         final eventsForCalendar = await ref
             .read(calendarRepositoryProvider)
             .listEvents(calendarId: calendarId);
+        if (!mounted) return;
         final deleted = await deleteCalendarList(
           context,
           ref,
@@ -1708,12 +1852,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       if (_mode == CalendarViewMode.week) {
         _rememberViewedWeek(_focused, weekStartsMonday);
       }
+      final previousMode = _mode;
       _mode = next;
       if (next == CalendarViewMode.year) {
         _focused = DateTime(_focused.year, 1, 1);
       } else if (next == CalendarViewMode.month) {
-        _focused = _mode == CalendarViewMode.week
-            ? _monthTargetForWeekReturn()
+        // previousMode, not _mode: _mode is already `next` by this line, so the
+        // week arm never fired and every switch landed on January when the
+        // focused week and _lastViewedMonth sat in different years.
+        _focused = previousMode == CalendarViewMode.week
+            ? DateTime(_focused.year, _focused.month, 1)
             : _monthTargetForYear(_focused.year);
       }
     });
@@ -2538,7 +2686,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                             final origin = box.localToGlobal(Offset.zero);
                             anchor = origin & box.size;
                           }
-                          _openEditor(day: _focused, anchorRect: anchor);
+                          _openEditor(
+                            day: _defaultNewEventDate(),
+                            anchorRect: anchor,
+                          );
                         },
                         label: 'Add event',
                         dense: true,

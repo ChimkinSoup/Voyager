@@ -161,6 +161,10 @@ class VimTextOverlay extends StatefulWidget {
 }
 
 class _VimTextOverlayState extends State<VimTextOverlay> {
+  /// Survives the painters, which are rebuilt on every repaint — see
+  /// [_OverlayLayoutCache].
+  final _OverlayLayoutCache _layout = _OverlayLayoutCache();
+
   @override
   void initState() {
     super.initState();
@@ -182,6 +186,7 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
   @override
   void dispose() {
     _unlisten(widget);
+    _layout.dispose();
     super.dispose();
   }
 
@@ -242,6 +247,7 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
     );
 
     final painter = _VimOverlayPainter(
+      layout: _layout,
       text: widget.controller.text,
       hintGlyph: hintGlyph,
       style: widget.style,
@@ -285,6 +291,7 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
 
 class _VimOverlayPainter extends CustomPainter {
   _VimOverlayPainter({
+    required this.layout,
     required this.text,
     required this.hintGlyph,
     required this.style,
@@ -301,6 +308,9 @@ class _VimOverlayPainter extends CustomPainter {
     required this.accentColor,
     required this.searchColor,
   });
+
+  /// The paragraph layout, held by the [State] so it outlives this painter.
+  final _OverlayLayoutCache layout;
 
   final String text;
 
@@ -333,14 +343,7 @@ class _VimOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textAlign: textAlign,
-      textDirection: textDirection,
-      textScaler: textScaler,
-      strutStyle: strutStyle,
-      textHeightBehavior: textHeightBehavior,
-    )..layout(maxWidth: size.width);
+    final painter = layout.paragraph(this, size.width);
 
     if (searchLength > 0) {
       final paint = Paint()..color = searchColor.withValues(alpha: 0.35);
@@ -359,8 +362,7 @@ class _VimOverlayPainter extends CustomPainter {
 
     final caret = caretOffset;
     if (caret != null) _paintCaret(canvas, painter, caret);
-
-    painter.dispose();
+    // [painter] is the cache's, not this paint's — it is not disposed here.
   }
 
   /// A faint dotted stub at every tabstop the user has still to visit.
@@ -562,19 +564,7 @@ class _VimOverlayPainter extends CustomPainter {
   /// Advance width of [glyph] in [style] — used to size a block where the
   /// document has nothing to measure, from a space to a placeholder's first
   /// letter.
-  double _advanceWidth(String glyph) {
-    final probe = TextPainter(
-      text: TextSpan(text: glyph, style: style),
-      textAlign: textAlign,
-      textDirection: textDirection,
-      textScaler: textScaler,
-      strutStyle: strutStyle,
-      textHeightBehavior: textHeightBehavior,
-    )..layout();
-    final width = probe.width;
-    probe.dispose();
-    return width;
-  }
+  double _advanceWidth(String glyph) => layout.advanceWidth(this, glyph);
 
   /// Repaints the character under the caret on top of the opaque block.
   ///
@@ -626,12 +616,23 @@ class _VimOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _VimOverlayPainter old) {
+    // Everything [paint] reads. The metrics below are as much an input as the
+    // text is: a system text-scale change or a directionality flip moves every
+    // box this layer draws, and leaving them out left the block caret, the
+    // Visual highlight and the tabstop marks at the old geometry until
+    // something else happened to dirty the layer.
     return old.text != text ||
         old.hintGlyph != hintGlyph ||
         old.style != style ||
+        old.strutStyle != strutStyle ||
+        old.textAlign != textAlign ||
+        old.textDirection != textDirection ||
+        old.textScaler != textScaler ||
+        old.textHeightBehavior != textHeightBehavior ||
         old.caretOffset != caretOffset ||
         old.selection != selection ||
         old.searchLength != searchLength ||
+        old.searchColor != searchColor ||
         old.tabstops != tabstops ||
         old.accentColor != accentColor ||
         !_sameOffsets(old.searchOffsets, searchOffsets);
@@ -644,6 +645,105 @@ class _VimOverlayPainter extends CustomPainter {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+}
+
+/// The overlay's laid-out paragraph, kept across repaints.
+///
+/// [_VimOverlayPainter.paint] needs box geometry for the document — where a
+/// character's box is, how tall the line is — and used to get it by laying the
+/// whole paragraph out afresh on every repaint. Since [CustomPainter]s repaint
+/// on every caret move, an `h` or a `j` cost a second full paragraph layout on
+/// top of `RenderEditable`'s own: cost scaling with document length, on a layer
+/// whose every other operation is O(1), and against a library built so that
+/// motion costs scale with the distance moved.
+///
+/// Held by [_VimTextOverlayState] because a fresh painter is constructed on
+/// every build, so the painter itself has nowhere to keep it.
+class _OverlayLayoutCache {
+  TextPainter? _paragraph;
+  String? _paragraphText;
+  double? _paragraphWidth;
+
+  TextPainter? _probe;
+  String? _probeGlyph;
+
+  // The text metrics both painters were built with; a change to any of them
+  // invalidates both.
+  TextStyle? _style;
+  StrutStyle? _strutStyle;
+  TextAlign? _textAlign;
+  TextDirection? _textDirection;
+  TextScaler? _textScaler;
+  TextHeightBehavior? _textHeightBehavior;
+
+  /// The document, laid out to [width].
+  TextPainter paragraph(_VimOverlayPainter p, double width) {
+    _syncStyle(p);
+    final cached = _paragraph;
+    if (cached != null && _paragraphText == p.text && _paragraphWidth == width) {
+      return cached;
+    }
+    _paragraph?.dispose();
+    _paragraphText = p.text;
+    _paragraphWidth = width;
+    return _paragraph = TextPainter(
+      text: TextSpan(text: p.text, style: p.style),
+      textAlign: p.textAlign,
+      textDirection: p.textDirection,
+      textScaler: p.textScaler,
+      strutStyle: p.strutStyle,
+      textHeightBehavior: p.textHeightBehavior,
+    )..layout(maxWidth: width);
+  }
+
+  /// Advance width of a single [glyph] — the block caret's width where the
+  /// document has nothing to measure. The glyph is the placeholder's first
+  /// character or a space, so it changes about as often as the field empties.
+  double advanceWidth(_VimOverlayPainter p, String glyph) {
+    _syncStyle(p);
+    var probe = _probe;
+    if (probe == null || _probeGlyph != glyph) {
+      probe?.dispose();
+      _probeGlyph = glyph;
+      probe = _probe = TextPainter(
+        text: TextSpan(text: glyph, style: p.style),
+        textAlign: p.textAlign,
+        textDirection: p.textDirection,
+        textScaler: p.textScaler,
+        strutStyle: p.strutStyle,
+        textHeightBehavior: p.textHeightBehavior,
+      )..layout();
+    }
+    return probe.width;
+  }
+
+  void _syncStyle(_VimOverlayPainter p) {
+    if (_style == p.style &&
+        _strutStyle == p.strutStyle &&
+        _textAlign == p.textAlign &&
+        _textDirection == p.textDirection &&
+        _textScaler == p.textScaler &&
+        _textHeightBehavior == p.textHeightBehavior) {
+      return;
+    }
+    _style = p.style;
+    _strutStyle = p.strutStyle;
+    _textAlign = p.textAlign;
+    _textDirection = p.textDirection;
+    _textScaler = p.textScaler;
+    _textHeightBehavior = p.textHeightBehavior;
+    dispose();
+  }
+
+  void dispose() {
+    _paragraph?.dispose();
+    _paragraph = null;
+    _paragraphText = null;
+    _paragraphWidth = null;
+    _probe?.dispose();
+    _probe = null;
+    _probeGlyph = null;
   }
 }
 

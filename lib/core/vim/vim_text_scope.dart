@@ -18,6 +18,7 @@ class VimFieldBinding {
     this.undoController,
     this.session,
     this.snippetSession,
+    this.snippetsAllowed = false,
   });
 
   /// The current mode, or null when Vim is switched off for this field — in
@@ -38,6 +39,13 @@ class VimFieldBinding {
   /// stack a `VimTextOverlay` pass this to it so the dotted tabstop marks get
   /// drawn — and must mount that overlay when *either* session is live.
   final SnippetSession? snippetSession;
+
+  /// Whether a *new* snippet could be written from this field — the field's
+  /// own opt-in narrowed by the suitability rule, and the user's global
+  /// switch. Unlike [snippetSession] it does not go false on an empty snippet
+  /// list, since writing the first one is exactly what it gates: the
+  /// right-click "Add snippet" item (see `voyagerTextContextMenuBuilder`).
+  final bool snippetsAllowed;
 
   /// Normal and Visual mode draw a block caret sitting *on* a character,
   /// rather than the thin bar that sits between two.
@@ -278,12 +286,29 @@ class _VimTextScopeState extends State<VimTextScope> {
   /// [CompositedTransformTarget] below — see [build].
   bool _overlayVisible = false;
 
+  /// The field's [EditableTextState], resolved once per editing session and
+  /// dropped on focus loss — see [_resolveEditableState].
+  EditableTextState? _editableState;
+
+  /// The undo stack for the field below, owned here rather than by
+  /// [VimSession] because the snippet layer needs it too and snippets run with
+  /// Vim switched off. Handed to the field through [VimFieldBinding], so `u`,
+  /// `<C-r>` and a snippet undo all drive the same history the field records
+  /// into.
+  final UndoHistoryController _undoController = UndoHistoryController();
+
   bool get _active => widget.enabled && widget.controller != null;
 
   bool get _snippetsActive =>
       widget.snippetsAllowed &&
       _snippetScope.active &&
       widget.controller != null;
+
+  /// Whether a new snippet may be *written* from this field. Deliberately not
+  /// [_snippetsActive]: an empty snippet list has nothing to expand but is
+  /// exactly when the right-click "Add snippet" item matters most.
+  bool get _canCreateSnippets =>
+      widget.snippetsAllowed && _snippetScope.enabled;
 
   @override
   void initState() {
@@ -311,6 +336,9 @@ class _VimTextScopeState extends State<VimTextScope> {
       _createSessionIfNeeded();
       // Offsets from the old field's text mean nothing in the new one.
       _parkedSelection = null;
+      // The host may have handed us a different field along with the new
+      // controller, so the cached state is no longer known to be the right one.
+      _editableState = null;
       // The fresh session starts in Insert, so any overlay from the old one is
       // stale. Assigned directly rather than through [_syncOverlay]: a rebuild
       // already follows didUpdateWidget, so setState here would be redundant
@@ -331,6 +359,7 @@ class _VimTextScopeState extends State<VimTextScope> {
     _scopeNode.dispose();
     _disposeSession();
     _insertOnly.dispose();
+    _undoController.dispose();
     super.dispose();
   }
 
@@ -339,6 +368,8 @@ class _VimTextScopeState extends State<VimTextScope> {
       final session = VimSession(
         textController: widget.controller!,
         resolveEditableState: _resolveEditableState,
+        isFieldFocused: () => _scopeNode.hasFocus,
+        undoController: _undoController,
         isMultiline: () => widget.multiline,
         // Looked up live: settings sync can replace [_snippetSession].
         trySnippetUndo: () =>
@@ -376,6 +407,8 @@ class _VimTextScopeState extends State<VimTextScope> {
     _snippetSession = SnippetSession(
       textController: widget.controller!,
       resolveEditableState: _resolveEditableState,
+      isFieldFocused: () => _scopeNode.hasFocus,
+      undoController: _undoController,
       isInsertMode: _isInsertBehaviour,
       index: _snippetScope.index,
       expandKey: _snippetScope.expandKey,
@@ -394,16 +427,46 @@ class _VimTextScopeState extends State<VimTextScope> {
         session.searchListenable.value == null;
   }
 
-  /// Finds the focused field's [EditableTextState].
+  /// Finds *this scope's* field's [EditableTextState], or null when the field
+  /// is not the one holding the keyboard.
   ///
-  /// `EditableText` builds a `Focus` around its own subtree, so the primary
-  /// focus node's context always sits *inside* the `EditableText` element —
-  /// making the state one ancestor walk away, with no [GlobalKey] on the
-  /// field required. Resolved per mutation rather than cached: it costs a few
-  /// parent-pointer hops, and only Normal-mode commands ever ask.
+  /// Deliberately not resolved from `FocusManager.instance.primaryFocus`: that
+  /// answers "whichever field is focused right now", which is only this one
+  /// while this one is focused. Two paths ask after focus has already moved on
+  /// — [VimSession.reset] from the focus listener, and a `<C-v>` whose
+  /// clipboard read resolves late — and a global lookup hands them the state of
+  /// the field the user moved *to*, so the write lands there and destroys it.
+  ///
+  /// Searching down from [_fieldKey] instead keeps the answer tied to the
+  /// scope's own subtree, and the [FocusNode.hasFocus] gate keeps it tied to
+  /// the editing session it was resolved in. Cached for the length of that
+  /// session: the walk is a handful of hops, but it was being paid on every
+  /// keystroke.
   EditableTextState? _resolveEditableState() {
-    final context = FocusManager.instance.primaryFocus?.context;
-    return context?.findAncestorStateOfType<EditableTextState>();
+    // Not our keyboard any more — see [VimSession.isFieldFocused].
+    if (!_scopeNode.hasFocus) return null;
+    final cached = _editableState;
+    // `mounted` because the host can replace the field under us without focus
+    // ever leaving the scope, and a write to a dead state would throw.
+    if (cached != null && cached.mounted) return cached;
+    return _editableState = _findEditableState();
+  }
+
+  EditableTextState? _findEditableState() {
+    final context = _fieldKey.currentContext;
+    if (context is! Element) return null;
+    EditableTextState? found;
+    void visit(Element element) {
+      if (found != null) return;
+      if (element is StatefulElement && element.state is EditableTextState) {
+        found = element.state as EditableTextState;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    context.visitChildren(visit);
+    return found;
   }
 
   void _disposeSession() {
@@ -418,6 +481,9 @@ class _VimTextScopeState extends State<VimTextScope> {
   }
 
   void _handleFocusChanged() {
+    // Resolved lazily on the way in and dropped on the way out, so the cache
+    // never outlives the editing session it belongs to.
+    if (!_scopeNode.hasFocus) _editableState = null;
     if (_scopeNode.hasFocus) {
       // Focus is back — whether the framework handed it back after a window
       // switch or the user clicked in. Either way there is nothing left to
@@ -542,11 +608,20 @@ class _VimTextScopeState extends State<VimTextScope> {
     // Only claim keys destined for a real text field. The scope's subtree can
     // also contain focusable chrome (a suffix icon button, say), and Vim has
     // no business intercepting keys typed at those.
+    // Compared against this scope's own field rather than merely tested for
+    // "some editable": chrome inside the scope must not be mistaken for it.
+    final editable = _resolveEditableState();
     final focused = FocusManager.instance.primaryFocus?.context;
-    if (focused?.findAncestorStateOfType<EditableTextState>() == null) {
+    if (editable == null ||
+        focused?.findAncestorStateOfType<EditableTextState>() != editable) {
       return KeyEventResult.ignored;
     }
-    if (snippets != null) {
+    // Vim wins Tab while a Visual range is up: advancing a tabstop writes a
+    // collapsed selection, which the Vim layer would not see, leaving it in
+    // Visual mode with a highlight the next motion jumps back out of. The
+    // tabstops stay live and Tab works again the moment Escape drops back to
+    // Normal or Insert.
+    if (snippets != null && !(session?.mode.isVisual ?? false)) {
       final result = snippets.handleKey(event);
       if (result == KeyEventResult.handled) return result;
     }
@@ -558,7 +633,10 @@ class _VimTextScopeState extends State<VimTextScope> {
     final session = _session;
     final snippets = _snippetSession;
     if (session == null && snippets == null) {
-      return widget.builder(context, const VimFieldBinding());
+      return widget.builder(
+        context,
+        VimFieldBinding(snippetsAllowed: _canCreateSnippets),
+      );
     }
 
     final accent = widget.accentColor ?? Theme.of(context).colorScheme.primary;
@@ -578,9 +656,10 @@ class _VimTextScopeState extends State<VimTextScope> {
             // Null, not Insert, when Vim is off: that is what makes every
             // getter on the binding fall back to the field's own defaults.
             mode: session == null ? null : mode,
-            undoController: session?.undoController,
+            undoController: _undoController,
             session: session,
             snippetSession: snippets,
+            snippetsAllowed: _canCreateSnippets,
           ),
         ),
       ),

@@ -36,6 +36,8 @@ import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/services/recurrence_engine.dart';
+import 'package:voyager/features/todo/todo_list_actions.dart';
 
 class TodoEditPanel extends ConsumerStatefulWidget {
   const TodoEditPanel({
@@ -87,10 +89,15 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   var _lastNotesText = '';
 
   late final Future<void> Function() _lifecycleFlushCallback;
+  // Captured up front so a pending text edit can still be flushed from
+  // dispose(), where `ref` is already off limits. Same pattern as
+  // _TodoPageState's completion queue.
+  late final ProviderContainer _container;
 
   @override
   void initState() {
     super.initState();
+    _container = ProviderScope.containerOf(context, listen: false);
     _lifecycleFlushCallback = _lifecycleFlush;
     PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
     _lastNonEmptyTitle = widget.task.title;
@@ -248,8 +255,31 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
+    // Flush, don't drop. Title and notes are debounced by _saveDebounce, and
+    // _close() is only one of the ways this panel goes away: the page also
+    // calls _closeEditPanel() when the list dropdown changes, when a list is
+    // created or deleted, and when the task is deleted. Those start the 270ms
+    // reverse animation and unmount this State at the end of it — under the
+    // 400ms debounce — so cancelling here lost the edit outright. Typing a
+    // title and immediately switching lists lost it every time.
+    //
+    // PendingFlushRegistry doesn't cover this: it only fires on app/window
+    // lifecycle, and the shell keeps every page mounted, so nothing else runs.
+    final hasPendingText =
+        (_titleSaveTimer?.isActive ?? false) ||
+        (_notesSaveTimer?.isActive ?? false);
     _titleSaveTimer?.cancel();
     _notesSaveTimer?.cancel();
+    if (hasPendingText) {
+      // Snapshot now — the controllers are disposed further down this method.
+      unawaited(
+        _savePendingText(
+          taskId: widget.task.id,
+          title: _titleController.text.trim(),
+          notes: _notesController.text.trim(),
+        ),
+      );
+    }
     _unregisterPendingNotesListener(widget.task.id);
     _setNotesEditingFlag(false);
     _notesFocusNode.removeListener(_handleNotesFocusChanged);
@@ -388,15 +418,33 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     // and competes with it for frame budget.
     bool notifyChanged = true,
   }) async {
-    await _applyPendingNotesMerge();
+    // Everything `_save` needs is read before the first await. _close() calls
+    // this with unawaited() while starting a 270ms animation that ends in this
+    // State being disposed, and _applyPendingNotesMerge is a network-backed
+    // merge — slowest on exactly the offline/slow connections where it is most
+    // likely to outlive the close. Afterwards `ref` would throw and the
+    // controllers would be disposed.
     final repo = ref.read(todoRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
-    final notesText = notes ?? _notesController.text.trim();
-    var titleText = title ?? _titleController.text.trim();
+    final rawTitle = title ?? _titleController.text.trim();
+    final rawNotes = notes ?? _notesController.text.trim();
+    await _applyPendingNotesMerge();
+    // The merge above may have rewritten the notes field; prefer its result
+    // when this State is still alive to read it.
+    final notesText = notes ?? (mounted ? _notesController.text.trim() : rawNotes);
+    var titleText = rawTitle;
     if (titleText.isEmpty) {
       titleText = _lastNonEmptyTitle;
-      _titleController.text = titleText;
+      if (mounted) _titleController.text = titleText;
     }
+
+    // Rebase on the stored row rather than the page's snapshot. widget.task
+    // can be arbitrarily stale — the page skips rebuilding the panel when a
+    // change isn't sort-relevant — so a full-document write built from it
+    // reverts whatever else landed while the panel was open.
+    final stored = await repo.getTask(widget.task.id);
+    // A missing row means the task was hard-deleted; writing would resurrect it.
+    if (stored == null) return;
 
     final effectiveDue = clearDueDate ? null : (dueDate ?? _dueDate);
     final listMoved = listId != null && listId != widget.task.listId;
@@ -405,18 +453,19 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         (reorderDueDate || clearDueDate || effectiveDue != widget.task.dueDate);
 
     final effectiveRule = recurrence ?? _recurrence;
-    // The anchor is frozen the first time a repeat is set and only moves when
-    // the user reschedules the task by hand. Letting it follow every due date
-    // would re-anchor it on each roll-forward, and a "monthly on the 31st"
-    // task that landed on Feb 28 would stay on the 28th from then on.
+    // A manual reschedule re-anchors; an incidental save (a rename, a repeat
+    // change) leaves the frozen anchor where it is. The reschedule half of that
+    // policy is shared with the row's context menu — see
+    // [rescheduledRecurrenceAnchor] for why the anchor may not simply follow
+    // the due date.
     final rescheduled = dueDate != null || clearDueDate;
-    final anchor = !effectiveRule.repeats
-        ? null
-        : (rescheduled
-              ? effectiveDue
-              : (widget.task.recurrenceAnchor ?? effectiveDue));
+    final anchor = rescheduled
+        ? rescheduledRecurrenceAnchor(rule: effectiveRule, newDue: effectiveDue)
+        : (effectiveRule.repeats
+              ? (stored.recurrenceAnchor ?? effectiveDue)
+              : null);
 
-    final baseUpdate = widget.task.copyWith(
+    final baseUpdate = stored.copyWith(
       title: titleText,
       listId: listId,
       notes: notesText.isEmpty ? null : notesText,
@@ -533,7 +582,35 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   Future<void> _close() async {
     if (mounted) widget.onClose();
+    // _save() writes both fields from the live controllers, so the debounced
+    // timers have nothing left to contribute — retiring them here keeps
+    // dispose() from issuing a second, redundant write for the same text.
+    _titleSaveTimer?.cancel();
+    _notesSaveTimer?.cancel();
     unawaited(_save(notifyChanged: false));
+  }
+
+  /// Writes debounced title/notes text that never made it to its timer.
+  ///
+  /// Reads through [_container] rather than `ref`, and re-reads the row before
+  /// writing so this only ever changes the two fields it owns — a full-document
+  /// write built from [widget.task] would undo anything else that landed while
+  /// the panel was open.
+  Future<void> _savePendingText({
+    required String taskId,
+    required String title,
+    required String notes,
+  }) async {
+    final latest = await _container.read(todoRepositoryProvider).getTask(taskId);
+    if (latest == null) return;
+    final updated = latest.copyWith(
+      title: title.isEmpty ? _lastNonEmptyTitle : title,
+      notes: notes.isEmpty ? null : notes,
+      clearNotes: notes.isEmpty,
+    );
+    await _container
+        .read(remoteSyncServiceProvider)
+        .saveTodoTaskThenScheduleUpload(updated);
   }
 
   void _scheduleTitleSave(String value) {
@@ -556,22 +633,10 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final remoteSync = ref.read(remoteSyncServiceProvider);
     final repo = ref.read(todoRepositoryProvider);
     final notes = value.trim();
-    final storedLists = await repo.listLists(includeDeleted: true);
-    TodoTask? baseline;
-    for (final list in storedLists) {
-      final tasks = await repo.listTasks(
-        list.id,
-        includeDeleted: true,
-        topLevelOnly: false,
-      );
-      for (final task in tasks) {
-        if (task.id == widget.task.id) {
-          baseline = task;
-          break;
-        }
-      }
-      if (baseline != null) break;
-    }
+    // One indexed lookup by primary key. This used to walk every list and
+    // linear-scan its tasks — a query per list plus a scan, every 400ms while
+    // the user types, to fetch a single row.
+    final baseline = await repo.getTask(widget.task.id);
     if (baseline == null) return;
 
     final updated = baseline.copyWith(
@@ -588,10 +653,16 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _lastNonEmptyTitle = title;
     }
     if (title.isEmpty) return;
-    final updated = widget.task.copyWith(title: title);
+    // Re-read rather than building a full-document write from widget.task.
+    // Notes are saved through _taskOverrides, and onTaskOptimistic's non-sort
+    // branch deliberately skips setState when nothing sort-relevant changed —
+    // so widget.task can hold pre-edit notes indefinitely, and writing it back
+    // reverted notes the user had typed moments earlier.
+    final latest = await ref.read(todoRepositoryProvider).getTask(widget.task.id);
+    if (latest == null) return;
     await ref
         .read(remoteSyncServiceProvider)
-        .saveTodoTaskThenScheduleUpload(updated);
+        .saveTodoTaskThenScheduleUpload(latest.copyWith(title: title));
   }
 
   Future<void> _onTitleSubmitted(String value) async {
@@ -821,11 +892,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     );
     if (!confirmed) return;
     widget.onDeleted();
-    final deleted = widget.task.copyWith(deletedAt: utcNow());
-    unawaited(() async {
-      await ref.read(todoRepositoryProvider).upsertTask(deleted);
-      await ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
-    }());
+    unawaited(softDeleteTaskWithSubtasks(ref, widget.task));
   }
 
   String _formatDue(DateTime dateTime) {

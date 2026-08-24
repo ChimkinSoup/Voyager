@@ -4,11 +4,9 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
-import 'package:voyager/core/widgets/labeled_text_field.dart';
-import 'package:voyager/core/widgets/voyager_checkbox.dart';
+import 'package:voyager/core/widgets/snippet_editor.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/settings_models.dart';
-import 'package:voyager/domain/models/snippet.dart';
 
 /// Edits the user's text-expansion snippets, plus the two settings that govern
 /// them all.
@@ -48,27 +46,17 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
         );
   }
 
-  /// Rejects the two things that would make a snippet unusable rather than
-  /// merely odd: nothing to type, and a trigger some other snippet already
-  /// owns. Everything else — an empty replacement, a `$` with no digits — is
-  /// legal, just unhelpful.
-  String? _validate(List<Snippet> existing, String? id, String trigger) {
-    if (trigger.isEmpty) return 'Give the snippet a trigger.';
-    for (final snippet in existing) {
-      if (snippet.id != id && snippet.trigger == trigger) {
-        return 'Another snippet already uses "$trigger".';
-      }
-    }
-    return null;
-  }
-
   Future<void> _saveRow(
     AppSettings settings,
     Snippet? original,
-    _SnippetDraft draft,
+    SnippetDraft draft,
   ) async {
     final trigger = draft.trigger.trim();
-    final error = _validate(settings.snippets, original?.id, trigger);
+    final error = validateSnippetTrigger(
+      settings.snippets,
+      original?.id,
+      trigger,
+    );
     if (error != null) {
       setState(() => _editError = error);
       return;
@@ -208,7 +196,7 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
                           (_editingId == _newRowId ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index == settings.snippets.length) {
-                          return _SnippetEditor(
+                          return SnippetEditor(
                             key: const ValueKey('snippet-new'),
                             original: null,
                             error: _editError,
@@ -221,7 +209,7 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
                         }
                         final snippet = settings.snippets[index];
                         if (snippet.id == _editingId) {
-                          return _SnippetEditor(
+                          return SnippetEditor(
                             // Keyed on the record so opening a different row
                             // seeds fresh controllers from its text rather
                             // than reusing the previous row's.
@@ -375,210 +363,6 @@ class _Badge extends StatelessWidget {
             height: 1.2,
             color: theme.colorScheme.onSurface,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The values a row editor hands back on save.
-class _SnippetDraft {
-  const _SnippetDraft({
-    required this.trigger,
-    required this.replacement,
-    required this.autoExpand,
-    required this.wordBoundary,
-  });
-
-  final String trigger;
-  final String replacement;
-  final bool autoExpand;
-  final bool wordBoundary;
-}
-
-/// One snippet's row while it is being written.
-///
-/// Owns its own controllers so the list around it can rebuild without
-/// disturbing the text being typed — same shape as `_QuoteEditor`.
-class _SnippetEditor extends StatefulWidget {
-  const _SnippetEditor({
-    super.key,
-    required this.original,
-    required this.error,
-    required this.onSave,
-    required this.onCancel,
-  });
-
-  /// Null while a new snippet is being written.
-  final Snippet? original;
-  final String? error;
-  final ValueChanged<_SnippetDraft> onSave;
-  final VoidCallback onCancel;
-
-  @override
-  State<_SnippetEditor> createState() => _SnippetEditorState();
-}
-
-class _SnippetEditorState extends State<_SnippetEditor> {
-  late final TextEditingController _trigger = TextEditingController(
-    text: widget.original?.trigger ?? '',
-  );
-  late final TextEditingController _replacement = TextEditingController(
-    text: widget.original?.replacement ?? '',
-  );
-  final _triggerFocus = FocusNode();
-
-  late bool _autoExpand = widget.original?.autoExpand ?? false;
-  late bool _wordBoundary = widget.original?.wordBoundary ?? false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _triggerFocus.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _trigger.dispose();
-    _replacement.dispose();
-    _triggerFocus.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    widget.onSave(
-      _SnippetDraft(
-        trigger: _trigger.text,
-        replacement: _replacement.text,
-        autoExpand: _autoExpand,
-        wordBoundary: _wordBoundary,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final placeholders = snippetUsesPlaceholders(_replacement.text);
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: 150,
-                    child: LabeledTextField(
-                      label: 'Trigger',
-                      controller: _trigger,
-                      focusNode: _triggerFocus,
-                      dense: true,
-                      borderRadius: 12,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      // The one field in the app that must never expand a
-                      // snippet — see [showSnippetsDialog].
-                      snippetsAllowed: false,
-                      onSubmitted: (_) => _save(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: LabeledTextField(
-                      label: 'Replacement',
-                      controller: _replacement,
-                      dense: true,
-                      borderRadius: 12,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      snippetsAllowed: false,
-                      onChanged: (_) => setState(() {}),
-                      onSubmitted: (_) => _save(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                VoyagerCheckbox(
-                  value: _autoExpand,
-                  // No confetti in settings: the burst is the To-Do list's
-                  // "you finished something", and a snippet option is a
-                  // preference being set, not an accomplishment.
-                  celebrateOnComplete: false,
-                  onChanged: (v) => setState(() => _autoExpand = v),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    'Expand automatically',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                VoyagerCheckbox(
-                  value: _wordBoundary,
-                  celebrateOnComplete: false,
-                  onChanged: (v) => setState(() => _wordBoundary = v),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    'Only at word boundaries',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ),
-                const Spacer(),
-                GlassButton(
-                  dense: true,
-                  onPressed: widget.onCancel,
-                  icon: const Icon(PhosphorIconsRegular.x),
-                  tooltip: 'Cancel',
-                ),
-                const SizedBox(width: 4),
-                GlassButton(
-                  dense: true,
-                  onPressed: _save,
-                  icon: const Icon(PhosphorIconsRegular.check),
-                  tooltip: 'Save snippet',
-                ),
-              ],
-            ),
-            if (placeholders)
-              Padding(
-                padding: const EdgeInsets.only(top: 8, left: 4),
-                child: Text(
-                  r'${…} placeholders are not supported yet — that text will '
-                  'be inserted literally.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ),
-            if (widget.error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8, left: 4),
-                child: Text(
-                  widget.error!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ),
-          ],
         ),
       ),
     );

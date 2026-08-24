@@ -10,7 +10,6 @@ TodoTask _task({
   int sortOrder = unstarredSortOrderBase,
   DateTime? dueDate,
   DateTime? dueDateSetAt,
-  int? preStarSortOrder,
   DateTime? createdAt,
 }) {
   final now = createdAt ?? utcNow();
@@ -22,7 +21,6 @@ TodoTask _task({
     sortOrder: sortOrder,
     dueDate: dueDate,
     dueDateSetAt: dueDateSetAt,
-    preStarSortOrder: preStarSortOrder,
     createdAt: now,
     updatedAt: now,
   );
@@ -54,7 +52,6 @@ void main() {
 
     expect(sorted.map((t) => t.id).toList(), ['a', 'b', 'c']);
     expect(sorted[2].starred, isTrue);
-    expect(sorted[2].preStarSortOrder, unstarredSortOrderBase);
   });
 
   test('starring due task inserts chronologically among starred', () {
@@ -92,7 +89,6 @@ void main() {
         sortOrder: 0,
         dueDate: dueMiddle,
         dueDateSetAt: utcNow(),
-        preStarSortOrder: unstarredSortOrderBase + 2,
       ),
     ];
 
@@ -113,7 +109,6 @@ void main() {
     final batch = applyStarToggle(
       active[0].copyWith(
         starred: true,
-        preStarSortOrder: unstarredSortOrderBase + 2,
       ),
       active,
     );
@@ -135,7 +130,6 @@ void main() {
         id: 'c',
         starred: true,
         sortOrder: 0,
-        preStarSortOrder: unstarredSortOrderBase + 10,
       ),
     ];
 

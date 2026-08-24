@@ -11,6 +11,8 @@ runtime — see §11), `lib/core/vim/vim_text_overlay.dart` (dotted marks),
 `test/snippet_engine_test.dart`, `test/snippet_expansion_test.dart`,
 `test/snippet_settings_test.dart`.
 
+Snippets can also be created straight from a field's right-click menu; that flow is designed in `RIGHT_CLICK_SNIPPET.md`.
+
 ---
 
 ## 1. Goals

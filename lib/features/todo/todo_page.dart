@@ -327,6 +327,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // twice inside the window only writes the state it ended on.
   final _pendingCompletionSaves = <String, TodoTask>{};
   Timer? _completionSaveTimer;
+  // Rows whose Firestore push failed and is waiting to be re-pushed. Kept apart
+  // from _pendingCompletionSaves on purpose — see [_requeueRemotePush].
+  final _pendingRemotePushes = <String, TodoTask>{};
+  Timer? _remotePushRetryTimer;
   // Captured up front so pending writes can still be flushed from dispose(),
   // where `ref` is already off limits.
   late final ProviderContainer _container;
@@ -436,6 +440,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
     super.didChangeDependencies();
     if (_configuredPanelMotion) return;
     _configuredPanelMotion = true;
+    // The initState instance keeps its status listener on _panelController and
+    // would otherwise tick for the page's lifetime, flagged by Flutter's
+    // animation leak tracking.
+    _panelAnimation.dispose();
     _panelAnimation = CurvedAnimation(
       parent: _panelController,
       curve: VoyagerMotion.reduced(context)
@@ -543,6 +551,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
       _rollForwardTimers.remove(taskId)?.cancel();
       unawaited(_applyRecurringRollForward(taskId));
     }
+    // Cancelled explicitly rather than relying on _flushPendingCompletionSaves
+    // to do it: a push failure can re-arm either timer after that flush has
+    // already run, leaving a live Timer on a disposed State that later
+    // invalidates providers.
+    _completionSaveTimer?.cancel();
+    _remotePushRetryTimer?.cancel();
     _scrollIdleTimer?.cancel();
     _coalescedRefreshTimer?.cancel();
     _taskScrollController.removeListener(_onTaskScrollActivity);
@@ -599,41 +613,59 @@ class _TodoPageState extends ConsumerState<TodoPage>
         legacyTodoListId;
   }
 
+  /// Guards against a second entry while the first is still awaiting. The
+  /// composer wires this to both onSubmitted and the Add button, neither
+  /// debounced, and the field was previously only cleared *after* three awaits
+  /// — so Enter twice in quick succession read the same title into two tasks
+  /// and reindexed the undated section twice from the same sibling snapshot,
+  /// leaving two rows sharing a sortOrder.
+  bool _addingTask = false;
+
   Future<void> _addTask() async {
-    if (_taskController.text.trim().isEmpty) return;
-    final lists = await _ensureDefaultList();
-    final repo = ref.read(todoRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    final now = utcNow();
-    final listId = _listIdForNewTask(lists);
-    final task = TodoTask(
-      id: newId(),
-      listId: listId,
-      title: _taskController.text.trim(),
-      createdAt: now,
-      updatedAt: now,
-    );
-    final siblings = await repo.listTasks(listId);
-    final active = activeTopLevelTasks(siblings);
-    final batch = applyNewUndatedTask(task, active);
-    for (final updated in batch.tasks) {
-      await repo.upsertTask(updated);
-      remoteSync.pushTodoTaskNow(updated);
-    }
-    final placed = batch.tasks.firstWhere((t) => t.id == task.id);
-    setState(() {
-      _applySortBatchOptimistic(batch, [...active, task]);
-    });
-    logTodoSortDebug(
-      ref.read(todoSortDebugLoggerProvider),
-      'NEW_TASK',
-      task: placed,
-      details: 'listId=${task.listId} sortOrder: 0 → ${placed.sortOrder}',
-    );
+    if (_addingTask) return;
+    final title = _taskController.text.trim();
+    if (title.isEmpty) return;
+    _addingTask = true;
+    // Before the awaits, not after: this is what makes the guard visible to
+    // the user rather than just to the second invocation.
     _taskController.clear();
-    _taskFocusNode.requestFocus();
-    ref.invalidate(todoTasksProvider(task.listId));
-    _invalidateTodoListData();
+    try {
+      final lists = await _ensureDefaultList();
+      final repo = ref.read(todoRepositoryProvider);
+      final remoteSync = ref.read(remoteSyncServiceProvider);
+      final now = utcNow();
+      final listId = _listIdForNewTask(lists);
+      final task = TodoTask(
+        id: newId(),
+        listId: listId,
+        title: title,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final siblings = await repo.listTasks(listId);
+      final active = activeTopLevelTasks(siblings);
+      final batch = applyNewUndatedTask(task, active);
+      for (final updated in batch.tasks) {
+        await repo.upsertTask(updated);
+        remoteSync.pushTodoTaskNow(updated);
+      }
+      final placed = batch.tasks.firstWhere((t) => t.id == task.id);
+      if (!mounted) return;
+      setState(() {
+        _applySortBatchOptimistic(batch, [...active, task]);
+      });
+      logTodoSortDebug(
+        ref.read(todoSortDebugLoggerProvider),
+        'NEW_TASK',
+        task: placed,
+        details: 'listId=${task.listId} sortOrder: 0 → ${placed.sortOrder}',
+      );
+      ref.invalidate(todoTasksProvider(task.listId));
+      _invalidateTodoListData();
+    } finally {
+      _addingTask = false;
+      if (mounted) _taskFocusNode.requestFocus();
+    }
   }
 
   /// Commits a toggle after its row has already played its own shrink
@@ -709,9 +741,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
     // (_TaskRowState._exitDuration) has already played out — same for both
     // directions now — so the save it schedules is already held that long
     // past the tap.
+    // The two deferred queues have to be mutually exclusive. Both are keyed by
+    // task id and both fire _todoCompletionSaveDelay after the tap, so a second
+    // tap inside that window would otherwise leave the first tap's timer live:
+    // un-ticking a repeating task would still roll its due date forward a whole
+    // occurrence, with nothing on screen to explain it.
     if (value && task.repeats) {
+      _pendingCompletionSaves.remove(task.id);
       _scheduleRecurringRollForward(task.id);
     } else {
+      _rollForwardTimers.remove(task.id)?.cancel();
       _schedulePersistTaskCompletion(task.copyWith(completed: value));
     }
   }
@@ -758,15 +797,42 @@ class _TodoPageState extends ConsumerState<TodoPage>
       rule: latest.recurrence,
       now: DateTime.now(),
     );
-    if (next == null) return;
+    if (next == null) {
+      // The pattern has no further occurrence (or the bounded scan in
+      // nextTaskDueDate missed). Returning here would strand the task: its
+      // completion override is still set, nothing was written, and
+      // _reconcileCompletionOverrides only clears an override that disk agrees
+      // with. Honour the completion the user actually saw, same as the
+      // cleared-repeat branch above.
+      final completed = latest.copyWith(completed: true);
+      await repo.upsertTask(completed);
+      _container.read(remoteSyncServiceProvider).pushTodoTaskNow(completed);
+      _finishRollForward(taskId, listId: latest.listId, stayedActive: false);
+      return;
+    }
 
-    final rolled = latest.copyWith(
-      completed: false,
+    // Route the new due date through the same placement path every other
+    // due-date change uses. Writing dueDate alone leaves sortOrder at the value
+    // the task held for its *old* date, so a task that just moved from today to
+    // next month still renders at the top of its list's dated run —
+    // _maybeNormalizeListSort won't fix it, since it only checks that dated
+    // tasks precede undated ones, never the order within the dated run.
+    final siblings = await repo.listTasks(latest.listId);
+    final active = activeTopLevelTasks(siblings);
+    final batch = applyDueDateChange(
+      latest.copyWith(completed: false),
+      active,
       dueDate: next.toUtc(),
-      dueDateSetAt: utcNow(),
+      clearDueDate: false,
     );
-    await repo.upsertTask(rolled);
-    _container.read(remoteSyncServiceProvider).pushTodoTaskNow(rolled);
+    await repo.upsertTasksBatch(batch.tasks);
+    final rolled = batch.tasks.firstWhere(
+      (t) => t.id == taskId,
+      orElse: () => latest.copyWith(completed: false, dueDate: next.toUtc()),
+    );
+    unawaited(
+      _container.read(remoteSyncServiceProvider).pushTodoTasksBatch(batch.tasks),
+    );
     _finishRollForward(taskId, listId: rolled.listId, stayedActive: true);
   }
 
@@ -931,23 +997,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final directIds = resolved.map((task) => task.id).toSet();
     final cascadeRows = <TodoTask>[];
 
-    void requeueForRetry(List<TodoTask> tasks, Object error) {
-      for (final task in tasks) {
-        logTodoSortDebug(
-          _container.read(todoSortDebugLoggerProvider),
-          'REMOTE_PUSH_FAILED',
-          task: task,
-          details: 'error=$error',
-        );
-        _pendingCompletionSaves[task.id] = task;
-      }
-      _completionSaveTimer?.cancel();
-      _completionSaveTimer = Timer(
-        _todoCompletionSaveDelay,
-        () => unawaited(_flushPendingCompletionSaves()),
-      );
-    }
-
     // One batched transaction for the whole write set instead of N sequential
     // upserts: an uncomplete's renumbering routinely touches the whole active
     // list, and running that as N awaited round-trips (even with a yield
@@ -974,7 +1023,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
         unawaited(
           remoteSync
               .pushTodoTaskNow(task)
-              .catchError((Object error) => requeueForRetry([task], error)),
+              .catchError((Object error) => _requeueRemotePush([task], error)),
         );
       } else {
         cascadeRows.add(task);
@@ -985,21 +1034,73 @@ class _TodoPageState extends ConsumerState<TodoPage>
       unawaited(
         remoteSync
             .pushTodoTasksBatch(cascadeRows)
-            .catchError((Object error) => requeueForRetry(cascadeRows, error)),
+            .catchError(
+              (Object error) => _requeueRemotePush(cascadeRows, error),
+            ),
       );
     }
 
     return touchedLists;
   }
 
+  /// Lists with a normalize pass currently in flight.
+  ///
+  /// This runs from build() and applies no optimistic state, so for the whole
+  /// window between deciding to normalize and the data landing, `tasks` still
+  /// describes the un-normalized order. Rebuilds in that window are routine
+  /// (both ref.listen callbacks call _refreshOrDeferWhileScrolling, and
+  /// skipLoadingOnReload keeps serving the stale value across the
+  /// invalidation), and every one of them would re-detect the same condition
+  /// and re-issue the whole write set plus another Firestore round-trip.
+  final _normalizingLists = <String>{};
+
+  /// Retries a *remote* push, and nothing else.
+  ///
+  /// These rows were already written locally before the push was attempted, so
+  /// there is nothing local to redo. Putting them back into
+  /// [_pendingCompletionSaves] — which is what this used to do — fed them to
+  /// [_writeCompletionBatch], a local *placement* pipeline: every requeued row
+  /// carrying `completed: false` was re-read as a fresh uncompletion, snapped
+  /// to the top of its section and everything below it renumbered. One
+  /// transient network failure reordered the list.
+  void _requeueRemotePush(List<TodoTask> tasks, Object error) {
+    for (final task in tasks) {
+      logTodoSortDebug(
+        _container.read(todoSortDebugLoggerProvider),
+        'REMOTE_PUSH_FAILED',
+        task: task,
+        details: 'error=$error',
+      );
+      _pendingRemotePushes[task.id] = task;
+    }
+    _remotePushRetryTimer?.cancel();
+    _remotePushRetryTimer = Timer(_todoCompletionSaveDelay, () {
+      final rows = _pendingRemotePushes.values.toList();
+      _pendingRemotePushes.clear();
+      if (rows.isEmpty) return;
+      unawaited(
+        _container
+            .read(remoteSyncServiceProvider)
+            .pushTodoTasksBatch(rows)
+            .catchError((Object e) => _requeueRemotePush(rows, e)),
+      );
+    });
+  }
+
   void _maybeNormalizeListSort(List<TodoTask> tasks, String listId) {
-    if (_showAllTasks) return;
+    if (_showAllTasks || _normalizingLists.contains(listId)) return;
     final active = activeTopLevelTasks(
       _tasksWithOverrides(tasks, viewingListId: listId),
     );
     final batch = applyNormalizeUnstarredIfNeeded(active);
     if (batch == null) return;
-    unawaited(_persistSortBatch(batch, listId));
+    _normalizingLists.add(listId);
+    unawaited(
+      _persistSortBatch(
+        batch,
+        listId,
+      ).whenComplete(() => _normalizingLists.remove(listId)),
+    );
   }
 
   List<TodoTask> _tasksWithOverrides(
@@ -1090,7 +1191,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
         persisted.completed == override.completed &&
         persisted.starred == override.starred &&
         persisted.sortOrder == override.sortOrder &&
-        persisted.preStarSortOrder == override.preStarSortOrder &&
         persisted.listId == override.listId;
   }
 
@@ -1244,6 +1344,21 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
   }
 
+  /// Stamps [task] with the repeat anchor a manual reschedule implies. The edit
+  /// panel applies the same policy in `_save`; the row's context menu used to
+  /// reach [applyDueDateChange] without it, so the two disagreed about the same
+  /// user action. See [rescheduledRecurrenceAnchor].
+  static TodoTask _withRescheduledAnchor(TodoTask task, DateTime? newDue) {
+    final anchor = rescheduledRecurrenceAnchor(
+      rule: task.recurrence,
+      newDue: newDue,
+    );
+    return task.copyWith(
+      recurrenceAnchor: anchor,
+      clearRecurrenceAnchor: anchor == null,
+    );
+  }
+
   /// Sets (or replaces) a task's due date from the right-click menu. [localDue]
   /// is a local wall-clock time; a date-only selection arrives as local
   /// midnight (hour/minute == 0), matching the edit panel's picker contract.
@@ -1251,8 +1366,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final activeInList = _activeInList(_lastActiveAll, task.listId);
     final due = localDue.toUtc();
     if (task.dueDate == due) return;
+    // Picking a date here is a manual reschedule, exactly as it is in the edit
+    // panel, so it re-anchors the repeat the same way. Without this, an "every
+    // month on the 3rd" task rescheduled to the 20th from this menu would roll
+    // forward to the 3rd of next month rather than the 20th.
     final batch = applyDueDateChange(
-      task,
+      _withRescheduledAnchor(task, due),
       activeInList,
       dueDate: due,
       clearDueDate: false,
@@ -1285,7 +1404,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final activeInList = _activeInList(_lastActiveAll, task.listId);
     if (task.dueDate == null) return;
     final batch = applyDueDateChange(
-      task,
+      _withRescheduledAnchor(task, null),
       activeInList,
       dueDate: null,
       clearDueDate: true,
@@ -1366,9 +1485,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
       message: '"${task.title}" will be moved to trash.',
     );
     if (!confirmed || !mounted) return;
-    final deleted = task.copyWith(deletedAt: utcNow());
-    final repo = ref.read(todoRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
     setState(() {
       _optimisticActiveTaskOrder?.remove(task.id);
       _taskOverrides.remove(task.id);
@@ -1377,8 +1493,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
         _closeEditPanel();
       }
     });
-    await repo.upsertTask(deleted);
-    remoteSync.pushTodoTaskNow(deleted);
+    await softDeleteTaskWithSubtasks(ref, task);
     if (!mounted) return;
     _invalidateTodoListData(listId: task.listId);
   }
@@ -1727,7 +1842,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
     String listId,
     VoyagerMenuCatalogEntry action,
     List<TodoListModel> allLists,
-    ({int active, int completed}) stat,
   ) async {
     final list = allLists.firstWhere((l) => l.id == listId);
     switch (action) {
@@ -1738,13 +1852,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
       case VoyagerMenuCatalogEntry.settings:
         await showTodoListSettingsDialog(context, ref, list);
       case VoyagerMenuCatalogEntry.delete:
+        // No count passed: deleteTodoList reads it from the repository. The
+        // only count available here comes from a FutureProvider this page just
+        // `read`s, which reports zero for every non-selected list while it is
+        // still unresolved — and a wrong zero used to skip the branch that
+        // rehomes or deletes the list's tasks.
         final deleted = await deleteTodoList(
           context,
           ref,
           list: list,
           allLists: allLists,
-          activeCount: stat.active,
-          completedCount: stat.completed,
         );
         if (deleted && mounted) {
           final updatedLists =
@@ -2238,17 +2355,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                           : configurableManageMenuEntries,
                                       onManage: (listId, action) async {
                                         if (listId == null) return;
-                                        final stat = _statsForList(
-                                          listId,
-                                          stats,
-                                          activeCount: active.length,
-                                          completedCount: completed.length,
-                                        );
                                         await _handleListManage(
                                           listId,
                                           action,
                                           lists,
-                                          stat,
                                         );
                                       },
                                       items: lists.map((l) {
@@ -2756,9 +2866,25 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                         }
 
                                         if (dueDateChanged && !task.isSubtask) {
+                                          // Scoped to the task's own list, the
+                                          // way every other mutation on this
+                                          // page does it. `active` is derived
+                                          // from `sorted`, which in the
+                                          // all-tasks view is every list's
+                                          // tasks merged — and sortOrder is
+                                          // per-list (see resolveGlobalTaskOrder,
+                                          // which ignores the field for exactly
+                                          // this reason). Reindexing across the
+                                          // merged set stamps other lists' rows
+                                          // with numbering they can never
+                                          // reconcile against disk.
+                                          final listActive = _activeInList(
+                                            _lastActiveAll,
+                                            panelTask.listId,
+                                          );
                                           final batch = applyDueDateChange(
                                             panelTask,
-                                            active,
+                                            listActive,
                                             dueDate: task.dueDate,
                                             clearDueDate:
                                                 task.dueDate == null &&
@@ -2778,7 +2904,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                           setState(() {
                                             _applySortBatchOptimistic(
                                               batch,
-                                              active,
+                                              listActive,
                                             );
                                             _taskOverrides[task.id] = merged;
                                             _editPanelTask = merged;

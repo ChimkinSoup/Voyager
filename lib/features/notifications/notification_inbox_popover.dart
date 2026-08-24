@@ -290,9 +290,15 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
                     maxLines: null,
                     minLines: 1,
                     scrollPadding: kVoyagerFieldScrollPadding,
-                    contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                    contextMenuBuilder: voyagerTextContextMenuBuilder(
+                      context,
+                      snippetsAllowed: vim.snippetsAllowed,
+                    ),
                     spellCheckConfiguration:
-                        buildVoyagerSpellCheckConfiguration(context),
+                        buildVoyagerSpellCheckConfiguration(
+                          context,
+                          snippetsAllowed: vim.snippetsAllowed,
+                        ),
                     keyboardType: TextInputType.multiline,
                     onSubmitted: (_) => unawaited(_addNote()),
                     style: textStyle,
@@ -703,9 +709,13 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
                 maxLines: null,
                 minLines: 1,
                 scrollPadding: kVoyagerFieldScrollPadding,
-                contextMenuBuilder: voyagerSpellCheckContextMenuBuilder,
+                contextMenuBuilder: voyagerTextContextMenuBuilder(
+                  context,
+                  snippetsAllowed: vim.snippetsAllowed,
+                ),
                 spellCheckConfiguration: buildVoyagerSpellCheckConfiguration(
                   context,
+                  snippetsAllowed: vim.snippetsAllowed,
                 ),
                 keyboardType: TextInputType.multiline,
                 onSubmitted: (_) => unawaited(_submitEdit()),

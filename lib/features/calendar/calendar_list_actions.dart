@@ -131,6 +131,10 @@ Future<bool> deleteCalendarList(
 }) async {
   if (calendar.id == legacyCalendarId) return false;
 
+  // Read out of the theme before the dialog: the orElse below runs after the
+  // await, where [context] may already be dead.
+  final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
+
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${calendar.name}"?',
@@ -139,7 +143,7 @@ Future<bool> deleteCalendarList(
         : 'This calendar has $eventCount events. Move them to the default "Calendar", or delete everything.',
     deleteAllLabel: 'Yes (delete all events)',
   );
-  if (choice == DeleteContainerChoice.cancel) return false;
+  if (!context.mounted || choice == DeleteContainerChoice.cancel) return false;
 
   onConfirmed?.call();
 
@@ -156,7 +160,7 @@ Future<bool> deleteCalendarList(
           return Calendar(
             id: legacyCalendarId,
             name: 'Calendar',
-            colorValue: Theme.of(context).colorScheme.primary.toARGB32(),
+            colorValue: fallbackColor,
             createdAt: now,
             updatedAt: now,
           );

@@ -124,8 +124,13 @@ class VimSession {
     required this.textController,
     required this.resolveEditableState,
     required this.isMultiline,
+    this.isFieldFocused = _alwaysFocused,
     this.trySnippetUndo,
-  });
+    UndoHistoryController? undoController,
+  }) : undoController = undoController ?? UndoHistoryController(),
+       _ownsUndoController = undoController == null;
+
+  static bool _alwaysFocused() => true;
 
   final TextEditingController textController;
 
@@ -137,6 +142,18 @@ class VimSession {
   /// notes on bug 6. The direct-write fallback exists only for the window
   /// before the field's first frame, where there is no state to resolve.
   final EditableTextState? Function() resolveEditableState;
+
+  /// Whether the host field still holds the keyboard.
+  ///
+  /// [resolveEditableState] answers null both before the field's first frame
+  /// and after focus has moved on, and those two want opposite things: the
+  /// first is a direct controller write, the second is no write at all. Every
+  /// mutation here is keyboard-driven and so focused by construction, bar two
+  /// — [reset], which runs *from* the focus listener, and the clipboard read
+  /// behind `<C-v>`, which can land a frame after the user tabbed away. Left
+  /// ungated, both wrote this field's whole value into whichever field the
+  /// user had moved to.
+  final bool Function() isFieldFocused;
 
   /// Whether the host field can hold more than one line. Single-line fields
   /// reinterpret `o`/`O` as plain Insert-mode entry instead of splitting the
@@ -156,7 +173,12 @@ class VimSession {
   /// those two keys have something to call: `UndoHistoryController.undo` is
   /// the only public entry point, and it needs the same controller instance
   /// the field was built with.
-  final UndoHistoryController undoController = UndoHistoryController();
+  ///
+  /// Supplied by `VimTextScope`, which owns one per field so the snippet layer
+  /// can share it; a session built without one makes its own and disposes it.
+  final UndoHistoryController undoController;
+
+  final bool _ownsUndoController;
 
   final ValueNotifier<VimMode> modeListenable = ValueNotifier<VimMode>(
     VimMode.insert,
@@ -247,6 +269,11 @@ class VimSession {
   String? _cachedMatchesFor;
   String? _cachedMatchesPattern;
 
+  /// The text [_foldedText] was folded from, held by identity — see
+  /// [_matchesFor].
+  String? _foldedFor;
+  String? _foldedText;
+
   bool _disposed = false;
 
   void dispose() {
@@ -256,7 +283,7 @@ class VimSession {
     searchListenable.dispose();
     searchHighlightListenable.dispose();
     caretListenable.dispose();
-    undoController.dispose();
+    if (_ownsUndoController) undoController.dispose();
   }
 
   // ==========================================================================
@@ -280,8 +307,11 @@ class VimSession {
     final state = resolveEditableState();
     if (state != null) {
       state.userUpdateTextEditingValue(value, SelectionChangedCause.keyboard);
-    } else {
+    } else if (isFieldFocused()) {
       textController.value = value;
+    } else {
+      // Focus has moved on and this write is stale — see [isFieldFocused].
+      return;
     }
     // No explicit "scroll the caret into view" step is needed:
     // userUpdateTextEditingValue schedules its own whenever the selection
@@ -412,14 +442,20 @@ class VimSession {
     // after alt-tabbing away and back: losing focus drops to Insert, and the
     // selection was staying behind.
     if (wasVisual) {
-      _applyValue(
-        textController.value.copyWith(
-          selection: TextSelection.collapsed(
-            offset: _visualCursor.clamp(0, _text.length),
-          ),
-          composing: TextRange.empty,
+      // Written straight to the controller rather than through [_applyValue].
+      // This runs *from* the focus listener, by which point the primary focus
+      // is already the field the user moved to — and [_applyValue] would
+      // rightly decline (or, before that gate existed, hand this field's whole
+      // value to that one). A collapse is selection-only, so nothing
+      // downstream needs to hear about it, and the controller here is always
+      // this field's own.
+      textController.value = textController.value.copyWith(
+        selection: TextSelection.collapsed(
+          offset: _visualCursor.clamp(0, _text.length),
         ),
+        composing: TextRange.empty,
       );
+      caretListenable.value = caretOffset;
     }
   }
 
@@ -678,6 +714,20 @@ class VimSession {
       }
       return KeyEventResult.handled;
     }
+
+    // In Vim any key that is neither a valid motion nor a text object aborts
+    // the command being built, and every chord below is a command in its own
+    // right — so the redo or the paste must not run with a `d` still armed,
+    // and the motion after it must not inherit one either. The exceptions are
+    // `<C-d>` / `<C-u>`, which *are* motions and may legitimately complete a
+    // pending operator; they route through [_moveVertically], which honours
+    // the operator and clears the rest on its way out.
+    if (key != LogicalKeyboardKey.keyD &&
+        key != LogicalKeyboardKey.keyU &&
+        _hasPendingState) {
+      _clearPending();
+    }
+
     if (key == LogicalKeyboardKey.keyR) {
       if (undoController.value.canRedo) {
         // Same UndoHistory assert as `u` — see [suppressListEditingWrites].
@@ -813,7 +863,7 @@ class VimSession {
     if (ch.length == 1) {
       final code = ch.codeUnitAt(0);
       if (code >= 0x30 && code <= 0x39 && !(code == 0x30 && _count == 0)) {
-        _count = _count * 10 + (code - 0x30);
+        _count = math.min(_kMaxCount, _count * 10 + (code - 0x30));
         _publishHud();
         return;
       }
@@ -1154,6 +1204,20 @@ class VimSession {
     }
   }
 
+  /// Ceiling on a typed count, applied as the digits come in so every consumer
+  /// inherits it.
+  ///
+  /// `999999999p` otherwise asks Dart for a string of several gigabytes before
+  /// anything checks it, and past 2^63 the operator/motion product below wraps
+  /// negative — the same input freezing the isolate at one magnitude and
+  /// silently doing nothing at the next. Far past any count a text field in
+  /// this app has a use for.
+  static const int _kMaxCount = 100000;
+
+  /// Ceiling on the text one `p` may splice in, for the case a legal count
+  /// meets a long register.
+  static const int _kMaxPasteChars = 1 << 22;
+
   /// Consumes the pending count for a motion.
   ///
   /// A count may be typed on either side of an operator, and Vim multiplies
@@ -1165,7 +1229,7 @@ class VimSession {
     final operatorCount = _operatorCount > 0 ? _operatorCount : 1;
     _count = 0;
     _operatorCount = 0;
-    return motionCount * operatorCount;
+    return math.min(_kMaxCount, motionCount * operatorCount);
   }
 
   int? _consumeCount() {
@@ -1591,25 +1655,41 @@ class VimSession {
       final range = _visualRange().normalized();
       final start = range.start.clamp(0, text.length);
       final end = range.end.clamp(start, text.length);
-      final replaced = text
-          .substring(start, end)
-          .split('')
-          .map((c) => c == '\n' ? c : ch)
-          .join();
+      // By runes, not by code unit: `split('')` cuts surrogate pairs in half
+      // and emits the halves, which is text the paragraph cannot shape.
+      final replaced = StringBuffer();
+      for (final rune in text.substring(start, end).runes) {
+        replaced.write(rune == 0x0a ? '\n' : ch);
+      }
       _setMode(VimMode.normal);
-      _writeText(text.replaceRange(start, end, replaced), start);
+      _writeText(text.replaceRange(start, end, replaced.toString()), start);
       _clearPending();
       return;
     }
 
+    // The count is in characters and a character can be two code units, on
+    // both sides: `3r😀` must write three emoji, and `3rx` over an emoji must
+    // consume the pair rather than half of it and leave a lone surrogate.
     final count = math.max(1, _takeCount());
     final start = _cursor;
-    final end = math.min(vimLineEnd(text, start), start + count);
+    final lineEnd = vimLineEnd(text, start);
+    var end = start;
+    var taken = 0;
+    for (final rune in text.substring(start, lineEnd).runes) {
+      if (taken == count) break;
+      end += rune > 0xFFFF ? 2 : 1;
+      taken++;
+    }
     if (end <= start) {
       _clearPending();
       return;
     }
-    _writeText(text.replaceRange(start, end, ch * (end - start)), end - 1);
+    final replacement = ch * taken;
+    _writeText(
+      text.replaceRange(start, end, replacement),
+      // The last copy of [ch], not one code unit back from the end of it.
+      start + replacement.length - ch.length,
+    );
     _clearPending();
   }
 
@@ -1739,6 +1819,10 @@ class VimSession {
       return;
     }
     final count = math.max(1, _takeCount());
+    if (payload.length * count > _kMaxPasteChars) {
+      _clearPending();
+      return;
+    }
     final body = payload * count;
 
     if (mode.isVisual) {
@@ -1791,7 +1875,16 @@ class VimSession {
 
   Future<void> _pasteFromSystemClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (_disposed) return;
+    // The platform channel takes a frame or two, and the user can leave the
+    // field — or the mode — in that window. A paste that lands afterwards is
+    // not the one they asked for: it would splice the register into whatever
+    // is focused now, or into a field that is back to typing normally.
+    if (_disposed ||
+        !isFieldFocused() ||
+        mode == VimMode.insert ||
+        searchListenable.value != null) {
+      return;
+    }
     final payload = data?.text;
     if (payload == null || payload.isEmpty) return;
     _paste(
@@ -1865,7 +1958,15 @@ class VimSession {
         _cachedMatchesPattern == pattern) {
       return _cachedMatches ?? const [];
     }
-    final matches = vimSearchMatches(text, pattern);
+    // The matches cache misses on every keystroke of the `/` bar — the pattern
+    // is what changed — but the folded haystack does not, so it is kept on the
+    // text identity alone. Without it, growing the query by one character
+    // allocated another copy of the whole document.
+    if (!identical(_foldedFor, text)) {
+      _foldedFor = text;
+      _foldedText = text.toLowerCase();
+    }
+    final matches = vimSearchMatches(text, pattern, foldedText: _foldedText);
     _cachedMatches = matches;
     _cachedMatchesFor = text;
     _cachedMatchesPattern = pattern;

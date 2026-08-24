@@ -866,10 +866,16 @@ String vimApplyCase(String source, VimCaseOp op) {
 /// keystroke while the `/` bar is open and once per `n`/`N`, on plain
 /// [String.indexOf] — microseconds even for a long journal entry — and the
 /// caller caches the result until the text changes.
-List<int> vimSearchMatches(String text, String pattern) {
+///
+/// [foldedText] is `text.toLowerCase()`, when the caller already has it. The
+/// scan itself is cheap; folding the document to run it is not, and the
+/// pattern changes on every keystroke of the `/` bar, so a caller that keeps
+/// the folded copy across those keystrokes turns a per-keystroke allocation of
+/// the whole document into one [String.indexOf] sweep.
+List<int> vimSearchMatches(String text, String pattern, {String? foldedText}) {
   if (pattern.isEmpty || text.isEmpty) return const [];
   final caseSensitive = pattern != pattern.toLowerCase();
-  final haystack = caseSensitive ? text : text.toLowerCase();
+  final haystack = caseSensitive ? text : (foldedText ?? text.toLowerCase());
   final needle = caseSensitive ? pattern : pattern.toLowerCase();
 
   final matches = <int>[];

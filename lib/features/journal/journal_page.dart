@@ -936,6 +936,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       // 'sunny' onto any legacy or imported row merely because the user opened
       // it and typed a character.
       weatherIcon: weather?.icon ?? 'sunny',
+      // Same reasoning as the weather default above: stamped once at creation,
+      // so an entry opens at the neutral midpoint instead of unrecorded.
+      mood: kDefaultMood,
       timestamp: now,
       createdAt: now,
       updatedAt: now,
