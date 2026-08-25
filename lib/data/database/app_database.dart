@@ -483,6 +483,8 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get snippetsEnabled =>
       boolean().withDefault(const Constant(true))();
+  BoolColumn get capsLockIndicatorEnabled =>
+      boolean().withDefault(const Constant(true))();
 
   /// [SnippetExpandKey] name — 'tab' or 'space'.
   TextColumn get snippetExpandKey =>
@@ -778,6 +780,20 @@ class PendingUploadsTable extends Table {
   /// and the drain skips it so one rejected document can't stall the queue
   /// behind it.
   TextColumn get failureReason => text().nullable()();
+
+  /// Marks a row that stands for a wholesale CRDT text overwrite rather than an
+  /// ordinary re-upload.
+  ///
+  /// The Search popup rewrites a body without an editing session, so publishing
+  /// it means wiping the document's remote operation log and re-seeding it —
+  /// and that can only be done against a reachable server, since Firestore
+  /// answers both the wipe and the log listing from the local cache while
+  /// offline. When the wipe can't be proven, the publish is deferred here
+  /// instead of being attempted on top of a log this device cannot see; the
+  /// drain replays it through
+  /// [RemoteSyncService.forceOverwriteJournalEntryText].
+  BoolColumn get crdtOverwrite =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {documentId, collectionName};
@@ -1134,7 +1150,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 86;
+  int get schemaVersion => 88;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2116,6 +2132,20 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'CREATE INDEX IF NOT EXISTS idx_todo_tasks_parent_task_id '
           'ON todo_tasks_table (parent_task_id)',
+        );
+      }
+      if (from < 87) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.capsLockIndicatorEnabled,
+        );
+      }
+      if (from < 88) {
+        await _addColumnIfNotExists(
+          migrator,
+          'pending_uploads_table',
+          pendingUploadsTable,
+          pendingUploadsTable.crdtOverwrite,
         );
       }
     },

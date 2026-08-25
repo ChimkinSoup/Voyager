@@ -771,6 +771,7 @@
   "769": "workoutRestSeconds",
   "770": "workoutRestTimerEnabled",
   "771": "_MonthWeekMorphLayer",
+  "772": "package:voyager/features/analytics/stat_number_format.dart",
   "773": "_BucketNoteDialog",
-  "775": "_RowHoverSurface"
+  "774": "_QuickDelayedDragStartListener"
 }

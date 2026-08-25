@@ -8,13 +8,18 @@ const double assumedRestingHeartRateBpm = 70.0;
 /// Assumed nightly sleep, since there is no sleep tracker in the app.
 const double assumedSleepHoursPerNight = 8.0;
 
-/// Earth's average orbital speed, in miles per hour.
-const double earthOrbitalSpeedMph = 66600.0;
+/// Earth's average orbital speed, in kilometres per hour.
+const double earthOrbitalSpeedKmh = 107208.0;
 
 /// Average synodic (full-moon-to-full-moon) month, in days.
 const double synodicMonthDays = 29.530588;
 
 const int lifespanWeeks = totalLeafCount;
+
+/// Weeks per year as the tree counts them. Derived from the same 80-year /
+/// 4,160-week lifespan the canopy is built on, so a full life converts back to
+/// exactly 80.00 years — the true 52.18 would land it at 79.7.
+const double weeksPerYear = lifespanWeeks / 80;
 
 /// Brief (1-2 word) hover label shown under a blossom.
 String shortLabelForStat(LifeStat stat) => _shortLabelFor(stat);
@@ -31,8 +36,8 @@ String _shortLabelFor(LifeStat stat) {
       return 'Tasks';
     case LifeStat.lifetimeMood:
       return 'Mood';
-    case LifeStat.milesTraveled:
-      return 'Miles';
+    case LifeStat.kmTraveled:
+      return 'Kilometres';
     case LifeStat.fullMoons:
       return 'Full Moons';
   }
@@ -50,8 +55,8 @@ String _titleFor(LifeStat stat) {
       return 'Tasks Conquered';
     case LifeStat.lifetimeMood:
       return 'Lifetime Mood';
-    case LifeStat.milesTraveled:
-      return 'Miles Travelled Around the Sun';
+    case LifeStat.kmTraveled:
+      return 'Kilometres Travelled Around the Sun';
     case LifeStat.fullMoons:
       return 'Full Moons Experienced';
   }
@@ -64,7 +69,9 @@ class LifeStatValue {
     required this.title,
     required this.shortLabel,
     required this.value,
+    this.secondaryValue,
     this.footnote,
+    this.isPlaceholder = false,
   });
 
   final LifeStat stat;
@@ -75,9 +82,18 @@ class LifeStatValue {
   /// underlying data isn't available yet.
   final String value;
 
+  /// The same figure in a second unit, shown under [value] in the stat popup
+  /// only — currently just the weeks-remaining count converted to years.
+  final String? secondaryValue;
+
   /// Optional small print explaining an assumption behind the number (e.g.
   /// the assumed heart rate), shown in the stat popup only.
   final String? footnote;
+
+  /// True when [value] is one of the "no data yet" sentences rather than a
+  /// figure. Those read as prose and are happy to wrap, so the stat popup
+  /// doesn't widen itself to fit them the way it does for a long number.
+  final bool isPlaceholder;
 }
 
 final _integerFormat = NumberFormat.decimalPattern();
@@ -114,6 +130,7 @@ LifeStatValue resolveLifeStat({
       value: lifetimeMood == null
           ? 'No journal moods yet'
           : '${lifetimeMood.toStringAsFixed(1)}/10',
+      isPlaceholder: lifetimeMood == null,
     );
   }
 
@@ -123,6 +140,7 @@ LifeStatValue resolveLifeStat({
       title: title,
       shortLabel: shortLabel,
       value: 'Set your birth date in Settings',
+      isPlaceholder: true,
     );
   }
 
@@ -138,6 +156,7 @@ LifeStatValue resolveLifeStat({
         title: title,
         shortLabel: shortLabel,
         value: '${_integerFormat.format(remaining)} weeks',
+        secondaryValue: '${(remaining / weeksPerYear).toStringAsFixed(2)} years',
         footnote: 'Assuming an 80-year lifespan (4,160 weeks).',
       );
 
@@ -168,15 +187,15 @@ LifeStatValue resolveLifeStat({
             'Estimated at ${assumedSleepHoursPerNight.toStringAsFixed(0)} hours of sleep per night (no sleep tracker yet).',
       );
 
-    case LifeStat.milesTraveled:
-      final miles = (age.inMinutes / 60.0) * earthOrbitalSpeedMph;
+    case LifeStat.kmTraveled:
+      final km = (age.inMinutes / 60.0) * earthOrbitalSpeedKmh;
       return LifeStatValue(
         stat: stat,
         title: title,
         shortLabel: shortLabel,
-        value: '${_integerFormat.format(miles.round())} mi',
+        value: '${_integerFormat.format(km.round())} km',
         footnote:
-            'Based on Earth\'s average orbital speed of ${_integerFormat.format(earthOrbitalSpeedMph.round())} mph.',
+            'Based on Earth\'s average orbital speed of ${_integerFormat.format(earthOrbitalSpeedKmh.round())} km/h.',
       );
 
     case LifeStat.fullMoons:
@@ -195,8 +214,8 @@ LifeStatValue resolveLifeStat({
   }
 }
 
-/// Weeks lived so far, or null if [birthDate] is unset. Used by the opening
-/// animation to decide how many leaves fall.
+/// Weeks lived so far, or null if [birthDate] is unset. Decides how many of
+/// the tree's leaves rest on the ground.
 int? weeksLivedFor(DateTime? birthDate, DateTime now) {
   if (birthDate == null) return null;
   final days = now.difference(birthDate).inDays;

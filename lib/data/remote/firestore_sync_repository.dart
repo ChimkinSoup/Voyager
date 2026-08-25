@@ -331,11 +331,32 @@ class FirestoreSyncRepository implements SyncRepository {
     await _doc(collection, id).delete();
   }
 
+  /// Forces a server round-trip, so an offline caller is told rather than
+  /// handed a lie.
+  ///
+  /// Firestore answers reads from the local cache while offline and never
+  /// fails, so at the default source a cold or evicted cache returns zero
+  /// documents and this reported "deleted 0 operations" with the remote log
+  /// fully intact. Every caller uses the result to decide the log is gone —
+  /// [RemoteSyncService.forceOverwriteJournalEntryText] then re-seeds a chain
+  /// on top of the surviving one, producing exactly the duplicated text it
+  /// exists to prevent. The `isFromCache` check is what enforces the option,
+  /// the same way [ping] does: a platform that quietly ignored it would
+  /// otherwise report a cached miss as a completed wipe.
   @override
   Future<int> deleteOperationsForDocument(String documentId) async {
-    final query = await _collection(
-      'sync_operations',
-    ).where('documentId', isEqualTo: documentId).get();
+    final query = await _collection('sync_operations')
+        .where('documentId', isEqualTo: documentId)
+        .get(const GetOptions(source: Source.server));
+    if (query.metadata.isFromCache) {
+      throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'unavailable',
+        message:
+            'Operation-log wipe for $documentId was answered from the local '
+            'cache, so the remote log could not be read.',
+      );
+    }
     if (query.docs.isEmpty) return 0;
 
     const batchSize = 500;

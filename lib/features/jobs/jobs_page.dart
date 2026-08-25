@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
@@ -405,20 +406,24 @@ class _Toolbar extends StatelessWidget {
           Expanded(
             child: SizedBox(
               height: 32,
-              child: TextField(
-                controller: searchController,
-                onChanged: onQueryChanged,
-                style: theme.textTheme.bodySmall,
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: 'Search company, title, notes or status',
-                  prefixIcon: const Icon(
-                    PhosphorIconsRegular.magnifyingGlass,
-                    size: 14,
+              // Not under [VimTextScope] like the app's prose fields, so the
+              // Caps Lock mark is opted into by hand here.
+              child: CapsLockCaretIndicator(
+                child: TextField(
+                  controller: searchController,
+                  onChanged: onQueryChanged,
+                  style: theme.textTheme.bodySmall,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Search company, title, notes or status',
+                    prefixIcon: const Icon(
+                      PhosphorIconsRegular.magnifyingGlass,
+                      size: 14,
+                    ),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   ),
-                  prefixIconConstraints: const BoxConstraints(minWidth: 32),
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 ),
               ),
             ),

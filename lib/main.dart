@@ -120,9 +120,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       authRepo,
       // Read lazily: the drain only reaches for this once it has a queued row
       // in a collection that keeps a character-operation log.
-      pushDocument: (collection, documentId) => ref
-          .read(remoteSyncServiceProvider)
-          .pushOutboxDocument(collection, documentId),
+      pushDocument: (collection, documentId, {forceCrdtOverwrite = false}) =>
+          ref
+              .read(remoteSyncServiceProvider)
+              .pushOutboxDocument(
+                collection,
+                documentId,
+                forceCrdtOverwrite: forceCrdtOverwrite,
+              ),
     );
 
     final settingsRepo = ref.read(settingsRepositoryProvider);

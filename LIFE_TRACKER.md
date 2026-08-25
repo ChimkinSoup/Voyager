@@ -7,7 +7,7 @@
 - Scatter them strategically across the canopy, some near the edges and some near the center (At uniform randomness)
 - When the user clicks a blossom, the blossom should subtly scale up and a tooltip should animate from the blossom (Expanding outwards like it came from the blossom). Animate leaves around the popup as if the popup generated a gust of wind that makes the leaves still on the tree shudder.
 - Blossoms will display various statistics, these should be the statistics:
-	- Weeks remaining
+	- Weeks remaining (clicking the blossom also shows the same figure in years, to two decimal places)
 	- Heartbeats taken
 	- Time slept sleeping
 	- Tasks conquered (Total tasks over all todo lists)
@@ -20,6 +20,7 @@
 - Hanging from a thick lower-right branch is a simple rope swing. Resting in the center of the seat is a single ethereal bubble. When the user hovers over the bubble it should gently expand and increase its glow slightly. 
 ### Bucket List Popup
 - If the user clicks on the bubble it should also animate a popup (Just like the blossoms), except this popup will be larger than the blossom popups. It will function exactly like todo lists but with hollow circles for completions. Additionally each "task" will lack some regular task features like a due date or subtasks (And anything else you think necessary). When the user does finally mark off a task, they will then have the option of writing a note for that specific task that can provide background information on them completing that bucket list task. 
-### Opening Animation
-- Once per app restart, the first time the user opens this page, the tree should first initially appear with all of it's leaves intact, then suddenly X number of leaves should (evenly spread out across the tree) fall for the X weeks that the user has lived. They should fall and collect on the floor. These leaves should NOT fade out and instead remain on the floor. If the user changes pages and comes back, these same leaves should still be on the ground (Without ever running an animation unless the app is restarted). 
+### Fallen Leaves
+- The page always opens with X leaves (evenly spread out across the tree) already collected on the floor, for the X weeks that the user has lived. There is no fall animation — they are simply down from the first frame, every time the page is opened.
+- These leaves should NOT fade out and instead remain on the floor.
 - Keep the background animation of the leaves falling as normal.

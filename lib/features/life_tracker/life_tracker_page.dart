@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/life_tracker/blossom_stat_popup.dart';
 import 'package:voyager/features/life_tracker/bucket_list_popup.dart';
@@ -17,8 +16,8 @@ import 'package:voyager/features/life_tracker/stat_leader_label.dart';
 
 /// The Unified Canvas: a watercolour cherry tree annotated with one life
 /// statistic per leader label, a figure resting on the trunk that opens the
-/// bucket list, and a first-run leaf-fall animation for every week already
-/// lived. See LIFE_TRACKER.md for the spec.
+/// bucket list, and one leaf already resting on the ground for every week
+/// already lived. See LIFE_TRACKER.md for the spec.
 ///
 /// The page paints its own paper and keeps it in both themes. The whole look
 /// is ink and wash on off-white stock, and re-toning it for dark mode gives up
@@ -38,7 +37,6 @@ const _grassColor = Color(0xFF8C9A79);
 class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   final _stackKey = GlobalKey();
   final _canvasController = LifeTreeCanvasController();
-  bool _openingAnimationTriggered = false;
 
   /// Which leader label the pointer is over, so its line and dot can light up
   /// with it. -1 for none.
@@ -49,9 +47,11 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   /// list.
   bool _treeHovered = false;
 
-  /// Bumped whenever the fall is reset, so a fall that was already scheduled
-  /// but has not started yet doesn't kick in afterwards and undo it.
-  int _openingRun = 0;
+  /// Memoized result of [_groundedLeavesFor], with the week count it was built
+  /// for. Choosing the leaves sorts all 4,160 of them by angle, and the page
+  /// rebuilds on every hover.
+  Set<int>? _livedLeaves;
+  int? _livedLeavesWeeks;
 
   @override
   void dispose() {
@@ -72,7 +72,8 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     await showTreePopover(
       context: context,
       anchorGlobalCenter: anchor,
-      width: 260,
+      width: statPopupWidth,
+      maxWidth: statPopupMaxWidth,
       accentColor: accent,
       builder: (_) => BlossomStatPopup(stat: blossom.stat, accentColor: accent),
     );
@@ -91,61 +92,32 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     );
   }
 
-  /// Debug-only: puts every leaf back on the tree and replays the opening
-  /// fall from the top. No-ops without a birth date, since the number of
-  /// leaves to shed is derived from it.
-  void _replayOpeningAnimation() {
-    final settings = ref.read(settingsProvider).valueOrNull;
-    final weeks = weeksLivedFor(settings?.birthDate, DateTime.now());
-    if (weeks == null || weeks <= 0) return;
-
-    _openingRun++;
-    _canvasController.resetFall();
-    ref.read(lifeTreeGroundedLeavesProvider.notifier).state = null;
-    setState(() => _openingAnimationTriggered = false);
+  /// Debug-only: puts every leaf back on the tree so the canopy can be looked
+  /// at whole, and drops them back to the ground on a second press. An empty
+  /// grounded set overrides the derived one; null hands it back.
+  void _toggleAllLeaves() {
+    final notifier = ref.read(lifeTreeGroundedLeavesProvider.notifier);
+    notifier.state = notifier.state == null ? const <int>{} : null;
   }
 
-  /// Debug-only: puts every leaf back on the tree and leaves it there, so the
-  /// canopy can be looked at whole. The grounded set goes to empty rather
-  /// than null, which is also what marks the opening fall as already resolved
-  /// — otherwise it would immediately shed the leaves again.
-  void _restoreAllLeaves() {
-    _openingRun++;
-    _canvasController.resetFall();
-    ref.read(lifeTreeGroundedLeavesProvider.notifier).state = const <int>{};
-    setState(() => _openingAnimationTriggered = true);
-  }
-
-  void _maybeStartOpeningAnimation(LifeTreeGeometry geometry, DateTime? birthDate) {
-    if (_openingAnimationTriggered) return;
-    if (ref.read(lifeTreeGroundedLeavesProvider) != null) return;
-    final weeks = weeksLivedFor(birthDate, DateTime.now());
-    if (weeks == null || weeks <= 0) return;
-    _openingAnimationTriggered = true;
-    final run = ++_openingRun;
+  /// One leaf on the ground for every week already lived, spread evenly around
+  /// the canopy. Derived from the birth date rather than animated into place,
+  /// so the page opens straight onto the settled state.
+  Set<int> _groundedLeavesFor(LifeTreeGeometry geometry, DateTime? birthDate) {
+    final weeks = weeksLivedFor(birthDate, DateTime.now()) ?? 0;
+    if (weeks == _livedLeavesWeeks) return _livedLeaves!;
 
     final orderedIndices = geometry.leafIndicesByAngle;
     final count = weeks.clamp(0, orderedIndices.length);
-    final stride = orderedIndices.length / count;
-    final chosen = <int>[
+    final stride = count == 0 ? 0.0 : orderedIndices.length / count;
+    final chosen = <int>{
       for (var i = 0; i < count; i++)
         orderedIndices[(i * stride).floor().clamp(0, orderedIndices.length - 1)],
-    ];
+    };
 
-    if (VoyagerMotion.reduced(context)) {
-      // Skip the multi-second leaf-fall cascade — land straight on the
-      // settled state.
-      ref.read(lifeTreeGroundedLeavesProvider.notifier).state = chosen.toSet();
-      return;
-    }
-
-    // Let the fully-leaved tree render for a beat before it starts shedding.
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted || run != _openingRun) return;
-      _canvasController.startOpeningFall(chosen, () {
-        ref.read(lifeTreeGroundedLeavesProvider.notifier).state = chosen.toSet();
-      });
-    });
+    _livedLeavesWeeks = weeks;
+    _livedLeaves = chosen;
+    return chosen;
   }
 
   @override
@@ -153,7 +125,8 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     final geometry = ref.watch(lifeTreeGeometryProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
     final cachedStats = ref.watch(lifeTrackerStatsProvider).valueOrNull;
-    final grounded = ref.watch(lifeTreeGroundedLeavesProvider) ?? const <int>{};
+    final grounded = ref.watch(lifeTreeGroundedLeavesProvider) ??
+        _groundedLeavesFor(geometry, settings?.birthDate);
 
     final minorColors = (settings?.minorPetalColors ?? const <int>[]).map(Color.new).toList();
     if (minorColors.isEmpty) {
@@ -168,11 +141,6 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
       ...minorColors,
     ];
     final accent = Color(settings?.accentColor ?? 0xFF7C9EFF);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _maybeStartOpeningAnimation(geometry, settings?.birthDate);
-    });
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -270,40 +238,20 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                   ),
                 );
               }(),
-            Positioned(
-              right: 16,
-              top: 16,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (ref.watch(lifeTrackerShowRestoreButtonProvider))
-                    Tooltip(
-                      message: 'Put every fallen leaf back on the tree',
-                      child: IconButton.filledTonal(
-                        icon: const Icon(PhosphorIconsRegular.tree),
-                        onPressed: _restoreAllLeaves,
-                      ),
-                    ),
-                  if (ref.watch(lifeTrackerShowReplayButtonProvider))
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Tooltip(
-                        message: settings?.birthDate == null
-                            ? 'Set a birth date in Settings to replay the opening animation'
-                            : 'Replay the opening animation',
-                        child: IconButton.filledTonal(
-                          icon: const Icon(
-                            PhosphorIconsRegular.arrowCounterClockwise,
-                          ),
-                          onPressed: settings?.birthDate == null
-                              ? null
-                              : _replayOpeningAnimation,
-                        ),
-                      ),
-                    ),
-                ],
+            if (ref.watch(lifeTrackerShowRestoreButtonProvider))
+              Positioned(
+                right: 16,
+                top: 16,
+                child: Tooltip(
+                  message: ref.watch(lifeTreeGroundedLeavesProvider) == null
+                      ? 'Put every fallen leaf back on the tree'
+                      : 'Put the leaves back on the ground',
+                  child: IconButton.filledTonal(
+                    icon: const Icon(PhosphorIconsRegular.tree),
+                    onPressed: _toggleAllLeaves,
+                  ),
+                ),
               ),
-            ),
           ],
         );
       },

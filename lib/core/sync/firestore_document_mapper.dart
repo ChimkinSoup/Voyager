@@ -2370,6 +2370,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'hideCompletedTasks': s.hideCompletedTasks,
   'vimModeEnabled': s.vimModeEnabled,
   'snippetsEnabled': s.snippetsEnabled,
+  'capsLockIndicatorEnabled': s.capsLockIndicatorEnabled,
   'snippetExpandKey': s.snippetExpandKey.name,
   'snippets': [for (final snippet in s.snippets) snippet.toJson()],
   'lastViewedJournalId': s.lastViewedJournalId,
@@ -2504,6 +2505,7 @@ AppSettings mergeSettingsFromRemote(
     hideCompletedTasks: data['hideCompletedTasks'] as bool?,
     vimModeEnabled: data['vimModeEnabled'] as bool?,
     snippetsEnabled: data['snippetsEnabled'] as bool?,
+    capsLockIndicatorEnabled: data['capsLockIndicatorEnabled'] as bool?,
     snippetExpandKey: _enumFromName(
       SnippetExpandKey.values,
       data['snippetExpandKey'],

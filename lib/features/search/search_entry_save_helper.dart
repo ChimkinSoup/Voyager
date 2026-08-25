@@ -33,8 +33,8 @@ class SearchEntrySaveHelper {
     required String journalId,
     DateTime? entryDate,
   }) async {
+    JournalEntry? result;
     try {
-      JournalEntry? result;
       await coordinator.saveEntry(
         entryId: baseline.id,
         bumpVersion: true,
@@ -54,20 +54,10 @@ class SearchEntrySaveHelper {
           result = saved;
         },
       );
-      // The search page doesn't maintain a CRDT editing session, so the
-      // debounced upload scheduled above would push empty char-ops — creating
-      // a gap in the CRDT history that causes corrupted-op-chain conflicts on
-      // next pull.  Cancel that upload and replace it with a full-text CRDT
-      // overwrite that wipes stale ops and re-seeds from the current body.
-      if (result != null) {
-        remoteSync.cancelDocument(
-          FirestoreCollections.journalEntries,
-          baseline.id,
-        );
-        await remoteSync.forceOverwriteJournalEntryText(result!);
-      }
-      return result;
     } catch (error, stackTrace) {
+      // The local write itself failed — a locked database, a missing row
+      // (`JournalWriteCoordinator` throws a StateError for that). There is
+      // nothing on disk for the caller to show.
       FlutterError.reportError(
         FlutterErrorDetails(
           exception: error,
@@ -77,6 +67,38 @@ class SearchEntrySaveHelper {
         ),
       );
       return null;
+    }
+    if (result == null) return null;
+
+    // The search page doesn't maintain a CRDT editing session, so the
+    // debounced upload scheduled above would push empty char-ops — creating
+    // a gap in the CRDT history that causes corrupted-op-chain conflicts on
+    // next pull.  Cancel that upload and replace it with a full-text CRDT
+    // overwrite that wipes stale ops and re-seeds from the current body.
+    //
+    // Publishing is reported separately from saving on purpose. Both used to
+    // share one `catch` that returned null, so a failure here — network,
+    // permissions, a rejected batch — discarded a row that was already on
+    // disk: the caller skipped `onSaved`, nothing landed in `_localUpdates`,
+    // no provider was invalidated, and the result list kept rendering the
+    // pre-edit title and body. The edit looked lost, and the stale row it left
+    // behind was then used to build delete tombstones.
+    try {
+      remoteSync.cancelDocument(
+        FirestoreCollections.journalEntries,
+        baseline.id,
+      );
+      return await remoteSync.forceOverwriteJournalEntryText(result!);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'SearchEntrySaveHelper',
+          context: ErrorDescription('while publishing entry from Search'),
+        ),
+      );
+      return result;
     }
   }
 }

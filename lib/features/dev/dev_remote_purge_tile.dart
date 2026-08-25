@@ -63,6 +63,14 @@ class _DevRemotePurgeSectionState extends ConsumerState<DevRemotePurgeSection> {
           ),
         ),
       );
+    } catch (error) {
+      // The operation-log wipe forces a server read and throws when it can't
+      // reach one, so an offline purge now fails instead of reporting the
+      // cache's "no sync_operations found" as a completed delete.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Remote purge failed: $error')),
+      );
     } finally {
       if (mounted) setState(() => _purging = false);
     }

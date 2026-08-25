@@ -31,24 +31,6 @@ class _LeafShudder {
   }
 }
 
-/// One leaf currently animating from its canopy anchor down to the ground, as
-/// part of the first-run opening animation.
-class _FallingLeaf {
-  _FallingLeaf({required this.leafIndex, required this.startDelay});
-
-  final int leafIndex;
-  final double startDelay;
-  double elapsed = 0;
-
-  static const _fallDuration = 1.4;
-
-  double get progress =>
-      ((elapsed - startDelay) / _fallDuration).clamp(0.0, 1.0);
-
-  bool get isDone => elapsed - startDelay >= _fallDuration;
-  bool get hasStarted => elapsed >= startDelay;
-}
-
 /// Standard-normal sample via Box-Muller, using [r] as the entropy source.
 double _gaussian(math.Random r) {
   final u1 = 1.0 - r.nextDouble(); // (0, 1], never log(0)
@@ -62,9 +44,9 @@ double _gaussian(math.Random r) {
 /// smearing evenly across the width.
 const _groundPileStdDev = 0.22;
 
-/// Deterministic landing spot + rest rotation for a fallen leaf, keyed only by
-/// its index — so grounded leaves never need their own persisted position,
-/// just the fact that they landed (see [LifeTreeCanvasController]).
+/// Deterministic resting spot + rotation for a grounded leaf, keyed only by
+/// its index — so grounded leaves never need their own stored position, just
+/// the fact that they are down.
 ///
 /// A true bell curve centered under the trunk's base, rather than a uniform
 /// scatter or an independent per-leaf position — real fallen petals mound up
@@ -92,8 +74,8 @@ double groundRotationFor(int leafIndex) {
   return math.Random(leafIndex * 104729 + 31).nextDouble() * math.pi * 2;
 }
 
-/// Diameter, in logical pixels, a leaf is drawn at once it detaches from the
-/// canopy and starts falling — matching [PetalFieldParams]'s background
+/// Diameter, in logical pixels, a leaf is drawn at once it is on the ground
+/// rather than in the canopy — matching [PetalFieldParams]'s background
 /// petals (`5.0 + rand * 7.0` half-width, i.e. 10-24px across) rather than the
 /// much smaller stipple grain it reads as while still on the tree.
 double fallenLeafDiameterFor(int leafIndex) {
@@ -101,12 +83,9 @@ double fallenLeafDiameterFor(int leafIndex) {
   return 10.0 + r.nextDouble() * 14.0;
 }
 
-/// Imperative handle for triggering the gust shudder and the first-run opening
-/// fall.
+/// Imperative handle for triggering the gust shudder.
 class LifeTreeCanvasController extends ChangeNotifier {
   final List<_LeafShudder> _pendingGusts = [];
-  List<int>? _pendingFallIndices;
-  VoidCallback? _pendingFallOnDone;
 
   /// Shudders the foliage near [normalizedPosition] — called when a popup
   /// opens, so the tree visibly reacts.
@@ -116,25 +95,6 @@ class LifeTreeCanvasController extends ChangeNotifier {
     );
     notifyListeners();
   }
-
-  /// Starts the first-run opening animation: [leafIndices] fall and settle on
-  /// the ground; [onDone] fires once every leaf has landed so the caller can
-  /// persist the grounded set.
-  void startOpeningFall(List<int> leafIndices, VoidCallback onDone) {
-    _pendingFallIndices = leafIndices;
-    _pendingFallOnDone = onDone;
-    notifyListeners();
-  }
-
-  /// Puts every leaf back on the tree, abandoning any fall in progress. The
-  /// caller is responsible for clearing the persisted grounded set too — see
-  /// the Life Tracker page's replay button.
-  void resetFall() {
-    _pendingReset = true;
-    notifyListeners();
-  }
-
-  bool _pendingReset = false;
 }
 
 /// Expands the petal palette into light tint / base / deep shade for each
@@ -184,7 +144,9 @@ class LifeTreeCanvas extends StatefulWidget {
 
   final Color grassColor;
 
-  /// Leaves already permanently grounded from a previous run this session.
+  /// Leaves resting on the ground rather than in the canopy — one per week
+  /// lived. They are drawn where they lie from the first frame; nothing
+  /// animates them down.
   final Set<int> groundedLeafIndices;
 
   /// Tint for the whole-tree hover glow — see [hovered].
@@ -213,17 +175,16 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   /// subtle grain over the wash rather than darkening it into a muddy blob.
   static const _leafAlpha = 35;
 
-  /// Alpha baked into a leaf once it's landed and settled on the ground —
-  /// 70% opacity per user request, well above the on-tree stipple so fallen
-  /// leaves read clearly against the grass instead of staying a faint grain.
+  /// Alpha baked into a leaf that is resting on the ground — 70% opacity per
+  /// user request, well above the on-tree stipple so grounded leaves read
+  /// clearly against the grass instead of staying a faint grain.
   static const _landedLeafAlpha = 179;
 
   static const _grainExtent = 128;
 
   /// How finely the canopy's shedding is quantized. Each new step re-bakes the
   /// background, so this trades smoothness of the thinning against the number
-  /// of re-bakes during the opening fall.
-  static const _sweepSteps = 14;
+  /// of re-bakes as the week count moves.
   static const _shedSteps = 24;
 
   Timer? _timer;
@@ -237,8 +198,6 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   double _hoverGlow = 0;
 
   final List<_LeafShudder> _gusts = [];
-  final Map<int, _FallingLeaf> _falling = {};
-  final Set<int> _landedThisSession = {};
 
   ui.Image? _atlas;
   List<Color>? _atlasColors;
@@ -253,11 +212,11 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   Color? _grainInk;
   ui.ImageShader? _grainShader;
 
-  // Every leaf is drawn every frame — attached, falling or landed — so the
+  // Every leaf is drawn every frame — in the canopy or on the ground — so the
   // atlas buffers are allocated once and refilled in place rather than
-  // rebuilding 4160 transform objects sixty times a second. Split into a
-  // still-on-tree/falling pair and a landed pair, one leaf ever going into
-  // only one of the two on a given frame.
+  // rebuilding 4160 transform objects sixty times a second. Split into an
+  // on-tree pair and a grounded pair, one leaf ever going into only one of the
+  // two on a given frame.
   late final Float32List _rstBuffer =
       Float32List(widget.geometry.leaves.length * 4);
   late final Float32List _landedRstBuffer =
@@ -268,8 +227,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
       Float32List(widget.geometry.leaves.length * 4);
 
   // Resting places, resolved once. These are derived from the leaf index
-  // alone, but deriving them seeds a Random per leaf — and every grounded or
-  // falling leaf needs both of them on every frame.
+  // alone, but deriving them seeds a Random per leaf — and every grounded leaf
+  // needs both of them on every frame.
   late final List<Offset> _restPositions = [
     for (var i = 0; i < widget.geometry.leaves.length; i++)
       groundPositionFor(i, widget.geometry),
@@ -281,11 +240,10 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     for (var i = 0; i < widget.geometry.leaves.length; i++) fallenLeafDiameterFor(i),
   ]);
 
-  // The woody skeleton and the grass never change with the shed/sweep level
-  // (only the canopy wash does), so they're rasterized once into their own
-  // layer and reused across every re-bake of the fall — recomputing their
-  // path unions and dry-brush streaks tens of times over one fall animation
-  // was the main cost behind its frame drops.
+  // The woody skeleton and the grass never change with the shed level (only
+  // the canopy wash does), so they're rasterized once into their own layer and
+  // reused across every re-bake — recomputing their path unions and dry-brush
+  // streaks is far and away the most expensive part of a bake.
   ui.Image? _staticLayer;
 
   // Paper, 250-odd canopy washes, the whole woody skeleton, the grass and the
@@ -300,7 +258,6 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   Color? _scenePaper;
   Color? _sceneGrass;
   double? _sceneShed;
-  double? _sceneSweep;
   bool? _sceneShowDebugColors;
 
   /// Guards against a re-bake that was kicked off before a resize (or before
@@ -360,40 +317,11 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
 
   void _onControllerEvent() {
     final controller = widget.controller;
-    if (controller._pendingReset) {
-      controller._pendingReset = false;
-      _falling.clear();
-      _landedThisSession.clear();
-      _pendingFallOnDoneCallback = null;
-    }
     if (controller._pendingGusts.isNotEmpty) {
       _gusts.addAll(controller._pendingGusts);
       controller._pendingGusts.clear();
     }
-    final fallIndices = controller._pendingFallIndices;
-    if (fallIndices != null) {
-      controller._pendingFallIndices = null;
-      final onDone = controller._pendingFallOnDone;
-      controller._pendingFallOnDone = null;
-      _beginFall(fallIndices, onDone);
-    }
   }
-
-  void _beginFall(List<int> leafIndices, VoidCallback? onDone) {
-    const sweepDuration = 2.4;
-    for (var i = 0; i < leafIndices.length; i++) {
-      final delay = leafIndices.isEmpty
-          ? 0.0
-          : (i / leafIndices.length) * sweepDuration;
-      _falling[leafIndices[i]] = _FallingLeaf(
-        leafIndex: leafIndices[i],
-        startDelay: delay,
-      );
-    }
-    _pendingFallOnDoneCallback = onDone;
-  }
-
-  VoidCallback? _pendingFallOnDoneCallback;
 
   void _tick() {
     if (!mounted) return;
@@ -412,42 +340,16 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     }
     _gusts.removeWhere((g) => g.isDone);
 
-    if (_falling.isNotEmpty) {
-      final done = <int>[];
-      for (final leaf in _falling.values) {
-        leaf.elapsed += dt;
-        if (leaf.isDone) done.add(leaf.leafIndex);
-      }
-      for (final index in done) {
-        _falling.remove(index);
-        _landedThisSession.add(index);
-      }
-      if (_falling.isEmpty && _landedThisSession.isNotEmpty) {
-        _pendingFallOnDoneCallback?.call();
-        _pendingFallOnDoneCallback = null;
-      }
-    }
-
     setState(() {});
   }
 
-  /// How much of the canopy has washed out, and how far the wave of thinning
-  /// has travelled around the crown. The fall drops leaves in order of their
-  /// angle, so following the landed count with the wash keeps the pigment
-  /// disappearing just behind the petals that left it.
-  ({double shed, double sweep}) _erosion() {
+  /// How much of the canopy has washed out, following the share of leaves now
+  /// on the ground — the pigment thins with the petals that left it.
+  double _shedLevel() {
     final total = widget.geometry.leaves.length;
-    if (total == 0) return (shed: 0.0, sweep: 1.0);
-    final inFlight = _falling.length + _landedThisSession.length;
-    final shed =
-        math.max(widget.groundedLeafIndices.length, inFlight) / total;
-    final sweep = _falling.isEmpty
-        ? 1.0
-        : _landedThisSession.length / math.max(1, inFlight);
-    return (
-      shed: (shed * _shedSteps).round() / _shedSteps,
-      sweep: (sweep * _sweepSteps).round() / _sweepSteps,
-    );
+    if (total == 0) return 0.0;
+    final shed = widget.groundedLeafIndices.length / total;
+    return (shed * _shedSteps).round() / _shedSteps;
   }
 
   void _ensureAtlas(List<Color> colors) {
@@ -562,8 +464,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     );
   }
 
-  /// The woody skeleton and grass, which don't depend on the shed/sweep level
-  /// (or the leaf palette) at all — see [_staticLayer].
+  /// The woody skeleton and grass, which don't depend on the shed level (or
+  /// the leaf palette) at all — see [_staticLayer].
   ui.Picture _recordStaticLayer(Size size, double scale) {
     final pixelSize = Size(size.width * scale, size.height * scale);
     final recorder = ui.PictureRecorder();
@@ -578,7 +480,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   }
 
   ui.Picture _recordBackground(Size size, List<Color> palette, double scale,
-      double shed, double sweep, ui.Image staticLayer) {
+      double shed, ui.Image staticLayer) {
     final pixelSize = Size(size.width * scale, size.height * scale);
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Offset.zero & pixelSize);
@@ -592,7 +494,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     );
 
     canvas.scale(scale);
-    _paintCrown(canvas, size, palette, shed, sweep);
+    _paintCrown(canvas, size, palette, shed);
     return recorder.endRecording();
   }
 
@@ -607,7 +509,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
 
   void _ensureScene(Size size, List<Color> palette, double dpr) {
     final scale = math.min(dpr, _maxBackgroundScale);
-    final erosion = _erosion();
+    final shed = _shedLevel();
     final layoutValid = _background != null &&
         _staticLayer != null &&
         _sceneSize == size &&
@@ -619,15 +521,13 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
         _sceneShowDebugColors == widget.showDebugColors;
 
     if (layoutValid) {
-      if (_sceneShed == erosion.shed && _sceneSweep == erosion.sweep) return;
+      if (_sceneShed == shed) return;
       // Only the canopy's thinning changed. Re-bake off the frame and keep
       // showing the current background until the new one is ready — doing this
-      // synchronously drops a frame every step of the opening animation. The
-      // static wood+grass layer is reused as-is since neither depends on
-      // shed/sweep.
-      _sceneShed = erosion.shed;
-      _sceneSweep = erosion.sweep;
-      _rebakeAsync(size, palette, scale, erosion.shed, erosion.sweep, _staticLayer!);
+      // synchronously drops a frame. The static wood+grass layer is reused
+      // as-is since it doesn't depend on the shed level.
+      _sceneShed = shed;
+      _rebakeAsync(size, palette, scale, shed, _staticLayer!);
       return;
     }
 
@@ -638,7 +538,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     _staticLayer = staticLayer;
 
     _background = _rasterize(
-      _recordBackground(size, palette, scale, erosion.shed, erosion.sweep, staticLayer),
+      _recordBackground(size, palette, scale, shed, staticLayer),
       size,
       scale,
     );
@@ -649,15 +549,14 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     _sceneInk = widget.inkColor;
     _scenePaper = widget.paperColor;
     _sceneGrass = widget.grassColor;
-    _sceneShed = erosion.shed;
-    _sceneSweep = erosion.sweep;
+    _sceneShed = shed;
     _sceneShowDebugColors = widget.showDebugColors;
   }
 
   Future<void> _rebakeAsync(Size size, List<Color> palette, double scale,
-      double shed, double sweep, ui.Image staticLayer) async {
+      double shed, ui.Image staticLayer) async {
     final generation = ++_bakeGeneration;
-    final picture = _recordBackground(size, palette, scale, shed, sweep, staticLayer);
+    final picture = _recordBackground(size, palette, scale, shed, staticLayer);
     final ui.Image image;
     try {
       image = await picture.toImage(
@@ -710,14 +609,13 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     Size size,
     List<Color> palette,
     double shed,
-    double sweep,
   ) {
     final fade = 1.0 - 0.40 * shed;
     if (fade <= 0) return;
 
     final rimWidth = size.shortestSide * 0.0012;
     for (final cell in widget.geometry.cells) {
-      if (cell.shedOrder < shed && cell.angleRank <= sweep) continue;
+      if (cell.shedOrder < shed) continue;
       final path = _cellPath(cell, size);
       final color = palette[cell.colorIndex.clamp(0, palette.length - 1)];
       canvas.drawPath(
@@ -1152,13 +1050,9 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
               fallenDiameters: _fallenDiameters,
               colorCount: palette.length,
               time: _time,
-              // Passed live rather than copied: the painter only reads them,
-              // and snapshotting the fall map rebuilt a 4160-entry map every
-              // frame for the whole opening animation.
+              // Passed live rather than copied: the painter only reads them.
               gusts: _gusts,
-              falling: _falling,
               groundedLeafIndices: widget.groundedLeafIndices,
-              landedThisSession: _landedThisSession,
               glowPath: glowPath,
               hoverGlow: _hoverGlow,
               glowColor: widget.accentColor,
@@ -1507,9 +1401,7 @@ class _LifeTreePainter extends CustomPainter {
     required this.colorCount,
     required this.time,
     required this.gusts,
-    required this.falling,
     required this.groundedLeafIndices,
-    required this.landedThisSession,
     required this.glowPath,
     required this.hoverGlow,
     required this.glowColor,
@@ -1525,8 +1417,8 @@ class _LifeTreePainter extends CustomPainter {
   final ui.ImageShader grainShader;
   final ui.Image atlas;
 
-  /// Same sprites as [atlas], baked brighter — used for leaves that have
-  /// landed and settled on the ground.
+  /// Same sprites as [atlas], baked brighter — used for leaves resting on the
+  /// ground.
   final ui.Image landedAtlas;
   final List<Rect> leafCellRects;
   final Float32List rstBuffer;
@@ -1536,15 +1428,13 @@ class _LifeTreePainter extends CustomPainter {
   final List<Offset> restPositions;
   final Float32List restRotations;
 
-  /// Pixel diameter each leaf is drawn at once it's detached from the canopy
-  /// (falling or landed), keyed by leaf index — see [fallenLeafDiameterFor].
+  /// Pixel diameter each leaf is drawn at once it's on the ground rather than
+  /// in the canopy, keyed by leaf index — see [fallenLeafDiameterFor].
   final Float32List fallenDiameters;
   final int colorCount;
   final double time;
   final List<_LeafShudder> gusts;
-  final Map<int, _FallingLeaf> falling;
   final Set<int> groundedLeafIndices;
-  final Set<int> landedThisSession;
 
   /// The branches' own silhouette, for the hover glow — null whenever the
   /// glow is fully faded out, so a hover that never happens costs nothing.
@@ -1637,8 +1527,8 @@ class _LifeTreePainter extends CustomPainter {
   }
 
   /// Every one of the 4160 weeks, as one speck of blossom over the wash.
-  /// Attached specks ride their pool's sway; detached ones fall free, and a
-  /// landed one stays where it settled.
+  /// Attached specks ride their pool's sway; grounded ones sit still where
+  /// they rest.
   void _paintStipple(
     Canvas canvas,
     Size size,
@@ -1649,7 +1539,7 @@ class _LifeTreePainter extends CustomPainter {
     final leaves = geometry.leaves;
     const anchor = _spriteExtent / 2;
 
-    // Split across two buffers/atlases rather than one: a landed leaf is
+    // Split across two buffers/atlases rather than one: a grounded leaf is
     // drawn from landedAtlas at _landedLeafAlpha (70% opacity) instead of the
     // faint on-tree stipple alpha, so it reads clearly against the grass.
     var liveCount = 0;
@@ -1657,10 +1547,7 @@ class _LifeTreePainter extends CustomPainter {
 
     for (var i = 0; i < leaves.length; i++) {
       final leaf = leaves[i];
-      final fallingLeaf = falling[i];
-      final isGrounded =
-          groundedLeafIndices.contains(i) || landedThisSession.contains(i);
-      final settled = isGrounded && fallingLeaf == null;
+      final settled = groundedLeafIndices.contains(i);
 
       double x;
       double y;
@@ -1671,18 +1558,6 @@ class _LifeTreePainter extends CustomPainter {
         x = at.dx * size.width;
         y = at.dy * size.height;
         angle = restRotations[i];
-      } else if (fallingLeaf != null && fallingLeaf.hasStarted) {
-        final p = fallingLeaf.progress;
-        final t = Curves.easeIn.transform(p);
-        final ground = restPositions[i];
-        final drift =
-            math.sin(p * math.pi * 2.3 + leaf.swayPhase) * 0.010 * (1 - t);
-        x = (leaf.position.dx + (ground.dx - leaf.position.dx) * t + drift) *
-            size.width;
-        y = (leaf.position.dy + (ground.dy - leaf.position.dy) * t) * size.height;
-        angle = leaf.baseAngle +
-            (restRotations[i] - leaf.baseAngle) * t +
-            math.sin(p * 5.5 + leaf.swayPhase) * 0.6 * (1 - t);
       } else {
         // Still on the tree: sways with its pool, breathes with the crown.
         final transform = transforms[leaf.cellIndex];
@@ -1694,11 +1569,10 @@ class _LifeTreePainter extends CustomPainter {
         angle = leaf.baseAngle + transform.roll;
       }
 
-      // Detached leaves (falling or landed) are drawn at a fixed pixel size
-      // matching the background petal field, instead of the tiny stipple
-      // grain they read as while still part of the canopy texture.
-      final detached = settled || (fallingLeaf != null && fallingLeaf.hasStarted);
-      final scale = detached
+      // Grounded leaves are drawn at a fixed pixel size matching the
+      // background petal field, instead of the tiny stipple grain they read as
+      // while still part of the canopy texture.
+      final scale = settled
           ? fallenDiameters[i] / _spriteExtent
           : leaf.size * size.shortestSide * 2 / _spriteExtent;
       final scos = math.cos(angle) * scale;
@@ -1759,8 +1633,8 @@ class _LifeTreePainter extends CustomPainter {
   bool shouldRepaint(covariant _LifeTreePainter oldDelegate) {
     return oldDelegate.time != time ||
         oldDelegate.gusts.length != gusts.length ||
-        oldDelegate.falling.length != falling.length ||
-        oldDelegate.landedThisSession.length != landedThisSession.length ||
+        oldDelegate.groundedLeafIndices.length !=
+            groundedLeafIndices.length ||
         oldDelegate.hoverGlow != hoverGlow ||
         !identical(oldDelegate.background, background) ||
         !identical(oldDelegate.atlas, atlas) ||

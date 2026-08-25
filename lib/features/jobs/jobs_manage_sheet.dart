@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -532,19 +533,23 @@ class _CompanyAssignmentState extends State<_CompanyAssignment> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: widget.filterController,
-          onChanged: (_) => setState(() {}),
-          style: theme.textTheme.bodySmall,
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: 'Search companies to add…',
-            prefixIcon: const Icon(
-              PhosphorIconsRegular.magnifyingGlass,
-              size: 14,
+        // Not under [VimTextScope] like the app's prose fields, so the Caps
+        // Lock mark is opted into by hand here.
+        CapsLockCaretIndicator(
+          child: TextField(
+            controller: widget.filterController,
+            onChanged: (_) => setState(() {}),
+            style: theme.textTheme.bodySmall,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Search companies to add…',
+              prefixIcon: const Icon(
+                PhosphorIconsRegular.magnifyingGlass,
+                size: 14,
+              ),
+              prefixIconConstraints: const BoxConstraints(minWidth: 30),
+              border: const OutlineInputBorder(),
             ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 30),
-            border: const OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 6),
