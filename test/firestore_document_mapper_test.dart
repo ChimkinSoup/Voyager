@@ -215,8 +215,13 @@ void main() {
     expect(restoredEntry.journalId, legacyJournalId);
   });
 
+  // A record the remote has already outranked is adopted whole, including the
+  // absence of a tombstone. Keeping the local `deletedAt` here made a delete a
+  // one-way trapdoor: `softDelete` could set one but no later revision from
+  // anywhere could lift it, so a record restored on one device stayed
+  // invisible on every other one forever.
   test(
-    'mergeJournalFromRemote preserves local tombstone when remote omits deletedAt',
+    'mergeJournalFromRemote lets a newer remote lift a local tombstone',
     () {
       final now = utcNow();
       final deletedAt = now.subtract(const Duration(days: 1));
@@ -238,8 +243,41 @@ void main() {
         local: local,
       );
 
-      expect(merged.deletedAt, deletedAt);
+      expect(merged.deletedAt, isNull);
       expect(merged.name, 'Remote rename');
+    },
+  );
+
+  // The other half of the same rule, and the reason lifting is safe: a remote
+  // copy that loses the version comparison never reaches the deletedAt merge
+  // at all, so a device that hasn't seen the delete yet cannot resurrect it.
+  test(
+    'mergeJournalFromRemote keeps a local tombstone against a stale remote',
+    () {
+      final now = utcNow();
+      final deletedAt = now;
+      final local = Journal(
+        id: 'journal-deleted',
+        name: 'Local name',
+        createdAt: now.subtract(const Duration(days: 2)),
+        updatedAt: deletedAt,
+        version: 4,
+        deletedAt: deletedAt,
+      );
+      final remote = {
+        'name': 'Stale rename',
+        'updatedAt': now.subtract(const Duration(days: 1)).toIso8601String(),
+        'version': 3,
+      };
+
+      final merged = mergeJournalFromRemote(
+        remote,
+        local.id,
+        local: local,
+      );
+
+      expect(merged.deletedAt, deletedAt);
+      expect(merged.name, 'Local name');
     },
   );
 }

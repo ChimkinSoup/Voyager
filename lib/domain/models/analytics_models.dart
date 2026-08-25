@@ -1,7 +1,24 @@
+import 'dart:math' as math;
+
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
+
+/// Distinguishes "argument omitted" from "argument passed as null" in the
+/// `copyWith`s below.
+///
+/// The usual `x ?? this.x` idiom cannot express *clearing* a field: passing
+/// `null` reads as "keep what's there". That made an un-delete impossible —
+/// `softDeleteValue` could set a tombstone but nothing could lift one — and
+/// left a value carrying a stale `intValue` after a tracker changed type. Both
+/// call sites worked around it by hand-rolling a constructor instead, which is
+/// how writes started dropping `version` and reverting on the next pull.
+class _Unset {
+  const _Unset();
+}
+
+const _unset = _Unset();
 
 /// Reserved id for the built-in "Journal Entries" default tracker shown on the
 /// analytics page. It is virtual — synthesised at display time from the user's
@@ -84,11 +101,13 @@ class StatisticTracker extends SoftDeletable {
     return trackingStyle ?? TrackerStyle.independent;
   }
 
+  /// [deletedAt] and [trackingStyle] take [_unset] rather than null as their
+  /// "leave it alone" default, so passing an explicit `null` clears them.
   StatisticTracker copyWith({
     String? name,
     bool? showOnCalendar,
-    DateTime? deletedAt,
-    TrackerStyle? trackingStyle,
+    Object? deletedAt = _unset,
+    Object? trackingStyle = _unset,
     bool? starred,
     int? sortOrder,
     bool bumpVersion = true,
@@ -98,7 +117,9 @@ class StatisticTracker extends SoftDeletable {
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
       version: bumpVersion ? version + 1 : version,
-      deletedAt: deletedAt ?? this.deletedAt,
+      deletedAt: identical(deletedAt, _unset)
+          ? this.deletedAt
+          : deletedAt as DateTime?,
       name: name ?? this.name,
       type: type,
       cadence: cadence,
@@ -109,12 +130,31 @@ class StatisticTracker extends SoftDeletable {
       defaultBool: defaultBool,
       enumOptions: enumOptions,
       defaultEnumOption: defaultEnumOption,
-      trackingStyle: trackingStyle ?? this.trackingStyle,
+      trackingStyle: identical(trackingStyle, _unset)
+          ? this.trackingStyle
+          : trackingStyle as TrackerStyle?,
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       isDefault: isDefault,
     );
   }
+}
+
+/// [raw] confined to [tracker]'s recorded range (`defaultInt`..`integerCap`),
+/// or returned unchanged when the tracker has no limit.
+///
+/// Orders the two bounds rather than trusting them. `num.clamp` *throws* on an
+/// inverted range, and a tracker can hold one: the dialog's "Lower limit" and
+/// "Upper limit" fields were never validated against each other. Rows written
+/// by such a tracker are read during build (the value editor's `Slider`), on
+/// focus loss (the notification popover's entry row) and on save — so an
+/// unordered clamp turns a bad pair of limits into a subtree that throws every
+/// frame rather than a value that reads oddly.
+int clampToTrackerRange(int raw, StatisticTracker tracker) {
+  final cap = tracker.integerCap;
+  if (cap == null) return raw;
+  final lower = tracker.defaultInt;
+  return raw.clamp(math.min(lower, cap), math.max(lower, cap)).toInt();
 }
 
 /// Builds the virtual "Journal Entries" default tracker: a daily boolean stat
@@ -273,11 +313,15 @@ class TrackerValue extends SoftDeletable {
   final bool? boolValue;
   final String? enumValue;
 
+  /// Every nullable field takes [_unset] rather than null as its "leave it
+  /// alone" default, so passing an explicit `null` clears it — which is what
+  /// lifting a tombstone, or dropping a stale reading after a tracker changes
+  /// type, requires.
   TrackerValue copyWith({
-    int? intValue,
-    bool? boolValue,
-    String? enumValue,
-    DateTime? deletedAt,
+    Object? intValue = _unset,
+    Object? boolValue = _unset,
+    Object? enumValue = _unset,
+    Object? deletedAt = _unset,
     bool bumpVersion = true,
   }) {
     return TrackerValue(
@@ -285,12 +329,18 @@ class TrackerValue extends SoftDeletable {
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
       version: bumpVersion ? version + 1 : version,
-      deletedAt: deletedAt ?? this.deletedAt,
+      deletedAt: identical(deletedAt, _unset)
+          ? this.deletedAt
+          : deletedAt as DateTime?,
       trackerId: trackerId,
       periodStart: periodStart,
-      intValue: intValue ?? this.intValue,
-      boolValue: boolValue ?? this.boolValue,
-      enumValue: enumValue ?? this.enumValue,
+      intValue: identical(intValue, _unset) ? this.intValue : intValue as int?,
+      boolValue: identical(boolValue, _unset)
+          ? this.boolValue
+          : boolValue as bool?,
+      enumValue: identical(enumValue, _unset)
+          ? this.enumValue
+          : enumValue as String?,
     );
   }
 }

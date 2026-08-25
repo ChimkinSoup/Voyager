@@ -541,7 +541,10 @@ void main() {
       expect(merged.intValue, isNull);
     });
 
-    test('a local tombstone survives a remote payload that omits it', () {
+    // A remote revision that outranks the local one is adopted whole, the
+    // absence of a tombstone included — otherwise a delete is a one-way
+    // trapdoor and a note restored on another device never comes back here.
+    test('a newer remote payload lifts a local tombstone', () {
       final local = PinnedNote(
         id: 'note-1',
         text: 'Call the dentist',
@@ -556,6 +559,32 @@ void main() {
         'createdAt': now.toIso8601String(),
         'updatedAt': now.add(const Duration(minutes: 1)).toIso8601String(),
         'version': 3,
+      };
+
+      expect(
+        mergePinnedNoteFromRemote(remote, 'note-1', local: local).deletedAt,
+        isNull,
+      );
+    });
+
+    // And a remote revision that does *not* outrank it never reaches the
+    // deletedAt merge, so a device still holding the pre-delete copy cannot
+    // resurrect the note.
+    test('a local tombstone survives an older remote payload', () {
+      final local = PinnedNote(
+        id: 'note-1',
+        text: 'Call the dentist',
+        createdAt: now,
+        updatedAt: now,
+        version: 3,
+        deletedAt: now,
+      );
+      final remote = {
+        'id': 'note-1',
+        'text': 'Call the dentist',
+        'createdAt': now.toIso8601String(),
+        'updatedAt': now.subtract(const Duration(minutes: 1)).toIso8601String(),
+        'version': 2,
       };
 
       expect(

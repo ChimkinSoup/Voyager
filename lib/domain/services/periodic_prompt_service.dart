@@ -1,5 +1,22 @@
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+
+/// The week start every *stored* tracker value is filed under, independent of
+/// the `weekStartsOnMonday` display setting.
+///
+/// A weekly value's row id and `periodStart` are both derived from its week
+/// start (see `trackerValueId`), and every lookup matches on that exact date.
+/// Letting a per-device display preference move the anchor therefore
+/// repartitions stored data: flipping the setting made every historical
+/// weekly value vanish from the heatmap, the sparkline and the detail
+/// calendar at once, and re-entering a week wrote a *second* row beside the
+/// first rather than updating it.
+///
+/// So storage pins to Monday and the setting decides only which column a
+/// calendar draws first — the same split [WorkoutPlan.dayIndexForDate] already
+/// makes for planner day slots.
+const bool kTrackerStorageWeekStartsMonday = true;
 
 class PeriodicPromptService {
   DateTime periodStartFor(
@@ -15,17 +32,31 @@ class PeriodicPromptService {
         final startOffset = weekStartsMonday
             ? weekday - DateTime.monday
             : weekday % 7;
-        return DateTime(
-          date.year,
-          date.month,
-          date.day,
-        ).subtract(Duration(days: startOffset));
+        // Calendar days, not elapsed time — a Duration-based subtraction
+        // lands at 23:00 the previous day across a DST spring-forward, and
+        // every downstream y/m/d read then floors the week start onto the
+        // wrong date. See [addCalendarDays].
+        return addCalendarDays(
+          DateTime(date.year, date.month, date.day),
+          -startOffset,
+        );
       case TrackerCadence.monthly:
         return DateTime(date.year, date.month, 1);
       case TrackerCadence.yearly:
         return DateTime(date.year, 1, 1);
     }
   }
+
+  /// [periodStartFor] with the storage anchor applied — the form every read
+  /// or write of a `TrackerValue` must go through, so the heatmap, the
+  /// sparkline and the detail calendars all address the same row for a given
+  /// week. See [kTrackerStorageWeekStartsMonday].
+  DateTime trackerPeriodStartFor(DateTime date, TrackerCadence cadence) =>
+      periodStartFor(
+        date,
+        cadence,
+        weekStartsMonday: kTrackerStorageWeekStartsMonday,
+      );
 
   bool isDue({
     required TrackerCadence cadence,
@@ -82,10 +113,14 @@ class PeriodicPromptService {
     bool weekStartsMonday = true,
   }) {
     switch (cadence) {
+      // Calendar days for the same reason as [periodStartFor]'s weekly
+      // branch: this walks forward from one period start to the next, so a
+      // 24h-per-day Duration drifts to 23:00 across a DST transition and
+      // floors [missedPeriods] onto the day before.
       case TrackerCadence.daily:
-        return start.add(const Duration(days: 1));
+        return addCalendarDays(start, 1);
       case TrackerCadence.weekly:
-        return start.add(const Duration(days: 7));
+        return addCalendarDays(start, 7);
       case TrackerCadence.monthly:
         return DateTime(start.year, start.month + 1, 1);
       case TrackerCadence.yearly:

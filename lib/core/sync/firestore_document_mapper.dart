@@ -97,16 +97,30 @@ bool remoteVersionWins({
   return remoteUpdatedAtWins(remoteUpdated, localUpdated);
 }
 
-/// Keeps a local soft-delete when remote payloads omit [deletedAt].
+/// Resolves [deletedAt] for a record whose remote copy is being adopted.
+///
+/// [remoteWins] is the caller's document-level verdict: it is only true once
+/// the remote record has already outranked the local one on version (see
+/// `remoteVersionWins`). When it has, the remote payload is authoritative for
+/// *every* field, including the absence of a tombstone — so a record restored
+/// on another device un-deletes here.
+///
+/// This previously kept the local tombstone whenever the remote payload
+/// omitted one, which made an un-delete impossible to propagate in either
+/// direction: `softDelete` could set a tombstone but no newer revision could
+/// ever lift it, so a value re-entered on one device stayed invisible on the
+/// others forever.
+///
+/// A record that only *predates* the local one never reaches here with
+/// [remoteWins] true, so a stale remote copy still cannot resurrect something
+/// this device deleted.
 DateTime? mergeDeletedAtFromRemote(
   Map<String, dynamic> data,
   DateTime? localDeletedAt, {
   bool remoteWins = true,
 }) {
   if (!remoteWins) return localDeletedAt;
-  final remoteDeleted = parseFirestoreDate(data['deletedAt']);
-  if (remoteDeleted != null) return remoteDeleted;
-  return localDeletedAt;
+  return parseFirestoreDate(data['deletedAt']);
 }
 
 /// CRDT-resolved text fields that bypass document-level LWW gates.

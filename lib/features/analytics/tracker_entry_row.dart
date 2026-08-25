@@ -88,18 +88,25 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     if (raw == null) return;
     final val = _clampInt(raw);
     final now = utcNow();
-    await ref
-        .read(trackerRepositoryProvider)
-        .upsertValue(
-          TrackerValue(
-            id: existing?.id ?? trackerValueId(widget.tracker.id, date),
-            trackerId: widget.tracker.id,
-            periodStart: date,
-            intValue: val,
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
-          ),
-        );
+    final repo = ref.read(trackerRepositoryProvider);
+    final id = existing?.id ?? trackerValueId(widget.tracker.id, date);
+    // Read back from disk rather than trusting [existing]: `listValues`
+    // filters tombstones out, so a period that was deleted arrives here with
+    // a null `existing` while the row survives at a higher version. See
+    // [_saveValue].
+    final onDisk = await repo.getValue(id);
+    await repo.upsertValue(
+      TrackerValue(
+        id: id,
+        trackerId: widget.tracker.id,
+        periodStart: date,
+        intValue: val,
+        createdAt: onDisk?.createdAt ?? existing?.createdAt ?? now,
+        updatedAt: now,
+        version: (onDisk?.version ?? 0) + 1,
+        deletedAt: null,
+      ),
+    );
     ref.invalidate(trackerValuesProvider(widget.tracker.id));
     ref.invalidate(pendingStatEntriesProvider);
   }
@@ -133,11 +140,10 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     }
   }
 
-  int _clampInt(int raw) {
-    final cap = widget.tracker.integerCap;
-    if (cap == null) return raw;
-    return raw.clamp(widget.tracker.defaultInt, cap);
-  }
+  /// Ordered, not trusted — a tracker can carry a lower limit above its upper
+  /// one and `num.clamp` throws on an inverted range, which this reaches from
+  /// [_handleIntFocusChange] on plain focus loss. See [clampToTrackerRange].
+  int _clampInt(int raw) => clampToTrackerRange(raw, widget.tracker);
 
   @override
   Widget build(BuildContext context) {
@@ -367,20 +373,31 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     String? enumValue,
   }) async {
     final now = utcNow();
-    await ref
-        .read(trackerRepositoryProvider)
-        .upsertValue(
-          TrackerValue(
-            id: current?.id ?? trackerValueId(widget.tracker.id, widget.date),
-            trackerId: widget.tracker.id,
-            periodStart: widget.date,
-            intValue: intValue,
-            boolValue: boolValue,
-            enumValue: enumValue,
-            createdAt: current?.createdAt ?? now,
-            updatedAt: now,
-          ),
-        );
+    final repo = ref.read(trackerRepositoryProvider);
+    final id = current?.id ?? trackerValueId(widget.tracker.id, widget.date);
+    // Read back from disk, not from [current]: `listValues` filters
+    // soft-deleted rows out, so re-entering a value on a deleted period sees
+    // a null `current` even though the row still exists at a higher version.
+    // `trackerValueId` is deterministic, so this writes that *same* row — at
+    // version 0, which let the remote tombstone outrank the fresh local value
+    // and delete it again on the next pull with nothing to explain why.
+    final onDisk = await repo.getValue(id);
+    await repo.upsertValue(
+      TrackerValue(
+        id: id,
+        trackerId: widget.tracker.id,
+        periodStart: widget.date,
+        intValue: intValue,
+        boolValue: boolValue,
+        enumValue: enumValue,
+        createdAt: onDisk?.createdAt ?? current?.createdAt ?? now,
+        updatedAt: now,
+        // A write is a new revision of whatever is already there.
+        version: (onDisk?.version ?? 0) + 1,
+        // Re-entering a value on a deleted period lifts the tombstone.
+        deletedAt: null,
+      ),
+    );
     ref.invalidate(trackerValuesProvider(widget.tracker.id));
     ref.invalidate(pendingStatEntriesProvider);
     if (_dirty) {

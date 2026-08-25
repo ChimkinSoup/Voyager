@@ -1261,6 +1261,26 @@ final trackerValuesProvider = FutureProvider.family((
   return ref.watch(trackerRepositoryProvider).listValues(trackerId);
 });
 
+/// App-scoped invalidator for one tracker's cached values, safe to call after
+/// the widget that captured it has been disposed.
+///
+/// The analytics page's editor callbacks fire from the popover's completion,
+/// which can outlive the row that opened it — the shell branch changes, the
+/// tracker is deleted from another surface, the list rebuilds the row out of
+/// existence — and a `ConsumerWidget`'s [WidgetRef] is its element, so
+/// invalidating through one there throws on a deactivated element.
+///
+/// It also settles an inconsistency: the sparkline paths invalidated only
+/// [trackerValuesProvider] while the heatmap paths also invalidated
+/// [pendingStatEntriesProvider]. Harmless, since the latter watches the
+/// former, but a difference with no reason behind it.
+final trackerCacheInvalidatorProvider = Provider<void Function(String)>((ref) {
+  return (trackerId) {
+    ref.invalidate(trackerValuesProvider(trackerId));
+    ref.invalidate(pendingStatEntriesProvider);
+  };
+});
+
 /// Number of daily trackers that have no entry recorded for today's local date.
 /// Feeds the notification bell's semi-important state.
 final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
