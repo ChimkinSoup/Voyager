@@ -131,6 +131,14 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   final List<_SolutionEditors> _solutionEditors = [];
   late LeetCodeDifficulty _difficulty;
   String? _titleSlug;
+
+  /// The name that was in the title field when [_titleSlug] was adopted.
+  ///
+  /// A slug says which LeetCode question this record *is*, so it only keeps
+  /// saying that while the name it arrived with is the name being saved.
+  /// Renaming the entry to a different problem leaves the old slug describing
+  /// somebody else's question — see [_effectiveTitleSlug].
+  String? _slugTitle;
   String? _questionId;
   bool _saving = false;
   bool _retracking = false;
@@ -235,7 +243,13 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         existing?.difficulty ??
         prefill?.difficulty ??
         LeetCodeDifficulty.medium;
-    _titleSlug = existing?.titleSlug ?? prefill?.titleSlug;
+    if (existing?.titleSlug != null) {
+      _titleSlug = existing!.titleSlug;
+      _slugTitle = existing.title;
+    } else if (prefill?.titleSlug != null) {
+      _titleSlug = prefill!.titleSlug;
+      _slugTitle = prefill.title;
+    }
     _questionId = existing?.questionId ?? prefill?.questionId;
   }
 
@@ -259,6 +273,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     ]);
     _difficulty = draft.difficulty;
     _titleSlug = draft.titleSlug;
+    _slugTitle = draft.title;
     _questionId = draft.questionId;
   }
 
@@ -317,6 +332,25 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     _draftTimer = Timer(_draftDebounce, () => unawaited(_flushDraft()));
   }
 
+  /// The slug to file with this record, or null once the name has moved off
+  /// the question the slug came from.
+  ///
+  /// Identity is decided by the stored slug when there is one, so a lookup's
+  /// slug left behind on a renamed entry would file it as the same question as
+  /// whatever else carries that slug — a new problem typed over a prefilled
+  /// name would read as a duplicate of the problem it was prefilled from.
+  /// Dropping it falls identity back to the name the user actually typed.
+  String? get _effectiveTitleSlug {
+    final slug = _titleSlug;
+    if (slug == null || slug.isEmpty) return null;
+    final source = _slugTitle;
+    if (source == null) return null;
+    return source.trim().toLowerCase() ==
+            _titleController.text.trim().toLowerCase()
+        ? slug
+        : null;
+  }
+
   /// The whole form as it stands, ready to persist or to compare.
   LeetCodeTrackDraft _snapshot() => LeetCodeTrackDraft(
     title: _titleController.text,
@@ -325,7 +359,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     description: _descriptionController.text,
     examples: [for (final c in _exampleControllers) c.text],
     difficulty: _difficulty,
-    titleSlug: _titleSlug,
+    titleSlug: _effectiveTitleSlug,
     questionId: _questionId,
     solutions: [for (final e in _solutionEditors) e.readDraft()],
     savedAt: utcNow(),
@@ -605,6 +639,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       _tagsController.text = _tagFieldText(detail.topicTags);
       _difficulty = detail.difficulty;
       _titleSlug = detail.titleSlug;
+      _slugTitle = _titleController.text;
       _questionId = detail.questionId.isEmpty
           ? picked.questionId
           : detail.questionId;
@@ -752,7 +787,12 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       _questionFrontendIdController.text = detail.questionFrontendId;
       _tagsController.text = _tagFieldText(detail.topicTags);
       _difficulty = detail.difficulty;
-      if (detail.titleSlug.isNotEmpty) _titleSlug = detail.titleSlug;
+      // On an edit the name stays as typed and the lookup was made *by* it,
+      // so the slug belongs to that name rather than to the hit's own.
+      if (detail.titleSlug.isNotEmpty) {
+        _titleSlug = detail.titleSlug;
+        _slugTitle = _titleController.text;
+      }
       if (detail.questionId.isNotEmpty) _questionId = detail.questionId;
       // A null description means the lookup came back with no body text at all,
       // not that the problem ships none — so the statement and examples already
@@ -820,7 +860,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       questionFrontendId: _questionFrontendIdController.text.trim().isEmpty
           ? null
           : _questionFrontendIdController.text.trim(),
-      titleSlug: _titleSlug,
+      titleSlug: _effectiveTitleSlug,
       difficulty: _difficulty,
       tags: _parsedTags,
       description: _descriptionController.text.trim().isEmpty

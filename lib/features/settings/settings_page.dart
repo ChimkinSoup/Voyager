@@ -226,6 +226,16 @@ class SettingsPage extends ConsumerWidget {
             value: settings.vimModeEnabled,
             onChanged: (v) => _save(ref, settings.copyWith(vimModeEnabled: v)),
           ),
+          SwitchListTile(
+            title: const Text('Caps Lock indicator'),
+            subtitle: const Text(
+              'Shows a mark next to the caret while Caps Lock is on and a text '
+              'box has focus. Windows and Linux only — macOS draws its own',
+            ),
+            value: settings.capsLockIndicatorEnabled,
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(capsLockIndicatorEnabled: v)),
+          ),
           ListTile(
             title: const Text('Text snippets'),
             subtitle: Text(

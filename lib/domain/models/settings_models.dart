@@ -42,6 +42,7 @@ class AppSettings {
     this.hideCompletedTasks = false,
     this.vimModeEnabled = false,
     this.snippetsEnabled = true,
+    this.capsLockIndicatorEnabled = true,
     this.snippetExpandKey = SnippetExpandKey.tab,
     this.snippets = const [],
     this.deviceId,
@@ -209,6 +210,15 @@ class AppSettings {
   /// Deliberately independent of [vimModeEnabled] — snippets run in the same
   /// fields Vim would suit, whether or not Vim itself is switched on.
   final bool snippetsEnabled;
+
+  /// Master switch for the Caps Lock caret mark. On by default: it costs
+  /// nothing until Caps Lock is actually on, and the one moment it matters —
+  /// typing a password in caps without noticing — is the moment nobody would
+  /// have thought to switch it on for.
+  ///
+  /// Windows and Linux only whatever this says; macOS draws its own glyph and a
+  /// soft keyboard has no lock key. See `CapsLockIndicatorScope`.
+  final bool capsLockIndicatorEnabled;
 
   /// Which key expands a non-auto snippet. Global rather than per-snippet.
   final SnippetExpandKey snippetExpandKey;
@@ -412,6 +422,7 @@ class AppSettings {
     bool? hideCompletedTasks,
     bool? vimModeEnabled,
     bool? snippetsEnabled,
+    bool? capsLockIndicatorEnabled,
     SnippetExpandKey? snippetExpandKey,
     List<Snippet>? snippets,
     bool? timelineModeYearZero,
@@ -574,6 +585,8 @@ class AppSettings {
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
       snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+      capsLockIndicatorEnabled:
+          capsLockIndicatorEnabled ?? this.capsLockIndicatorEnabled,
       snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
       snippets: snippets ?? this.snippets,
       deviceId: deviceId ?? this.deviceId,

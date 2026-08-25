@@ -10,7 +10,7 @@ enum LifeStat {
   sleepTime,
   tasksConquered,
   lifetimeMood,
-  milesTraveled,
+  kmTraveled,
   fullMoons,
 }
 
@@ -106,7 +106,6 @@ class WashCell {
     required this.wobbleAmount,
     required this.alpha,
     required this.shedOrder,
-    required this.angleRank,
     required this.swayPhase,
   });
 
@@ -130,11 +129,6 @@ class WashCell {
   /// out. Uniform over the crown, so the canopy thins evenly rather than
   /// retreating from one side.
   final double shedOrder;
-
-  /// Position around the crown, 0-1, matching the order the opening fall
-  /// sweeps in. Decides *when* during that sweep this pool goes, so the
-  /// thinning travels with the falling petals instead of appearing at once.
-  final double angleRank;
 
   final double swayPhase;
 }
@@ -239,8 +233,8 @@ class LifeTreeGeometry {
   /// index is stable.
   final List<LeafDesign> leafDesigns;
 
-  /// Leaves ordered by angle around the canopy center, for the opening
-  /// animation's "evenly spread out across the tree" fall selection.
+  /// Leaves ordered by angle around the canopy center, so the leaves picked
+  /// for the ground come out "evenly spread out across the tree".
   List<int> get leafIndicesByAngle {
     final indices = List<int>.generate(leaves.length, (i) => i);
     indices.sort((a, b) {
@@ -521,14 +515,6 @@ LifeTreeGeometry generateLifeTreeGeometry() {
         0.045 * math.sin(8 * angle + envelopePhases[2]);
   }
 
-  double angleRankOf(Offset p) {
-    final a = math.atan2(
-      (p.dy - _crownCenter.dy) / _crownRadiusY,
-      (p.dx - _crownCenter.dx) / _crownRadiusX,
-    );
-    return (a + math.pi) / (math.pi * 2);
-  }
-
   final cells = <WashCell>[];
 
   // Base pools: large, pale, and spread over the whole envelope so their union
@@ -561,7 +547,6 @@ LifeTreeGeometry generateLifeTreeGeometry() {
         // over them barely changes the crown and the shedding stops reading.
         alpha: 0.055 + decor.nextDouble() * 0.035,
         shedOrder: 0.50 + decor.nextDouble() * 0.50,
-        angleRank: angleRankOf(center),
         swayPhase: decor.nextDouble() * 1.1,
       ),
     );
@@ -601,7 +586,6 @@ LifeTreeGeometry generateLifeTreeGeometry() {
             ? 0.040 + rand.nextDouble() * 0.025
             : 0.035 + rand.nextDouble() * 0.025,
         shedOrder: rand.nextDouble(),
-        angleRank: angleRankOf(center),
         swayPhase: rand.nextDouble() * 1.1,
       ),
     );
@@ -764,7 +748,6 @@ LifeTreeGeometry generateLifeTreeGeometry() {
           wobbleAmount: cell.wobbleAmount,
           alpha: cell.alpha,
           shedOrder: cell.shedOrder,
-          angleRank: cell.angleRank,
           swayPhase: cell.swayPhase,
         ),
     ],

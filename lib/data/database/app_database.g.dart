@@ -7306,6 +7306,21 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _capsLockIndicatorEnabledMeta =
+      const VerificationMeta('capsLockIndicatorEnabled');
+  @override
+  late final GeneratedColumn<bool> capsLockIndicatorEnabled =
+      GeneratedColumn<bool>(
+        'caps_lock_indicator_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("caps_lock_indicator_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
   static const VerificationMeta _snippetExpandKeyMeta = const VerificationMeta(
     'snippetExpandKey',
   );
@@ -8587,6 +8602,7 @@ class $SettingsTableTable extends SettingsTable
     hideCompletedTasks,
     vimModeEnabled,
     snippetsEnabled,
+    capsLockIndicatorEnabled,
     snippetExpandKey,
     snippetsJson,
     deviceId,
@@ -8897,6 +8913,15 @@ class $SettingsTableTable extends SettingsTable
         snippetsEnabled.isAcceptableOrUnknown(
           data['snippets_enabled']!,
           _snippetsEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('caps_lock_indicator_enabled')) {
+      context.handle(
+        _capsLockIndicatorEnabledMeta,
+        capsLockIndicatorEnabled.isAcceptableOrUnknown(
+          data['caps_lock_indicator_enabled']!,
+          _capsLockIndicatorEnabledMeta,
         ),
       );
     }
@@ -9885,6 +9910,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}snippets_enabled'],
       )!,
+      capsLockIndicatorEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}caps_lock_indicator_enabled'],
+      )!,
       snippetExpandKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}snippet_expand_key'],
@@ -10317,6 +10346,7 @@ class SettingsTableData extends DataClass
   final bool hideCompletedTasks;
   final bool vimModeEnabled;
   final bool snippetsEnabled;
+  final bool capsLockIndicatorEnabled;
 
   /// [SnippetExpandKey] name — 'tab' or 'space'.
   final String snippetExpandKey;
@@ -10482,6 +10512,7 @@ class SettingsTableData extends DataClass
     required this.hideCompletedTasks,
     required this.vimModeEnabled,
     required this.snippetsEnabled,
+    required this.capsLockIndicatorEnabled,
     required this.snippetExpandKey,
     this.snippetsJson,
     this.deviceId,
@@ -10624,6 +10655,9 @@ class SettingsTableData extends DataClass
     map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks);
     map['vim_mode_enabled'] = Variable<bool>(vimModeEnabled);
     map['snippets_enabled'] = Variable<bool>(snippetsEnabled);
+    map['caps_lock_indicator_enabled'] = Variable<bool>(
+      capsLockIndicatorEnabled,
+    );
     map['snippet_expand_key'] = Variable<String>(snippetExpandKey);
     if (!nullToAbsent || snippetsJson != null) {
       map['snippets_json'] = Variable<String>(snippetsJson);
@@ -10879,6 +10913,7 @@ class SettingsTableData extends DataClass
       hideCompletedTasks: Value(hideCompletedTasks),
       vimModeEnabled: Value(vimModeEnabled),
       snippetsEnabled: Value(snippetsEnabled),
+      capsLockIndicatorEnabled: Value(capsLockIndicatorEnabled),
       snippetExpandKey: Value(snippetExpandKey),
       snippetsJson: snippetsJson == null && nullToAbsent
           ? const Value.absent()
@@ -11084,6 +11119,9 @@ class SettingsTableData extends DataClass
       hideCompletedTasks: serializer.fromJson<bool>(json['hideCompletedTasks']),
       vimModeEnabled: serializer.fromJson<bool>(json['vimModeEnabled']),
       snippetsEnabled: serializer.fromJson<bool>(json['snippetsEnabled']),
+      capsLockIndicatorEnabled: serializer.fromJson<bool>(
+        json['capsLockIndicatorEnabled'],
+      ),
       snippetExpandKey: serializer.fromJson<String>(json['snippetExpandKey']),
       snippetsJson: serializer.fromJson<String?>(json['snippetsJson']),
       deviceId: serializer.fromJson<String?>(json['deviceId']),
@@ -11356,6 +11394,9 @@ class SettingsTableData extends DataClass
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
       'vimModeEnabled': serializer.toJson<bool>(vimModeEnabled),
       'snippetsEnabled': serializer.toJson<bool>(snippetsEnabled),
+      'capsLockIndicatorEnabled': serializer.toJson<bool>(
+        capsLockIndicatorEnabled,
+      ),
       'snippetExpandKey': serializer.toJson<String>(snippetExpandKey),
       'snippetsJson': serializer.toJson<String?>(snippetsJson),
       'deviceId': serializer.toJson<String?>(deviceId),
@@ -11558,6 +11599,7 @@ class SettingsTableData extends DataClass
     bool? hideCompletedTasks,
     bool? vimModeEnabled,
     bool? snippetsEnabled,
+    bool? capsLockIndicatorEnabled,
     String? snippetExpandKey,
     Value<String?> snippetsJson = const Value.absent(),
     Value<String?> deviceId = const Value.absent(),
@@ -11690,6 +11732,8 @@ class SettingsTableData extends DataClass
     hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
     vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
     snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+    capsLockIndicatorEnabled:
+        capsLockIndicatorEnabled ?? this.capsLockIndicatorEnabled,
     snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
     snippetsJson: snippetsJson.present ? snippetsJson.value : this.snippetsJson,
     deviceId: deviceId.present ? deviceId.value : this.deviceId,
@@ -11938,6 +11982,9 @@ class SettingsTableData extends DataClass
       snippetsEnabled: data.snippetsEnabled.present
           ? data.snippetsEnabled.value
           : this.snippetsEnabled,
+      capsLockIndicatorEnabled: data.capsLockIndicatorEnabled.present
+          ? data.capsLockIndicatorEnabled.value
+          : this.capsLockIndicatorEnabled,
       snippetExpandKey: data.snippetExpandKey.present
           ? data.snippetExpandKey.value
           : this.snippetExpandKey,
@@ -12270,6 +12317,7 @@ class SettingsTableData extends DataClass
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
           ..write('snippetsEnabled: $snippetsEnabled, ')
+          ..write('capsLockIndicatorEnabled: $capsLockIndicatorEnabled, ')
           ..write('snippetExpandKey: $snippetExpandKey, ')
           ..write('snippetsJson: $snippetsJson, ')
           ..write('deviceId: $deviceId, ')
@@ -12422,6 +12470,7 @@ class SettingsTableData extends DataClass
     hideCompletedTasks,
     vimModeEnabled,
     snippetsEnabled,
+    capsLockIndicatorEnabled,
     snippetExpandKey,
     snippetsJson,
     deviceId,
@@ -12552,6 +12601,7 @@ class SettingsTableData extends DataClass
           other.hideCompletedTasks == this.hideCompletedTasks &&
           other.vimModeEnabled == this.vimModeEnabled &&
           other.snippetsEnabled == this.snippetsEnabled &&
+          other.capsLockIndicatorEnabled == this.capsLockIndicatorEnabled &&
           other.snippetExpandKey == this.snippetExpandKey &&
           other.snippetsJson == this.snippetsJson &&
           other.deviceId == this.deviceId &&
@@ -12697,6 +12747,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> hideCompletedTasks;
   final Value<bool> vimModeEnabled;
   final Value<bool> snippetsEnabled;
+  final Value<bool> capsLockIndicatorEnabled;
   final Value<String> snippetExpandKey;
   final Value<String?> snippetsJson;
   final Value<String?> deviceId;
@@ -12822,6 +12873,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.hideCompletedTasks = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
     this.snippetsEnabled = const Value.absent(),
+    this.capsLockIndicatorEnabled = const Value.absent(),
     this.snippetExpandKey = const Value.absent(),
     this.snippetsJson = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -12948,6 +13000,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.hideCompletedTasks = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
     this.snippetsEnabled = const Value.absent(),
+    this.capsLockIndicatorEnabled = const Value.absent(),
     this.snippetExpandKey = const Value.absent(),
     this.snippetsJson = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -13074,6 +13127,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? hideCompletedTasks,
     Expression<bool>? vimModeEnabled,
     Expression<bool>? snippetsEnabled,
+    Expression<bool>? capsLockIndicatorEnabled,
     Expression<String>? snippetExpandKey,
     Expression<String>? snippetsJson,
     Expression<String>? deviceId,
@@ -13210,6 +13264,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'hide_completed_tasks': hideCompletedTasks,
       if (vimModeEnabled != null) 'vim_mode_enabled': vimModeEnabled,
       if (snippetsEnabled != null) 'snippets_enabled': snippetsEnabled,
+      if (capsLockIndicatorEnabled != null)
+        'caps_lock_indicator_enabled': capsLockIndicatorEnabled,
       if (snippetExpandKey != null) 'snippet_expand_key': snippetExpandKey,
       if (snippetsJson != null) 'snippets_json': snippetsJson,
       if (deviceId != null) 'device_id': deviceId,
@@ -13409,6 +13465,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? hideCompletedTasks,
     Value<bool>? vimModeEnabled,
     Value<bool>? snippetsEnabled,
+    Value<bool>? capsLockIndicatorEnabled,
     Value<String>? snippetExpandKey,
     Value<String?>? snippetsJson,
     Value<String?>? deviceId,
@@ -13540,6 +13597,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
       snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+      capsLockIndicatorEnabled:
+          capsLockIndicatorEnabled ?? this.capsLockIndicatorEnabled,
       snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
       snippetsJson: snippetsJson ?? this.snippetsJson,
       deviceId: deviceId ?? this.deviceId,
@@ -13783,6 +13842,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (snippetsEnabled.present) {
       map['snippets_enabled'] = Variable<bool>(snippetsEnabled.value);
+    }
+    if (capsLockIndicatorEnabled.present) {
+      map['caps_lock_indicator_enabled'] = Variable<bool>(
+        capsLockIndicatorEnabled.value,
+      );
     }
     if (snippetExpandKey.present) {
       map['snippet_expand_key'] = Variable<String>(snippetExpandKey.value);
@@ -14228,6 +14292,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
           ..write('snippetsEnabled: $snippetsEnabled, ')
+          ..write('capsLockIndicatorEnabled: $capsLockIndicatorEnabled, ')
           ..write('snippetExpandKey: $snippetExpandKey, ')
           ..write('snippetsJson: $snippetsJson, ')
           ..write('deviceId: $deviceId, ')
@@ -15410,12 +15475,28 @@ class $PendingUploadsTableTable extends PendingUploadsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _crdtOverwriteMeta = const VerificationMeta(
+    'crdtOverwrite',
+  );
+  @override
+  late final GeneratedColumn<bool> crdtOverwrite = GeneratedColumn<bool>(
+    'crdt_overwrite',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("crdt_overwrite" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     documentId,
     collectionName,
     addedAt,
     failureReason,
+    crdtOverwrite,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -15463,6 +15544,15 @@ class $PendingUploadsTableTable extends PendingUploadsTable
         ),
       );
     }
+    if (data.containsKey('crdt_overwrite')) {
+      context.handle(
+        _crdtOverwriteMeta,
+        crdtOverwrite.isAcceptableOrUnknown(
+          data['crdt_overwrite']!,
+          _crdtOverwriteMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -15488,6 +15578,10 @@ class $PendingUploadsTableTable extends PendingUploadsTable
         DriftSqlType.string,
         data['${effectivePrefix}failure_reason'],
       ),
+      crdtOverwrite: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}crdt_overwrite'],
+      )!,
     );
   }
 
@@ -15510,11 +15604,25 @@ class PendingUploadData extends DataClass
   /// and the drain skips it so one rejected document can't stall the queue
   /// behind it.
   final String? failureReason;
+
+  /// Marks a row that stands for a wholesale CRDT text overwrite rather than an
+  /// ordinary re-upload.
+  ///
+  /// The Search popup rewrites a body without an editing session, so publishing
+  /// it means wiping the document's remote operation log and re-seeding it —
+  /// and that can only be done against a reachable server, since Firestore
+  /// answers both the wipe and the log listing from the local cache while
+  /// offline. When the wipe can't be proven, the publish is deferred here
+  /// instead of being attempted on top of a log this device cannot see; the
+  /// drain replays it through
+  /// [RemoteSyncService.forceOverwriteJournalEntryText].
+  final bool crdtOverwrite;
   const PendingUploadData({
     required this.documentId,
     required this.collectionName,
     required this.addedAt,
     this.failureReason,
+    required this.crdtOverwrite,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -15525,6 +15633,7 @@ class PendingUploadData extends DataClass
     if (!nullToAbsent || failureReason != null) {
       map['failure_reason'] = Variable<String>(failureReason);
     }
+    map['crdt_overwrite'] = Variable<bool>(crdtOverwrite);
     return map;
   }
 
@@ -15536,6 +15645,7 @@ class PendingUploadData extends DataClass
       failureReason: failureReason == null && nullToAbsent
           ? const Value.absent()
           : Value(failureReason),
+      crdtOverwrite: Value(crdtOverwrite),
     );
   }
 
@@ -15549,6 +15659,7 @@ class PendingUploadData extends DataClass
       collectionName: serializer.fromJson<String>(json['collectionName']),
       addedAt: serializer.fromJson<DateTime>(json['addedAt']),
       failureReason: serializer.fromJson<String?>(json['failureReason']),
+      crdtOverwrite: serializer.fromJson<bool>(json['crdtOverwrite']),
     );
   }
   @override
@@ -15559,6 +15670,7 @@ class PendingUploadData extends DataClass
       'collectionName': serializer.toJson<String>(collectionName),
       'addedAt': serializer.toJson<DateTime>(addedAt),
       'failureReason': serializer.toJson<String?>(failureReason),
+      'crdtOverwrite': serializer.toJson<bool>(crdtOverwrite),
     };
   }
 
@@ -15567,6 +15679,7 @@ class PendingUploadData extends DataClass
     String? collectionName,
     DateTime? addedAt,
     Value<String?> failureReason = const Value.absent(),
+    bool? crdtOverwrite,
   }) => PendingUploadData(
     documentId: documentId ?? this.documentId,
     collectionName: collectionName ?? this.collectionName,
@@ -15574,6 +15687,7 @@ class PendingUploadData extends DataClass
     failureReason: failureReason.present
         ? failureReason.value
         : this.failureReason,
+    crdtOverwrite: crdtOverwrite ?? this.crdtOverwrite,
   );
   PendingUploadData copyWithCompanion(PendingUploadsTableCompanion data) {
     return PendingUploadData(
@@ -15587,6 +15701,9 @@ class PendingUploadData extends DataClass
       failureReason: data.failureReason.present
           ? data.failureReason.value
           : this.failureReason,
+      crdtOverwrite: data.crdtOverwrite.present
+          ? data.crdtOverwrite.value
+          : this.crdtOverwrite,
     );
   }
 
@@ -15596,14 +15713,20 @@ class PendingUploadData extends DataClass
           ..write('documentId: $documentId, ')
           ..write('collectionName: $collectionName, ')
           ..write('addedAt: $addedAt, ')
-          ..write('failureReason: $failureReason')
+          ..write('failureReason: $failureReason, ')
+          ..write('crdtOverwrite: $crdtOverwrite')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(documentId, collectionName, addedAt, failureReason);
+  int get hashCode => Object.hash(
+    documentId,
+    collectionName,
+    addedAt,
+    failureReason,
+    crdtOverwrite,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -15611,7 +15734,8 @@ class PendingUploadData extends DataClass
           other.documentId == this.documentId &&
           other.collectionName == this.collectionName &&
           other.addedAt == this.addedAt &&
-          other.failureReason == this.failureReason);
+          other.failureReason == this.failureReason &&
+          other.crdtOverwrite == this.crdtOverwrite);
 }
 
 class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
@@ -15619,12 +15743,14 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
   final Value<String> collectionName;
   final Value<DateTime> addedAt;
   final Value<String?> failureReason;
+  final Value<bool> crdtOverwrite;
   final Value<int> rowid;
   const PendingUploadsTableCompanion({
     this.documentId = const Value.absent(),
     this.collectionName = const Value.absent(),
     this.addedAt = const Value.absent(),
     this.failureReason = const Value.absent(),
+    this.crdtOverwrite = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PendingUploadsTableCompanion.insert({
@@ -15632,6 +15758,7 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
     required String collectionName,
     this.addedAt = const Value.absent(),
     this.failureReason = const Value.absent(),
+    this.crdtOverwrite = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : documentId = Value(documentId),
        collectionName = Value(collectionName);
@@ -15640,6 +15767,7 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
     Expression<String>? collectionName,
     Expression<DateTime>? addedAt,
     Expression<String>? failureReason,
+    Expression<bool>? crdtOverwrite,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -15647,6 +15775,7 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
       if (collectionName != null) 'collection_name': collectionName,
       if (addedAt != null) 'added_at': addedAt,
       if (failureReason != null) 'failure_reason': failureReason,
+      if (crdtOverwrite != null) 'crdt_overwrite': crdtOverwrite,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -15656,6 +15785,7 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
     Value<String>? collectionName,
     Value<DateTime>? addedAt,
     Value<String?>? failureReason,
+    Value<bool>? crdtOverwrite,
     Value<int>? rowid,
   }) {
     return PendingUploadsTableCompanion(
@@ -15663,6 +15793,7 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
       collectionName: collectionName ?? this.collectionName,
       addedAt: addedAt ?? this.addedAt,
       failureReason: failureReason ?? this.failureReason,
+      crdtOverwrite: crdtOverwrite ?? this.crdtOverwrite,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -15682,6 +15813,9 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
     if (failureReason.present) {
       map['failure_reason'] = Variable<String>(failureReason.value);
     }
+    if (crdtOverwrite.present) {
+      map['crdt_overwrite'] = Variable<bool>(crdtOverwrite.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -15695,6 +15829,7 @@ class PendingUploadsTableCompanion extends UpdateCompanion<PendingUploadData> {
           ..write('collectionName: $collectionName, ')
           ..write('addedAt: $addedAt, ')
           ..write('failureReason: $failureReason, ')
+          ..write('crdtOverwrite: $crdtOverwrite, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -35887,6 +36022,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> hideCompletedTasks,
       Value<bool> vimModeEnabled,
       Value<bool> snippetsEnabled,
+      Value<bool> capsLockIndicatorEnabled,
       Value<String> snippetExpandKey,
       Value<String?> snippetsJson,
       Value<String?> deviceId,
@@ -36014,6 +36150,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> hideCompletedTasks,
       Value<bool> vimModeEnabled,
       Value<bool> snippetsEnabled,
+      Value<bool> capsLockIndicatorEnabled,
       Value<String> snippetExpandKey,
       Value<String?> snippetsJson,
       Value<String?> deviceId,
@@ -36246,6 +36383,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get snippetsEnabled => $composableBuilder(
     column: $table.snippetsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get capsLockIndicatorEnabled => $composableBuilder(
+    column: $table.capsLockIndicatorEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -36883,6 +37025,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get capsLockIndicatorEnabled => $composableBuilder(
+    column: $table.capsLockIndicatorEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get snippetExpandKey => $composableBuilder(
     column: $table.snippetExpandKey,
     builder: (column) => ColumnOrderings(column),
@@ -37515,6 +37662,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get capsLockIndicatorEnabled => $composableBuilder(
+    column: $table.capsLockIndicatorEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get snippetExpandKey => $composableBuilder(
     column: $table.snippetExpandKey,
     builder: (column) => column,
@@ -38078,6 +38230,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
                 Value<bool> snippetsEnabled = const Value.absent(),
+                Value<bool> capsLockIndicatorEnabled = const Value.absent(),
                 Value<String> snippetExpandKey = const Value.absent(),
                 Value<String?> snippetsJson = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
@@ -38221,6 +38374,7 @@ class $$SettingsTableTableTableManager
                 hideCompletedTasks: hideCompletedTasks,
                 vimModeEnabled: vimModeEnabled,
                 snippetsEnabled: snippetsEnabled,
+                capsLockIndicatorEnabled: capsLockIndicatorEnabled,
                 snippetExpandKey: snippetExpandKey,
                 snippetsJson: snippetsJson,
                 deviceId: deviceId,
@@ -38352,6 +38506,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
                 Value<bool> snippetsEnabled = const Value.absent(),
+                Value<bool> capsLockIndicatorEnabled = const Value.absent(),
                 Value<String> snippetExpandKey = const Value.absent(),
                 Value<String?> snippetsJson = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
@@ -38495,6 +38650,7 @@ class $$SettingsTableTableTableManager
                 hideCompletedTasks: hideCompletedTasks,
                 vimModeEnabled: vimModeEnabled,
                 snippetsEnabled: snippetsEnabled,
+                capsLockIndicatorEnabled: capsLockIndicatorEnabled,
                 snippetExpandKey: snippetExpandKey,
                 snippetsJson: snippetsJson,
                 deviceId: deviceId,
@@ -39161,6 +39317,7 @@ typedef $$PendingUploadsTableTableCreateCompanionBuilder =
       required String collectionName,
       Value<DateTime> addedAt,
       Value<String?> failureReason,
+      Value<bool> crdtOverwrite,
       Value<int> rowid,
     });
 typedef $$PendingUploadsTableTableUpdateCompanionBuilder =
@@ -39169,6 +39326,7 @@ typedef $$PendingUploadsTableTableUpdateCompanionBuilder =
       Value<String> collectionName,
       Value<DateTime> addedAt,
       Value<String?> failureReason,
+      Value<bool> crdtOverwrite,
       Value<int> rowid,
     });
 
@@ -39198,6 +39356,11 @@ class $$PendingUploadsTableTableFilterComposer
 
   ColumnFilters<String> get failureReason => $composableBuilder(
     column: $table.failureReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get crdtOverwrite => $composableBuilder(
+    column: $table.crdtOverwrite,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -39230,6 +39393,11 @@ class $$PendingUploadsTableTableOrderingComposer
     column: $table.failureReason,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get crdtOverwrite => $composableBuilder(
+    column: $table.crdtOverwrite,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PendingUploadsTableTableAnnotationComposer
@@ -39256,6 +39424,11 @@ class $$PendingUploadsTableTableAnnotationComposer
 
   GeneratedColumn<String> get failureReason => $composableBuilder(
     column: $table.failureReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get crdtOverwrite => $composableBuilder(
+    column: $table.crdtOverwrite,
     builder: (column) => column,
   );
 }
@@ -39307,12 +39480,14 @@ class $$PendingUploadsTableTableTableManager
                 Value<String> collectionName = const Value.absent(),
                 Value<DateTime> addedAt = const Value.absent(),
                 Value<String?> failureReason = const Value.absent(),
+                Value<bool> crdtOverwrite = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PendingUploadsTableCompanion(
                 documentId: documentId,
                 collectionName: collectionName,
                 addedAt: addedAt,
                 failureReason: failureReason,
+                crdtOverwrite: crdtOverwrite,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -39321,12 +39496,14 @@ class $$PendingUploadsTableTableTableManager
                 required String collectionName,
                 Value<DateTime> addedAt = const Value.absent(),
                 Value<String?> failureReason = const Value.absent(),
+                Value<bool> crdtOverwrite = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PendingUploadsTableCompanion.insert(
                 documentId: documentId,
                 collectionName: collectionName,
                 addedAt: addedAt,
                 failureReason: failureReason,
+                crdtOverwrite: crdtOverwrite,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -10,25 +10,16 @@ final lifeTreeGeometryProvider = Provider<LifeTreeGeometry>((ref) {
   return generateLifeTreeGeometry();
 });
 
-/// Which leaves have permanently landed on the ground from the first-run
-/// opening animation. Null until that animation has run once this session;
-/// stays populated across page navigation within the same app run, and
-/// resets (like all Riverpod state) on the next app restart — matching the
-/// "once per app restart" spec requirement without any persistence code.
+/// Overrides which leaves rest on the ground, for the debug restore button
+/// only. Null — the normal case — means the page derives them from the weeks
+/// lived; an empty set puts the whole canopy back on the tree. Resets (like
+/// all Riverpod state) on the next app restart.
 final lifeTreeGroundedLeavesProvider = StateProvider<Set<int>?>((ref) => null);
 
-/// Shows the debug replay button on the Life Tracker page, which resets the
-/// grounded leaves and re-runs the opening fall on demand. Toggled from the
-/// Dev page; lives here rather than beside the other dev flags so the page
-/// can watch it without depending on the dev feature.
-final lifeTrackerShowReplayButtonProvider = StateProvider<bool>(
-  (ref) => DevFlags.showLifeTrackerReplay,
-);
-
-/// Shows the debug restore button on the Life Tracker page, which puts every
-/// fallen leaf back on the tree without replaying the fall. Toggled from the
-/// Dev page; lives here for the same reason as
-/// [lifeTrackerShowReplayButtonProvider].
+/// Shows the debug restore button on the Life Tracker page, which toggles
+/// every leaf between the tree and the ground. Toggled from the Dev page;
+/// lives here rather than beside the other dev flags so the page can watch it
+/// without depending on the dev feature.
 final lifeTrackerShowRestoreButtonProvider = StateProvider<bool>(
   (ref) => DevFlags.showLifeTrackerRestore,
 );

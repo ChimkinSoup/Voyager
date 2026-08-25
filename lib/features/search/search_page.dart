@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
-import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
@@ -34,6 +33,7 @@ import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -53,6 +53,7 @@ class SearchPage extends ConsumerStatefulWidget {
 class _SearchPageState extends ConsumerState<SearchPage> {
   final _queryController = TextEditingController();
   final _queryFocusNode = FocusNode();
+  final _resultsController = ScrollController();
 
   final Map<String, JournalEntry> _localUpdates = {};
 
@@ -60,17 +61,125 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   /// so the list doesn't wait for the provider to refresh.
   final Set<String> _deletedIds = {};
 
+  /// Bumped by every mutation of [_localUpdates] or [_deletedIds], so the
+  /// folded-text cache can tell a merged list apart from the previous one
+  /// without comparing its contents.
+  int _localRevision = 0;
+
+  /// The query the results are actually computed from. Trails the controller
+  /// by [_queryDebounceDelay] so a burst of keystrokes costs one pass over the
+  /// corpus rather than one per character.
+  String _activeQuery = '';
+  Timer? _queryDebounce;
+  static const _queryDebounceDelay = Duration(milliseconds: 150);
+
+  /// `entry.id -> lowercased "title body"`, rebuilt only when the merged list
+  /// changes. Folding per keystroke allocated a full-body concat and a
+  /// full-body lowercase for every entry in the database — the dominant cost
+  /// of typing in this field, all of it on the UI isolate.
+  final Map<String, String> _haystack = {};
+  List<JournalEntry>? _haystackEntries;
+  int _haystackRevision = -1;
+
   @override
   void dispose() {
+    _queryDebounce?.cancel();
     _queryController.dispose();
     _queryFocusNode.dispose();
+    _resultsController.dispose();
     super.dispose();
   }
 
-  void _invalidateEntryCaches() {
-    ref.invalidate(journalEntriesProvider);
-    ref.invalidate(journalListEntriesProvider);
-    ref.invalidate(journalEntryCountsProvider);
+  void _onQueryChanged(String _) {
+    _queryDebounce?.cancel();
+    _queryDebounce = Timer(_queryDebounceDelay, () {
+      if (!mounted) return;
+      setState(() => _activeQuery = _queryController.text);
+      // One ScrollPosition is shared across every result set (the list is kept
+      // alive under a constant PageStorageKey), so without this a deep offset
+      // from a narrow result set survives into the next one — clearing the
+      // query lands the user somewhere arbitrary in the full list instead of
+      // at the best matches.
+      if (_resultsController.hasClients) _resultsController.jumpTo(0);
+    });
+  }
+
+  /// The app-scoped invalidator, so every journal entry provider is refreshed
+  /// rather than the three this page used to name. `allJournalEntriesProvider`
+  /// and `journalAllEntryIdsProvider` were missing, and both are keepAlive:
+  /// `tagPoolProvider` folds over the former, so a `#tag` created here never
+  /// entered the completion pool — including in this page's own query field —
+  /// and the analytics page kept showing entries deleted from Search.
+  void _invalidateEntryCaches() =>
+      ref.read(journalEntryCacheInvalidatorProvider)();
+
+  /// Drops the optimistic state the provider data has caught up with, then
+  /// applies what's left.
+  ///
+  /// Neither collection used to be pruned and this page never unmounts — it is
+  /// a shell branch root — so `_localUpdates` retained a full body per entry
+  /// edited all session, and `_deletedIds` was a permanent hide-list: a delete
+  /// undone by a pull or a trash restore stayed invisible in Search until the
+  /// app restarted.
+  List<JournalEntry> _mergeAndPrune(List<JournalEntry> entries) {
+    final entryIndex = {for (final e in entries) e.id: e};
+    final before = _localUpdates.length + _deletedIds.length;
+    _localUpdates.removeWhere((id, local) {
+      final live = entryIndex[id];
+      return live == null ||
+          live.version > local.version ||
+          (live.version == local.version &&
+              !live.updatedAt.isBefore(local.updatedAt));
+    });
+    // Retires the optimistic hide once the delete has actually landed — i.e.
+    // once the provider itself stops returning the id.
+    _deletedIds.removeWhere((id) => !entryIndex.containsKey(id));
+    if (_localUpdates.length + _deletedIds.length != before) _localRevision++;
+
+    // Every survivor of the prune is strictly newer than the row beside it, so
+    // the merge is just a lookup.
+    return [
+      for (final e in entries)
+        if (!_deletedIds.contains(e.id)) _localUpdates[e.id] ?? e,
+    ];
+  }
+
+  Map<String, String> _foldedText(
+    List<JournalEntry> source,
+    List<JournalEntry> merged,
+  ) {
+    if (identical(_haystackEntries, source) &&
+        _haystackRevision == _localRevision) {
+      return _haystack;
+    }
+    _haystack
+      ..clear()
+      ..addEntries(
+        merged.map((e) => MapEntry(e.id, '${e.title} ${e.body}'.toLowerCase())),
+      );
+    _haystackEntries = source;
+    _haystackRevision = _localRevision;
+    return _haystack;
+  }
+
+  void _reportActionFailure(
+    Object error,
+    StackTrace stackTrace,
+    String what,
+    String message,
+  ) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'SearchPage',
+        context: ErrorDescription(what),
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _deleteEntry(JournalEntry entry) async {
@@ -80,14 +189,43 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       message: 'This entry will be moved to trash.',
     );
     if (!confirmed || !mounted) return;
-    await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
-    ref
-        .read(remoteSyncServiceProvider)
-        .pushJournalEntryNow(entry.copyWith(deletedAt: utcNow()));
+    final repo = ref.read(journalRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    try {
+      // An in-flight save for this entry would otherwise land after the
+      // tombstone and republish it as live, which is why journal_page._delete
+      // flushes first too.
+      await remoteSync.flushDocument(
+        FirestoreCollections.journalEntries,
+        entry.id,
+      );
+      await repo.softDeleteEntry(entry.id);
+      // The pushed tombstone is read back rather than built from `entry`.
+      // `entry` comes from the _localUpdates-merged list, which lags disk
+      // whenever an in-flight save hasn't reported back, and softDeleteEntry
+      // bumps the version itself — so a tombstone built here went out at a
+      // version Firestore had already passed, the next device read it as the
+      // loser and pushed its own live document back, resurrecting the entry
+      // everywhere. See journal_page._softDeleteAndPushTombstone.
+      final tombstone = await repo.getEntry(entry.id);
+      if (tombstone != null) remoteSync.pushJournalEntryNow(tombstone);
+    } catch (error, stackTrace) {
+      // Never hide a row that still exists: the confirm dialog has already
+      // closed, and leaving the row in place with nothing said reads as "the
+      // delete was rejected".
+      _reportActionFailure(
+        error,
+        stackTrace,
+        'while deleting entry from Search',
+        'Could not delete entry.',
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _deletedIds.add(entry.id);
       _localUpdates.remove(entry.id);
+      _localRevision++;
     });
     _invalidateEntryCaches();
   }
@@ -106,15 +244,56 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         !mounted) {
       return;
     }
-    final repo = ref.read(journalRepositoryProvider);
-    final existing = await repo.getEntry(entry.id);
-    if (existing == null || !mounted) return;
-    final updated = existing.copyWith(journalId: targetJournalId);
-    await repo.upsertEntry(updated);
-    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(updated);
-    if (!mounted) return;
-    setState(() => _localUpdates[updated.id] = updated);
+    // Through the coordinator rather than a bare read-modify-write: it
+    // serialises writes per document, and outside that queue this interleaved
+    // freely with an in-flight save for the same entry — the save had already
+    // re-read its baseline, so its write carried the old journalId and the
+    // move was silently lost at a version that then looked authoritative.
+    // Easy to hit, since the dialog's Save and Enter both fire the save and
+    // pop immediately.
+    final coordinator = ref.read(journalWriteCoordinatorProvider);
+    JournalEntry? moved;
+    try {
+      await coordinator.saveEntry(
+        entryId: entry.id,
+        bumpVersion: true,
+        applyDelta: (base) =>
+            base.copyWith(journalId: targetJournalId, bumpVersion: false),
+        onSuccess: (saved) => moved = saved,
+      );
+    } catch (error, stackTrace) {
+      _reportActionFailure(
+        error,
+        stackTrace,
+        'while moving an entry to another journal from Search',
+        'Could not move entry.',
+      );
+      return;
+    }
+    final saved = moved;
+    if (saved == null || !mounted) return;
+    ref.read(remoteSyncServiceProvider).pushJournalEntryNow(saved);
+    setState(() {
+      _localUpdates[saved.id] = saved;
+      _localRevision++;
+    });
     _invalidateEntryCaches();
+  }
+
+  /// Both providers this page reads are `keepAlive`, so a failed future is
+  /// cached and nothing in the page can re-request it — a transient database
+  /// lock at startup left the search tab showing a raw exception string until
+  /// the app was restarted.
+  Widget _loadFailure(String message, VoidCallback onRetry) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(message),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -142,7 +321,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             tagScope: TagScope.journal,
             cursorColor: accentColor,
             hintText: 'Search keywords or #tag',
-            onChanged: (_) => setState(() {}),
+            onChanged: _onQueryChanged,
             decoration: const InputDecoration(
               filled: false,
               border: InputBorder.none,
@@ -157,26 +336,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               data: (entries) => journalsAsync.when(
                 skipLoadingOnReload: true,
                 data: (journals) {
-                  final mergedEntries = entries
-                      .where((e) => !_deletedIds.contains(e.id))
-                      .map((e) {
-                        final local = _localUpdates[e.id];
-                        if (local != null) {
-                          if (local.version > e.version) return local;
-                          if (local.version == e.version &&
-                              !local.updatedAt.isBefore(e.updatedAt))
-                            return local;
-                        }
-                        return e;
-                      })
-                      .toList();
-                  final parsedQuery = _parseSearchQuery(_queryController.text);
+                  final mergedEntries = _mergeAndPrune(entries);
+                  final parsedQuery = _parseSearchQuery(_activeQuery);
                   final results = search.searchEntries(
                     entries: mergedEntries,
                     query: parsedQuery.keywords,
-                    tagFilter: parsedQuery.tag == null
+                    tagFilter: parsedQuery.tags.isEmpty
                         ? null
-                        : [parsedQuery.tag!],
+                        : parsedQuery.tags,
+                    foldedText: _foldedText(entries, mergedEntries),
                   );
                   final keywords = parsedQuery.keywords
                       .split(RegExp(r'\s+'))
@@ -184,6 +352,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       .toList();
                   return KeepAliveScrollList(
                     storageKey: ShellPageStorageKeys.searchResults,
+                    controller: _resultsController,
                     itemCount: results.length,
                     itemBuilder: (_, i) {
                       final entry = results[i];
@@ -202,13 +371,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           ContextMenuItem(
                             label: 'Change Journal',
                             icon: PhosphorIconsRegular.folder,
-                            onTap: () => _changeEntryJournal(entry, journals),
+                            onTap: () =>
+                                unawaited(_changeEntryJournal(entry, journals)),
                           ),
                           ContextMenuItem(
                             label: 'Delete',
                             icon: PhosphorIconsRegular.trash,
                             isDestructive: true,
-                            onTap: () => _deleteEntry(entry),
+                            onTap: () => unawaited(_deleteEntry(entry)),
                           ),
                         ],
                         child: ListTile(
@@ -239,10 +409,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                     setState(() {
                                       _localUpdates[updatedEntry.id] =
                                           updatedEntry;
+                                      _localRevision++;
                                     });
-                                    ref.invalidate(journalEntriesProvider);
-                                    ref.invalidate(journalListEntriesProvider);
-                                    ref.invalidate(journalEntryCountsProvider);
+                                    _invalidateEntryCaches();
                                   }
                                 },
                               ),
@@ -254,10 +423,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('$e')),
+                error: (e, _) => _loadFailure(
+                  'Could not load journals.',
+                  () => ref.invalidate(journalsProvider),
+                ),
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('$e')),
+              error: (e, _) => _loadFailure(
+                'Could not load entries.',
+                () => ref.invalidate(
+                  journalListEntriesProvider(allJournalEntriesScope),
+                ),
+              ),
             ),
           ),
         ],
@@ -266,19 +443,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 }
 
-({String? tag, String keywords}) _parseSearchQuery(String rawQuery) {
+/// Splits a raw query into its `#tag` filters and its plain keywords.
+///
+/// Every `#token` filters, not just the first. The single-tag version dropped
+/// later ones into `keywords`, where `#urgent` was matched as literal body
+/// text — which happened to work for inline tags, failed for any tag that
+/// reached `tags` by another route (an import, a remote merge), and put spurious
+/// keyword highlighting on the `#urgent` literal.
+({List<String> tags, String keywords}) _parseSearchQuery(String rawQuery) {
   final parts = rawQuery.trim().split(RegExp(r'\s+'));
-  String? tag;
+  final tags = <String>[];
   final keywords = <String>[];
   for (final part in parts) {
     if (part.isEmpty) continue;
-    if (tag == null && part.startsWith('#') && part.length > 1) {
-      tag = part.substring(1);
+    if (part.startsWith('#') && part.length > 1) {
+      tags.add(part.substring(1));
     } else {
       keywords.add(part);
     }
   }
-  return (tag: tag, keywords: keywords.join(' '));
+  return (tags: tags, keywords: keywords.join(' '));
 }
 
 class _SearchEntryDialog extends ConsumerStatefulWidget {
@@ -304,7 +488,14 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   late JournalEntry _entry;
   late int? _mood;
   late String _weatherIcon;
-  bool _isSaved = false;
+
+  /// What the last save published (or, until then, what the entry was opened
+  /// with). [_isDirty] is the difference between it and the live buffer.
+  late _EntryBaseline _baseline;
+
+  /// Serialises this dialog's saves. Each one wipes and re-seeds the entry's
+  /// remote operation log, which two overlapping calls must never interleave.
+  Future<void> _saveChain = Future<void>.value();
 
   late final Future<void> Function() _lifecycleFlushCallback;
 
@@ -343,6 +534,35 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
     _mood = _entry.mood ?? kDefaultMood;
     _weatherIcon = _entry.weatherIcon ?? 'sunny';
+    // The *coerced* values are the baseline, not `_entry.mood` /
+    // `_entry.weatherIcon`. These defaults exist so the slider and the icon
+    // have something to show for the rows that predate them (see
+    // JournalEntry.mood); treating the coercion itself as an edit is what made
+    // merely viewing an entry stamp mood 5 and weather 'sunny' onto it. They
+    // still ride along once something else is genuinely edited, which is the
+    // only time this dialog writes at all.
+    _baseline = _EntryBaseline(
+      title: _entry.title,
+      body: _entry.body,
+      mood: _mood,
+      weatherIcon: _weatherIcon,
+      entryDate: _entry.entryDate,
+      journalId: _entry.journalId,
+    );
+  }
+
+  /// Whether the live buffer differs from what was last persisted.
+  ///
+  /// Trimmed the same way [_save] trims before writing, so a trailing newline
+  /// the save would drop never counts as an edit.
+  bool get _isDirty {
+    final b = _baseline;
+    return _titleController.text.trim() != b.title.trim() ||
+        _bodyController.text.trimRight() != b.body.trimRight() ||
+        _mood != b.mood ||
+        _weatherIcon != b.weatherIcon ||
+        _entry.entryDate != b.entryDate ||
+        _entry.journalId != b.journalId;
   }
 
   KeyEventResult _handleBodyKey(FocusNode node, KeyEvent event) {
@@ -364,7 +584,14 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
-    if (!_isSaved) {
+    // Was `if (!_isSaved)`, a flag set on the first line of _save and never
+    // reset. It conflated "a save has ever run" with "the buffer is
+    // persisted", so any lifecycle flush — alt-tabbing away on desktop is one,
+    // a shell branch change is another — latched it, and every edit made
+    // afterwards was silently dropped by Close and Escape alike. Dirtiness is
+    // the real question, and _save answers it again on its own first line so
+    // an unconditional close can't queue a duplicate write either.
+    if (_isDirty) {
       unawaited(_save());
     }
     _titleController.dispose();
@@ -385,35 +612,83 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     _journal?.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32(),
   );
 
-  Future<void> _save() async {
-    _isSaved = true;
+  /// Persists the buffer if it differs from [_baseline], and publishes it.
+  ///
+  /// Saving unconditionally was not free: it bumped `version`, restamped
+  /// `updatedAt` and re-uploaded a document nothing had changed, and every one
+  /// of those uploads deleted the entry's entire remote operation log and
+  /// re-seeded it. Since the dialog is barrier-dismissible, a mis-tap was
+  /// enough to do all of that to an untouched entry.
+  Future<void> _save() {
+    if (!_isDirty) return _saveChain;
+
+    // Read synchronously, before anything is awaited, so the snapshot and the
+    // dirty flag can't disagree with each other.
     final title = _titleController.text.trim();
     final body = _bodyController.text.trimRight();
+    final snapshot = _EntryBaseline(
+      title: title,
+      body: body,
+      mood: _mood,
+      weatherIcon: _weatherIcon,
+      entryDate: _entry.entryDate,
+      journalId: _entry.journalId,
+    );
+    // The baseline moves now rather than when the write lands: dispose runs
+    // immediately after the `unawaited(_save())` that Save and Enter fire, and
+    // it has to see a clean buffer instead of queueing the same text twice.
+    // Anything typed after this point makes the dialog dirty again and earns
+    // its own save.
+    final previous = _baseline;
+    _baseline = snapshot;
 
-    // Use cached references to avoid calling ref.read() during dispose()
+    // Cached references, so nothing calls ref.read() during dispose().
     final helper = SearchEntrySaveHelper(
       coordinator: _coordinator ?? ref.read(journalWriteCoordinatorProvider),
       remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
       journalRepository:
           _journalRepository ?? ref.read(journalRepositoryProvider),
     );
-    final updated = await helper.saveEntry(
-      baseline: _entry,
-      title: title,
-      body: body,
-      mood: _mood,
-      weatherIcon: _weatherIcon,
-      journalId: _entry.journalId,
-    );
-    if (updated != null) {
+    final entryId = _entry.id;
+
+    _saveChain = _saveChain.then((_) async {
+      // Re-read rather than closing over `_entry`: an earlier link in the
+      // chain may have replaced it with the row it published.
+      final updated = await helper.saveEntry(
+        baseline: _entry,
+        title: snapshot.title,
+        body: snapshot.body,
+        mood: snapshot.mood,
+        weatherIcon: snapshot.weatherIcon,
+        journalId: snapshot.journalId,
+        entryDate: snapshot.entryDate,
+      );
+      if (updated == null) {
+        // Nothing reached disk. Re-arm so a later close retries instead of
+        // dropping the edit on the floor — unless the user has typed since,
+        // in which case a newer snapshot already owns the baseline.
+        if (identical(_baseline, snapshot)) _baseline = previous;
+        return;
+      }
       if (mounted) setState(() => _entry = updated);
       widget.onSaved(updated);
-    }
+    }).catchError((Object error, StackTrace stackTrace) {
+      // Keeps the queue moving; SearchEntrySaveHelper already reports what it
+      // caught, so this only ever sees something it re-threw.
+      if (identical(_baseline, snapshot)) _baseline = previous;
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'SearchPage',
+          context: ErrorDescription('while saving entry $entryId from Search'),
+        ),
+      );
+    });
+    return _saveChain;
   }
 
-  Future<void> _lifecycleFlush() async {
-    await _save();
-  }
+  Future<void> _lifecycleFlush() => _save();
 
   /// Closes first, then saves: the popup disappearing is the user's
   /// confirmation that Enter landed, so it must not wait on the write.
@@ -446,52 +721,34 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     if (mounted) setState(() => _isDatePickerOpen = false);
     if (pickedDt == null) return;
 
-    // Update locally immediately for snappy responsiveness
-    final updatedImmediate = _entry.copyWith(entryDate: pickedDt.toUtc());
+    // Show it immediately, then let _save notice the difference. No version
+    // bump here: this copy has not been written anywhere, and claiming a
+    // version the disk doesn't have would outrank the row it came from.
+    final updatedImmediate = _entry.copyWith(
+      entryDate: pickedDt.toUtc(),
+      bumpVersion: false,
+    );
     if (mounted) {
       setState(() => _entry = updatedImmediate);
       widget.onSaved(updatedImmediate);
     }
-
-    final helper = SearchEntrySaveHelper(
-      coordinator: ref.read(journalWriteCoordinatorProvider),
-      remoteSync: ref.read(remoteSyncServiceProvider),
-      journalRepository: ref.read(journalRepositoryProvider),
-    );
-    final updated = await helper.saveEntry(
-      baseline: _entry,
-      title: _titleController.text.trim(),
-      body: _bodyController.text.trimRight(),
-      mood: _mood,
-      weatherIcon: _weatherIcon,
-      journalId: _entry.journalId,
-      entryDate: pickedDt.toUtc(),
-    );
-    if (updated != null) {
-      if (mounted) setState(() => _entry = updated);
-      widget.onSaved(updated);
-    }
+    // Through _save so this joins the same per-dialog queue as everything
+    // else: two overlapping full-text overwrites of one entry would otherwise
+    // race each other's operation-log reseed.
+    await _save();
   }
 
   Future<void> _moveToJournal(String journalId) async {
     if (journalId == _entry.journalId) return;
-    final helper = SearchEntrySaveHelper(
-      coordinator: ref.read(journalWriteCoordinatorProvider),
-      remoteSync: ref.read(remoteSyncServiceProvider),
-      journalRepository: ref.read(journalRepositoryProvider),
-    );
-    final updated = await helper.saveEntry(
-      baseline: _entry,
-      title: _titleController.text.trim(),
-      body: _bodyController.text.trimRight(),
-      mood: _mood,
-      weatherIcon: _weatherIcon,
-      journalId: journalId,
-    );
-    if (updated != null) {
-      if (mounted) setState(() => _entry = updated);
-      widget.onSaved(updated);
+    if (mounted) {
+      setState(
+        () => _entry = _entry.copyWith(
+          journalId: journalId,
+          bumpVersion: false,
+        ),
+      );
     }
+    await _save();
   }
 
   @override
@@ -651,4 +908,27 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       ),
     );
   }
+}
+
+/// What [_SearchEntryDialogState] last persisted, for the dirty check.
+///
+/// A class rather than a record so a snapshot can be compared by identity: a
+/// failed save only re-arms the baseline it set itself, leaving a newer one
+/// from a keystroke that landed meanwhile alone.
+class _EntryBaseline {
+  const _EntryBaseline({
+    required this.title,
+    required this.body,
+    required this.mood,
+    required this.weatherIcon,
+    required this.entryDate,
+    required this.journalId,
+  });
+
+  final String title;
+  final String body;
+  final int? mood;
+  final String weatherIcon;
+  final DateTime entryDate;
+  final String journalId;
 }

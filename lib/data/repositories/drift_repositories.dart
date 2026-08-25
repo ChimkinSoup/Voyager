@@ -2127,6 +2127,7 @@ class DriftSettingsRepository implements SettingsRepository {
       hideCompletedTasks: row.hideCompletedTasks,
       vimModeEnabled: row.vimModeEnabled,
       snippetsEnabled: row.snippetsEnabled,
+      capsLockIndicatorEnabled: row.capsLockIndicatorEnabled,
       snippetExpandKey: SnippetExpandKey.values.byName(row.snippetExpandKey),
       snippets: row.snippetsJson == null
           ? const []
@@ -2326,6 +2327,9 @@ class DriftSettingsRepository implements SettingsRepository {
             hideCompletedTasks: Value(settings.hideCompletedTasks),
             vimModeEnabled: Value(settings.vimModeEnabled),
             snippetsEnabled: Value(settings.snippetsEnabled),
+            capsLockIndicatorEnabled: Value(
+              settings.capsLockIndicatorEnabled,
+            ),
             snippetExpandKey: Value(settings.snippetExpandKey.name),
             snippetsJson: Value(
               jsonEncode([for (final s in settings.snippets) s.toJson()]),

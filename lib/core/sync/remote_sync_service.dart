@@ -492,31 +492,117 @@ class RemoteSyncService {
     return operationsDeleted;
   }
 
-  /// Forces an overwrite of the journal entry text by wiping remote CRDT operations,
-  /// resetting the local editing session, recording the new text, and pushing.
-  /// Used for out-of-band wholesale text edits (like the Search page popup) 
-  /// where an active sequential CRDT session isn't maintained.
-  Future<void> forceOverwriteJournalEntryText(JournalEntry entry) async {
-    await _syncRepository.deleteOperationsForDocument(entry.id);
+  /// Publishes a wholesale text rewrite of [entry] — the Search popup's save,
+  /// where no sequential CRDT session was ever maintained — and returns the row
+  /// that was actually written.
+  ///
+  /// Returns the published row rather than nothing, and persists it before
+  /// uploading it, because the two must stay on the same version. Uploading a
+  /// `copyWith(bumpVersion: true)` that never reached SQLite left the remote
+  /// copy at `N+1` against a local row still at `N`, and `remoteVersionWins`
+  /// then resolved every later pull in the remote's favour — reverting offline
+  /// edits made after the save. See [_uploadJournalEntryNow]'s note.
+  ///
+  /// [queueOnFailure] is false when the outbox is the caller: a failure there
+  /// must propagate so the drain can retry or park the row it already holds,
+  /// rather than queueing a second one.
+  Future<JournalEntry> forceOverwriteJournalEntryText(
+    JournalEntry entry, {
+    bool queueOnFailure = true,
+  }) async {
+    const collection = FirestoreCollections.journalEntries;
+
+    // Another surface — the journal editor — owns this document's chain and
+    // holds operations it has not uploaded yet. `resetSession` replaces a
+    // session unconditionally (unlike `ensureSession`'s putIfAbsent), so the
+    // wipe-and-reseed below would throw those away: the next upload would drain
+    // the blank replacement, and the following `recordTextChange` would start a
+    // fresh chain whose sequence counter restarts at 0 and sorts *before* the
+    // surviving one. Rebasing composes with the live chain instead, which is
+    // what conflict resolution does with the same problem, and leaves the
+    // session in place for the editor to keep writing into.
+    if (_charOpRegistry.session(collection, entry.id) != null) {
+      final published = await _persistPublishedRevision(entry);
+      await _rebaseCharOpsOnLiveChain(
+        collection: collection,
+        documentId: published.id,
+        target: published.body,
+      );
+      await _uploadJournalEntryNow(published);
+      await OutboxSyncWorker.recordSuccess(
+        collection: collection,
+        documentId: published.id,
+      );
+      return published;
+    }
+
+    // Wiping the log and re-seeding it from '' is only sound once the wipe is
+    // known to have happened. Firestore answers reads from the local cache
+    // while offline, so this used to return 0 with the remote log fully intact
+    // and the reseed then stacked the whole body on top of the surviving chain
+    // — the duplicated text this method exists to prevent.
+    // `deleteOperationsForDocument` now forces a server round-trip and throws
+    // instead of lying, which turns that silent corruption into a deferral.
+    // Attempted before anything is written locally: a deferral must leave the
+    // row exactly as it found it, or each pass of the outbox drain would bump
+    // the version again and the retries alone would inflate it.
+    try {
+      await _syncRepository.deleteOperationsForDocument(entry.id);
+    } catch (error, stackTrace) {
+      if (!queueOnFailure) rethrow;
+      // Nothing is written and nothing is uploaded here on purpose. The row
+      // the caller already persisted outranks the remote copy on version, and
+      // the remote log is untouched, so no device loses anything; the rewrite
+      // is simply owed to the server until the outbox can prove the wipe.
+      await OutboxSyncWorker.recordCrdtOverwrite(
+        collection: collection,
+        documentId: entry.id,
+      );
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'RemoteSyncService',
+          context: ErrorDescription(
+            'while wiping the operation log for ${entry.id}; the text rewrite '
+            'was queued for a later attempt',
+          ),
+        ),
+      );
+      return entry;
+    }
+
+    final published = await _persistPublishedRevision(entry);
     _charOpRegistry.resetSession(
-      collection: FirestoreCollections.journalEntries,
-      documentId: entry.id,
+      collection: collection,
+      documentId: published.id,
       clientId: deviceId,
       text: '',
     );
     _charOpRegistry.recordTextChange(
-      collection: FirestoreCollections.journalEntries,
-      documentId: entry.id,
+      collection: collection,
+      documentId: published.id,
       clientId: deviceId,
       before: '',
-      after: entry.body,
+      after: published.body,
     );
-    await _uploadJournalEntryNow(entry, bumpVersion: true);
-    
-    _charOpRegistry.removeSession(
-      FirestoreCollections.journalEntries,
-      entry.id,
+    // No second bump: `published` is what SQLite holds.
+    await _uploadJournalEntryNow(published);
+
+    _charOpRegistry.removeSession(collection, published.id);
+    await OutboxSyncWorker.recordSuccess(
+      collection: collection,
+      documentId: published.id,
     );
+    return published;
+  }
+
+  /// The revision [forceOverwriteJournalEntryText] publishes, written to SQLite
+  /// before it is uploaded so the two can never disagree on version.
+  Future<JournalEntry> _persistPublishedRevision(JournalEntry entry) async {
+    final published = entry.copyWith(bumpVersion: true);
+    await _journalRepository.upsertEntry(published, recordLocalActivity: false);
+    return published;
   }
 
   /// Hard-deletes a journal entry from Firestore (if present) and this device.
@@ -2276,12 +2362,24 @@ class RemoteSyncService {
   ///
   /// A document that no longer exists locally is a no-op: the queued row has
   /// nothing left to stand for.
-  Future<void> pushOutboxDocument(String collection, String documentId) async {
+  Future<void> pushOutboxDocument(
+    String collection,
+    String documentId, {
+    bool forceCrdtOverwrite = false,
+  }) async {
     cancelDocument(collection, documentId);
     switch (collection) {
       case FirestoreCollections.journalEntries:
         final entry = await _journalRepository.getEntry(documentId);
-        if (entry != null) await _uploadJournalEntryNow(entry);
+        if (entry == null) return;
+        if (forceCrdtOverwrite) {
+          // A rewrite the Search popup could not publish when it was made —
+          // see [forceOverwriteJournalEntryText]. Failures propagate so the
+          // drain retries or parks the row it is already holding.
+          await forceOverwriteJournalEntryText(entry, queueOnFailure: false);
+          return;
+        }
+        await _uploadJournalEntryNow(entry);
       case FirestoreCollections.dreamEntries:
         final entry = await _dreamRepository.getEntry(documentId);
         if (entry != null) await _uploadDreamEntryNow(entry);
@@ -2784,9 +2882,31 @@ class RemoteSyncService {
       for (final record in records) {
         final document = _recordDocument(collection, record);
         if (document == null) continue;
-        await _syncRepository.deleteOperationsForDocument(
-          _firestoreDocumentId(collection, document.id),
-        );
+        try {
+          await _syncRepository.deleteOperationsForDocument(
+            _firestoreDocumentId(collection, document.id),
+          );
+        } catch (error, stackTrace) {
+          // The wipe now insists on a server round-trip and throws offline
+          // rather than reporting a cache-answered zero. Report it and keep
+          // restoring: the records still reach SQLite and the mirror, and one
+          // unreachable document must not abandon the rest of the import
+          // after its transaction has already committed. What survives is the
+          // old log, which can still resolve this document's text away on a
+          // later pull — the same outcome the silent zero produced, now
+          // visible.
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'RemoteSyncService',
+              context: ErrorDescription(
+                'while clearing the operation log of restored '
+                '$collection/${document.id}',
+              ),
+            ),
+          );
+        }
         _charOpRegistry.removeSession(collection, document.id);
         _pendingTextMergeBuffer.clearDocument(collection, document.id);
       }

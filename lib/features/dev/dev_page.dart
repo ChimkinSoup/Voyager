@@ -111,22 +111,10 @@ class DevPage extends ConsumerWidget {
           },
         ),
         SwitchListTile(
-          title: const Text('Life Tracker replay button'),
-          subtitle: const Text(
-            'Show a button on the Life Tracker page that resets the fallen '
-            'leaves and re-runs the opening animation on demand',
-          ),
-          value: ref.watch(lifeTrackerShowReplayButtonProvider),
-          onChanged: (v) {
-            DevFlags.showLifeTrackerReplay = v;
-            ref.read(lifeTrackerShowReplayButtonProvider.notifier).state = v;
-          },
-        ),
-        SwitchListTile(
           title: const Text('Life Tracker restore button'),
           subtitle: const Text(
-            'Show a button on the Life Tracker page that puts every fallen '
-            'leaf back on the tree, without replaying the animation',
+            'Show a button on the Life Tracker page that toggles every leaf '
+            'between the tree and the ground',
           ),
           value: ref.watch(lifeTrackerShowRestoreButtonProvider),
           onChanged: (v) {

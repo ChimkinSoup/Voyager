@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/platform/window_focus_watcher.dart';
+import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_session.dart';
 import 'package:voyager/core/vim/vim_anchored_chrome.dart';
@@ -191,6 +192,7 @@ class VimTextScope extends StatefulWidget {
     required this.builder,
     this.accentColor,
     this.snippetsAllowed = true,
+    this.capsLockIndicatorAllowed = true,
   });
 
   /// Whether this field gets Vim at all. False for password boxes, numeric
@@ -211,6 +213,12 @@ class VimTextScope extends StatefulWidget {
   /// the LeetCode code editor (SNIPPET.md §2.3) and the snippet editor itself,
   /// where a trigger being typed into a form field must stay literal.
   final bool snippetsAllowed;
+
+  /// Whether this field may draw the Caps Lock caret mark, on top of the
+  /// user's own setting. False only for code editors (CAPS_LOCK.md §2.2) —
+  /// unlike [snippetsAllowed] the snippet *editor* keeps it, since nothing
+  /// about a badge beside the caret makes a trigger less literal.
+  final bool capsLockIndicatorAllowed;
 
   final Color? accentColor;
 
@@ -628,8 +636,27 @@ class _VimTextScopeState extends State<VimTextScope> {
     return session?.handleKey(event) ?? KeyEventResult.ignored;
   }
 
+  /// Wraps everything below, both paths through [_build], so the mark's
+  /// [RenderProxyBox] always has the field's [RenderEditable] under it to
+  /// measure the caret off — including the bare-builder path taken by a field
+  /// with neither Vim nor a snippet session, which is most of them.
+  ///
+  /// Every ordinary field in the app reaches the Caps Lock mark through this
+  /// one mount: it needs no text metrics of its own, so unlike the spellcheck,
+  /// selection and Vim layers there is nothing per-field to keep in step.
   @override
   Widget build(BuildContext context) {
+    return CapsLockCaretIndicator(
+      session: _session,
+      allowed: widget.capsLockIndicatorAllowed,
+      // Null for the fields that never named one, which is what the mark's own
+      // fallback to the app accent is for.
+      accentColor: widget.accentColor,
+      child: _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final session = _session;
     final snippets = _snippetSession;
     if (session == null && snippets == null) {

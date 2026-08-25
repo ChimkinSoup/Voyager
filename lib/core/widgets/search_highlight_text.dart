@@ -78,7 +78,13 @@ Widget searchHighlightedText(
             color: tagColor.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(tagText, style: style),
+          // Keywords apply inside the pill too. Without this a plain keyword
+          // that only occurs in a tag name (`proj` against `#project-alpha`)
+          // matched the entry but emphasised nothing, so the result read as a
+          // false positive.
+          child: Text.rich(
+            TextSpan(children: keywordSpans(tagText, style, keywords)),
+          ),
         ),
       ),
     );

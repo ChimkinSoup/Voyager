@@ -130,8 +130,8 @@
     "semantic_hash": ""
   },
   "lib/app/voyager_app.dart": {
-    "mtime": 1786917488.176321,
-    "ast_hash": "4699544b0e4f7d79a0f9504cfc47cddb",
+    "mtime": 1787600249.3044014,
+    "ast_hash": "ad108d0e9dc1821adfce19fde54575ba",
     "semantic_hash": ""
   },
   "lib/core/auth/firebase_auth_errors.dart": {
@@ -445,8 +445,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/labeled_text_field.dart": {
-    "mtime": 1786929068.1678164,
-    "ast_hash": "fe7b14b7993c748cc661518a6259d4ce",
+    "mtime": 1787600265.4935381,
+    "ast_hash": "2367e418aa04fcaa4f0d9031a7f43bbe",
     "semantic_hash": ""
   },
   "lib/core/widgets/local_overlay_wrapper.dart": {
@@ -490,8 +490,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/tag_highlighted_text_field.dart": {
-    "mtime": 1786917800.6424453,
-    "ast_hash": "719300a07c2b240e379fb407859ea518",
+    "mtime": 1787600249.3024,
+    "ast_hash": "57a7f24eb69ee2b5341a094713a3f59a",
     "semantic_hash": ""
   },
   "lib/core/widgets/time_selector_popovers.dart": {
@@ -515,8 +515,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_text_field.dart": {
-    "mtime": 1786932905.1041706,
-    "ast_hash": "c05ee176f912da39a2c161d9ad31af99",
+    "mtime": 1787600249.3024,
+    "ast_hash": "742954c0fc33f1979d2f6902b7ead775",
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_time_picker_spinner.dart": {
@@ -1990,8 +1990,8 @@
     "semantic_hash": ""
   },
   "lib/features/dream_journal/dream_sticky_note.dart": {
-    "mtime": 1786917822.39084,
-    "ast_hash": "d8a9c908a5da5089f3a723ac393fdeac",
+    "mtime": 1787600275.2269807,
+    "ast_hash": "caf58222e25a6eb00c1d6ae8007eb26b",
     "semantic_hash": ""
   },
   "DREAM_JOURNAL.md": {
@@ -2025,8 +2025,8 @@
     "semantic_hash": ""
   },
   "lib/features/notifications/notification_inbox_popover.dart": {
-    "mtime": 1787016621.3068707,
-    "ast_hash": "7a2b57f60961089e2647773f283d2f0e",
+    "mtime": 1787600275.2454915,
+    "ast_hash": "b39b530d42350c8eb11ab4c500411be6",
     "semantic_hash": ""
   },
   "test/list_editing_crdt_sync_test.dart": {
@@ -2100,13 +2100,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/spell_check_field_support.dart": {
-    "mtime": 1786836611.874779,
-    "ast_hash": "4b05fd2ca203db541761f4523e05e461",
-    "semantic_hash": ""
-  },
-  "lib/core/widgets/spell_check_popup.dart": {
-    "mtime": 1785440560.5728917,
-    "ast_hash": "03313a861c7f0a7ac80dd27a40de5579",
+    "mtime": 1787600249.3024,
+    "ast_hash": "182fa2d8d0ad7549c25958e673638cb6",
     "semantic_hash": ""
   },
   "lib/core/widgets/spell_check_squiggle_layer.dart": {
@@ -2680,8 +2675,8 @@
     "semantic_hash": ""
   },
   "lib/core/vim/vim_text_scope.dart": {
-    "mtime": 1787425535.864101,
-    "ast_hash": "37e44c96ff90a5f26f912ff0de0363cb",
+    "mtime": 1787600249.3044014,
+    "ast_hash": "0717fcedc3fc9d029c1da426e26697c9",
     "semantic_hash": ""
   },
   "lib/core/widgets/tag_suggestion_overlay.dart": {
@@ -3315,8 +3310,8 @@
     "semantic_hash": ""
   },
   "SNIPPET.md": {
-    "mtime": 1786932918.6530066,
-    "ast_hash": "b7b9cd5edf8b93230365d5a6603143f3",
+    "mtime": 1787600288.4272366,
+    "ast_hash": "fc514ee5d79d7e67db43e12a44616230",
     "semantic_hash": ""
   },
   "lib/core/sync/connectivity_status.dart": {
@@ -3450,8 +3445,8 @@
     "semantic_hash": ""
   },
   "lib/features/settings/snippets_dialog.dart": {
-    "mtime": 1787007343.267217,
-    "ast_hash": "80f86c15886813a3300e9cf39b477500",
+    "mtime": 1787600249.3044014,
+    "ast_hash": "6827806d548202cffda92ec577504848",
     "semantic_hash": ""
   },
   "test/leetcode_track_draft_test.dart": {
@@ -3605,8 +3600,8 @@
     "semantic_hash": ""
   },
   "lib/domain/services/calendar_recurrence_editing.dart": {
-    "mtime": 1787598250.8193195,
-    "ast_hash": "b69b6d6e641e934e4e871b994c4bc6c9",
+    "mtime": 1787598819.5842996,
+    "ast_hash": "83674be01b045304894efc4c07afb38a",
     "semantic_hash": ""
   },
   "lib/domain/services/recurrence_engine.dart": {
@@ -3690,8 +3685,8 @@
     "semantic_hash": ""
   },
   "test/recurrence_editing_test.dart": {
-    "mtime": 1787598487.1450489,
-    "ast_hash": "accb00d1780d210ac93ce0c21021c16e",
+    "mtime": 1787598805.0788052,
+    "ast_hash": "7a43e4029113510e21d5311d26089004",
     "semantic_hash": ""
   },
   "test/recurrence_engine_test.dart": {
@@ -3760,8 +3755,33 @@
     "semantic_hash": ""
   },
   "RIGHT_CLICK_SNIPPET.md": {
-    "mtime": 1787598541.035268,
-    "ast_hash": "119e5ab5c13f65cede9029b9042df906",
+    "mtime": 1787600288.4262364,
+    "ast_hash": "e22506b8fa941ef290af235deca7e7cf",
+    "semantic_hash": ""
+  },
+  "lib/core/snippets/snippet_settings_launcher.dart": {
+    "mtime": 1787600249.3034058,
+    "ast_hash": "049bd81ae7460af56cb4fb5b8b7ccee6",
+    "semantic_hash": ""
+  },
+  "lib/core/widgets/quick_add_snippet.dart": {
+    "mtime": 1787600249.3034058,
+    "ast_hash": "4e5f449c86775803b08c9ac8dbe13c98",
+    "semantic_hash": ""
+  },
+  "lib/core/widgets/snippet_editor.dart": {
+    "mtime": 1787600249.3034058,
+    "ast_hash": "d12d09686fa104f6fd8870b208b4e193",
+    "semantic_hash": ""
+  },
+  "lib/core/widgets/text_field_context_menu.dart": {
+    "mtime": 1787600249.3034058,
+    "ast_hash": "27726dd824714a7bbc5c81b000785126",
+    "semantic_hash": ""
+  },
+  "test/snippet_quick_add_test.dart": {
+    "mtime": 1787600249.3054018,
+    "ast_hash": "6446fd2cb45206e615f235cdae9ca340",
     "semantic_hash": ""
   }
 }

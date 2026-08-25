@@ -542,6 +542,10 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
       // [_codeEditorShortcuts]), and a prose trigger firing inside a code
       // block would corrupt the very text it is meant to be showing verbatim.
       snippetsAllowed: false,
+      // Hard off, per CAPS_LOCK.md §2.2 — a mark riding beside the caret
+      // through code is chrome the editor never asked for, and the gutter,
+      // highlight and Vim block are already competing for that strip.
+      capsLockIndicatorAllowed: false,
       controller: widget.controller,
       multiline: true,
       accentColor: Theme.of(context).colorScheme.primary,

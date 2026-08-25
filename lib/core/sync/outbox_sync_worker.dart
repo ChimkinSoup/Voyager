@@ -11,8 +11,15 @@ import 'package:voyager/domain/repositories/repositories.dart';
 
 /// Re-uploads one document through the app's ordinary save path — see
 /// [OutboxSyncWorker.pushDocument].
+///
+/// [forceCrdtOverwrite] replays a deferred wholesale text rewrite instead of an
+/// ordinary re-upload — see [PendingUploadsTable.crdtOverwrite].
 typedef OutboxDocumentPusher =
-    Future<void> Function(String collection, String documentId);
+    Future<void> Function(
+      String collection,
+      String documentId, {
+      bool forceCrdtOverwrite,
+    });
 
 class OutboxSyncWorker {
   OutboxSyncWorker(
@@ -130,7 +137,11 @@ class OutboxSyncWorker {
               FirestoreCollections.crdtBacked.contains(collection)) {
             for (final pending in entry.value) {
               try {
-                await pusher(collection, pending.documentId);
+                await pusher(
+                  collection,
+                  pending.documentId,
+                  forceCrdtOverwrite: pending.crdtOverwrite,
+                );
                 // Also the right outcome for a row whose entity is gone: the
                 // push is a no-op and the row has nothing left to stand for.
                 await _clearPending([pending]);
@@ -492,6 +503,7 @@ class OutboxSyncWorker {
         collection: pending.collectionName,
         documentId: pending.documentId,
         reason: describeSyncFailure(error),
+        crdtOverwrite: pending.crdtOverwrite,
       );
       return true;
     }
@@ -561,9 +573,15 @@ class OutboxSyncWorker {
 
   /// Queues [documentId] for a later retry after an upload failed for a reason
   /// that may not recur.
+  ///
+  /// [crdtOverwrite] marks the row as a deferred wholesale text rewrite. It is
+  /// sticky: an ordinary re-queue of the same document never clears it, because
+  /// the plain re-upload it stands for would leave the stale operation log
+  /// behind — and that log wins over the document on the next pull.
   Future<void> enqueue({
     required String collection,
     required String documentId,
+    bool crdtOverwrite = false,
   }) async {
     (await _loadRowKeys()).add(_rowKey(collection, documentId));
     await _db
@@ -574,6 +592,7 @@ class OutboxSyncWorker {
             collectionName: collection,
             addedAt: Value(DateTime.now().toUtc()),
             failureReason: const Value(null),
+            crdtOverwrite: Value(crdtOverwrite),
           ),
           // An existing row keeps its original `addedAt`. Refreshing it on
           // every re-queue is what let a row outlive [maxRetryAge] forever:
@@ -585,8 +604,11 @@ class OutboxSyncWorker {
           // `failureReason` is still cleared: a document parked earlier that
           // has started failing in a retryable way belongs back in the queue.
           onConflict: DoUpdate(
-            (_) => const PendingUploadsTableCompanion(
-              failureReason: Value(null),
+            (_) => PendingUploadsTableCompanion(
+              failureReason: const Value(null),
+              crdtOverwrite: crdtOverwrite
+                  ? const Value(true)
+                  : const Value.absent(),
             ),
           ),
         );
@@ -616,16 +638,32 @@ class OutboxSyncWorker {
     required String collection,
     required String documentId,
     required String reason,
+    bool crdtOverwrite = false,
   }) async {
     (await _loadRowKeys()).add(_rowKey(collection, documentId));
+    final now = DateTime.now().toUtc();
     await _db
         .into(_db.pendingUploadsTable)
-        .insertOnConflictUpdate(
+        .insert(
           PendingUploadsTableCompanion.insert(
             documentId: documentId,
             collectionName: collection,
-            addedAt: Value(DateTime.now().toUtc()),
+            addedAt: Value(now),
             failureReason: Value(reason),
+            crdtOverwrite: Value(crdtOverwrite),
+          ),
+          // Spelled out rather than insertOnConflictUpdate so an existing row's
+          // `crdtOverwrite` survives being parked: leaving the column absent
+          // leaves it untouched, and parking an ordinary failure must not
+          // downgrade a row that still owes the server a text rewrite.
+          onConflict: DoUpdate(
+            (_) => PendingUploadsTableCompanion(
+              addedAt: Value(now),
+              failureReason: Value(reason),
+              crdtOverwrite: crdtOverwrite
+                  ? const Value(true)
+                  : const Value.absent(),
+            ),
           ),
         );
     print('Sync parked $collection/$documentId: $reason');
@@ -663,6 +701,25 @@ class OutboxSyncWorker {
     } else {
       await instance.enqueue(collection: collection, documentId: documentId);
     }
+  }
+
+  /// Defers a wholesale CRDT text rewrite that could not be published now.
+  ///
+  /// Unlike [recordFailure] this is not a reaction to a rejected upload: the
+  /// document is on disk and correct, and what is missing is the remote
+  /// operation-log rewrite that only a reachable server can be given. The row
+  /// carries that intent so the drain replays the rewrite rather than a plain
+  /// re-upload, which would leave the stale log to win the next pull.
+  static Future<void> recordCrdtOverwrite({
+    required String collection,
+    required String documentId,
+  }) async {
+    if (!isInitialized) return;
+    await instance.enqueue(
+      collection: collection,
+      documentId: documentId,
+      crdtOverwrite: true,
+    );
   }
 
   /// Clears a document's queued or parked row after it uploaded successfully,

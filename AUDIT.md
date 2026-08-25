@@ -1,906 +1,513 @@
-# Calendar Feature Audit
+# Search Page — Code Audit
 
-Scope: `lib/features/calendar/` (page, event panel, todo panel, grid, day grid,
-week timeline, overlap engine, todo markers, day entries, list actions, keyboard
-shortcuts), `lib/domain/models/calendar_models.dart`,
-`lib/domain/services/calendar_recurrence.dart`,
-`lib/domain/services/calendar_recurrence_editing.dart`,
-`lib/domain/services/recurrence_engine.dart`, `DriftCalendarRepository`, and the
-Calendar half of `firestore_document_mapper.dart`.
+**Scope:** `lib/features/search/search_page.dart`, `lib/features/search/search_entry_save_helper.dart`,
+`lib/domain/services/search_service.dart`, `lib/core/widgets/search_highlight_text.dart`, and the
+collaborators they drive: `JournalWriteCoordinator`, `RemoteSyncService.forceOverwriteJournalEntryText`,
+`CharacterOpSessionRegistry`, `DriftJournalRepository`, and the journal providers in `lib/app/providers.dart`.
 
-Findings are ordered by severity. Line numbers are against the working tree at
-the time of the audit. **No finding below changes the year↔month or month↔week
-morph choreography** — the two fixes that touch animated code
-(`_CalendarInteractiveEventTapState`, the week-column layout) are a disposal call
-and a date-math correction; neither alters a curve, a duration, or a frame
-sequence.
+**Clarified during the audit (treated as settled, not filed as bugs):**
+- An empty query listing every entry is the intended "browse-all" state.
+- Every `#tag` in the query is intended to filter (AND). Filed as **[M-2]**.
+- Tag filtering is intended to be case-insensitive, like keyword matching. Filed as **[M-3]**.
+
+**Severity key:** Critical = silent data loss or cross-device corruption · High = incorrect persisted
+state or a user-visible stall · Medium = wrong results / stale UI · Low = narrow correctness gap.
 
 ---
 
 ## Critical
 
-### [Critical] Every save of an existing event resets its `version` to 0, so the next sync pull silently reverts the edit
-- **Location:** `lib/features/calendar/calendar_page.dart:559-582` (`_saveSidebarEvent`,
-  the `final edited = CalendarEvent(...)` literal); read back at
-  `lib/data/repositories/drift_repositories.dart:957-975` (`upsertEvent` writes
-  `version: Value(event.version)` verbatim) and adjudicated at
-  `lib/core/sync/firestore_document_mapper.dart:1573-1582`
-  (`mergeCalendarEventFromRemote` → `_remoteRecordWins`)
-- **Issue:** `_saveSidebarEvent` builds the row with the **`CalendarEvent`
-  constructor**, not `copyWith`. `version` is not among the arguments it passes,
-  so it falls back to `SoftDeletable`'s default of `0`
-  (`lib/domain/models/soft_deletable.dart:8`). Every other write path in the
-  feature goes through `copyWith`, which does `version: bumpVersion ? version + 1
-  : version` (`calendar_models.dart:133`) — this one path is the exception.
+### [Critical] Opening a search result and closing it — with no edit — rewrites the entry and wipes its CRDT history
 
-  `upsertEvent` persists whatever the model carries, so after one edit the local
-  row sits at version `0` forever, however many times it is saved. Conflict
-  resolution is version-first:
+- **Location:** `lib/features/search/search_page.dart:365-375` (`dispose`), `:388-412` (`_save`), `:344-345`; `lib/features/search/search_entry_save_helper.dart:36-68`
+- **Issue:** `dispose()` calls `_save()` whenever `_isSaved` is false, and `_save()` has **no dirty check** — it saves the controller contents unconditionally. The dialog is `barrierDismissible: true` (`voyager_dialog.dart:11`), so a mis-tap on the barrier is enough. Every open/close therefore:
+  1. bumps `version` and stamps `updatedAt = now` on a row nothing changed (`JournalEntry.copyWith` always restamps `updatedAt`, `journal_models.dart:138`);
+  2. runs `remoteSync.forceOverwriteJournalEntryText`, which **deletes the entry's entire remote `sync_operations` log** and re-seeds it from scratch (`remote_sync_service.dart:499-517`);
+  3. re-uploads the whole document.
+
+  It also mutates fields the user never touched. `initState` coerces defaults at `:344-345` — `_mood = _entry.mood ?? kDefaultMood` and `_weatherIcon = _entry.weatherIcon ?? 'sunny'` — and `_save` writes those back. An entry with a null mood (the pre-v85 rows that `journal_models.dart:108-111` explicitly says still exist) silently acquires mood `5` and weather `sunny` just by being viewed. Combined with **[C-3]**, browsing search results is enough to make this device unconditionally outrank every other device on those entries.
+- **Fix:** Gate the save on actual dirtiness. Snapshot the baseline in `initState`, compare against it, and make `dispose` (and `_lifecycleFlush`) no-ops when nothing changed.
 
   ```dart
-  // firestore_document_mapper.dart:90-98
-  if (remoteVersion != localVersion) return remoteVersion > localVersion;
+  // in _SearchEntryDialogState
+  late String _baselineTitle;
+  late String _baselineBody;
+  late int? _baselineMood;
+  late String? _baselineWeather;
+  late DateTime _baselineEntryDate;
+  late String _baselineJournalId;
+
+  @override
+  void initState() {
+    super.initState();
+    // ... existing setup ...
+    _baselineTitle = _entry.title;
+    _baselineBody = _entry.body;
+    _baselineMood = _entry.mood;
+    _baselineWeather = _entry.weatherIcon;
+    _baselineEntryDate = _entry.entryDate;
+    _baselineJournalId = _entry.journalId;
+  }
+
+  bool get _isDirty =>
+      _titleController.text.trim() != _baselineTitle.trim() ||
+      _bodyController.text.trimRight() != _baselineBody.trimRight() ||
+      _mood != _baselineMood ||
+      _weatherIcon != _baselineWeather ||
+      _entry.entryDate != _baselineEntryDate ||
+      _entry.journalId != _baselineJournalId;
+
+  Future<void> _save() async {
+    if (!_isDirty) return;          // nothing to persist, nothing to publish
+    // ... existing body ...
+  }
   ```
 
-  So any copy of that event on another device — or the copy this device itself
-  pushed *before* the regression — sits at version `N > 0` and wins
-  unconditionally on the next pull. The user's edit is overwritten with no
-  conflict prompt and nothing on screen to explain it.
+  Keep `_mood`/`_weatherIcon` coerced for *display* only; a coerced default must not count as an edit. If those defaults have to be persisted, do it in a one-time migration, not on every view.
 
-  Two things make this worse rather than a narrow race:
-  1. `calendarEventToFirestore` (`:1551-1571`) ships `'version': event.version`,
-     so the `0` is published, not just held locally.
-  2. Because the local row can never climb past `0`, this device can never win a
-     conflict on that event again. It is a one-way ratchet into "my calendar
-     edits don't stick".
+### [Critical] `_isSaved` is a one-way latch — a lifecycle flush makes every later edit unsavable
 
-  The same literal also drops `deletedAt` — the constructor defaults it to `null`
-  and nothing restores it, so editing an event that is sitting in trash silently
-  un-deletes it.
-- **Fix:** Build from the existing row so the version bump and every field the
-  panel does not own survive. Keep the constructor only for the genuinely new
-  case:
+- **Location:** `lib/features/search/search_page.dart:307`, `:366-369`, `:389`, `:414-416`
+- **Issue:** `_save()` sets `_isSaved = true` on its first line and **nothing ever resets it**. `dispose()` only saves `if (!_isSaved)`. `_lifecycleFlush()` calls `_save()`, and it is invoked by `PendingFlushRegistry.flushAll()` from two very ordinary triggers:
+  - `voyager_app.dart:69-78` — `AppLifecycleState.inactive`, which on Windows desktop fires **every time the window loses focus** (alt-tab, clicking another app);
+  - `app_shell.dart:253-257` — any shell branch change.
+
+  Reproduction: open a search result → alt-tab away and back (`_isSaved` becomes `true`) → type a paragraph → press Escape or **Close**. `dispose()` sees `_isSaved == true`, skips the save, and the paragraph is gone. Neither Close nor Escape has any other save path, so the loss is silent and total.
+- **Fix:** The flag conflates "a save has ever run" with "the current buffer is persisted". Delete it and derive from `_isDirty` (see **[C-1]**), refreshing the baselines after each successful save so a later edit re-arms:
 
   ```dart
-  final edited = event == null
-      ? CalendarEvent(
-          id: newId(),
-          calendarId: result['calendarId'] as String? ??
-              _selectedCalendarId ?? legacyCalendarId,
-          title: result['title'] as String,
-          start: result['start'] as DateTime,
-          end: result['end'] as DateTime,
-          isFullDay: result['isFullDay'] as bool,
-          colorValue: result['colorValue'] as int,
-          notes: result['notes'] as String,
-          recurrence: result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
-          createdAt: now,
-          updatedAt: now,
-        )
-      : event.copyWith(          // bumps version; keeps deletedAt/source/externalId
-          calendarId: result['calendarId'] as String?,
-          title: result['title'] as String,
-          start: result['start'] as DateTime,
-          end: result['end'] as DateTime,
-          isFullDay: result['isFullDay'] as bool,
-          colorValue: result['colorValue'] as int,
-          notes: result['notes'] as String,
-          recurrence: result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
-        );
-  ```
-
-  Note that `editRecurringEvent`'s two `CalendarEvent(...)` literals
-  (`calendar_recurrence_editing.dart:120-135`, `:151-172`) are **correct as they
-  stand** — those mint brand-new rows with fresh ids, for which version `0` is
-  the right starting point.
-
-### [Critical] Editing or deleting a task from the calendar leaves the stale task on screen — and on the todo page
-- **Location:** `lib/features/calendar/calendar_page.dart:518-524`
-  (`_showTodoPopup`'s `onSave`) and `:804-809` (`_deleteTodoTask`); provider
-  contract at `lib/app/providers.dart:715-728`
-- **Issue:** Both paths write the task and then invalidate exactly two providers:
-
-  ```dart
-  ref.invalidate(calendarTodoMarkersProvider);
-  ref.invalidate(allTodoTasksProvider);
-  ```
-
-  `allTodoTasksProvider` does not query the repository. It is an aggregate over
-  the per-list family, and the comment on it spells out the consequence:
-
-  ```dart
-  // providers.dart:715-728 — "invalidating this provider alone … no longer
-  // forces a re-query of every list's tasks, only the ones whose own
-  // todoTasksProvider(listId) was actually invalidated."
-  all.addAll(await ref.watch(todoTasksProvider(list.id).future));
-  ```
-
-  `todoTasksProvider` calls `ref.keepAlive()`, so invalidating only the aggregate
-  re-runs its body and reads the **cached** per-list value straight back. The
-  repository is never touched. Verified with a `ProviderContainer` probe: after
-  mutating the source and invalidating only the aggregate, the aggregate still
-  returned the pre-edit list; invalidating the family member as well returned the
-  new one.
-
-  So retitling a task, moving it to another list, rescheduling it, ticking it
-  complete, or deleting it from the calendar all write to SQLite and push to
-  Firestore, and then the calendar keeps drawing the old marker — and the todo
-  page, which reads the same family provider, keeps showing the old row — until
-  something unrelated invalidates that list. `_TodoPageState` never re-reads on
-  its own; it is preloaded and stays mounted, so a tab switch does not clear it
-  either. The user's edit looks lost.
-
-  `todo_page.dart` never makes this mistake: every one of its call sites pairs
-  the two (`:663-664`, `:860-861`, `:909-911`, `:1467-1469`, `:1530-1538`).
-- **Fix:** Invalidate the family member the write actually touched, in both
-  paths, and cover the move-between-lists case:
-
-  ```dart
-  onSave: (updatedTask) async {
-    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-    await ref.read(todoRepositoryProvider).upsertTask(updatedTask);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updatedTask);
-    ref.invalidate(todoTasksProvider(task.listId));            // source list
-    if (updatedTask.listId != task.listId) {
-      ref.invalidate(todoTasksProvider(updatedTask.listId));   // destination
+  Future<void> _save() async {
+    if (!_isDirty) return;
+    // ... existing save ...
+    if (updated != null) {
+      _baselineTitle = updated.title;
+      _baselineBody = updated.body;
+      _baselineMood = updated.mood;
+      _baselineWeather = updated.weatherIcon;
+      _baselineEntryDate = updated.entryDate;
+      _baselineJournalId = updated.journalId;
+      if (mounted) setState(() => _entry = updated);
+      widget.onSaved(updated);
     }
-    ref.invalidate(allTodoTasksProvider);
-    ref.invalidate(calendarTodoMarkersProvider);
-  },
+  }
+
+  @override
+  void dispose() {
+    PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
+    if (_isDirty) unawaited(_save());     // was: if (!_isSaved)
+    // ...
+  }
   ```
 
-  and in `_deleteTodoTask`, after the upsert:
+  If a flag is still wanted as an in-flight guard, it must be reset in the save future's `whenComplete`, never left latched.
+
+### [Critical] `forceOverwriteJournalEntryText` publishes a version the local row never receives
+
+- **Location:** `lib/core/sync/remote_sync_service.dart:499-517` (specifically `:513`), reached from `lib/features/search/search_entry_save_helper.dart:62-68`
+- **Issue:** The last step is `_uploadJournalEntryNow(entry, bumpVersion: true)`, which uploads `entry.copyWith(bumpVersion: true)` — version `N+1` — but **never writes that row back to SQLite**. The local row stays at `N`. This is precisely the failure mode documented on that method at `remote_sync_service.dart:2398-2408`: a remote copy that unconditionally outranks the row it came from, so `remoteVersionWins` (`firestore_document_mapper.dart:96`) resolves every subsequent pull in the remote's favour.
+
+  Concrete loss: save an entry from Search (local `N`, remote `N+1`) → go offline → edit that entry in the journal editor, whose autosave path uploads at an *unchanged* version (`_uploadJournalEntryNow(latest)` with `bumpVersion: false`, `remote_sync_service.dart:620-624`) so the local row is still `N` → reconnect. The pull sees remote `N+1 > N`, `metadataRemoteWins` is true, and the offline title / mood / `entryDate` / `journalId` are reverted (`firestore_document_mapper.dart:1162-1185`). Because **[C-1]** fires this path on a mere open/close, the desync is created by browsing, not just by editing.
+- **Fix:** Persist exactly what is published. Bump once, write it locally, then upload without a second bump:
 
   ```dart
-  ref.invalidate(todoTasksProvider(deleted.listId));
-  ref.invalidate(allTodoTasksProvider);
-  ref.invalidate(calendarTodoMarkersProvider);
+  Future<JournalEntry> forceOverwriteJournalEntryText(JournalEntry entry) async {
+    final published = entry.copyWith(bumpVersion: true);
+    await _journalRepository.upsertEntry(published, recordLocalActivity: false);
+
+    await _syncRepository.deleteOperationsForDocument(published.id);
+    _charOpRegistry.resetSession(
+      collection: FirestoreCollections.journalEntries,
+      documentId: published.id,
+      clientId: deviceId,
+      text: '',
+    );
+    _charOpRegistry.recordTextChange(
+      collection: FirestoreCollections.journalEntries,
+      documentId: published.id,
+      clientId: deviceId,
+      before: '',
+      after: published.body,
+    );
+    await _uploadJournalEntryNow(published);   // no second bump
+    _charOpRegistry.removeSession(FirestoreCollections.journalEntries, published.id);
+    return published;
+  }
   ```
+
+  Return `published` so `SearchEntrySaveHelper.saveEntry` hands the *published* row to `onSaved`, keeping `_localUpdates` and the row on disk on the same version.
+
+### [Critical] The overwrite destroys a concurrent editing session's un-uploaded char-ops
+
+- **Location:** `lib/core/sync/remote_sync_service.dart:501-516`; `lib/domain/services/character_op_session.dart:290-302`
+- **Issue:** `resetSession` **unconditionally replaces** whatever session exists for that document (`_sessions[k] = CharacterOpSession(...)`, `:296-297`) — it does not check for one, unlike `ensureSession`'s `putIfAbsent` at `:231`. If the same entry is open in the journal editor, that editor's live session (seeded by `prepareEditingSession`, including the sequence-counter lift described at `remote_sync_service.dart:700-716`) is thrown away along with **all of its pending, not-yet-uploaded operations**: `_uploadCrdtDocumentNow`'s `takePendingOps` at `:2383` then drains the *blank* replacement session, so those ops are never uploaded and never restored. The trailing `removeSession` at `:514-517` deletes the session entirely, so the editor's next `recordTextChange` re-creates a fresh chain via `ensureSession` with no history and a sequence counter restarting at 0 — sorting its ops *before* the surviving chain on replay.
+- **Fix:** Refuse to force-overwrite a document that has a live session, and route the wholesale rewrite through the existing rebase path instead:
+
+  ```dart
+  Future<JournalEntry> forceOverwriteJournalEntryText(JournalEntry entry) async {
+    final live = _charOpRegistry.session(FirestoreCollections.journalEntries, entry.id);
+    if (live != null) {
+      // Another surface owns this document's chain — rebase onto it rather
+      // than wiping it, exactly as conflict resolution does.
+      final published = entry.copyWith(bumpVersion: true);
+      await _journalRepository.upsertEntry(published, recordLocalActivity: false);
+      await _rebaseCharOpsOnLiveChain(
+        collection: FirestoreCollections.journalEntries,
+        documentId: published.id,
+        target: published.body,
+      );
+      await _uploadJournalEntryNow(published);
+      return published;
+    }
+    // ... wipe-and-reseed path (see [C-3]) ...
+  }
+  ```
+
+  At minimum, guard the trailing `removeSession` so it only removes a session this call created.
 
 ---
 
 ## High
 
-### [High] Every occurrence of a recurring timed event after the first renders as an 18 px stub in week view
-- **Location:** `lib/features/calendar/calendar_overlap_engine.dart:46-58`
-  (`_eventEndMinutes`), consumed at `:74-81` and `:196-202`
-- **Issue:** `_eventEndMinutes` clamps the event's own absolute `start`/`end`
-  against the day being laid out:
+### [High] Delete pushes a tombstone built from a stale in-memory snapshot — entries resurrect
+
+- **Location:** `lib/features/search/search_page.dart:83-86`
+- **Issue:** This is the exact bug already diagnosed and fixed on the journal page; see the comment at `journal_page.dart:1744-1755`. `softDeleteEntry` reads the current row and bumps its version (`drift_repositories.dart:254-259`), but the pushed tombstone is built independently from the widget's `entry`:
 
   ```dart
-  final effectiveStart = localStart.isBefore(dayStart) ? dayStart : localStart;
-  final effectiveEnd   = localEnd.isAfter(dayEnd)     ? dayEnd   : localEnd;
-  if (!effectiveEnd.isAfter(effectiveStart)) {
-    return _minutesFromMidnight(effectiveStart) + 30;
+  await ref.read(journalRepositoryProvider).softDeleteEntry(entry.id);
+  ref.read(remoteSyncServiceProvider)
+     .pushJournalEntryNow(entry.copyWith(deletedAt: utcNow()));
+  ```
+
+  `entry` comes from the `_localUpdates`-merged provider list (`:160-172`), which lags disk whenever an in-flight save hasn't reported back — and after **[M-5]** it can silently never report back. When it lags, the tombstone goes out at a version Firestore has already passed, the next device to pull reads it as the loser, and pushes its own higher-versioned live document back, **resurrecting the entry on every device**. The pushed payload also still carries the full title and body, contrary to the content-wiped-tombstone rule the rest of the sync layer follows.
+- **Fix:** Read the row back after the delete and push what the write actually produced, mirroring `_softDeleteAndPushTombstone`:
+
+  ```dart
+  final repo = ref.read(journalRepositoryProvider);
+  final remoteSync = ref.read(remoteSyncServiceProvider);
+  await repo.softDeleteEntry(entry.id);
+  final tombstone = await repo.getEntry(entry.id);
+  if (tombstone != null) remoteSync.pushJournalEntryNow(tombstone);
+  ```
+
+### [High] `_changeEntryJournal` is a read-modify-write outside the write queue — lost update
+
+- **Location:** `lib/features/search/search_page.dart:109-117`
+- **Issue:** It does `repo.getEntry` → `copyWith(journalId:)` → `repo.upsertEntry` directly, bypassing `JournalWriteCoordinator`, whose entire purpose is to serialise writes per document (`journal_write_coordinator.dart:8-10`, backed by `_localSaveChains` / `_localSaveGenerations` at `remote_sync_service.dart:574-600`). Because it is outside that queue, it interleaves freely with an in-flight coordinator save for the same entry — easy to hit, since `_saveAndClose` and the Save button both fire `unawaited(_save())` and pop immediately (`:420-423`, `:641-649`), leaving the save running while the user right-clicks the row.
+
+  Interleaving: the coordinator reads baseline `B` → `_changeEntryJournal` reads `B`, writes `B + journalId` at version `N+1` → the coordinator writes `applyDelta(B)` at version `N+1`, carrying the **old** `journalId`. The move is silently lost, at a version that now looks authoritative. The same hazard applies to `_deleteEntry` (**[H-1]**), whose `softDeleteEntry` is likewise unqueued.
+- **Fix:** Route it through the coordinator so it joins the per-document chain and re-reads its baseline under the queue:
+
+  ```dart
+  final coordinator = ref.read(journalWriteCoordinatorProvider);
+  JournalEntry? moved;
+  await coordinator.saveEntry(
+    entryId: entry.id,
+    bumpVersion: true,
+    applyDelta: (base) =>
+        base.copyWith(journalId: targetJournalId, bumpVersion: false),
+    onSuccess: (saved) => moved = saved,
+  );
+  if (moved == null || !mounted) return;
+  ref.read(remoteSyncServiceProvider).pushJournalEntryNow(moved!);
+  setState(() => _localUpdates[moved!.id] = moved!);
+  _invalidateEntryCaches();
+  ```
+
+  Do the same for the delete: `await remoteSync.flushDocument(FirestoreCollections.journalEntries, entry.id)` before `softDeleteEntry`, the way `journal_page._deleteEntry` calls `_flushActiveEntryEdits` first.
+
+### [High] Offline, the op-log wipe silently does nothing — and the reseed then corrupts the chain
+
+- **Location:** `lib/data/remote/firestore_sync_repository.dart:335-352`, called from `lib/core/sync/remote_sync_service.dart:500`
+- **Issue:** `deleteOperationsForDocument` starts with `.where('documentId', isEqualTo: ...).get()` at the default `Source.serverAndCache`. Per the contract documented at `repositories.dart:619-627`, Firestore answers reads from the local cache while offline and never fails — so with a cold or evicted cache the query returns **zero docs and the method returns 0**, leaving the remote op log fully intact. `forceOverwriteJournalEntryText` proceeds anyway: it resets the session to `''` and records one insert of the entire body, which is uploaded on top of the surviving chain. The result is exactly the duplicated/garbled text that `search_entry_save_helper.dart:57-61` claims this path exists to prevent, and the failure is invisible because the return value is discarded.
+- **Fix:** Make the wipe verifiable and refuse to reseed when it isn't. Force a server read so an offline call throws rather than lying:
+
+  ```dart
+  final query = await _collection('sync_operations')
+      .where('documentId', isEqualTo: documentId)
+      .get(const GetOptions(source: Source.server));
+  ```
+
+  and in `forceOverwriteJournalEntryText`, wrap the wipe so a failure falls back to `_rebaseCharOpsOnLiveChain` (which composes with the existing chain instead of assuming an empty one) rather than reseeding from `''`.
+
+### [High] Every keystroke re-scans and re-lowercases the entire corpus on the UI isolate
+
+- **Location:** `lib/features/search/search_page.dart:145`, `:173-180`; `lib/domain/services/search_service.dart:23-26`
+- **Issue:** Three costs compound per keystroke, all synchronous on the UI isolate, with no debounce anywhere:
+  1. `onChanged: (_) => setState(() {})` rebuilds the whole page, including both `.when` branches and the `TagHighlightedTextField`;
+  2. `mergedEntries` allocates a new `List` over **every** entry (`:160-172`) — a full pass with a map lookup per element;
+  3. `searchEntries` allocates `'${entry.title} ${entry.body}'.toLowerCase()` for **every entry** (`search_service.dart:24`) — one full-body concat plus one full-body lowercase, per entry, per keystroke.
+
+  With "browse-all" confirmed as intended, the source list is `repo.listEntries()` with no `limit` (`providers.dart:684`) — every journal entry in the database. On a few thousand entries this is megabytes of transient string allocation per character typed, and it is the dominant cost of typing in this field.
+- **Fix:** Debounce the query and precompute the folded haystack once per entry-list identity, not once per keystroke.
+
+  ```dart
+  // _SearchPageState
+  Timer? _queryDebounce;
+  String _activeQuery = '';
+
+  void _onQueryChanged(String _) {
+    _queryDebounce?.cancel();
+    _queryDebounce = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) setState(() => _activeQuery = _queryController.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _queryDebounce?.cancel();   // see [M-4]
+    // ...
   }
   ```
 
-  For a **recurring** event the stored `start`/`end` are the *anchor's* instants,
-  not the occurrence's. On any later occurrence day `localStart` is before
-  `dayStart`, so `effectiveStart` collapses to midnight; `localEnd` is before
-  that again, so the guard fires and the function returns `30`. Meanwhile
-  `startMinutes` is taken from the raw `event.start` (`:77`) and is correct. The
-  slot therefore has `startMinutes = 600`, `endMinutes = 30` — an inverted
-  interval.
-
-  Two visible consequences:
-  1. `height: max(taskBarHeight, (endMinutes - startMinutes) / 60 * pxPerHour)`
-     (`:199-202`) resolves to `taskBarHeight`. A weekly 2-hour meeting draws
-     120 px on the week it was created and **18 px every week after**.
-  2. `_itemsOverlap` (`:107-108`) is `a.start < b.end && b.start < a.end`. With
-     an inverted interval that is essentially never true, so a recurring event
-     never joins a cluster: it always claims the full column width and is drawn
-     straight over whatever it actually collides with.
-
-  Confirmed by probe against `layoutDayColumn` — a weekly 10:00→12:00 event
-  measured `top=600.0 h=120.0` on its anchor day and `top=600.0 h=18.0` seven
-  days later.
-- **Fix:** Resolve the occurrence onto the day being laid out before measuring.
-  The existing helper already answers that question:
+  Drive `_parseSearchQuery(_activeQuery)` from `_activeQuery`, and cache the folded text so it is rebuilt only when the entry list actually changes:
 
   ```dart
-  double _eventEndMinutes(CalendarEvent event, DateTime day) {
-    final occurrenceStart = calendarOccurrenceStartOn(event, day);
-    if (occurrenceStart == null) {
-      return _minutesFromMidnight(event.start.toLocal()) + 30;
-    }
-    // Shift the anchor's instants onto the occurrence that covers [day].
-    final shift = epochDay(occurrenceStart) -
-        epochDay(DateUtils.dateOnly(event.start.toLocal()));
-    final localStart = addDays(event.start.toLocal(), shift);
-    final localEnd   = addDays(event.end.toLocal(),   shift);
-    final dayStart = DateTime(day.year, day.month, day.day);
-    final dayEnd   = addDays(dayStart, 1);
-    final effectiveStart = localStart.isBefore(dayStart) ? dayStart : localStart;
-    final effectiveEnd   = localEnd.isAfter(dayEnd)     ? dayEnd   : localEnd;
-    if (!effectiveEnd.isAfter(effectiveStart)) {
-      return _minutesFromMidnight(effectiveStart) + 30;
-    }
-    return _minutesFromMidnight(effectiveEnd);
+  List<JournalEntry>? _haystackSource;
+  final Map<String, String> _haystack = {};   // entry.id -> folded "title body"
+
+  void _rebuildHaystack(List<JournalEntry> merged) {
+    if (identical(_haystackSource, merged)) return;
+    _haystack
+      ..clear()
+      ..addEntries(merged.map(
+        (e) => MapEntry(e.id, '${e.title} ${e.body}'.toLowerCase()),
+      ));
+    _haystackSource = merged;
   }
   ```
 
-  `addDays` rather than `add(Duration(days:))`, for the reason
-  `recurrence_engine.dart:28-35` documents. This is a pure arithmetic fix inside
-  the layout function — the week timeline's entry fade and the month↔week morph
-  read the resulting `CalendarOverlapSlot` list unchanged.
-
-### [High] Tapping a week-view time slot creates an all-day event, discarding the slot the user picked
-- **Location:** `lib/features/calendar/calendar_week_timeline.dart:396-424`
-  (`_handleBackgroundTap`) → `lib/features/calendar/calendar_page.dart:532-534`
-  (`_openWeekSlotSidebar`) → `lib/features/calendar/calendar_event_panel.dart:154`
-- **Issue:** `_handleBackgroundTap` converts the tap's y into minutes, rounds to
-  the nearest half hour, clamps it into the day, and hands the exact `DateTime`
-  through as `onSlotTap(day, time)`. `_openWeekSlotSidebar` forwards it as
-  `_openEventSidebar(day: time)`, and the panel seeds `_start` from it correctly
-  (`calendar_event_panel.dart:155-162`).
-
-  Then `initState` runs `_isFullDay = e?.isFullDay ?? true;` — unconditionally
-  `true` for a new event, whatever entry point opened it. Saving produces an
-  all-day row, which `calendarWeekAllDayShelfEvent`
-  (`calendar_todo_markers.dart:96-100`) routes to the pinned shelf. The user taps
-  2:30 PM on Wednesday and gets a banner across the top of the day.
-
-  The whole rounding block in `_handleBackgroundTap` — including the
-  `roundedMinutes >= 24 * 60` guard — is unreachable in its effect: nothing
-  downstream can observe the time it computed.
-- **Fix:** Let the caller state the intent rather than having the panel guess.
-  Thread a flag through `_openEventSidebar`:
-
-  ```dart
-  // calendar_page.dart
-  void _openWeekSlotSidebar(DateTime day, DateTime time) {
-    _openEventSidebar(day: time, timedByDefault: true);
-  }
-  ```
-
-  pass it into `CalendarEventPanel` as `initialIsFullDay`, and seed from it:
-
-  ```dart
-  // calendar_event_panel.dart:154, and the matching line at :196
-  _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
-  ```
-
-  with `initialIsFullDay` defaulting to `true`, so every existing call site — the
-  month day-cell tap, the toolbar button, `_revealCalendarEvent` — keeps its
-  current behaviour.
-
-### [High] Dismissing an event popup rewrites and re-pushes the event even when nothing was edited
-- **Location:** `lib/features/calendar/calendar_page.dart:587-595`
-  (`_saveSidebarEvent`'s single-row branch), with the guard that exists only for
-  the recurring branch at `:598-602`; triggered from
-  `lib/features/calendar/calendar_event_panel.dart:245-254` (`_handleDismissPop`)
-- **Issue:** Clicking outside the popup is a save by design — `_handleDismissPop`
-  calls `_trySave(showValidationErrors: false)`. For a **repeating** event the
-  page then guards against a no-op:
-
-  ```dart
-  if (!_eventContentChanged(occurrenceView(event, occurrenceDay), edited)) {
-    if (mounted) _resetSidebar();
-    return;
-  }
-  ```
-
-  The single-row branch above it has no such guard. It runs
-  `await repo.upsertEvent(edited)` unconditionally, so merely **opening an event
-  to look at it and clicking away** produces:
-  - a full-row SQLite write,
-  - a `_syncedWrites.notifyOne(FirestoreCollections.calendarEvents, ...)`
-    (`drift_repositories.dart:984-986`) — i.e. a Firestore push,
-  - a fresh `updatedAt`, so the row jumps to the top of any recency ordering,
-  - and, until the Critical above is fixed, a `version` reset.
-
-  On a page where the popup opens on every event tap, that is a write and a
-  network round trip per glance, and it manufactures sync conflicts out of
-  read-only interactions.
-- **Fix:** Move the existing guard above the branch so it covers both shapes:
-
-  ```dart
-  if (event != null &&
-      !_eventContentChanged(
-        occurrenceDay == null ? event : occurrenceView(event, occurrenceDay),
-        edited,
-      )) {
-    if (mounted) _resetSidebar();
-    return;
-  }
-
-  if (event == null || !event.recurrence.repeats ||
-      event.isRecurrenceOverride || occurrenceDay == null) {
-    await repo.upsertEvent(edited);
-    ...
-  }
-  ```
-
-### [High] Rescheduling a task from the calendar leaves a repeating task's anchor stale and its list order wrong
-- **Location:** `lib/features/calendar/calendar_todo_panel.dart:155-177`
-  (`_trySave`), consumed at `lib/features/calendar/calendar_page.dart:518-524`;
-  contrast the policy in `lib/domain/services/recurrence_engine.dart:279-285`
-  (`rescheduledRecurrenceAnchor`), applied at
-  `lib/features/todo/todo_edit_panel.dart:409-428`
-- **Issue:** `_trySave` writes `widget.task.copyWith(..., dueDate: _dueDate,
-  clearDueDate: _dueDate == null)` and nothing else. Two invariants the todo
-  feature maintains are skipped:
-
-  1. **Recurrence anchor.** The documented rule is that the anchor is frozen when
-     the repeat is set and *only moves when the user reschedules by hand*
-     (`recurrence_engine.dart:266-278`). A calendar reschedule is exactly that,
-     but `recurrenceAnchor` is left untouched, so a "monthly on the 3rd" task
-     dragged to the 20th from the calendar still rolls forward to the **3rd**.
-     Clearing the due date leaves a stale anchor behind, which silently revives
-     the old pattern the next time any date is set — the failure mode
-     `rescheduledRecurrenceAnchor`'s doc comment exists to prevent.
-  2. **Placement.** `sortOrder` is per-list and is only kept chronological within
-     the dated run by `buildUnstarredOrderForDueDate` at insertion time. Writing
-     `dueDate` without running `applyDueDateChange` parks the task at its old
-     position in the todo list. `unstarredSectionNeedsNormalize` only checks that
-     dated tasks precede undated ones, so `_maybeNormalizeListSort` will not
-     repair it either.
-
-  Moving the task to a different list (`listId: _listId`) has the same problem
-  from the other side: it arrives in the destination carrying the source list's
-  numbering.
-- **Fix:** Route the calendar's save through the same helpers the todo feature
-  uses, in `_showTodoPopup`'s `onSave` rather than in the panel (the panel should
-  keep reporting intent, not owning placement):
-
-  ```dart
-  onSave: (updatedTask) async {
-    if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
-    final repo = ref.read(todoRepositoryProvider);
-    var next = updatedTask;
-    if (next.dueDate != task.dueDate) {
-      next = next.copyWith(
-        recurrenceAnchor: rescheduledRecurrenceAnchor(
-          rule: next.recurrence, newDue: next.dueDate),
-        clearRecurrenceAnchor: next.dueDate == null,
-      );
-    }
-    final active = activeTopLevelTasks(await repo.listTasks(next.listId));
-    final batch = applyDueDateChange(next, active,
-        dueDate: next.dueDate, clearDueDate: next.dueDate == null);
-    await repo.upsertTasksBatch(batch.tasks);
-    await ref.read(remoteSyncServiceProvider).pushTodoTasksBatch(batch.tasks);
-    // …plus the family invalidation from the Critical finding above.
-  },
-  ```
+  Pass that map into `SearchService.searchEntries` (or move the fold into the service behind an `id -> folded` cache) so the per-keystroke work is a `contains` over precomputed strings.
 
 ---
 
 ## Medium
 
-### [Medium] `calendarPackWeekEvents` re-normalizes every event on every membership test — the month view's hot path
-- **Location:** `lib/features/calendar/calendar_day_grid.dart:88-136`
-  (`calendarPackWeekEvents`), called at `:2620` (full month layout),
-  `lib/features/calendar/calendar_page.dart:3220` and `:3916` (both morph
-  layers), and `lib/features/calendar/calendar_todo_markers.dart:120`
-- **Issue:** `calendar_recurrence.dart:55-63` exists precisely to hoist this
-  work: `normalizeCalendarEvents` pre-computes each event's local date-only
-  start/end and its exception set once, and
-  `calendarEventOccursOnDayNormalized` reads those instead of recomputing.
-  `MonthDayGrid.build` uses it — but **only on the compact (year-tile) branch**
-  (`calendar_day_grid.dart:2600-2615`). The full month branch falls through to
-  `calendarPackWeekEvents`, which calls the un-normalized
-  `calendarEventOccursOnDay` throughout; every one of those calls allocates a
-  fresh `NormalizedCalendarEvent` — a `toLocal()`, two `DateUtils.dateOnly()`
-  calls, and a `Set<int>` built from the parsed exception list — before doing any
-  work.
+### [Medium] `_invalidateEntryCaches` misses two providers — the tag pool and analytics stay stale all session
 
-  The call count is not small. Per week row, for `E` events: 7·E in the
-  membership filter, then for each event ≥7 per attempted row in the
-  `while (true)` packing loop plus 7 more in the placement loop — ≥21·E
-  normalizations per row, ~126·E per month-view build. During a month↔week morph
-  `_buildInactiveMonthRows` builds a second full `MonthDayGrid` (another 6 rows)
-  alongside the live one, and `_MonthWeekMorphLayer.initState` adds one more.
-
-  For weekly rules each of those also runs `latestOccurrenceOnOrBefore`'s bounded
-  backward scan (`recurrence_engine.dart:141-147`), up to `7·interval + 7`
-  iterations.
-- **Fix:** Normalize once at the top and index a membership matrix. The
-  signature can stay as it is:
+- **Location:** `lib/features/search/search_page.dart:70-74`, and the duplicated inline copy at `:243-245`
+- **Issue:** Both invalidate only `journalEntriesProvider`, `journalListEntriesProvider`, and `journalEntryCountsProvider`. They omit `allJournalEntriesProvider` and `journalAllEntryIdsProvider`, even though `invalidateJournalEntryProviders(ref)` exists at `providers.dart:654-658` for exactly this set, and `journal_page._refreshEntryLists` explains at `:456-459` why `allJournalEntriesProvider` must be included. Every one of these is `keepAlive`, so an un-invalidated one is stale for the rest of the app session:
+  - `tagPoolProvider` folds over `allJournalEntriesProvider` (`tag_suggestions.dart:141`), so a `#tag` typed in the search dialog never enters the completion pool — **including in the search page's own query field**, which is a `TagScope.journal` field (`search_page.dart:137-143`). The user can create a tag and then be unable to autocomplete it.
+  - The analytics page (`analytics_page.dart:92`) keeps showing entries deleted from Search and pre-edit bodies.
+- **Fix:** Use the shared helper in both places and delete the inline copy:
 
   ```dart
-  List<List<CalendarEvent?>> calendarPackWeekEvents(
-    List<DateTime> weekDates,
-    List<CalendarEvent> allEvents,
-  ) {
-    final localDays = [for (final d in weekDates) DateUtils.dateOnly(d.toLocal())];
-    final onDay = <String, List<bool>>{};
-    final weekEvents = <CalendarEvent>[];
-    for (final n in normalizeCalendarEvents(allEvents)) {
-      final row = [
-        for (final day in localDays) calendarEventOccursOnDayNormalized(n, day),
-      ];
-      if (row.contains(true)) {
-        onDay[n.event.id] = row;
-        weekEvents.add(n.event);
+  void _invalidateEntryCaches() => invalidateJournalEntryProviders(ref);
+  ```
+
+  and at `:243-245`, replace the three `ref.invalidate(...)` lines with `_invalidateEntryCaches();`.
+
+### [Medium] Only the first `#tag` filters; later ones are matched as literal text
+
+- **Location:** `lib/features/search/search_page.dart:269-282`
+- **Issue:** `_parseSearchQuery` returns a single `String? tag` and its loop guard is `if (tag == null && part.startsWith('#'))`, so the second `#tag` onward falls into `keywords` and is matched with `haystack.contains('#urgent')` against title+body. `SearchService.searchEntries` already accepts `List<String>? tagFilter` and ANDs it with `.every` (`search_service.dart:10-14`), so the multi-tag capability exists and is simply never reached. Confirmed as a bug. Today `#work #urgent` returns only entries tagged `work` whose *body text* also literally contains the string `#urgent` — which coincidentally works for inline tags but silently fails for any tag that reached `tags` by another route (an import, a remote merge), and it produces spurious keyword highlighting on the `#urgent` literal.
+- **Fix:** Collect every `#token`:
+
+  ```dart
+  ({List<String> tags, String keywords}) _parseSearchQuery(String rawQuery) {
+    final parts = rawQuery.trim().split(RegExp(r'\s+'));
+    final tags = <String>[];
+    final keywords = <String>[];
+    for (final part in parts) {
+      if (part.isEmpty) continue;
+      if (part.startsWith('#') && part.length > 1) {
+        tags.add(part.substring(1));
+      } else {
+        keywords.add(part);
       }
     }
-    // …sort and pack exactly as today, replacing every
-    // `calendarEventOccursOnDay(event, weekDates[c])` with `onDay[event.id]![c]`.
+    return (tags: tags, keywords: keywords.join(' '));
   }
   ```
 
-  Output and geometry are identical, so the morph layers that call it from
-  `initState` are unaffected.
+  and at the call site: `tagFilter: parsedQuery.tags.isEmpty ? null : parsedQuery.tags`.
 
-### [Medium] A multi-day event's caps and title are wrong on every occurrence after the first
-- **Location:** `lib/features/calendar/calendar_todo_markers.dart:501-514`
-  (`CalendarWeekEventBlock.build`)
-- **Issue:** The block decides which end caps to round and where to draw the
-  title by comparing the day it is rendering against the event's **anchor**
-  dates:
+### [Medium] Tag filtering is case-sensitive while keyword matching is not
+
+- **Location:** `lib/domain/services/search_service.dart:12`
+- **Issue:** `e.tags.contains(tag)` is an exact `String ==` against tags stored verbatim by `extractTags` (`journal_tags.dart:10-13`, which preserves the author's casing), whereas keyword matching folds both sides at `:16-24`. Searching `#work` therefore returns nothing for an entry tagged `#Work`, with no indication why — and the query field's own tag autocomplete will happily suggest `Work` while the filter that consumes it rejects it. Confirmed as a bug.
+- **Fix:** Fold both sides at the filter site:
 
   ```dart
-  final startDay = DateUtils.dateOnly(event.start.toLocal());
-  final endDay   = DateUtils.dateOnly(event.end.toLocal());
-  final currentDay = DateUtils.dateOnly(day!);
-  final totalDays = endDay.difference(startDay).inDays + 1;
-  if (totalDays > 1) {
-    isStart = currentDay.isAtSameMomentAs(startDay);
-    final isEnd = currentDay.isAtSameMomentAs(endDay);
-    bridgeLeft  = !isStart && !isFirstColumn;
-    bridgeRight = !isEnd   && !isLastColumn;
+  if (tagFilter != null && tagFilter.isNotEmpty) {
+    final needles = tagFilter.map((t) => t.toLowerCase()).toList();
+    candidates = candidates.where((e) {
+      final own = e.tags.map((t) => t.toLowerCase()).toSet();
+      return needles.every(own.contains);
+    }).toList();
   }
   ```
 
-  For a repeating multi-day event, `currentDay` never equals `startDay` or
-  `endDay` on any occurrence past the first, so `bridgeLeft` and `bridgeRight`
-  are both true for every interior column. The bar renders with square caps on
-  both ends as if it continued past the visible week, and
-  `showText = !bridgeLeft` (`:531`) is false in every column — **the event's
-  title never appears** on any occurrence after the first.
+  Once **[H-4]**'s cache exists, fold the tag set into the same per-entry cache so this is not recomputed per keystroke.
 
-  Separately, `endDay.difference(startDay).inDays` is the DST-unsafe form the
-  codebase documents against in `calendar_days.dart:1-18` and
-  `recurrence_engine.dart:19-26`: across a fall-back transition a genuinely
-  3-day event measures 2, so `totalDays > 1` can even collapse a 2-day event to
-  a single-day block.
-- **Fix:** Resolve the occurrence that covers `day`, and use `epochDay` for the
-  span:
+### [Medium] `_deletedIds` and `_localUpdates` are never pruned and the page never unmounts
+
+- **Location:** `lib/features/search/search_page.dart:57`, `:61`; `dispose` at `:63-68`
+- **Issue:** `SearchPage` is a `StatefulShellBranch` root (`app_router.dart:33-47`), so `_SearchPageState` lives for the entire authenticated session. Neither collection is ever cleared, and `dispose` doesn't touch them.
+  - `_localUpdates` retains a full `JournalEntry` — including its complete `body` — for every entry edited this session, long after the providers have caught up and the two copies are identical.
+  - `_deletedIds` is a permanent hide-list. If a delete is later undone (a pull from another device that resolves in favour of the live row, or a trash restore), the entry is **invisible in Search until the app restarts**, even though it is present in the provider data.
+- **Fix:** Prune both against the provider data during the merge, and cancel the debounce timer from **[H-4]** in `dispose`:
 
   ```dart
-  if (day != null) {
-    final occurrenceStart = calendarOccurrenceStartOn(event, day!);
-    if (occurrenceStart != null) {
-      final span = epochDay(DateUtils.dateOnly(event.end.toLocal())) -
-                   epochDay(DateUtils.dateOnly(event.start.toLocal()));
-      final currentDay = DateUtils.dateOnly(day!);
-      if (span > 0) {
-        isStart = currentDay == occurrenceStart;
-        final isEnd = currentDay == addDays(occurrenceStart, span);
-        bridgeLeft  = !isStart && !isFirstColumn;
-        bridgeRight = !isEnd   && !isLastColumn;
-      }
-    }
-  }
+  final entryIndex = {for (final e in entries) e.id: e};
+
+  _localUpdates.removeWhere((id, local) {
+    final live = entryIndex[id];
+    return live == null ||
+        live.version > local.version ||
+        (live.version == local.version && !live.updatedAt.isBefore(local.updatedAt));
+  });
+  _deletedIds.removeWhere((id) => !entryIndex.containsKey(id));
   ```
 
-  `calendarEventBarsBridge` (`calendar_recurrence.dart:145-163`) already answers
-  this correctly for the month view; this is the week view's copy having drifted
-  from it.
+  Both maps are read-only for the rest of the build, so pruning here is safe; move it to a post-frame callback if you prefer not to mutate during `build`. The `_deletedIds` line also retires the optimistic hide once the provider itself stops returning the id — i.e. once the delete has actually landed.
 
-### [Medium] Moving a series with "all events" leaves its deleted occurrences behind on the old dates
-- **Location:** `lib/domain/services/calendar_recurrence_editing.dart:215-235`
-  (`rebaseToAnchor`), reached from
-  `lib/features/calendar/calendar_page.dart:616-618`
-- **Issue:** `rebaseToAnchor` shifts `start` and `end` by the number of days the
-  user moved the occurrence, so the whole series slides. It does not touch
-  `exceptionDates`, and `editRecurringEvent`'s `allEvents` branch (`:114-115`)
-  upserts `edited` — which `_saveSidebarEvent` populated with
-  `exceptionDates: event?.exceptionDates` (`calendar_page.dart:574`), i.e. the
-  master's originals.
+### [Medium] Save failures are swallowed — the list keeps showing pre-edit text after a successful local write
 
-  An exception identifies an occurrence in the pattern ("the one on Mar 14"), so
-  once the pattern moves by N days the stored dates no longer land on any
-  occurrence. `_coveringOccurrenceStart` (`calendar_recurrence.dart:97-104`) then
-  matches none of them and every previously-deleted occurrence **reappears**.
-  Detached override rows are worse: their `recurrenceDate` still points at the
-  old date, so they orphan — the master no longer excludes that day, and both the
-  series occurrence and the override render on top of each other.
-- **Fix:** Shift the exception dates and the child overrides by the same delta.
-  In `rebaseToAnchor`:
+- **Location:** `lib/features/search/search_entry_save_helper.dart:62-80`; consumed at `lib/features/search/search_page.dart:408-411`
+- **Issue:** `saveEntry` returns `result` only after `forceOverwriteJournalEntryText` completes, and the `catch` at `:70-80` converts *any* throw into `return null`. But the local SQLite write already succeeded inside `coordinator.saveEntry` before that line — so when the remote step throws (network, permissions, the batch commit at `firestore_sync_repository.dart:349`), the caller sees `null`, skips `setState(() => _entry = updated)`, and **never calls `widget.onSaved`**. No `_localUpdates` entry, no provider invalidation: the search list keeps rendering the pre-edit title and body until something else refreshes it. The user's edit is on disk but invisible, which reads as "my edit was lost" — and it directly feeds **[H-1]**, where that stale `entry` is used to build a tombstone.
+- **Fix:** Separate the local outcome from the remote outcome. Return the saved row as soon as the local write lands, and report the publish failure without discarding it:
 
   ```dart
-  final shift = epochDay(editedStart) - epochDay(occurrence);
-  ...
-  return edited.copyWith(
-    start: _onDateKeepingTime(newStartDate, edited.start),
-    end: _onDateKeepingTime(addDays(newStartDate, span), edited.end),
-    exceptionDates: [
-      for (final d in edited.exceptionDates)
-        addDays(DateUtils.dateOnly(d.toLocal()), shift),
-    ],
-    bumpVersion: false,
-  );
-  ```
-
-  and, in `_saveSidebarEvent`'s `allEvents` path, re-point the overrides before
-  writing (they are reachable the same way `_orphanedOverrideIds` finds them):
-
-  ```dart
-  for (final child in await _overridesOf(event)) {
-    final d = child.recurrenceDate;
-    if (d == null) continue;
-    await repo.upsertEvent(child.copyWith(
-      recurrenceDate: addDays(DateUtils.dateOnly(d.toLocal()), shift),
-      start: addDays(child.start.toLocal(), shift),
-      end:   addDays(child.end.toLocal(),   shift),
+  JournalEntry? result;
+  try {
+    await coordinator.saveEntry(
+      entryId: baseline.id,
+      bumpVersion: true,
+      applyDelta: (base) => /* ... unchanged ... */,
+      onSuccess: (saved) => result = saved,
+    );
+  } catch (error, stackTrace) {
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error, stack: stackTrace, library: 'SearchEntrySaveHelper',
+      context: ErrorDescription('while saving entry from Search'),
     ));
+    return null;   // the local write itself failed — nothing to show
+  }
+  if (result == null) return null;
+
+  try {
+    remoteSync.cancelDocument(FirestoreCollections.journalEntries, baseline.id);
+    return await remoteSync.forceOverwriteJournalEntryText(result!);
+  } catch (error, stackTrace) {
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error, stack: stackTrace, library: 'SearchEntrySaveHelper',
+      context: ErrorDescription('while publishing entry from Search'),
+    ));
+    return result;   // local write succeeded; the UI must reflect it either way
   }
   ```
 
-### [Medium] The date pill can persist an event whose end precedes its start
-- **Location:** `lib/features/calendar/calendar_event_panel.dart:551-573`
-  (the `DateSelectorPopover` result handler)
-- **Issue:** The handler reassembles both endpoints by pinning the picked dates
-  to the *existing* wall-clock times:
+  The narrowed outer `try` still covers `coordinator.saveEntry`'s `StateError` for a missing row (`journal_write_coordinator.dart:47-49`), which is the one case where `null` is the right answer.
+
+### [Medium] Context-menu actions drop their Futures — failures surface as unhandled async errors
+
+- **Location:** `lib/features/search/search_page.dart:196-212`
+- **Issue:** `ContextMenuItem.onTap` is a `VoidCallback`, so `() => _changeEntryJournal(entry, journals)` and `() => _deleteEntry(entry)` return `Future`s that nobody holds. If `softDeleteEntry`, `getEntry`, or `upsertEntry` throws — a locked database, a failed migration — the error escapes as an unhandled async exception with **no user-facing feedback at all**: the confirm dialog closes, the row stays in the list, and the user reasonably concludes the delete was rejected and tries again. There is no `try`/`catch` and no snackbar on either path.
+- **Fix:** Wrap both bodies and surface the failure, and make sure a failed delete does not enter `_deletedIds`:
 
   ```dart
-  _start = DateTime(dateRange.start.year, …, _start.hour, _start.minute);
-  _end   = DateTime(dateRange.end.year,   …, _end.hour,   _end.minute);
-  ```
-
-  That is correct while the range stays multi-day, but collapsing a multi-day
-  event to a single day carries both times onto the same date with no ordering
-  check. An event running `Mar 1 14:00 → Mar 3 09:00`, re-pointed at `Mar 5`,
-  becomes `Mar 5 14:00 → Mar 5 09:00`.
-
-  Nothing downstream rejects it. `_trySave` validates only the title
-  (`:238-245`). `TimeRangePopover` does keep end > start
-  (`time_selector_popovers.dart:211-215`), so this is the one route that produces
-  the inversion — and the panel then displays "2:00 PM → 9:00 AM", which is what
-  the user sees and saves. The row is written and pushed to Firestore in that
-  state. The week column degrades gracefully (`_eventEndMinutes` returns
-  `start + 30`), so this shows up as a wrong label and a wrong-length bar rather
-  than a crash, which is why it survives.
-- **Fix:** Re-derive the end from the start when the range collapses, preserving
-  the event's duration:
-
-  ```dart
-  if (dateRange != null) {
-    setState(() {
-      final duration = _end.difference(_start);
-      _start = DateTime(dateRange.start.year, dateRange.start.month,
-          dateRange.start.day, _start.hour, _start.minute);
-      var end = DateTime(dateRange.end.year, dateRange.end.month,
-          dateRange.end.day, _end.hour, _end.minute);
-      if (!end.isAfter(_start)) {
-        end = _start.add(
-            duration > Duration.zero ? duration : const Duration(hours: 1));
+  Future<void> _deleteEntry(JournalEntry entry) async {
+    // ... confirm ...
+    try {
+      await repo.softDeleteEntry(entry.id);
+      final tombstone = await repo.getEntry(entry.id);   // see [H-1]
+      if (tombstone != null) remoteSync.pushJournalEntryNow(tombstone);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: error, stack: stackTrace, library: 'SearchPage',
+        context: ErrorDescription('while deleting entry from Search'),
+      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete entry.')),
+        );
       }
-      _end = end;
-    });
-  }
-  ```
-
-### [Medium] `_orphanedOverrideIds` misses any override the user moved to another calendar
-- **Location:** `lib/features/calendar/calendar_page.dart:773-790`
-- **Issue:** The sweep that cleans up detached occurrences when a series is
-  deleted scopes its query to the master's calendar:
-
-  ```dart
-  final all = await ref.read(calendarRepositoryProvider)
-      .listEvents(calendarId: master.calendarId);
-  ```
-
-  But an override row is minted with `calendarId: edited.calendarId`
-  (`calendar_recurrence_editing.dart:124`) — the calendar the user picked in the
-  panel's corner flag while editing that one occurrence. Moving a single
-  occurrence to a different calendar is a supported action, and it takes the row
-  out of this query's reach.
-
-  Deleting the series then leaves that override behind as a stray one-off event
-  with a `recurrenceParentId` pointing at a soft-deleted row. It renders forever
-  with no series to explain it — exactly the failure the function's own doc
-  comment says it exists to prevent.
-
-  The same scoping breaks the reverse case: `reassignEventsCalendar` moving a
-  calendar's events elsewhere silently splits a series from its overrides.
-- **Fix:** Query across all calendars and filter on the parent link, which is the
-  actual relationship:
-
-  ```dart
-  final all = await ref.read(calendarRepositoryProvider).listEvents();
-  return [
-    for (final candidate in all)
-      if (candidate.recurrenceParentId == master.id &&
-          (scope == RecurrenceEditScope.allEvents ||
-              !(candidate.recurrenceDate ?? candidate.start).isBefore(occurrence)))
-        candidate.id,
-  ];
-  ```
-
-### [Medium] `_handleTap` can leave an event bar permanently untappable
-- **Location:** `lib/features/calendar/calendar_day_grid.dart:1686-1706`
-- **Issue:** The press animation gates re-entry on `_isTapping` and only clears
-  it after awaiting the controller:
-
-  ```dart
-  if (widget.onTap == null || _isTapping) return;
-  _isTapping = true;
-  ...
-  await _controller.forward(from: 0);
-  if (!mounted) return;
-  _isTapping = false;
-  widget.onTap!();
-  ```
-
-  `AnimationController.forward()` returns a `TickerFuture` that completes when
-  the animation *finishes*. If the controller is stopped or restarted before
-  then, that future never completes — it does not throw, it simply never
-  resolves. The `await` therefore hangs, `_isTapping` stays `true` for the life
-  of the `State`, and `widget.onTap!()` is never called: the bar keeps painting
-  and keeps swallowing taps.
-
-  The 140 ms window is short but the controller is genuinely restartable —
-  `_onTapStateChanged` (`:1678-1684`) calls `forward(from: 0)` on every segment
-  whose `eventId` matches the broadcast, and its `_isTapping` guard only protects
-  the segment that *initiated* the tap. Tapping segment A of a multi-day bar and
-  then, inside the same 140 ms, tapping segment B leaves A's future dangling.
-
-  Two smaller issues on the same path: the tap's side effect (opening the popup)
-  is delayed a full animation length behind the press, and `_isTapping` is never
-  reset on the `!mounted` early return.
-- **Fix:** Do not tie the callback's lifetime to the animation's. Fire the
-  animation and release the latch on a delay that cannot be cancelled out from
-  under it:
-
-  ```dart
-  Future<void> _handleTap() async {
-    if (widget.onTap == null || _isTapping) return;
-    _isTapping = true;
-    if (widget.eventId != null && _tapState != null) {
-      final box = context.findRenderObject() as RenderBox?;
-      _tapState!.notifyEventTap(
-        eventId: widget.eventId!,
-        widgetRect: box != null ? box.localToGlobal(Offset.zero) & box.size : Rect.zero,
-      );
+      return;                       // do not hide a row that still exists
     }
-    unawaited(_controller.forward(from: 0));
-    await Future<void>.delayed(_controller.duration ?? Duration.zero);
     if (!mounted) return;
-    _isTapping = false;
-    widget.onTap!();
+    setState(() {
+      _deletedIds.add(entry.id);
+      _localUpdates.remove(entry.id);
+    });
+    _invalidateEntryCaches();
   }
-  ```
-
-  The press animation itself is untouched — same controller, same curve, same
-  duration; only the latch stops depending on the ticker future resolving.
-
-### [Medium] `deleteCalendarList` reads `Theme.of(context)` after an await with no mounted check
-- **Location:** `lib/features/calendar/calendar_list_actions.dart:152-167`, after
-  the `await` at `:134`; caller at
-  `lib/features/calendar/calendar_page.dart:998-1013`
-- **Issue:** The `orElse` closure that fabricates a replacement default calendar
-  calls `Theme.of(context).colorScheme.primary.toARGB32()` (`:159`). It runs
-  after `await showDeleteContainerDialog(context, …)`, and neither
-  `deleteCalendarList` nor its caller has a `context.mounted` guard across that
-  gap. If the page went away while the dialog was up, this throws on a dead
-  `BuildContext` — inside a `try` whose `catch` reports the error and returns
-  `false`, so the calendar is left undeleted and its events half-reassigned.
-
-  `_handleCalendarManage` has the same gap one level up: it awaits
-  `listEvents(calendarId: …)` at `:1000-1002` and then passes `context` into the
-  dialog with no check.
-
-  `reassignEventsCalendar` (`drift_repositories.dart:906-917`) also passes
-  `includeDeleted: true`, so soft-deleted events are dragged into the default
-  calendar along with the live ones.
-- **Fix:** Hoist the colour out of the async gap and guard after each await:
-
-  ```dart
-  // calendar_list_actions.dart
-  final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
-  final choice = await showDeleteContainerDialog(context, …);
-  if (!context.mounted || choice == DeleteContainerChoice.cancel) return false;
-  // …use fallbackColor inside orElse
-  ```
-
-  ```dart
-  // calendar_page.dart:1000
-  final eventsForCalendar = await ref.read(calendarRepositoryProvider)
-      .listEvents(calendarId: calendarId);
-  if (!mounted) return;
   ```
 
 ---
 
 ## Low
 
-### [Low] The `CurvedAnimation` built in `didChangeDependencies` is never disposed
-- **Location:** `lib/features/calendar/calendar_day_grid.dart:1657-1664`;
-  `dispose()` at `:1668-1673` disposes only `_controller`
-- **Issue:** `_CalendarInteractiveEventTapState` builds a `CurvedAnimation`
-  parented to `_controller` once motion settings are readable, and drives
-  `_scale` from it. `dispose()` never calls `_curved.dispose()`, so Flutter's
-  animation leak tracking flags one leaked `CurvedAnimation` **per event bar** —
-  and the month view can hold dozens, recreated on every navigation to a new
-  month.
-- **Fix:** Hold a reference and dispose it. This does not change the animation:
+### [Low] `toLowerCase()` can change string length, desyncing highlight offsets from the source text
+
+- **Location:** `lib/core/widgets/search_highlight_text.dart:172` and `:179-208`; same pattern at `:32-37`
+- **Issue:** `keywordSpans` computes `final lower = text.toLowerCase();` and then applies indices found in `lower` to `text` (`text.substring(index, next)`, `text.substring(hitAt, hitAt + hitLen)`). That assumes `lower.length == text.length`, which Dart does not guarantee: `toLowerCase` applies full Unicode case mapping, and `'İ'` (U+0130) lowercases to two UTF-16 units (`i` + U+0307). One such character anywhere in a title or body shifts every subsequent index by one, so highlights land on the wrong characters — and because `lower` is *longer* than `text`, `_nextPatternIndex` can return an index at or past `text.length`, making `text.substring(...)` throw a `RangeError` that takes down the whole result list. `searchSnippet` has the same defect at `:32-37`, where `hit` is found in `collapsed.toLowerCase()` and then used to slice `collapsed`.
+- **Fix:** Bail out to plain text when the fold is not length-preserving — the highlight is decoration, the crash is not:
 
   ```dart
-  CurvedAnimation? _curved;
-  ...
-  _curved?.dispose();
-  _curved = CurvedAnimation(
-    parent: _controller,
-    curve: reduced ? Curves.linear : VoyagerSpring.snappyCurve,
-  );
-  _scale = TweenSequence<double>([...]).animate(_curved!);
-  ...
-  @override
-  void dispose() {
-    _tapState?.removeListener(_onTapStateChanged);
-    _curved?.dispose();          // <-- add
-    _controller.dispose();
-    super.dispose();
+  final lower = text.toLowerCase();
+  // Full Unicode lowercasing is not length-preserving (U+0130 -> 2 units), so
+  // offsets found in `lower` are only valid against `text` when lengths agree.
+  if (lower.length != text.length) {
+    return [TextSpan(text: text, style: style)];
   }
   ```
 
-### [Low] The week→month fallback branch reads `_mode` after overwriting it
-- **Location:** `lib/features/calendar/calendar_page.dart:1711-1718`
-- **Issue:**
+  Apply the same guard in `searchSnippet` (fall back to `start = 0`). If highlighting must survive those inputs, build an explicit `lower index -> text index` map while folding rather than assuming a 1:1 correspondence.
+
+### [Low] Keyword matches inside a `#tag` pill are never emphasised
+
+- **Location:** `lib/core/widgets/search_highlight_text.dart:62-85`
+- **Issue:** Text *between* tag matches goes through `keywordSpans`, but the tag itself is rendered as `Text(tagText, style: style)` inside the pill's `WidgetSpan` (`:81`) — keywords are never applied to it. Once **[M-2]** lands and stray `#tokens` stop leaking into `keywords`, this is the remaining case: a plain keyword that occurs inside a tag name (searching `proj` against `#project-alpha`) matches the entry but shows no emphasis on the part that matched, so the result reads as a false positive.
+- **Fix:** Build the pill's child from `keywordSpans` too:
 
   ```dart
-  _mode = next;
-  if (next == CalendarViewMode.year) {
-    _focused = DateTime(_focused.year, 1, 1);
-  } else if (next == CalendarViewMode.month) {
-    _focused = _mode == CalendarViewMode.week      // always false — _mode is now `next`
-        ? _monthTargetForWeekReturn()
-        : _monthTargetForYear(_focused.year);
+  child: Text.rich(
+    TextSpan(children: keywordSpans(tagText, style, keywords)),
+  ),
+  ```
+
+### [Low] One scroll position is shared across every result set
+
+- **Location:** `lib/features/search/search_page.dart:185-187`; `lib/core/widgets/keep_alive_scroll.dart:77-95`
+- **Issue:** `KeepAliveScrollList` passes a single constant `PageStorageKey` (`ShellPageStorageKeys.searchResults`) as the `ListView`'s key, and `wantKeepAlive` holds the element across query changes, so one `ScrollPosition` is reused for every result set. Scroll deep into a narrow result set, then clear the query: the offset is retained and the user lands at an unrelated position in the full list rather than at the top. Narrowing the query similarly leaves the view clamped to the bottom of the shrunken list rather than showing the best matches.
+- **Fix:** Jump to the top whenever the effective query changes. With the debounce from **[H-4]** in place:
+
+  ```dart
+  final _resultsController = ScrollController();
+
+  void _onQueryChanged(String _) {
+    _queryDebounce?.cancel();
+    _queryDebounce = Timer(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+      setState(() => _activeQuery = _queryController.text);
+      if (_resultsController.hasClients) _resultsController.jumpTo(0);
+    });
   }
   ```
 
-  `_mode` was assigned `next` on the line above, so inside the `next == month`
-  branch `_mode == CalendarViewMode.week` can never hold. The week→month arm is
-  dead and every switch resolves through `_monthTargetForYear`.
-  `_monthTargetForWeekReturn` has the same `_mode` test internally (`:254-256`),
-  so even if it were reached it would take its own fallback path.
+  Pass `controller: _resultsController` to `KeepAliveScrollList` and dispose it alongside the others.
 
-  This branch is only reached when a morph is already in flight (the guarded
-  handlers above it catch the normal case), and the two targets usually agree
-  because `_shiftFocus` keeps `_lastViewedMonth` in step. They diverge when the
-  focused week and `_lastViewedMonth` sit in different years — the switch then
-  lands on January instead of the week's own month.
-- **Fix:** Capture the previous mode before overwriting it:
+### [Low] A failed entry or journal load is a terminal state with no retry
+
+- **Location:** `lib/features/search/search_page.dart:256-261`
+- **Issue:** Both `error` branches render `Center(child: Text('$e'))` — a raw exception string with no retry affordance. `journalListEntriesProvider` and `journalsProvider` are both `keepAlive` (`providers.dart:682`, `:626-629`), so the failed future is cached and **nothing in the page can ever re-request it**: the search tab shows a raw error string until the app is restarted. A transient database lock during startup is enough to trigger it.
+- **Fix:** Give the error state a retry that invalidates the failed provider:
 
   ```dart
-  final previousMode = _mode;
-  _mode = next;
-  if (next == CalendarViewMode.year) {
-    _focused = DateTime(_focused.year, 1, 1);
-  } else if (next == CalendarViewMode.month) {
-    _focused = previousMode == CalendarViewMode.week
-        ? DateTime(_focused.year, _focused.month, 1)
-        : _monthTargetForYear(_focused.year);
-  }
+  error: (e, _) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Could not load entries.'),
+        TextButton(
+          onPressed: () =>
+              ref.invalidate(journalListEntriesProvider(allJournalEntriesScope)),
+          child: const Text('Retry'),
+        ),
+      ],
+    ),
+  ),
   ```
 
-### [Low] `calendarDateInWeek` counts eight days across a spring-forward
-- **Location:** `lib/features/calendar/calendar_day_grid.dart:191-196`
-- **Issue:**
-
-  ```dart
-  final end = start.add(const Duration(days: 7));
-  return !day.isBefore(start) && day.isBefore(end);
-  ```
-
-  `Duration(days: 7)` is 168 absolute hours, which the file's own neighbours go
-  out of their way to avoid (`monthGridDates` and `_weekStart` both use field
-  arithmetic, and `recurrence_engine.dart:28-35` documents why). In a week
-  containing a spring-forward the local day is 23 hours, so `end` lands at 01:00
-  on the *eighth* day — and that eighth day's local midnight still satisfies
-  `isBefore(end)`.
-
-  The one caller is `_isOnCurrentPeriod` (`calendar_page.dart:826-829`), which
-  gates the "This week" button. Twice a year the button stays disabled for a
-  week after the user has already navigated away from the current one.
-- **Fix:**
-
-  ```dart
-  final end = DateTime(start.year, start.month, start.day + 7);
-  ```
-
-### [Low] "Add event" from the toolbar lands on January 1 in year view
-- **Location:** `lib/features/calendar/calendar_page.dart:2530-2540`, which
-  passes `day: _focused`
-- **Issue:** `_focused` is normalized per mode: the 1st of the month in month
-  view, the week start in week view, and **January 1** in year view
-  (`:1613-1628`, `:1747`, `:1959`). The toolbar's "Add event" button always seeds
-  the panel from it, so pressing it while looking at 2026 opens a new event dated
-  1 January 2026 with no indication that the date was chosen for the user.
-- **Fix:** Fall back to today when it lies inside the focused period, which is
-  what the user almost always means:
-
-  ```dart
-  DateTime _defaultNewEventDate() {
-    final now = DateTime.now();
-    return switch (_mode) {
-      CalendarViewMode.year =>
-        _focused.year == now.year ? DateUtils.dateOnly(now) : _focused,
-      CalendarViewMode.month =>
-        _focused.year == now.year && _focused.month == now.month
-            ? DateUtils.dateOnly(now)
-            : _focused,
-      CalendarViewMode.week => _focused,
-    };
-  }
-  ```
-
-### [Low] `Enter` inside an open sub-popover pops the sub-popover but latches the panel as "saved"
-- **Location:** `lib/features/calendar/calendar_event_panel.dart:238-254`, with
-  the popup's `onSave` at `lib/features/calendar/calendar_page.dart:544-548`
-- **Issue:** `EnterToSubmitScope` wraps the whole panel, so pressing Enter while
-  the date, time, or repeat popover is open still runs `_submit()` →
-  `_trySave()` → `_closingAfterSave = true` → `widget.onSave(...)`. `onSave`
-  calls `Navigator.of(ctx).pop()`, which pops the **topmost** route — the
-  sub-popover — not the event panel.
-
-  The panel stays open with `_closingAfterSave` stuck at `true`. Every later
-  dismissal then takes the `_intentionalDiscard || _closingAfterSave` branch at
-  `:246-249` and pops without saving, so any edit the user makes after that point
-  is silently discarded when they click away.
-- **Fix:** Suppress submit while a sub-popover owns the top of the stack:
-
-  ```dart
-  void _submit() {
-    if (_isDatePopoverOpen || _isTimePopoverOpen || _isRepeatPopoverOpen) return;
-    _trySave();
-  }
-  ```
-
-### [Low] A detached occurrence can be given its own repeat rule
-- **Location:** `lib/features/calendar/calendar_page.dart:587-595` (the
-  `event.isRecurrenceOverride` short-circuit) with the always-visible
-  `RepeatIconButton` at `lib/features/calendar/calendar_event_panel.dart:631-639`
-- **Issue:** A "this event only" edit produces a row carrying
-  `recurrenceParentId` and `recurrenceDate`. The panel still shows the repeat
-  control for it, and `_saveSidebarEvent` writes overrides through the no-prompt
-  single-row branch, so the rule is persisted. The result is a row that is
-  simultaneously one detached occurrence of series A and a series of its own — it
-  renders on many days, none of which series A's `exceptionDates` cover, and
-  deleting series A with "all events" takes the whole second series down with it
-  via `_orphanedOverrideIds`.
-- **Fix:** Hide the control for a detached row, which is what the model already
-  says it is (`calendar_recurrence_editing.dart:118-119`: *"it is one occurrence
-  now, not a series of its own"*):
-
-  ```dart
-  if (widget.event?.isRecurrenceOverride != true)
-    Builder(builder: (buttonContext) => RepeatIconButton(...)),
-  ```
-
----
-
-## Notes (not bugs)
-
-- **`DayHourGrid` is unreachable.** `_dayViewDate` (`calendar_page.dart:51`) is
-  only ever assigned a non-null value from `_goToToday` (`:856-857`),
-  `_shiftFocus` (`:1050-1053`) and `DayHourGrid.onDayChanged` (`:2122-2125`) —
-  all three of which require it to already be non-null. Nothing sets it from
-  null, so the day view at `calendar_grid.dart:246-350` never renders and the
-  `_dayViewDate != null` arms threaded through ~15 sites on the page are dead.
-  Two latent bugs live in there and would surface the moment an entry point is
-  added: the hour-slot filter (`calendar_grid.dart:317-323`) matches on
-  `event.start`'s absolute date, so recurring timed events would be invisible in
-  every hour row; and the prev/next day buttons use
-  `add`/`subtract(Duration(days: 1))` (`:280`, `:294`), which skips or repeats a
-  day across a DST transition. Flagging, not deleting — the intent to reach it
-  may still be live.
-- **`CalendarTodoMarker.completed` is always false.**
-  `buildCalendarTodoMarkers` skips completed tasks entirely
-  (`calendar_todo_markers.dart:184`), so the field, the `marker.completed` guard
-  in `calendarTodoOnDay` (`:205`), and the line-through / reduced-alpha styling
-  in `CalendarDayTodoBar` (`:288-291`, `:322-324`) and `CalendarWeekTaskBar`
-  (`:392`, `:435-438`) are unreachable. Either surface completed tasks on the
-  calendar or drop the field — currently it is paid for and never seen.
-- **The morph machinery is sound.** The `_prepareMorphSession` /
-  `_prepareWeekMorphSession` generation counters correctly invalidate in-flight
-  post-frame callbacks and status listeners; both controllers, the week scroll
-  controller and `_eventTapState` are disposed; `_MorphAnimationLayer` and
-  `_MonthWeekMorphLayer` build their cell children once in `initState` and pass
-  the expensive subtrees as `AnimatedBuilder`'s `child`, so nothing heavy is
-  rebuilt per frame; `_MorphProgress` hoists `Theme.of` and colour allocation out
-  of the 42-cell loop. No finding above touches any of it.
+  and the equivalent for `journalsProvider` in the inner `.when`.

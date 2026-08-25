@@ -150,12 +150,24 @@ class _SyncConflictResolutionDialogState
     if (!confirmed || !mounted) return;
 
     await _resolveConflict(() async {
-      final operationsDeleted = await ref
-          .read(remoteSyncServiceProvider)
-          .permanentlyDeleteFromRemote(
-            collection: conflict.collection,
-            documentId: conflict.documentId,
-          );
+      final int operationsDeleted;
+      try {
+        operationsDeleted = await ref
+            .read(remoteSyncServiceProvider)
+            .permanentlyDeleteFromRemote(
+              collection: conflict.collection,
+              documentId: conflict.documentId,
+            );
+      } catch (error) {
+        // The operation-log wipe forces a server read and throws when it can't
+        // reach one, so an offline purge now fails instead of reporting the
+        // cache's "no sync_operations found" as a completed delete.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Remote purge failed: $error')),
+        );
+        return;
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

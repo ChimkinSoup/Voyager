@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -12,6 +14,7 @@ Future<T?> showTreePopover<T>({
   required Offset anchorGlobalCenter,
   required WidgetBuilder builder,
   required double width,
+  double? maxWidth,
   double? height,
   Color? accentColor,
 }) async {
@@ -27,6 +30,7 @@ Future<T?> showTreePopover<T>({
       overlaySize: overlaySize,
       builder: builder,
       width: width,
+      maxWidth: maxWidth,
       height: height,
       accentColor: accentColor,
       capturedThemes: InheritedTheme.capture(
@@ -43,6 +47,7 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
     required this.overlaySize,
     required this.builder,
     required this.width,
+    this.maxWidth,
     this.height,
     this.accentColor,
     required this.capturedThemes,
@@ -52,6 +57,10 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
   final Size overlaySize;
   final WidgetBuilder builder;
   final double width;
+
+  /// When set, the popup may grow past [width] up to this, so content that
+  /// would otherwise wrap (a long stat value) widens the popup instead.
+  final double? maxWidth;
   final double? height;
   final Color? accentColor;
   final CapturedThemes capturedThemes;
@@ -80,6 +89,7 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
         delegate: _CenterOnAnchorDelegate(
           anchor: anchor,
           width: width,
+          maxWidth: maxWidth,
           height: height,
         ),
         child: Builder(
@@ -121,18 +131,34 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
   }
 }
 
+/// Gap kept between the popup and the edge of the overlay.
+const double _margin = 12.0;
+
 class _CenterOnAnchorDelegate extends SingleChildLayoutDelegate {
-  _CenterOnAnchorDelegate({required this.anchor, required this.width, this.height});
+  _CenterOnAnchorDelegate({
+    required this.anchor,
+    required this.width,
+    this.maxWidth,
+    this.height,
+  });
 
   final Offset anchor;
   final double width;
+  final double? maxWidth;
   final double? height;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    // Never wider than the screen leaves room for, and never narrower than
+    // [width] — a popup that shrank on a small window would just move the
+    // wrapping problem into the content.
+    final upper = math.max(
+      width,
+      math.min(maxWidth ?? width, constraints.maxWidth - 2 * _margin),
+    );
     return BoxConstraints(
       minWidth: width,
-      maxWidth: width,
+      maxWidth: upper,
       minHeight: 0,
       maxHeight: height ?? constraints.maxHeight * 0.8,
     );
@@ -142,7 +168,7 @@ class _CenterOnAnchorDelegate extends SingleChildLayoutDelegate {
   Offset getPositionForChild(Size size, Size childSize) {
     var x = anchor.dx - childSize.width / 2;
     var y = anchor.dy - childSize.height / 2;
-    const margin = 12.0;
+    const margin = _margin;
     x = x.clamp(margin, (size.width - childSize.width - margin).clamp(margin, double.infinity));
     y = y.clamp(margin, (size.height - childSize.height - margin).clamp(margin, double.infinity));
     return Offset(x, y);
@@ -150,6 +176,9 @@ class _CenterOnAnchorDelegate extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_CenterOnAnchorDelegate oldDelegate) {
-    return anchor != oldDelegate.anchor || width != oldDelegate.width || height != oldDelegate.height;
+    return anchor != oldDelegate.anchor ||
+        width != oldDelegate.width ||
+        maxWidth != oldDelegate.maxWidth ||
+        height != oldDelegate.height;
   }
 }

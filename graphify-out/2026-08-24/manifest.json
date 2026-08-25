@@ -765,7 +765,7 @@
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_overlap_engine.dart": {
-    "mtime": 1787598235.6435747,
+    "mtime": 1787598534.6521401,
     "ast_hash": "aac4ee448a88b2342eada019a7b677f0",
     "semantic_hash": ""
   },
@@ -1970,8 +1970,8 @@
     "semantic_hash": ""
   },
   "test/calendar_event_layout_test.dart": {
-    "mtime": 1786836611.9603286,
-    "ast_hash": "cbacc21081e60550975c34a2a4b6d8a9",
+    "mtime": 1787598518.582952,
+    "ast_hash": "a0c8bebb49c7b869e618db801f10cbe6",
     "semantic_hash": ""
   },
   "lib/domain/models/dream_models.dart": {
@@ -2320,8 +2320,8 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_track_modal.dart": {
-    "mtime": 1787007343.2642171,
-    "ast_hash": "3aa7c7b634b207ec05789c6009978e3d",
+    "mtime": 1787598664.0142124,
+    "ast_hash": "d20c16f458a1dd84a735856d893a5674",
     "semantic_hash": ""
   },
   "lib/features/life_tracker/life_tree_figure.dart": {
@@ -3290,8 +3290,8 @@
     "semantic_hash": ""
   },
   "test/leetcode_solutions_editor_test.dart": {
-    "mtime": 1786836611.9737532,
-    "ast_hash": "615a1100efa64b3c10088e74d0880e9d",
+    "mtime": 1787598718.0482368,
+    "ast_hash": "c423229f6f044311277e2fba05191ee9",
     "semantic_hash": ""
   },
   "test/leetcode_solutions_test.dart": {
@@ -3690,8 +3690,8 @@
     "semantic_hash": ""
   },
   "test/recurrence_editing_test.dart": {
-    "mtime": 1787193223.19812,
-    "ast_hash": "c02a8ce7779eba798535c3f395ae843e",
+    "mtime": 1787598487.1450489,
+    "ast_hash": "accb00d1780d210ac93ce0c21021c16e",
     "semantic_hash": ""
   },
   "test/recurrence_engine_test.dart": {
@@ -3757,6 +3757,11 @@
   "test/vim_cross_field_write_test.dart": {
     "mtime": 1787424960.2753043,
     "ast_hash": "24be8441d4b00152ed401af8e5294a4d",
+    "semantic_hash": ""
+  },
+  "RIGHT_CLICK_SNIPPET.md": {
+    "mtime": 1787598541.035268,
+    "ast_hash": "119e5ab5c13f65cede9029b9042df906",
     "semantic_hash": ""
   }
 }

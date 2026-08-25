@@ -222,5 +222,23 @@ void main() {
       expect(_highlighted(tester, find.byType(Text).first), ['AAA']);
       expect(find.text('#outside'), findsOneWidget);
     });
+
+    testWidgets('highlights a keyword that only occurs inside a tag', (
+      tester,
+    ) async {
+      // The pill used to render as plain Text, so a keyword matching only a
+      // tag name put the entry in the results with nothing emphasised — the
+      // row read as a false positive.
+      await _pumpText(
+        tester,
+        searchHighlightedText(
+          'shipped #project-alpha today',
+          style: const TextStyle(fontSize: 14, color: Color(0xFF000000)),
+          keywords: ['proj'],
+        ),
+      );
+
+      expect(_highlighted(tester, find.text('#project-alpha')), ['proj']);
+    });
   });
 }

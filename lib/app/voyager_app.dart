@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
@@ -99,6 +100,9 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       settingsProvider.select((s) => s.value?.vimModeEnabled ?? false),
     );
     final snippetScope = ref.watch(snippetScopeProvider);
+    final capsLockIndicator = ref.watch(
+      settingsProvider.select((s) => s.value?.capsLockIndicatorEnabled ?? true),
+    );
 
     return MaterialApp.router(
       title: 'Voyager',
@@ -111,25 +115,28 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
           // its overlay — see the same Vim setting as the page behind them.
           child: VimEnabledScope(
             enabled: vimEnabled,
-            child: SnippetEnabledScope(
-              data: snippetScope,
-              // Lets a field's right-click quick-add reach the full settings
-              // dialog without core importing features — see
-              // [SnippetSettingsLauncher].
-              child: SnippetSettingsLauncher(
-                open: showSnippetsDialog,
-                child: Stack(
-                  children: [
-                    const _AppBackground(),
-                    RepaintBoundary(
-                      child: DefaultTextStyle(
-                        style: AppFonts.style(
-                          color: theme.colorScheme.onSurface,
+            child: CapsLockIndicatorScope(
+              enabled: capsLockIndicator,
+              child: SnippetEnabledScope(
+                data: snippetScope,
+                // Lets a field's right-click quick-add reach the full settings
+                // dialog without core importing features — see
+                // [SnippetSettingsLauncher].
+                child: SnippetSettingsLauncher(
+                  open: showSnippetsDialog,
+                  child: Stack(
+                    children: [
+                      const _AppBackground(),
+                      RepaintBoundary(
+                        child: DefaultTextStyle(
+                          style: AppFonts.style(
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          child: child ?? const SizedBox.shrink(),
                         ),
-                        child: child ?? const SizedBox.shrink(),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
