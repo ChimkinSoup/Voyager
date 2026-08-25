@@ -11,7 +11,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/platform/platform_info.dart';
-import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
@@ -19,7 +18,6 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/petal_field.dart' show petalColorWeights;
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
-import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -167,13 +165,17 @@ class SettingsPage extends ConsumerWidget {
           ),
           SwitchListTile(
             title: const Text('Week starts on Monday'),
+            // Purely a display preference now: weekly tracker values are
+            // always filed under Monday (see
+            // [kTrackerStorageWeekStartsMonday]), so this only decides which
+            // column a calendar draws first. It used to re-anchor every
+            // stored weekly value on each flip, which meant a per-device
+            // setting repartitioned synced data — and rewrote each row's
+            // periodStart while leaving its id derived from the old anchor.
+            onChanged: (v) => _save(ref, settings.copyWith(
+              weekStartsOnMonday: v,
+            )),
             value: settings.weekStartsOnMonday,
-            onChanged: (v) async {
-              if (v != settings.weekStartsOnMonday) {
-                await _reanchorWeeklyValues(ref, weekStartsMonday: v);
-              }
-              await _save(ref, settings.copyWith(weekStartsOnMonday: v));
-            },
           ),
           ListTile(
             title: const Text('Calendar: previous period'),
@@ -585,50 +587,6 @@ class SettingsPage extends ConsumerWidget {
   /// the shell a second time for a value we already have.
   Future<void> _save(WidgetRef ref, AppSettings settings) {
     return ref.read(settingsProvider.notifier).saveSettings(settings);
-  }
-
-  /// Weekly tracker values are stored on their week's start day, which depends
-  /// on the "week starts on Monday" setting. When that setting flips, every
-  /// existing weekly value would otherwise land on the "wrong" weekday and
-  /// vanish from the weekly grid (resurfacing as stray daily data). Re-anchor
-  /// them to the new week-start so nothing is orphaned.
-  Future<void> _reanchorWeeklyValues(
-    WidgetRef ref, {
-    required bool weekStartsMonday,
-  }) async {
-    final trackerRepo = ref.read(trackerRepositoryProvider);
-    final promptService = ref.read(periodicPromptServiceProvider);
-    final trackers = await trackerRepo.listTrackers();
-    final now = utcNow();
-    for (final tracker in trackers) {
-      if (tracker.cadence != TrackerCadence.weekly) continue;
-      final values = await trackerRepo.listValues(tracker.id);
-      for (final value in values) {
-        final anchored = promptService.periodStartFor(
-          value.periodStart,
-          TrackerCadence.weekly,
-          weekStartsMonday: weekStartsMonday,
-        );
-        if (anchored.year == value.periodStart.year &&
-            anchored.month == value.periodStart.month &&
-            anchored.day == value.periodStart.day) {
-          continue;
-        }
-        await trackerRepo.upsertValue(
-          TrackerValue(
-            id: value.id,
-            trackerId: value.trackerId,
-            periodStart: anchored,
-            intValue: value.intValue,
-            boolValue: value.boolValue,
-            enumValue: value.enumValue,
-            createdAt: value.createdAt,
-            updatedAt: now,
-            deletedAt: value.deletedAt,
-          ),
-        );
-      }
-    }
   }
 
   String _statCountLabel(int? count) {

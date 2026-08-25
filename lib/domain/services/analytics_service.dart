@@ -52,7 +52,12 @@ class AnalyticsService {
         if (singleValue) {
           return (value.intValue ?? 0) > 0 ? 0.5 : 0.0;
         }
-        return (value.intValue ?? 0) / cap;
+        // Clamped where it's produced: callers turn this straight into an
+        // alpha (`0.15 + 0.85 * intensity`), and `Color.withValues` does not
+        // range-check — a reading above [cap], which a lowered integerCap or
+        // a max drawn from outside the rendered window both produce, would
+        // flatten the whole upper range to one saturated shade.
+        return ((value.intValue ?? 0) / cap).clamp(0.0, 1.0);
       case TrackerType.enumType:
         return value.enumValue == null || value.enumValue!.isEmpty ? 0 : 0.5;
     }

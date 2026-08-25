@@ -23,6 +23,7 @@ import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
+import 'package:voyager/domain/services/periodic_prompt_service.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
@@ -55,19 +56,23 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 /// pointer happens to pass under mid-drag.
 final _heatmapDraggingProvider = StateProvider<bool>((_) => false);
 
-final _calendarViewYearProvider = StateProvider<int>(
-  (_) => DateTime.now().year,
-);
+/// Paging state for a detail popup's calendar, keyed by tracker.
+///
+/// Per-tracker and auto-disposing, because a single app-global window meant
+/// paging tracker A back four years left tracker B opening four years in the
+/// past with nothing to explain it. Disposal also re-runs the initialiser on
+/// every open, so a session left running across New Year stops reporting the
+/// previous year as the current one.
+final _calendarViewYearProvider = StateProvider.autoDispose
+    .family<int, String>((ref, trackerId) => DateTime.now().year);
 
 /// Older (top-row) year of the 2-year window shown by [_MonthGridCalendar].
-final _calendarViewMonthlyBaseYearProvider = StateProvider<int>(
-  (_) => DateTime.now().year - 1,
-);
+final _calendarViewMonthlyBaseYearProvider = StateProvider.autoDispose
+    .family<int, String>((ref, trackerId) => DateTime.now().year - 1);
 
 /// Oldest (leftmost) year of the 10-year window shown by [_YearGridCalendar].
-final _calendarViewYearlyBaseYearProvider = StateProvider<int>(
-  (_) => DateTime.now().year - 9,
-);
+final _calendarViewYearlyBaseYearProvider = StateProvider.autoDispose
+    .family<int, String>((ref, trackerId) => DateTime.now().year - 9);
 
 /// Years spanned by [_MonthGridCalendar] (one row per year), and so also how
 /// far one page step moves it — paging by the full window means each step
@@ -267,7 +272,9 @@ class _MacroStatsRow extends StatelessWidget {
           const SizedBox(width: 10),
           _StatChip(
             label: 'Best Streak',
-            value: '${compactNumberLabel(longestStreak)} days',
+            value:
+                '${compactNumberLabel(longestStreak)} '
+                '${longestStreak == 1 ? 'day' : 'days'}',
             icon: PhosphorIconsRegular.flame,
             accent: accent,
             onTap: () => _showStatisticDetail(
@@ -687,20 +694,59 @@ class _SparklineStackState extends ConsumerState<_SparklineStack> {
     _items = [for (final t in _items) byId[t.id] ?? t];
   }
 
+  /// The most recent [_persist] pass, so a second drag chains onto it rather
+  /// than racing it. Two passes overlapping is what let a stale `sortOrder`
+  /// skip a write that was still needed.
+  Future<void>? _persistInFlight;
+
   void _handleReorder(int oldIndex, int newIndex) {
     setState(() {
       final item = _items.removeAt(oldIndex);
       _items.insert(newIndex, item);
     });
-    unawaited(_persist());
+    _persistInFlight = (_persistInFlight ?? Future<void>.value())
+        .then((_) => _persist())
+        // A failed pass must not poison the chain — every later drag hangs off
+        // it — and an unawaited rejected future is an unhandled async error.
+        .catchError((Object error, StackTrace stack) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stack,
+              library: 'analytics',
+              context: ErrorDescription('persisting tracker order'),
+            ),
+          );
+        });
+    unawaited(_persistInFlight);
   }
 
   Future<void> _persist() async {
     final repo = ref.read(trackerRepositoryProvider);
-    for (var i = 0; i < _items.length; i++) {
-      if (_items[i].sortOrder != i) {
-        await repo.upsertTracker(_items[i].copyWith(sortOrder: i));
+    // Snapshotted: [_handleReorder] mutates `_items` in place, so reading it
+    // across the awaits below would let a drag landing mid-pass splice rows
+    // into `next` out of two different orders.
+    final pass = List<StatisticTracker>.of(_items);
+    final next = <StatisticTracker>[];
+    for (var i = 0; i < pass.length; i++) {
+      if (pass[i].sortOrder == i) {
+        next.add(pass[i]);
+        continue;
       }
+      final saved = pass[i].copyWith(sortOrder: i);
+      await repo.upsertTracker(saved);
+      // Kept in step with disk. The loop used to write a `copyWith` copy and
+      // discard it, so `_items[i].sortOrder` went on reporting its pre-drag
+      // value until the provider refetch landed — and a second drag arriving
+      // in that window compared its new index against that stale number,
+      // skipping writes the row still needed and leaving the persisted order
+      // different from the one on screen.
+      next.add(saved);
+    }
+    // Only adopt when nothing moved while this pass ran; otherwise the pass
+    // chained behind it owns the newer order.
+    if (mounted && _sameTrackerOrder(_items, pass)) {
+      setState(() => _items = next);
     }
     ref.invalidate(trackersProvider);
   }
@@ -754,8 +800,11 @@ class _SparklineRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final color = Color(tracker.colorValue);
     final promptService = ref.watch(periodicPromptServiceProvider);
-    final weekStartsMonday =
-        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
+    // Captured here rather than closed over: this is a [ConsumerWidget], so
+    // its `ref` is its element and is only valid while that element is
+    // mounted — but the editor's onSaved fires from the popover's completion,
+    // which can outlive the row. See [trackerCacheInvalidatorProvider].
+    final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
 
     // The gap between rows lives outside the tile, so the tile's own
     // decoration and gesture layers ([_StatTile]) line up exactly with each
@@ -884,10 +933,9 @@ class _SparklineRow extends ConsumerWidget {
                     // bar's spots, so these let the user tap the sparkline to enter
                     // data even when it has no values yet — the chart renders (axes
                     // + gridlines) instead of a dead "No data" label.
-                    final todayPeriod = promptService.periodStartFor(
+                    final todayPeriod = promptService.trackerPeriodStartFor(
                       now,
                       tracker.cadence,
-                      weekStartsMonday: weekStartsMonday,
                     );
                     final anchors = <FlSpot>[];
                     // Every period boundary the window touches, including the
@@ -925,10 +973,9 @@ class _SparklineRow extends ConsumerWidget {
                     final ascendingPeriodStarts = periodStarts.reversed
                         .toList();
                     DateTime periodStartOf(DateTime date) =>
-                        promptService.periodStartFor(
+                        promptService.trackerPeriodStartFor(
                           date,
                           tracker.cadence,
-                          weekStartsMonday: weekStartsMonday,
                         );
                     final dataMax = spots
                         .map((s) => s.y)
@@ -1026,9 +1073,8 @@ class _SparklineRow extends ConsumerWidget {
                                       onTouchChanged: onTouchChanged,
                                       series: spots,
                                       snapX: snapX,
-                                      onSaved: () => ref.invalidate(
-                                        trackerValuesProvider(tracker.id),
-                                      ),
+                                      onSaved: () =>
+                                          invalidateTrackerCache(tracker.id),
                                     );
                                   },
                             ),
@@ -1205,10 +1251,81 @@ int _compareTrackerOrder(StatisticTracker a, StatisticTracker b) {
   return a.createdAt.compareTo(b.createdAt);
 }
 
+/// Largest recorded [TrackerValue.intValue] between [fromYear] and [toYear]
+/// inclusive, floored at 1.
+///
+/// Heatmap shading normalises against the window that is actually on screen.
+/// [AnalyticsService.rollingMax] measures back from `DateTime.now()` instead,
+/// but all three detail calendars page arbitrarily far into the past — so a
+/// year that peaked higher than the recent window rendered uniformly maxed
+/// (every reading clamping at full alpha) and one that peaked lower rendered
+/// washed out. [_HeatmapRow] already derives its window from what it draws.
+int _maxIntInYears(List<TrackerValue> values, int fromYear, int toYear) {
+  var max = 1;
+  for (final value in values) {
+    final year = value.periodStart.year;
+    if (year < fromYear || year > toYear) continue;
+    final reading = value.intValue;
+    if (reading != null && reading > max) max = reading;
+  }
+  return max;
+}
+
+/// A tracker's recorded values, indexed by calendar day for the detail
+/// calendars' cells.
+///
+/// Every cell used to run two independent O(n) passes over the tracker's
+/// entire history: a `firstWhere` for its own record, and a second full scan
+/// inside [AnalyticsService.heatmapIntensity], which falls back to counting
+/// `allValues` when [hasSingleIntValue] isn't supplied. [_YearHeatmapCalendar]
+/// draws 504 cells, so opening one year cost ~1000 linear scans — around 735k
+/// comparisons for a two-year-old daily tracker — synchronously on the UI
+/// isolate, and again on every paging chevron. [_HeatmapRow] hoisted exactly
+/// this out for the grid; the detail calendars never got the same treatment.
+///
+/// First-wins on duplicate days, matching the `firstWhere`s this replaces and
+/// the rule `resolveSparklinePeriod` documents for the same situation.
+/// [d] at local midnight — the canonical form every period-start lookup in
+/// this feature compares on.
+DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+class _TrackerValueIndex {
+  _TrackerValueIndex(List<TrackerValue> values)
+    : byDay = _indexByDay(values),
+      hasSingleIntValue = values.where((v) => v.intValue != null).length == 1;
+
+  static Map<DateTime, TrackerValue> _indexByDay(List<TrackerValue> values) {
+    final byDay = <DateTime, TrackerValue>{};
+    for (final value in values) {
+      byDay.putIfAbsent(dateOnly(value.periodStart), () => value);
+    }
+    return byDay;
+  }
+
+  final Map<DateTime, TrackerValue> byDay;
+
+  /// Precomputed once per calendar rather than per cell — see
+  /// [AnalyticsService.heatmapIntensity].
+  final bool hasSingleIntValue;
+
+  /// The record filed under [date]'s calendar day, or null.
+  TrackerValue? operator [](DateTime date) => byDay[dateOnly(date)];
+}
+
 bool _sameTrackerIds(List<StatisticTracker> a, List<StatisticTracker> b) {
   if (a.length != b.length) return false;
   final ids = a.map((t) => t.id).toSet();
   return b.every((t) => ids.contains(t.id));
+}
+
+/// Same trackers in the same positions — order-sensitive, unlike
+/// [_sameTrackerIds], because a reorder changes only the order.
+bool _sameTrackerOrder(List<StatisticTracker> a, List<StatisticTracker> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i].id != b[i].id) return false;
+  }
+  return true;
 }
 
 /// Moves [tracker] to the end of its new group (the starred group if newly
@@ -1424,20 +1541,59 @@ class _HeatmapBucketState extends ConsumerState<_HeatmapBucket> {
     _items = [for (final t in _items) byId[t.id] ?? t];
   }
 
+  /// The most recent [_persist] pass, so a second drag chains onto it rather
+  /// than racing it. Two passes overlapping is what let a stale `sortOrder`
+  /// skip a write that was still needed.
+  Future<void>? _persistInFlight;
+
   void _handleReorder(int oldIndex, int newIndex) {
     setState(() {
       final item = _items.removeAt(oldIndex);
       _items.insert(newIndex, item);
     });
-    unawaited(_persist());
+    _persistInFlight = (_persistInFlight ?? Future<void>.value())
+        .then((_) => _persist())
+        // A failed pass must not poison the chain — every later drag hangs off
+        // it — and an unawaited rejected future is an unhandled async error.
+        .catchError((Object error, StackTrace stack) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stack,
+              library: 'analytics',
+              context: ErrorDescription('persisting tracker order'),
+            ),
+          );
+        });
+    unawaited(_persistInFlight);
   }
 
   Future<void> _persist() async {
     final repo = ref.read(trackerRepositoryProvider);
-    for (var i = 0; i < _items.length; i++) {
-      if (_items[i].sortOrder != i) {
-        await repo.upsertTracker(_items[i].copyWith(sortOrder: i));
+    // Snapshotted: [_handleReorder] mutates `_items` in place, so reading it
+    // across the awaits below would let a drag landing mid-pass splice rows
+    // into `next` out of two different orders.
+    final pass = List<StatisticTracker>.of(_items);
+    final next = <StatisticTracker>[];
+    for (var i = 0; i < pass.length; i++) {
+      if (pass[i].sortOrder == i) {
+        next.add(pass[i]);
+        continue;
       }
+      final saved = pass[i].copyWith(sortOrder: i);
+      await repo.upsertTracker(saved);
+      // Kept in step with disk. The loop used to write a `copyWith` copy and
+      // discard it, so `_items[i].sortOrder` went on reporting its pre-drag
+      // value until the provider refetch landed — and a second drag arriving
+      // in that window compared its new index against that stale number,
+      // skipping writes the row still needed and leaving the persisted order
+      // different from the one on screen.
+      next.add(saved);
+    }
+    // Only adopt when nothing moved while this pass ran; otherwise the pass
+    // chained behind it owns the newer order.
+    if (mounted && _sameTrackerOrder(_items, pass)) {
+      setState(() => _items = next);
     }
     ref.invalidate(trackersProvider);
   }
@@ -1525,13 +1681,11 @@ class _HeatmapRow extends ConsumerWidget {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
     final color = Color(tracker.colorValue);
-    final weekStartsMonday =
-        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
 
     return valuesAsync.when(
       data: (values) {
         // Build the last 30 period dates for this cadence
-        final periods = _lastNPeriods(30, weekStartsMonday: weekStartsMonday);
+        final periods = _lastNPeriods(30);
 
         // Compute rolling max over the exact window being displayed, so
         // normalisation doesn't miss values that fall outside a fixed
@@ -1656,18 +1810,35 @@ class _HeatmapRow extends ConsumerWidget {
                 LayoutBuilder(
                   builder: (ctx, constraints) {
                     const gap = 4.0;
+                    const minSquare = 10.0;
+                    // Drop periods rather than shrink squares below what's
+                    // legible. The lower clamp means 30 squares demand at
+                    // least 30 * (10 + 4) = 420px whatever constraint this
+                    // was handed, so under roughly a 476px window the plain
+                    // [Row] below overflowed into the yellow/black stripe
+                    // band — and nothing prevents that width, since
+                    // `main.dart` sets no minimum window size. Trimming the
+                    // oldest first keeps the recent data, which is what the
+                    // row is for.
+                    final fits = math.max(
+                      1,
+                      (constraints.maxWidth / (minSquare + gap)).floor(),
+                    );
+                    final shown = periods.sublist(
+                      math.max(0, periods.length - fits),
+                    );
                     final squareSize =
-                        ((constraints.maxWidth - gap * periods.length) /
-                                periods.length)
-                            .clamp(10.0, 40.0);
+                        ((constraints.maxWidth - gap * shown.length) /
+                                shown.length)
+                            .clamp(minSquare, 40.0);
                     return Row(
                       children: [
-                        for (var i = 0; i < periods.length; i++)
+                        for (var i = 0; i < shown.length; i++)
                           Builder(
                             builder: (ctx) {
-                              final period = periods[i];
+                              final period = shown[i];
                               final showLabel =
-                                  (periods.length - 1 - i) % 5 == 0;
+                                  (shown.length - 1 - i) % 5 == 0;
                               return Padding(
                                 padding: const EdgeInsets.only(right: gap),
                                 child: Column(
@@ -1738,15 +1909,19 @@ class _HeatmapRow extends ConsumerWidget {
 
   /// Returns the last [n] period start dates for this tracker's cadence,
   /// oldest first. Weekly periods are anchored to the calendar week start
-  /// (matching [_periodStart] and the Calendar view's week grid) rather
-  /// than to today's weekday, so a value saved in one view is found by
+  /// rather than to today's weekday, so a value saved in one view is found by
   /// the other.
-  List<DateTime> _lastNPeriods(int n, {required bool weekStartsMonday}) {
+  ///
+  /// That anchor is [kTrackerStorageWeekStartsMonday], not the display
+  /// setting: these dates are matched against stored `periodStart`s, so
+  /// following a per-device preference here would make every historical
+  /// weekly value disappear the moment it was flipped.
+  List<DateTime> _lastNPeriods(int n) {
     final today = DateTime.now();
     final todayLocal = DateTime(today.year, today.month, today.day);
     final currentWeekStart = addCalendarDays(
       todayLocal,
-      -(weekStartsMonday
+      -(kTrackerStorageWeekStartsMonday
           ? todayLocal.weekday - DateTime.monday
           : todayLocal.weekday % 7),
     );
@@ -1825,12 +2000,27 @@ void _openSparklinePeriodEditor({
   required double Function(double rawX) snapX,
 }) {
   if (event is! FlTapUpEvent && event is! FlLongPressEnd) return;
+  // Virtual trackers are derived at display time from journal entries and
+  // workout sessions — [trackerValuesProvider] short-circuits their ids and
+  // never queries the table, so a write here lands on a row nothing reads
+  // back and the number the user typed vanishes in the same frame. The
+  // heatmap path carries this guard as `readOnly`; the sparkline path, which
+  // is where the "Best Streak" and "Words" chips open, had none at all.
+  if (tracker.isDefault) return;
   final spots = response?.lineBarSpots;
   if (spots == null || spots.isEmpty) return;
   // Both measured before the bubble is dismissed below — [_hide]'s
   // counterpart here, and for the same reason: once it's gone there's nothing
   // left to measure.
-  final anchorRect = bubbleKeys.bubbleRect;
+  //
+  // Falling back to the pointer when there is no bubble to expand out of: the
+  // doc comment above rejects a pointer-anchored rect for the normal case and
+  // rightly, but a chart with no recorded values never renders a bubble at
+  // all (the hover bubble needs a touched *data* spot, and an empty series
+  // has none), so refusing here made a brand-new consecutive tracker
+  // impossible to enter data into from the grid. The morph is decoration; the
+  // editor is not.
+  final anchorRect = bubbleKeys.bubbleRect ?? _pointerAnchorRect(context, event);
   if (anchorRect == null) return;
   final anchorDateRect = bubbleKeys.dateRect;
   // The data curve's hit, not `spots.first` — see [_sparklineDataBarSpot].
@@ -1878,6 +2068,22 @@ void _openSparklinePeriodEditor({
       theme: Theme.of(context),
     ),
     onSaved: onSaved,
+  );
+}
+
+/// A degenerate 1×1 global rect at the pointer, for
+/// [_openSparklinePeriodEditor]'s fallback when no hover bubble exists to
+/// morph out of. Null when the event carries no position or the chart has no
+/// render object to convert it against.
+Rect? _pointerAnchorRect(BuildContext context, FlTouchEvent event) {
+  final local = event.localPosition;
+  if (local == null) return null;
+  final box = context.findRenderObject() as RenderBox?;
+  if (box == null || !box.hasSize) return null;
+  return Rect.fromCenter(
+    center: box.localToGlobal(Offset(local.dx, local.dy)),
+    width: 1,
+    height: 1,
   );
 }
 
@@ -2308,6 +2514,15 @@ String? _hoverValueLabel({
   }
   if (tracker.id == kDreamLoggedTrackerId) {
     return value?.boolValue == true ? 'Dreamed' : 'No dream';
+  }
+  // Same treatment as the two above, and for the same reason: this tracker's
+  // values are derived from finished workout sessions, so a day with no
+  // session produces no [TrackerValue] *by design* — "no record" here means a
+  // known "did not work out", not "unknown". Falling through to
+  // [_tooltipValueLabel] returned null for those days and rendered the greyed
+  // dash that means nothing was logged.
+  if (tracker.id == kWorkedOutTrackerId) {
+    return value?.boolValue == true ? 'Worked out' : 'No workout';
   }
   return _tooltipValueLabel(type, value);
 }
@@ -2905,6 +3120,27 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   bool? _boolValue;
   String? _enumValue;
 
+  /// The state the editor opened with, snapshotted in [initState].
+  late final bool? _initialBool;
+  late final String? _initialEnum;
+  late final String _initialInt;
+
+  /// Whether anything was actually edited.
+  ///
+  /// A never-logged period seeds the editor from the tracker's defaults
+  /// (`defaultBool` / `defaultEnumOption`), so the fields alone can't
+  /// distinguish "the user chose this" from "the user chose nothing" —
+  /// dismissing an untouched boolean editor used to persist `boolValue:
+  /// false`, which borders the square, flips its tooltip to "Not completed",
+  /// clears the day from the notification bell's pending prompt and drags the
+  /// completion rate down. Integer editors were already safe: an empty field
+  /// takes the delete/no-op branch in [_save].
+  bool get _isDirty => switch (widget.tracker.type) {
+    TrackerType.integer => _intController.text.trim() != _initialInt.trim(),
+    TrackerType.boolean => _boolValue != _initialBool,
+    TrackerType.enumType => _enumValue != _initialEnum,
+  };
+
   /// Key on the editor's content only (no frame/decoration of its own) —
   /// it's laid out at its natural size the whole time regardless of the
   /// frame's current animated size, so it can be measured immediately and
@@ -2912,6 +3148,11 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   final _cardKey = GlobalKey();
   Rect? _cardRect;
   bool _morphStarted = false;
+
+  /// Retry budget for [_measure]. A handful of frames is plenty for a subtree
+  /// that will lay out at all.
+  static const _maxMeasureAttempts = 10;
+  int _measureAttempts = 0;
 
   /// Keys on the date text in each of its two resting spots (tooltip and
   /// editor). Both instances are rendered invisible (opacity 0, kept only
@@ -2947,6 +3188,11 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     _boolValue = widget.initialValue?.boolValue ?? widget.tracker.defaultBool;
     _enumValue =
         widget.initialValue?.enumValue ?? widget.tracker.defaultEnumOption;
+    // The opening state, kept so a dismissal can be told apart from an edit
+    // that happens to land on the tracker's default — see [_isDirty].
+    _initialBool = _boolValue;
+    _initialEnum = _enumValue;
+    _initialInt = _intController.text;
     // Seed from the tooltip's own already-measured date rect (see
     // [_MorphPopover.anchorDateRect]) so the date-slide layer in [build] can
     // render from frame one instead of waiting for [_measure]'s post-frame
@@ -2984,6 +3230,10 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     if (!mounted) return;
     final box = _cardKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) {
+      // Bounded: a content subtree that throws during build never attaches
+      // its key, so an unconditional retry re-arms a post-frame callback
+      // every frame for the life of the popover.
+      if (_measureAttempts++ >= _maxMeasureAttempts) return;
       WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
       return;
     }
@@ -3307,8 +3557,17 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   Widget _valueEditor(ThemeData theme, Color accent) {
     switch (widget.tracker.type) {
       case TrackerType.integer:
-        final cap = widget.tracker.integerCap;
-        final minVal = widget.tracker.defaultInt;
+        final rawCap = widget.tracker.integerCap;
+        // Ordered, not trusted: a tracker can carry a lower limit above its
+        // upper one, and `Slider` asserts `min <= max` while `num.clamp`
+        // throws outright — both during build, which leaves the editor's
+        // subtree throwing instead of showing. See [clampToTrackerRange].
+        final minVal = rawCap == null
+            ? widget.tracker.defaultInt
+            : math.min(widget.tracker.defaultInt, rawCap);
+        final cap = rawCap == null
+            ? null
+            : math.max(widget.tracker.defaultInt, rawCap);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -3385,6 +3644,13 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   }
 
   Future<void> _delete() async {
+    // Belt and braces alongside the guard in [_openSparklinePeriodEditor]:
+    // a virtual tracker's values are derived at display time, so a row
+    // written under its id is one nothing ever reads back.
+    if (widget.tracker.isDefault) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
     final current = widget.initialValue;
     if (current != null) {
       await ref.read(trackerRepositoryProvider).softDeleteValue(current.id);
@@ -3394,6 +3660,16 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   }
 
   Future<void> _save() async {
+    // See [_delete] — a write under a virtual tracker's id is unreadable.
+    if (widget.tracker.isDefault) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    // No dirty check here on purpose — see [_handleOutsideTap]. Pressing Save
+    // (or Enter) is an affirmative act, and on a boolean tracker whose
+    // `defaultBool` is already `false` it is the *only* way to record a
+    // deliberate "no", which is a real state: it breaks the streak, where a
+    // period with no record at all merely doesn't extend it.
     final now = utcNow();
     final current = widget.initialValue;
     int? intVal;
@@ -3418,37 +3694,59 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           Navigator.of(context).pop();
           return;
         }
-        final cap = widget.tracker.integerCap;
-        final minVal = widget.tracker.defaultInt;
-        intVal = cap == null ? raw : raw.clamp(minVal, cap);
+        intVal = clampToTrackerRange(raw, widget.tracker);
       case TrackerType.boolean:
         boolVal = _boolValue;
       case TrackerType.enumType:
         enumVal = _enumValue;
     }
 
-    await ref
-        .read(trackerRepositoryProvider)
-        .upsertValue(
-          TrackerValue(
-            id:
-                current?.id ??
-                trackerValueId(widget.tracker.id, widget.periodDate),
-            trackerId: widget.tracker.id,
-            periodStart: widget.periodDate,
-            intValue: intVal,
-            boolValue: boolVal,
-            enumValue: enumVal,
-            createdAt: current?.createdAt ?? now,
-            updatedAt: now,
-          ),
-        );
+    final repo = ref.read(trackerRepositoryProvider);
+    final id =
+        current?.id ?? trackerValueId(widget.tracker.id, widget.periodDate);
+    // Read back from disk rather than trusting [initialValue]: `listValues`
+    // filters tombstones out, so re-entering a value on a deleted period
+    // arrives here with a null `current` even though the row still exists at
+    // a higher version. Writing it at version 0 let the remote tombstone
+    // outrank the fresh local value and delete it again on the next pull.
+    final onDisk = await repo.getValue(id);
+
+    await repo.upsertValue(
+      TrackerValue(
+        id: id,
+        trackerId: widget.tracker.id,
+        periodStart: widget.periodDate,
+        intValue: intVal,
+        boolValue: boolVal,
+        enumValue: enumVal,
+        createdAt: onDisk?.createdAt ?? current?.createdAt ?? now,
+        updatedAt: now,
+        // A write is a new revision of whatever is already there.
+        version: (onDisk?.version ?? 0) + 1,
+        // Re-entering a value on a deleted period lifts the tombstone rather
+        // than silently inheriting it.
+        deletedAt: null,
+      ),
+    );
 
     widget.onSaved();
     if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _handleOutsideTap() async {
+    // A dismissal is not an edit. The editor is seeded from the tracker's
+    // *defaults* on a period that was never logged, so "untouched" and
+    // "deliberately the default value" occupy the same fields — only
+    // [_isDirty] can tell them apart. Committing unconditionally meant
+    // hovering a never-logged boolean square, clicking it and clicking away
+    // persisted `boolValue: false` with no interaction at all: the square
+    // gained a border, its tooltip flipped to "Not completed", the day
+    // stopped counting toward the notification bell's pending prompt, and the
+    // completion rate dropped.
+    if (!_isDirty) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
     await _save();
   }
 }
@@ -3499,6 +3797,10 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
 
   @override
   Widget build(BuildContext context) {
+    // Captured, not called through `ref` later: an editor callback can
+    // outlive the element that opened it. See
+    // [trackerCacheInvalidatorProvider].
+    final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
     final value = _findValue();
     final intensity = widget.analytics.heatmapIntensity(
       type: widget.tracker.type,
@@ -3523,10 +3825,7 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
       tracker: widget.tracker,
       periodDate: widget.periodDate,
       valueColor: value == null ? null : _heatmapValueColor(color, intensity),
-      onSaved: () {
-        ref.invalidate(trackerValuesProvider(widget.tracker.id));
-        ref.invalidate(pendingStatEntriesProvider);
-      },
+      onSaved: () => invalidateTrackerCache(widget.tracker.id),
       child: Container(
         width: widget.size,
         height: widget.size,
@@ -3705,7 +4004,6 @@ class _DetailStatisticsSection extends ConsumerWidget {
     if (values.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
 
-    DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
     final rows = <Widget>[];
     ({int longest, int current}) streak;
@@ -3873,31 +4171,30 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
     }
 
     // Unique recorded periods (date-only), oldest first — the basis for both
-    // the "entries logged" count and streak detection.
-    final periods = (values
-            .map((v) => DateTime(
-                  v.periodStart.year,
-                  v.periodStart.month,
-                  v.periodStart.day,
-                ))
-            .toSet()
-            .toList())
-      ..sort();
+    // the "entries logged" count and the date range.
+    final periods =
+        (values.map((v) => dateOnly(v.periodStart)).toSet().toList())..sort();
 
-    var longestStreak = 1;
-    var run = 1;
-    for (var i = 1; i < periods.length; i++) {
-      final expected = _nextTrackerPeriod(periods[i - 1], tracker.cadence);
-      if (periods[i] == expected) {
-        run++;
-      } else {
-        run = 1;
-      }
-      if (run > longestStreak) longestStreak = run;
-    }
-    // Current streak: the unbroken run ending at the most recent recorded
-    // period (however long ago that period was).
-    final currentStreak = run;
+    // A boolean tracker's streak counts only the periods recorded `true`; an
+    // explicit "no" breaks it. Counting every recorded period, whatever it
+    // held, reported a 7-day streak for a week of explicit "no" answers here
+    // while the detail popup — which filters first — reported 0, two
+    // different numbers under the same "Longest streak" label.
+    //
+    // Through the shared helper rather than a second inlined copy: the two
+    // had drifted apart on the empty case, the helper returning 0 and the
+    // copy seeding both counters at 1.
+    final streakPeriods = tracker.type == TrackerType.boolean
+        ? (values
+                  .where((v) => v.boolValue == true)
+                  .map((v) => dateOnly(v.periodStart))
+                  .toSet()
+                  .toList()
+              ..sort())
+        : periods;
+    final streak = _streakStats(streakPeriods, tracker.cadence);
+    final longestStreak = streak.longest;
+    final currentStreak = streak.current;
 
     final unit = _cadenceUnit(tracker.cadence);
     String streakLabel(int n) => '$n ${n == 1 ? unit : '${unit}s'}';
@@ -3984,14 +4281,16 @@ class _StatisticDetailPopup extends ConsumerWidget {
     if (tracker.effectiveTrackingStyle == TrackerStyle.consecutive) return;
     if (tracker.cadence == TrackerCadence.monthly) {
       ref
-          .read(_calendarViewMonthlyBaseYearProvider.notifier)
+          .read(_calendarViewMonthlyBaseYearProvider(tracker.id).notifier)
           .update((y) => y + _monthGridWindowYears * delta);
     } else if (tracker.cadence == TrackerCadence.yearly) {
       ref
-          .read(_calendarViewYearlyBaseYearProvider.notifier)
+          .read(_calendarViewYearlyBaseYearProvider(tracker.id).notifier)
           .update((y) => y + _yearGridWindowYears * delta);
     } else {
-      ref.read(_calendarViewYearProvider.notifier).update((y) => y + delta);
+      ref
+          .read(_calendarViewYearProvider(tracker.id).notifier)
+          .update((y) => y + delta);
     }
   }
 
@@ -4158,9 +4457,12 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
     final color = Color(tracker.colorValue);
-    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
-    final weekStartsMonday = settings.weekStartsOnMonday;
     final promptService = ref.watch(periodicPromptServiceProvider);
+    // Captured here rather than closed over: this is a [ConsumerWidget], so
+    // its `ref` is its element and is only valid while that element is
+    // mounted — but the editor's onSaved fires from the popover's completion,
+    // which can outlive the row. See [trackerCacheInvalidatorProvider].
+    final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
 
     // The chart spans a fixed number of periods per cadence — roughly 180
     // days / 50 weeks / 24 months / 15 years. The window is sized so the day
@@ -4169,10 +4471,9 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
     // squarely on the final tick (instead of a stray, closer "today" label at
     // the right edge — the old 1, 6, 11, 16, 17 problem).
     final now = DateTime.now();
-    final todayPeriod = promptService.periodStartFor(
+    final todayPeriod = promptService.trackerPeriodStartFor(
       now,
       tracker.cadence,
-      weekStartsMonday: weekStartsMonday,
     );
     final (
       int totalDays,
@@ -4225,11 +4526,8 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
         final anchorSpots = anchors.reversed.toList();
         final ascendingPeriodStarts = periodStarts.reversed.toList();
 
-        DateTime periodStartOf(DateTime date) => promptService.periodStartFor(
-          date,
-          tracker.cadence,
-          weekStartsMonday: weekStartsMonday,
-        );
+        DateTime periodStartOf(DateTime date) =>
+            promptService.trackerPeriodStartFor(date, tracker.cadence);
 
         final dataMax = spots.isEmpty
             ? 1.0
@@ -4310,9 +4608,8 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                             onTouchChanged: onTouchChanged,
                             series: spots,
                             snapX: snapX,
-                            onSaved: () => ref.invalidate(
-                              trackerValuesProvider(tracker.id),
-                            ),
+                            onSaved: () =>
+                                invalidateTrackerCache(tracker.id),
                           );
                         },
                   ),
@@ -4432,21 +4729,29 @@ class _YearHeatmapCalendar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
-    final year = ref.watch(_calendarViewYearProvider);
+    final year = ref.watch(_calendarViewYearProvider(tracker.id));
     final weekStartsMonday =
         ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
 
     void previousYear() {
-      ref.read(_calendarViewYearProvider.notifier).update((y) => y - 1);
+      ref
+          .read(_calendarViewYearProvider(tracker.id).notifier)
+          .update((y) => y - 1);
     }
 
     void nextYear() {
-      ref.read(_calendarViewYearProvider.notifier).update((y) => y + 1);
+      ref
+          .read(_calendarViewYearProvider(tracker.id).notifier)
+          .update((y) => y + 1);
     }
 
     return valuesAsync.when(
       data: (values) {
-        final max = analytics.rollingMax(values, days: 366);
+        final max = _maxIntInYears(values, year, year);
+        // Built once per calendar and passed down, so each cell does an
+        // O(1) lookup instead of its own scan over the full history — see
+        // [_TrackerValueIndex].
+        final index = _TrackerValueIndex(values);
 
         // Arrow-key paging is handled once for every calendar by
         // [_CalendarView] above — see [_CalendarView._page].
@@ -4484,7 +4789,7 @@ class _YearHeatmapCalendar extends ConsumerWidget {
                       child: _HeatmapMonthTile(
                         month: DateTime(year, row * 3 + col + 1),
                         tracker: tracker,
-                        values: values,
+                        index: index,
                         maxInPeriod: max,
                         analytics: analytics,
                         weekStartsMonday: weekStartsMonday,
@@ -4514,7 +4819,7 @@ class _HeatmapMonthTile extends StatelessWidget {
   const _HeatmapMonthTile({
     required this.month,
     required this.tracker,
-    required this.values,
+    required this.index,
     required this.maxInPeriod,
     required this.analytics,
     required this.weekStartsMonday,
@@ -4522,7 +4827,7 @@ class _HeatmapMonthTile extends StatelessWidget {
 
   final DateTime month;
   final StatisticTracker tracker;
-  final List<TrackerValue> values;
+  final _TrackerValueIndex index;
   final int maxInPeriod;
   final AnalyticsService analytics;
   final bool weekStartsMonday;
@@ -4596,7 +4901,7 @@ class _HeatmapMonthTile extends StatelessWidget {
                                   tracker: tracker,
                                   date: cells[row * 7 + col],
                                   month: month,
-                                  values: values,
+                                  index: index,
                                   maxInPeriod: maxInPeriod,
                                   analytics: analytics,
                                 ),
@@ -4630,7 +4935,7 @@ class _HeatmapMonthTile extends StatelessWidget {
           tracker: tracker,
           rowCells: rowCells,
           month: month,
-          values: values,
+          index: index,
           maxInPeriod: maxInPeriod,
           analytics: analytics,
         ),
@@ -4648,7 +4953,7 @@ class _HeatmapDayCell extends ConsumerStatefulWidget {
     required this.tracker,
     required this.date,
     required this.month,
-    required this.values,
+    required this.index,
     required this.maxInPeriod,
     required this.analytics,
   });
@@ -4656,7 +4961,7 @@ class _HeatmapDayCell extends ConsumerStatefulWidget {
   final StatisticTracker tracker;
   final DateTime date;
   final DateTime month;
-  final List<TrackerValue> values;
+  final _TrackerValueIndex index;
   final int maxInPeriod;
   final AnalyticsService analytics;
 
@@ -4665,19 +4970,14 @@ class _HeatmapDayCell extends ConsumerStatefulWidget {
 }
 
 class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
-  TrackerValue? _findValue() {
-    return widget.values.cast<TrackerValue?>().firstWhere(
-      (v) =>
-          v != null &&
-          v.periodStart.year == widget.date.year &&
-          v.periodStart.month == widget.date.month &&
-          v.periodStart.day == widget.date.day,
-      orElse: () => null,
-    );
-  }
+  TrackerValue? _findValue() => widget.index[widget.date];
 
   @override
   Widget build(BuildContext context) {
+    // Captured, not called through `ref` later: an editor callback can
+    // outlive the element that opened it. See
+    // [trackerCacheInvalidatorProvider].
+    final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
     final inMonth =
         widget.date.month == widget.month.month &&
         widget.date.year == widget.month.year;
@@ -4687,7 +4987,7 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
       value: value,
       tracker: widget.tracker,
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
-      allValues: widget.values,
+      hasSingleIntValue: widget.index.hasSingleIntValue,
     );
     final color = Color(widget.tracker.colorValue);
     final fade = inMonth ? 1.0 : 0.4;
@@ -4709,10 +5009,7 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
       tracker: widget.tracker,
       periodDate: widget.date,
       valueColor: value == null ? null : _heatmapValueColor(color, intensity),
-      onSaved: () {
-        ref.invalidate(trackerValuesProvider(widget.tracker.id));
-        ref.invalidate(pendingStatEntriesProvider);
-      },
+      onSaved: () => invalidateTrackerCache(widget.tracker.id),
       child: Container(
         margin: const EdgeInsets.all(1),
         padding: const EdgeInsets.all(1),
@@ -4758,7 +5055,7 @@ class _HeatmapWeekBlock extends ConsumerStatefulWidget {
     required this.tracker,
     required this.rowCells,
     required this.month,
-    required this.values,
+    required this.index,
     required this.maxInPeriod,
     required this.analytics,
   });
@@ -4766,7 +5063,7 @@ class _HeatmapWeekBlock extends ConsumerStatefulWidget {
   final StatisticTracker tracker;
   final List<DateTime> rowCells;
   final DateTime month;
-  final List<TrackerValue> values;
+  final _TrackerValueIndex index;
   final int maxInPeriod;
   final AnalyticsService analytics;
 
@@ -4777,22 +5074,17 @@ class _HeatmapWeekBlock extends ConsumerStatefulWidget {
 class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
   DateTime get _weekStart => widget.rowCells.first;
 
-  TrackerValue? _findValue() {
-    return widget.values.cast<TrackerValue?>().firstWhere(
-      (v) =>
-          v != null &&
-          v.periodStart.year == _weekStart.year &&
-          v.periodStart.month == _weekStart.month &&
-          v.periodStart.day == _weekStart.day,
-      orElse: () => null,
-    );
-  }
+  TrackerValue? _findValue() => widget.index[_weekStart];
 
   bool _inMonth(DateTime d) =>
       d.year == widget.month.year && d.month == widget.month.month;
 
   @override
   Widget build(BuildContext context) {
+    // Captured, not called through `ref` later: an editor callback can
+    // outlive the element that opened it. See
+    // [trackerCacheInvalidatorProvider].
+    final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
     final theme = Theme.of(context);
     final value = _findValue();
     final intensity = widget.analytics.heatmapIntensity(
@@ -4800,7 +5092,7 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
       value: value,
       tracker: widget.tracker,
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
-      allValues: widget.values,
+      hasSingleIntValue: widget.index.hasSingleIntValue,
     );
     final color = Color(widget.tracker.colorValue);
     final baseAlpha = value == null
@@ -4818,10 +5110,7 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
       tracker: widget.tracker,
       periodDate: _weekStart,
       valueColor: value == null ? null : _heatmapValueColor(color, intensity),
-      onSaved: () {
-        ref.invalidate(trackerValuesProvider(widget.tracker.id));
-        ref.invalidate(pendingStatEntriesProvider);
-      },
+      onSaved: () => invalidateTrackerCache(widget.tracker.id),
       child: Container(
         margin: const EdgeInsets.all(1),
         clipBehavior: Clip.antiAlias,
@@ -4881,23 +5170,33 @@ class _MonthGridCalendar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
-    final baseYear = ref.watch(_calendarViewMonthlyBaseYearProvider);
+    final baseYear = ref.watch(
+      _calendarViewMonthlyBaseYearProvider(tracker.id),
+    );
 
     void previousWindow() {
       ref
-          .read(_calendarViewMonthlyBaseYearProvider.notifier)
+          .read(_calendarViewMonthlyBaseYearProvider(tracker.id).notifier)
           .update((y) => y - _monthGridWindowYears);
     }
 
     void nextWindow() {
       ref
-          .read(_calendarViewMonthlyBaseYearProvider.notifier)
+          .read(_calendarViewMonthlyBaseYearProvider(tracker.id).notifier)
           .update((y) => y + _monthGridWindowYears);
     }
 
     return valuesAsync.when(
       data: (values) {
-        final max = analytics.rollingMax(values, days: 731);
+        final max = _maxIntInYears(
+          values,
+          baseYear,
+          baseYear + _monthGridWindowYears - 1,
+        );
+        // Built once per calendar and passed down, so each cell does an
+        // O(1) lookup instead of its own scan over the full history — see
+        // [_TrackerValueIndex].
+        final index = _TrackerValueIndex(values);
 
         // Arrow-key paging is handled once for every calendar by
         // [_CalendarView] above — see [_CalendarView._page].
@@ -4943,7 +5242,7 @@ class _MonthGridCalendar extends ConsumerWidget {
                         child: _MonthGridBox(
                           tracker: tracker,
                           periodDate: DateTime(baseYear + row, m + 1, 1),
-                          values: values,
+                          index: index,
                           maxInPeriod: max,
                           analytics: analytics,
                         ),
@@ -4968,14 +5267,14 @@ class _MonthGridBox extends ConsumerStatefulWidget {
   const _MonthGridBox({
     required this.tracker,
     required this.periodDate,
-    required this.values,
+    required this.index,
     required this.maxInPeriod,
     required this.analytics,
   });
 
   final StatisticTracker tracker;
   final DateTime periodDate;
-  final List<TrackerValue> values;
+  final _TrackerValueIndex index;
   final int maxInPeriod;
   final AnalyticsService analytics;
 
@@ -4984,23 +5283,19 @@ class _MonthGridBox extends ConsumerStatefulWidget {
 }
 
 class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
-  TrackerValue? _findValue() {
-    // Match the canonical month period-start exactly (the 1st). Matching
-    // year+month alone would also pick up any daily row recorded in that
-    // month, so a tracker toggled from daily to monthly would surface an
-    // arbitrary daily value as the month's — and overwrite it on edit.
-    return widget.values.cast<TrackerValue?>().firstWhere(
-      (v) =>
-          v != null &&
-          v.periodStart.year == widget.periodDate.year &&
-          v.periodStart.month == widget.periodDate.month &&
-          v.periodStart.day == widget.periodDate.day,
-      orElse: () => null,
-    );
-  }
+  /// Matched on the canonical month period-start exactly (the 1st), which is
+  /// what the day index keys on. Matching year+month alone would also pick up
+  /// any daily row recorded in that month, so a tracker toggled from daily to
+  /// monthly would surface an arbitrary daily value as the month's — and
+  /// overwrite it on edit.
+  TrackerValue? _findValue() => widget.index[widget.periodDate];
 
   @override
   Widget build(BuildContext context) {
+    // Captured, not called through `ref` later: an editor callback can
+    // outlive the element that opened it. See
+    // [trackerCacheInvalidatorProvider].
+    final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
     final theme = Theme.of(context);
     final value = _findValue();
     final intensity = widget.analytics.heatmapIntensity(
@@ -5008,7 +5303,7 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
       value: value,
       tracker: widget.tracker,
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
-      allValues: widget.values,
+      hasSingleIntValue: widget.index.hasSingleIntValue,
     );
     final color = Color(widget.tracker.colorValue);
     final bgColor = value == null
@@ -5034,10 +5329,7 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
             valueColor: value == null
                 ? null
                 : _heatmapValueColor(color, intensity),
-            onSaved: () {
-              ref.invalidate(trackerValuesProvider(widget.tracker.id));
-              ref.invalidate(pendingStatEntriesProvider);
-            },
+            onSaved: () => invalidateTrackerCache(widget.tracker.id),
             child: Container(
               decoration: BoxDecoration(
                 color: bgColor,
@@ -5078,26 +5370,33 @@ class _YearGridCalendar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
-    final baseYear = ref.watch(_calendarViewYearlyBaseYearProvider);
+    final baseYear = ref.watch(
+      _calendarViewYearlyBaseYearProvider(tracker.id),
+    );
 
     void previousWindow() {
       ref
-          .read(_calendarViewYearlyBaseYearProvider.notifier)
+          .read(_calendarViewYearlyBaseYearProvider(tracker.id).notifier)
           .update((y) => y - _yearGridWindowYears);
     }
 
     void nextWindow() {
       ref
-          .read(_calendarViewYearlyBaseYearProvider.notifier)
+          .read(_calendarViewYearlyBaseYearProvider(tracker.id).notifier)
           .update((y) => y + _yearGridWindowYears);
     }
 
     return valuesAsync.when(
       data: (values) {
-        final max = analytics.rollingMax(
+        final max = _maxIntInYears(
           values,
-          days: 365 * _yearGridWindowYears,
+          baseYear,
+          baseYear + _yearGridWindowYears - 1,
         );
+        // Built once per calendar and passed down, so each cell does an
+        // O(1) lookup instead of its own scan over the full history — see
+        // [_TrackerValueIndex].
+        final index = _TrackerValueIndex(values);
 
         // Arrow-key paging is handled once for every calendar by
         // [_CalendarView] above — see [_CalendarView._page].
@@ -5135,7 +5434,7 @@ class _YearGridCalendar extends ConsumerWidget {
                       child: _YearGridBox(
                         tracker: tracker,
                         periodDate: DateTime(baseYear + i),
-                        values: values,
+                        index: index,
                         maxInPeriod: max,
                         analytics: analytics,
                       ),
@@ -5159,14 +5458,14 @@ class _YearGridBox extends ConsumerStatefulWidget {
   const _YearGridBox({
     required this.tracker,
     required this.periodDate,
-    required this.values,
+    required this.index,
     required this.maxInPeriod,
     required this.analytics,
   });
 
   final StatisticTracker tracker;
   final DateTime periodDate;
-  final List<TrackerValue> values;
+  final _TrackerValueIndex index;
   final int maxInPeriod;
   final AnalyticsService analytics;
 
@@ -5175,23 +5474,18 @@ class _YearGridBox extends ConsumerStatefulWidget {
 }
 
 class _YearGridBoxState extends ConsumerState<_YearGridBox> {
-  TrackerValue? _findValue() {
-    // Match the canonical year period-start exactly (Jan 1). Matching the
-    // year alone would also pick up any daily/monthly row in that year, so a
-    // tracker toggled to yearly would surface an unrelated value as the
-    // year's — and overwrite it on edit.
-    return widget.values.cast<TrackerValue?>().firstWhere(
-      (v) =>
-          v != null &&
-          v.periodStart.year == widget.periodDate.year &&
-          v.periodStart.month == widget.periodDate.month &&
-          v.periodStart.day == widget.periodDate.day,
-      orElse: () => null,
-    );
-  }
+  /// Matched on the canonical year period-start exactly (Jan 1), which is what
+  /// the day index keys on. Matching the year alone would also pick up any
+  /// daily/monthly row in that year, so a tracker toggled to yearly would
+  /// surface an unrelated value as the year's — and overwrite it on edit.
+  TrackerValue? _findValue() => widget.index[widget.periodDate];
 
   @override
   Widget build(BuildContext context) {
+    // Captured, not called through `ref` later: an editor callback can
+    // outlive the element that opened it. See
+    // [trackerCacheInvalidatorProvider].
+    final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
     final theme = Theme.of(context);
     final value = _findValue();
     final intensity = widget.analytics.heatmapIntensity(
@@ -5199,7 +5493,7 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
       value: value,
       tracker: widget.tracker,
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
-      allValues: widget.values,
+      hasSingleIntValue: widget.index.hasSingleIntValue,
     );
     final color = Color(widget.tracker.colorValue);
     final bgColor = value == null
@@ -5225,10 +5519,7 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
             valueColor: value == null
                 ? null
                 : _heatmapValueColor(color, intensity),
-            onSaved: () {
-              ref.invalidate(trackerValuesProvider(widget.tracker.id));
-              ref.invalidate(pendingStatEntriesProvider);
-            },
+            onSaved: () => invalidateTrackerCache(widget.tracker.id),
             child: Container(
               decoration: BoxDecoration(
                 color: bgColor,
@@ -5296,6 +5587,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   final _nameFocusNode = FocusNode();
   String? _optionError;
   String? _nameError;
+  String? _capError;
   late TrackerType _type;
   late TrackerCadence _cadence;
   late TrackerStyle _trackingStyle;
@@ -5537,6 +5829,11 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                             isDense: true,
                             contentPadding: _kTrackerFieldPadding,
                           ),
+                          onChanged: (_) {
+                            if (_capError != null) {
+                              setState(() => _capError = null);
+                            }
+                          },
                         ),
                       ),
                       Padding(
@@ -5562,10 +5859,28 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                             isDense: true,
                             contentPadding: _kTrackerFieldPadding,
                           ),
+                          onChanged: (_) {
+                            if (_capError != null) {
+                              setState(() => _capError = null);
+                            }
+                          },
                         ),
                       ),
                     ],
                   ),
+                  if (_capError != null) ...[
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: Text(
+                        _capError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ],
               if (_type == TrackerType.boolean) ...[
@@ -5768,6 +6083,26 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
       return;
     }
 
+    if (_type == TrackerType.integer && _hasCap) {
+      final lower = int.tryParse(_defaultIntController.text.trim()) ?? 0;
+      final upper = int.tryParse(_capController.text.trim());
+      // Rejected here rather than left to the consumers: an inverted range
+      // makes `num.clamp` throw on every path that reads one of this
+      // tracker's values, including during build. The null case is the same
+      // guard doing double duty — an emptied "Upper limit" field parses to
+      // null and would silently save a tracker with the limit switch on and
+      // no limit set.
+      if (upper == null || upper < lower) {
+        setState(
+          () => _capError = upper == null
+              ? 'Upper limit is required'
+              : 'Upper limit must be at least $lower',
+        );
+        _upperFocusNode.requestFocus();
+        return;
+      }
+    }
+
     if (_type == TrackerType.enumType) {
       final pending = _newOptionController.text.trim();
       if (pending.isNotEmpty) {
@@ -5815,6 +6150,15 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         sortOrder: widget.tracker?.sortOrder ?? 0,
         createdAt: widget.tracker?.createdAt ?? now,
         updatedAt: now,
+        // An edit is a new revision of the tracker, not a brand-new one.
+        // Resetting to 0 shipped a rename at v0 against a remote that every
+        // star toggle and drag-reorder had already advanced, so the next pull
+        // discarded it and restored the old name, colour, cadence and limits.
+        version: (widget.tracker?.version ?? 0) + 1,
+        // Carried, not dropped: editing a tracker another device deleted
+        // would otherwise resurrect it locally and leave the two disagreeing
+        // about whether it exists.
+        deletedAt: widget.tracker?.deletedAt,
       ),
     );
   }

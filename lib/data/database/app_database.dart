@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/settings_models.dart' show defaultPetalColor;
@@ -1150,7 +1151,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 88;
+  int get schemaVersion => 89;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2148,6 +2149,10 @@ class AppDatabase extends _$AppDatabase {
           pendingUploadsTable.crdtOverwrite,
         );
       }
+      if (from < 89) {
+        await _deleteVirtualTrackerValues();
+        await _reanchorWeeklyTrackerValuesToMonday();
+      }
     },
   );
 
@@ -2514,6 +2519,96 @@ class AppDatabase extends _$AppDatabase {
         "UPDATE $table "
         "SET $col = strftime('%Y-%m-%dT%H:%M:%SZ', CAST($col AS INTEGER), 'unixepoch') "
         "WHERE typeof($col) = 'integer'",
+      );
+    }
+  }
+
+  /// Removes rows written under a virtual tracker's id.
+  ///
+  /// The built-in "Journal Entries", "Best Streak", "Words", "Dream Logged"
+  /// and "Worked Out" trackers are derived at display time —
+  /// `trackerValuesProvider` short-circuits their ids and never reads this
+  /// table — but the analytics page's sparkline editor had no guard, so
+  /// tapping the Streak or Words chart wrote real rows that nothing could
+  /// ever read back. They also accumulated forever: `purgeExpiredDeleted`
+  /// only deletes rows carrying a `deletedAt`, and these have none.
+  Future<void> _deleteVirtualTrackerValues() async {
+    // `substr` rather than `LIKE '__default_%'`: `_` is a single-character
+    // wildcard to LIKE, and the ESCAPE clause that would fix it needs a
+    // backslash literal in a Dart string inside a SQL string. This says
+    // exactly what it means.
+    await customStatement(
+      "DELETE FROM tracker_values_table "
+      "WHERE substr(tracker_id, 1, 10) = '__default_'",
+    );
+  }
+
+  /// Re-files every weekly tracker value on a Monday.
+  ///
+  /// Weekly values used to be stored on whichever weekday the
+  /// `weekStartsOnMonday` *display* setting named, and flipping it re-anchored
+  /// the whole table — so a per-device preference repartitioned synced data.
+  /// Storage is now pinned to Monday (`kTrackerStorageWeekStartsMonday`), and
+  /// the Sunday-anchored rows a previous flip left behind would otherwise be
+  /// invisible to every lookup, which all match on an exact date.
+  ///
+  /// Two repairs in one pass:
+  ///  * the *round to the nearest local midnight* step undoes
+  ///    `periodStartFor`'s old `subtract(Duration(days: n))`, which landed at
+  ///    23:00 the day before across a DST spring-forward and floored the week
+  ///    onto the wrong date;
+  ///  * mapping through `+1 day` picks the Monday-anchored week holding six of
+  ///    the old Sunday-anchored week's seven days, which is also the week each
+  ///    row's *id* was already derived from.
+  ///
+  /// A no-op for rows already anchored to Monday, so it is safe whatever the
+  /// device's setting was.
+  Future<void> _reanchorWeeklyTrackerValuesToMonday() async {
+    final weekly = await (select(
+      trackersTable,
+    )..where((t) => t.cadence.equals('weekly'))).get();
+    if (weekly.isEmpty) return;
+
+    final rows = await (select(trackerValuesTable)..where(
+          (v) => v.trackerId.isIn(weekly.map((t) => t.id).toList()),
+        ))
+        .get();
+
+    for (final row in rows) {
+      final local = row.periodStart;
+
+      // Nearest local midnight, not the floor: a DST-corrupted row sits an
+      // hour *before* the date it means, and flooring would keep it there.
+      final floor = DateTime(local.year, local.month, local.day);
+      final ceil = addCalendarDays(floor, 1);
+      final day = local.difference(floor).abs() <= ceil.difference(local).abs()
+          ? floor
+          : ceil;
+
+      // Through the following day: that picks the Monday-anchored week holding
+      // six of the old Sunday-anchored week's seven days, which is also the
+      // week each row's id was already derived from. A no-op for a row already
+      // on a Monday, so an up-to-date database pays no sync traffic.
+      final shifted = addCalendarDays(day, 1);
+      final anchored = addCalendarDays(
+        shifted,
+        -(shifted.weekday - DateTime.monday),
+      );
+      if (anchored == local) continue;
+
+      // Written through drift's own mapping rather than a hand-built string:
+      // this database stores date times as local wall time with an explicit
+      // offset, which is not something to reproduce by hand in SQL.
+      await (update(
+        trackerValuesTable,
+      )..where((v) => v.id.equals(row.id))).write(
+        TrackerValuesTableCompanion(
+          periodStart: Value(anchored),
+          updatedAt: Value(DateTime.now().toUtc()),
+          // Bumped so the repair outranks the stale copy still on the server
+          // rather than being reverted by the next pull.
+          version: Value(row.version + 1),
+        ),
       );
     }
   }
