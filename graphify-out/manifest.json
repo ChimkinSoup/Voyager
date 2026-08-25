@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "lib/app/providers.dart": {
-    "mtime": 1787426508.6610491,
-    "ast_hash": "06e4912e8737e1d97fb35f167833fb24",
+    "mtime": 1787683736.524878,
+    "ast_hash": "a833b7e80f923f0986194e01e33e0aa0",
     "semantic_hash": ""
   },
   "lib/app/voyager_app.dart": {
@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_document_mapper.dart": {
-    "mtime": 1787616680.8587756,
-    "ast_hash": "36e60e3bef999946890ef931c2c6dcec",
+    "mtime": 1787683666.3265734,
+    "ast_hash": "fc6ef19d0886fe411728ca9a795775a4",
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_pull_service.dart": {
@@ -530,8 +530,8 @@
     "semantic_hash": ""
   },
   "lib/data/database/app_database.dart": {
-    "mtime": 1787679286.373396,
-    "ast_hash": "ffe415cf1f2499afc46620f09fd47635",
+    "mtime": 1787689127.065269,
+    "ast_hash": "2bbfbebad5d875184042b089b7e7b2cc",
     "semantic_hash": ""
   },
   "lib/data/database/app_database.g.dart": {
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "lib/domain/models/analytics_models.dart": {
-    "mtime": 1786836611.8884535,
-    "ast_hash": "20c2494ef7ade0a4196853af745765d4",
+    "mtime": 1787683164.1899827,
+    "ast_hash": "be67aabb5dd0393714be49370d2d6e0c",
     "semantic_hash": ""
   },
   "lib/domain/models/calendar_models.dart": {
@@ -640,8 +640,8 @@
     "semantic_hash": ""
   },
   "lib/domain/services/analytics_service.dart": {
-    "mtime": 1784596204.8636918,
-    "ast_hash": "68b0e7158bfb06cb13473c92b5c81fee",
+    "mtime": 1787683082.3089738,
+    "ast_hash": "01e3b7b73c5c6d7e042c21c6bb7f7066",
     "semantic_hash": ""
   },
   "lib/domain/services/calendar_recurrence.dart": {
@@ -680,8 +680,8 @@
     "semantic_hash": ""
   },
   "lib/domain/services/periodic_prompt_service.dart": {
-    "mtime": 1781993762.2117505,
-    "ast_hash": "9ea57caa5cc59e84b7722ac1946ad277",
+    "mtime": 1787688983.9371297,
+    "ast_hash": "abfeb61b66b844aec6e37d291fdafd29",
     "semantic_hash": ""
   },
   "lib/domain/services/quote_bank.dart": {
@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1786855780.175093,
-    "ast_hash": "fa7e7d6b1db773c31831a534037795fa",
+    "mtime": 1787689477.307982,
+    "ast_hash": "2746dc30b3cde48873117c9e5976a438",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -895,8 +895,8 @@
     "semantic_hash": ""
   },
   "lib/features/settings/settings_page.dart": {
-    "mtime": 1787616861.332745,
-    "ast_hash": "4be1b26f7d45b3086684ab1b56c1d0fe",
+    "mtime": 1787683810.8900468,
+    "ast_hash": "bc7c6e56e91ba6f5e09153b72a60130e",
     "semantic_hash": ""
   },
   "lib/features/settings/weather_location_tile.dart": {
@@ -1070,8 +1070,8 @@
     "semantic_hash": ""
   },
   "test/firestore_document_mapper_test.dart": {
-    "mtime": 1787429641.8329358,
-    "ast_hash": "c2649152064ddf3da4b80ecd2799b959",
+    "mtime": 1787688795.9142928,
+    "ast_hash": "f1c9c32e043259cab8bc88c0a3ee21b7",
     "semantic_hash": ""
   },
   "test/import_export_test.dart": {
@@ -2015,8 +2015,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/tracker_entry_row.dart": {
-    "mtime": 1786836611.9000144,
-    "ast_hash": "7702fef95a26ebe269d05de6ed0134e2",
+    "mtime": 1787689252.6295085,
+    "ast_hash": "5b42a406e476d7ed360573c5fd8a19b9",
     "semantic_hash": ""
   },
   "lib/features/notifications/notification_bell.dart": {
@@ -3305,8 +3305,8 @@
     "semantic_hash": ""
   },
   "test/secondary_collections_sync_test.dart": {
-    "mtime": 1787417130.3642356,
-    "ast_hash": "d02a25917dbbcb825d9d848d388d5743",
+    "mtime": 1787688795.9153013,
+    "ast_hash": "1ec316844f1a66b418c4f2b88586c02d",
     "semantic_hash": ""
   },
   "SNIPPET.md": {
@@ -3725,8 +3725,8 @@
     "semantic_hash": ""
   },
   "AUDIT.md": {
-    "mtime": 1787676176.432437,
-    "ast_hash": "a6003e4e995e665493d499fd25d82ee0",
+    "mtime": 1787689874.882313,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": ""
   },
   "JOBS.md": {
@@ -3832,6 +3832,26 @@
   "CAPS_LOCK.md": {
     "mtime": 1787610706.09671,
     "ast_hash": "02514e61a04035c9b29082a73f3e2278",
+    "semantic_hash": ""
+  },
+  "test/tracker_model_invariants_test.dart": {
+    "mtime": 1787689016.164797,
+    "ast_hash": "8fdd52827ec2b16f5fd9077665d992fa",
+    "semantic_hash": ""
+  },
+  "test/tracker_period_anchor_test.dart": {
+    "mtime": 1787688957.4349227,
+    "ast_hash": "b366c93ee74076bc79c00848e9fdb6d5",
+    "semantic_hash": ""
+  },
+  "test/tracker_storage_migration_test.dart": {
+    "mtime": 1787689062.5560856,
+    "ast_hash": "223b7c00ea5d1206eff9c55262dc1265",
+    "semantic_hash": ""
+  },
+  "test/tracker_value_write_version_test.dart": {
+    "mtime": 1787689232.6569943,
+    "ast_hash": "c3210cacd6aa9d02fd328aa5c94903ce",
     "semantic_hash": ""
   }
 }

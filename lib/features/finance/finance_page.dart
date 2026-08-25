@@ -58,7 +58,9 @@ class FinancePage extends ConsumerWidget {
         data: (transactions) =>
             _FinanceView(transactions: transactions, tagColors: tagColors),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => _LedgerError(
+          onRetry: () => ref.invalidate(transactionsProvider),
+        ),
       ),
     );
   }
@@ -83,6 +85,14 @@ typedef _TxnRowSignature = ({
   String? note,
   String tagsKey,
   Map<String, int> tagColors,
+  // occurredAt and updatedAt aren't rendered by the row, but the cached
+  // widget holds the whole FinancialTransaction and hands it to the edit
+  // modal on tap. Without them a date-only edit keeps serving the pre-edit
+  // model, so re-saving reverts the date and re-uses the stale version.
+  // updatedAt is bumped by every repository write, so it covers version,
+  // deletedAt and any field added later.
+  DateTime occurredAt,
+  DateTime updatedAt,
 });
 
 /// A day-group header in the flattened ledger entry list (see
@@ -96,6 +106,18 @@ class _LedgerDayHeader {
 /// Marks the gap after a day group in the flattened ledger entry list.
 class _LedgerSpacer {
   const _LedgerSpacer();
+}
+
+/// The flattened ledger plus the position of every transaction in it, built
+/// once per build by `_FinanceViewState._ledgerModel`.
+class _LedgerModel {
+  const _LedgerModel({
+    this.entries = const [],
+    this.indexById = const {},
+  });
+
+  final List<Object> entries;
+  final Map<String, int> indexById;
 }
 
 const _ledgerSpacer = _LedgerSpacer();
@@ -125,6 +147,8 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
       // row. The separator keeps ["ab"] and ["a", "b"] from colliding.
       tagsKey: transaction.tags.join(String.fromCharCode(0)),
       tagColors: tagColors,
+      occurredAt: transaction.occurredAt,
+      updatedAt: transaction.updatedAt,
     );
     final cached = _rowWidgetCache[transaction.id];
     if (cached != null && _rowSignatureCache[transaction.id] == signature) {
@@ -142,9 +166,10 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
 
   /// Flattens the day-grouped ledger into an index a sliver can build
   /// lazily: a header, that day's transactions, then a spacer, newest day
-  /// first.
-  List<Object> _ledgerEntries(List<FinancialTransaction> transactions) {
-    if (transactions.isEmpty) return const [];
+  /// first. [_LedgerModel.indexById] records where each transaction landed so
+  /// `findChildIndexCallback` can look a row up without scanning.
+  _LedgerModel _ledgerModel(List<FinancialTransaction> transactions) {
+    if (transactions.isEmpty) return const _LedgerModel();
     final groups = <DateTime, List<FinancialTransaction>>{};
     for (final t in transactions) {
       final day = DateTime(
@@ -157,6 +182,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     final days = groups.keys.toList()..sort((a, b) => b.compareTo(a));
 
     final entries = <Object>[];
+    final indexById = <String, int>{};
     for (final day in days) {
       final dayTransactions = groups[day]!;
       final dayNet = dayTransactions.fold<int>(
@@ -164,10 +190,13 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
         (sum, t) => sum + t.signedCents,
       );
       entries.add(_LedgerDayHeader(day: day, netCents: dayNet));
-      entries.addAll(dayTransactions);
+      for (final t in dayTransactions) {
+        indexById[t.id] = entries.length;
+        entries.add(t);
+      }
       entries.add(_ledgerSpacer);
     }
-    return entries;
+    return _LedgerModel(entries: entries, indexById: indexById);
   }
 
   Widget _ledgerEntryAt(
@@ -187,11 +216,8 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
 
   /// The ledger as a lazily-built sliver, or the empty state as a single
   /// sliver item when there are no transactions.
-  Widget _ledgerSliver(
-    List<FinancialTransaction> transactions,
-    Map<String, int> tagColors,
-  ) {
-    final entries = _ledgerEntries(transactions);
+  Widget _ledgerSliver(_LedgerModel ledger, Map<String, int> tagColors) {
+    final entries = ledger.entries;
     if (entries.isEmpty) {
       return const SliverToBoxAdapter(child: _EmptyLedger());
     }
@@ -204,14 +230,11 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
         // `_TransactionRow`'s ValueKey back to its old Element when that
         // happens, so it destroys and recreates every shifted row instead of
         // reusing `_rowFor`'s cached widget — same issue as todo's row list.
-        findChildIndexCallback: (key) {
-          if (key is! ValueKey<String>) return null;
-          final id = key.value;
-          final index = entries.indexWhere(
-            (e) => e is FinancialTransaction && e.id == id,
-          );
-          return index == -1 ? null : index;
-        },
+        // The framework asks once per keyed child it is relocating, so this
+        // has to be a map read: scanning `entries` here would make a single
+        // rebuild quadratic in the size of the ledger.
+        findChildIndexCallback: (key) =>
+            key is ValueKey<String> ? ledger.indexById[key.value] : null,
       ),
     );
   }
@@ -237,6 +260,11 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
         .fold<int>(0, (sum, t) => sum + t.signedCents);
 
     final spark = _sparklineSeries(transactions, days: 30);
+
+    // Grouped once here rather than inside the LayoutBuilder below: it
+    // doesn't depend on the constraints, and the builder re-runs on every
+    // layout pass — every frame of a window-resize drag.
+    final ledger = _ledgerModel(transactions);
 
     final hero = _HeroSection(
       monthNet: monthNet,
@@ -308,7 +336,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                   slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(20, 4, 12, 96),
-                      sliver: _ledgerSliver(transactions, tagColors),
+                      sliver: _ledgerSliver(ledger, tagColors),
                     ),
                   ],
                 ),
@@ -323,7 +351,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 0),
-                sliver: _ledgerSliver(transactions, tagColors),
+                sliver: _ledgerSliver(ledger, tagColors),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
               SliverPadding(
@@ -374,13 +402,22 @@ List<double> _sparklineSeries(
 }) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
-  final start = today.subtract(Duration(days: days - 1));
+  // Calendar days, not a Duration: an absolute 29 days back from a wall-clock
+  // midnight lands at 01:00 across the autumn transition, which pushes the
+  // oldest day of the window out of it and leaves that slot unwritten.
+  final start = DateTime(today.year, today.month, today.day - (days - 1));
 
   final perDay = List<int>.filled(days, 0);
   for (final t in transactions) {
     final d = DateTime(t.occurredAt.year, t.occurredAt.month, t.occurredAt.day);
     if (d.isBefore(start) || d.isAfter(today)) continue;
-    final index = d.difference(start).inDays;
+    // Differenced in UTC: two local midnights are 23h or 25h apart when a
+    // transition falls between them, and inDays truncates that to one day
+    // short — the oldest day would land on top of its neighbour.
+    final index = DateTime.utc(d.year, d.month, d.day)
+        .difference(DateTime.utc(start.year, start.month, start.day))
+        .inDays;
+    if (index < 0 || index >= days) continue;
     perDay[index] += t.signedCents;
   }
 
@@ -618,11 +655,49 @@ class _TransactionRow extends ConsumerWidget {
     });
   }
 
-  Future<void> _delete(WidgetRef ref) async {
-    await ref
-        .read(financeRepositoryProvider)
-        .softDeleteTransaction(transaction.id);
-    ref.invalidate(transactionsProvider);
+  /// Soft-deletes the row and offers an undo.
+  ///
+  /// Everything the continuation needs is captured up front: a sync tick can
+  /// invalidate the ledger and unmount this row while the write is still in
+  /// flight, and `ref` throws once that happens — the invalidate would be
+  /// skipped and the ledger left showing the deleted entry.
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(financeRepositoryProvider);
+    final container = ProviderScope.containerOf(ref.context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final snapshot = transaction;
+
+    await repo.softDeleteTransaction(snapshot.id);
+    container.invalidate(transactionsProvider);
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Transaction deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            // Rebuilt rather than copyWith'd: copyWith reads
+            // `deletedAt ?? this.deletedAt`, so it cannot clear a tombstone.
+            // The delete itself wrote version + 1, so the restore has to be
+            // version + 2 to outrank it on the next sync.
+            await repo.upsertTransaction(
+              FinancialTransaction(
+                id: snapshot.id,
+                createdAt: snapshot.createdAt,
+                updatedAt: utcNow(),
+                version: snapshot.version + 2,
+                type: snapshot.type,
+                amountCents: snapshot.amountCents,
+                occurredAt: snapshot.occurredAt,
+                note: snapshot.note,
+                tags: snapshot.tags,
+              ),
+            );
+            container.invalidate(transactionsProvider);
+          },
+        ),
+      ),
+    );
   }
 
   /// Flips an expense to a deposit or back, leaving everything else alone.
@@ -631,17 +706,20 @@ class _TransactionRow extends ConsumerWidget {
   /// [FinancialTransaction.signedCents]), so this really is a one-field edit —
   /// nothing about the money has to be recomputed.
   Future<void> _convert(WidgetRef ref) async {
+    final repo = ref.read(financeRepositoryProvider);
+    // See _delete: the container outlives this row, `ref` doesn't.
+    final container = ProviderScope.containerOf(ref.context, listen: false);
     final flipped = transaction.type == TransactionType.expense
         ? TransactionType.deposit
         : TransactionType.expense;
-    await ref.read(financeRepositoryProvider).upsertTransaction(
-          transaction.copyWith(
-            type: flipped,
-            updatedAt: utcNow(),
-            version: transaction.version + 1,
-          ),
-        );
-    ref.invalidate(transactionsProvider);
+    await repo.upsertTransaction(
+      transaction.copyWith(
+        type: flipped,
+        updatedAt: utcNow(),
+        version: transaction.version + 1,
+      ),
+    );
+    container.invalidate(transactionsProvider);
   }
 
   /// Files the same transaction again under today's date.
@@ -651,20 +729,23 @@ class _TransactionRow extends ConsumerWidget {
   /// carrying the old clock time over would drop the copy into the middle of
   /// today's group rather than at the end of it.
   Future<void> _duplicate(WidgetRef ref) async {
+    final repo = ref.read(financeRepositoryProvider);
+    // See _delete: the container outlives this row, `ref` doesn't.
+    final container = ProviderScope.containerOf(ref.context, listen: false);
     final now = utcNow();
-    await ref.read(financeRepositoryProvider).upsertTransaction(
-          FinancialTransaction(
-            id: newId(),
-            createdAt: now,
-            updatedAt: now,
-            type: transaction.type,
-            amountCents: transaction.amountCents,
-            occurredAt: DateTime.now(),
-            note: transaction.note,
-            tags: transaction.tags,
-          ),
-        );
-    ref.invalidate(transactionsProvider);
+    await repo.upsertTransaction(
+      FinancialTransaction(
+        id: newId(),
+        createdAt: now,
+        updatedAt: now,
+        type: transaction.type,
+        amountCents: transaction.amountCents,
+        occurredAt: DateTime.now(),
+        note: transaction.note,
+        tags: transaction.tags,
+      ),
+    );
+    container.invalidate(transactionsProvider);
   }
 
   @override
@@ -694,14 +775,14 @@ class _TransactionRow extends ConsumerWidget {
           label: 'Delete',
           icon: PhosphorIconsRegular.trash,
           isDestructive: true,
-          onTap: () => _delete(ref),
+          onTap: () => _delete(context, ref),
         ),
       ],
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () =>
             showFinanceTransactionModal(context, ref, existing: transaction),
-        onLongPress: () => _delete(ref),
+        onLongPress: () => _delete(context, ref),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           child: Row(
@@ -764,6 +845,40 @@ class _TransactionRow extends ConsumerWidget {
   }
 }
 
+/// The whole page's failure state. A refetch is the only recovery a load
+/// error has here, so it needs to be reachable without restarting the app.
+class _LedgerError extends StatelessWidget {
+  const _LedgerError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            PhosphorIconsRegular.warningCircle,
+            size: 40,
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Could not load your ledger.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyLedger extends StatelessWidget {
   const _EmptyLedger();
 
@@ -804,6 +919,10 @@ class _InsightsSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      // Keyed so the sidebar keeps its offset: it is rebuilt from scratch on
+      // every tab switch and every crossing of the split breakpoint, and
+      // without a key that resets a long subscription list to the top.
+      key: ShellPageStorageKeys.financeInsights,
       padding: const EdgeInsets.fromLTRB(12, 4, 20, 96),
       children: const [BillRadarPanel(), SizedBox(height: 12), BudgetPanel()],
     );

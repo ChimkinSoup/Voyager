@@ -20,4 +20,7 @@ abstract final class ShellPageStorageKeys {
   static const financeLedgerNarrow = PageStorageKey<String>(
     'shell.finance.ledger.narrow',
   );
+  static const financeInsights = PageStorageKey<String>(
+    'shell.finance.insights',
+  );
 }

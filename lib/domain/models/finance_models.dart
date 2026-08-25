@@ -109,8 +109,13 @@ class Subscription extends SoftDeletable {
   /// today, negative should never occur (the next due date is always >= today).
   int daysUntilDue([DateTime? from]) {
     final base = from ?? DateTime.now();
-    final today = DateTime(base.year, base.month, base.day);
-    return nextDue(base).difference(today).inDays;
+    final due = nextDue(base);
+    // Counted in UTC so the subtraction is offset-free: differencing two local
+    // wall-clock midnights across a DST transition yields 23h or 25h for a
+    // nominal day, which truncates a bill due tomorrow to "Due today".
+    return DateTime.utc(due.year, due.month, due.day)
+        .difference(DateTime.utc(base.year, base.month, base.day))
+        .inDays;
   }
 
   Subscription copyWith({
@@ -189,9 +194,16 @@ DateTime nextDueDate(DateTime anchor, BillingPeriod period, DateTime from) {
     case BillingPeriod.weekly:
     case BillingPeriod.biweekly:
       final step = period == BillingPeriod.weekly ? 7 : 14;
-      final elapsed = today.difference(start).inDays;
+      // Both halves stay on the calendar rather than on absolute elapsed
+      // time. Across a DST transition two local midnights are 23h apart, so
+      // differencing them locally counts a day short — enough to land the
+      // "next" due date in the past — and adding a Duration to a wall-clock
+      // midnight lands at 23:00 the day before.
+      final elapsed = DateTime.utc(today.year, today.month, today.day)
+          .difference(DateTime.utc(start.year, start.month, start.day))
+          .inDays;
       final cycles = (elapsed / step).ceil();
-      return start.add(Duration(days: cycles * step));
+      return DateTime(start.year, start.month, start.day + cycles * step);
     case BillingPeriod.monthly:
     case BillingPeriod.quarterly:
     case BillingPeriod.yearly:
@@ -472,9 +484,10 @@ class SavingsGoal extends SoftDeletable {
     final target = targetDate;
     if (target == null) return null;
     final base = from ?? DateTime.now();
-    final today = DateTime(base.year, base.month, base.day);
-    return DateTime(target.year, target.month, target.day)
-        .difference(today)
+    // UTC for the same reason as [Subscription.daysUntilDue]: a DST
+    // transition inside the interval would otherwise cost or add a day.
+    return DateTime.utc(target.year, target.month, target.day)
+        .difference(DateTime.utc(base.year, base.month, base.day))
         .inDays;
   }
 
@@ -561,13 +574,53 @@ double goalProgress(int allocatedCents, int targetCents) {
   return (allocatedCents / targetCents).clamp(0.0, 1.0);
 }
 
+/// The largest amount any finance field accepts, in cents — $99,999,999.99.
+const int kMaxAmountCents = 9999999999;
+
+/// Parses a money field into cents, or null when the text isn't a usable
+/// amount.
+///
+/// The amount fields filter keystrokes down to digits and dots but don't
+/// validate the shape, so `1.2.3` and `.` arrive here unparseable and a long
+/// enough paste parses to `Infinity`, whose `round()` throws. The bound is
+/// checked on the rounded cents rather than the dollar value, so `0.001` —
+/// positive, but zero cents — is rejected rather than written as a $0.00 row.
+int? parseAmountCents(String text) {
+  final value = double.tryParse(text.replaceAll(RegExp(r'[^0-9.]'), ''));
+  if (value == null || !value.isFinite) return null;
+  final cents = (value * 100).round();
+  if (cents <= 0 || cents > kMaxAmountCents) return null;
+  return cents;
+}
+
+/// As [parseAmountCents], but signed and zero-tolerant: an asset can be worth
+/// nothing, or be a debt held as a negative value.
+///
+/// The `-` has to be leading and alone — the value field's formatter allows it
+/// anywhere, and `1-2` is not a number even though stripping the sign would
+/// make it look like $12.00.
+int? parseSignedAmountCents(String text) {
+  final raw = text.trim();
+  if (!RegExp(r'^-?\d*\.?\d*$').hasMatch(raw)) return null;
+  final value = double.tryParse(raw.replaceAll(RegExp(r'[^0-9.]'), ''));
+  if (value == null || !value.isFinite) return null;
+  final cents = (value * 100).round();
+  if (cents > kMaxAmountCents) return null;
+  return raw.startsWith('-') ? -cents : cents;
+}
+
+/// Hoisted rather than built per call: constructing a [NumberFormat] parses a
+/// locale number pattern, and [formatCents] renders every figure in the
+/// feature, so a full ledger repaint would otherwise pay for a few hundred
+/// pattern parses in one frame.
+final _currencyFormat = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
+
 /// Formats a cent amount as a currency string (e.g. `1250` -> `$12.50`).
 ///
 /// When [signed] is true, deposits are prefixed with `+` and expenses with `-`;
 /// otherwise the magnitude is returned unsigned.
 String formatCents(int cents, {bool signed = false}) {
-  final format = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
-  final magnitude = format.format(cents.abs() / 100);
+  final magnitude = _currencyFormat.format(cents.abs() / 100);
   if (!signed) return magnitude;
   final sign = cents < 0 ? '-' : '+';
   return '$sign$magnitude';

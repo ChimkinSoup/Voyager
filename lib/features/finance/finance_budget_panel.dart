@@ -213,8 +213,13 @@ class _PacingBar extends StatelessWidget {
         final width = constraints.maxWidth;
         final fill = (spentFraction.clamp(0.0, 1.0)) * width;
         const markerWidth = 2.0;
-        final markerLeft =
-            (pace.clamp(0.0, 1.0) * width).clamp(0.0, width - markerWidth);
+        // num.clamp asserts lowerLimit <= upperLimit, so the second clamp
+        // throws once the track is narrower than the marker — which a
+        // LayoutBuilder legitimately reports mid-layout (a collapsing
+        // sidebar, a zero-width Expanded during an animation).
+        final markerLeft = width <= markerWidth
+            ? 0.0
+            : (pace.clamp(0.0, 1.0) * width).clamp(0.0, width - markerWidth);
 
         return SizedBox(
           height: 10,

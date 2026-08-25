@@ -107,6 +107,50 @@ void main() {
     expect(series[2].netCents, 7000);
   });
 
+  // A weekly window that spans a DST transition used to lose whole buckets:
+  // stepping back by an absolute Duration from a wall-clock midnight lands at
+  // 23:00 the previous day, so the bucket keys stopped matching the key a
+  // transaction hashes to and its whole week read as $0.00.
+  //
+  // Runs on any machine: where there is no DST the arithmetic is unchanged,
+  // and the assertions describe the calendar, not the offset.
+  test('cashFlowSeries keeps every weekly bucket across a DST transition', () {
+    // US DST begins 2026-03-08 and this window straddles it.
+    final now = DateTime(2026, 4, 20);
+    final transactions = [
+      for (final day in [
+        DateTime(2026, 2, 4, 12),
+        DateTime(2026, 2, 11, 12),
+        DateTime(2026, 2, 18, 12),
+        DateTime(2026, 3, 4, 12),
+        DateTime(2026, 3, 18, 12),
+      ])
+        tx(
+          type: TransactionType.expense,
+          amountCents: 1000,
+          occurredAt: day,
+        ),
+    ];
+
+    final series = cashFlowSeries(
+      transactions,
+      granularity: CashFlowGranularity.weekly,
+      periods: 12,
+      now: now,
+    );
+
+    // Every bucket starts on a Monday at wall-clock midnight.
+    for (final point in series) {
+      expect(point.periodStart.weekday, DateTime.monday);
+      expect(point.periodStart.hour, 0);
+    }
+    // And nothing inside the window was dropped.
+    expect(
+      series.fold<int>(0, (sum, p) => sum + p.expenseCents),
+      5000,
+    );
+  });
+
   // -- Spending breakdown --------------------------------------------------
 
   group('spendingBreakdown', () {

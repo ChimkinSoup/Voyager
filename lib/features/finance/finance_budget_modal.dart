@@ -19,17 +19,26 @@ Future<void> showBudgetModal(
   WidgetRef ref, {
   Budget? existing,
 }) async {
+  // Captured out here, not inside the sheet: the sheet builds its own
+  // ProviderScope, and that container is disposed the moment the sheet is
+  // dismissed — which can happen while a save is still in flight, when the
+  // invalidate still has to land.
+  final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
     builder: (ctx) => ProviderScope(
-      parent: ProviderScope.containerOf(context),
-      child: _BudgetModal(existing: existing),
+      parent: container,
+      child: _BudgetModal(container: container, existing: existing),
     ),
   );
 }
 
 class _BudgetModal extends ConsumerStatefulWidget {
-  const _BudgetModal({this.existing});
+  const _BudgetModal({required this.container, this.existing});
+
+  /// The app-level container, which outlives this sheet. See
+  /// [showBudgetModal].
+  final ProviderContainer container;
 
   final Budget? existing;
 
@@ -41,6 +50,10 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   late final TextEditingController _tagController;
   late final TextEditingController _limitController;
   bool _saving = false;
+
+  /// Set when a write throws, so the sheet says what went wrong instead of
+  /// silently sitting there with Save disabled forever.
+  String? _saveError;
 
   @override
   void initState() {
@@ -66,12 +79,15 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
 
   String get _tag => _tagController.text.replaceAll('#', '').trim();
 
-  int? get _parsedLimit {
-    final cleaned = _limitController.text.replaceAll(RegExp(r'[^0-9.]'), '');
-    if (cleaned.isEmpty) return null;
-    final value = double.tryParse(cleaned);
-    if (value == null || value <= 0) return null;
-    return (value * 100).round();
+  int? get _parsedLimit => parseAmountCents(_limitController.text);
+
+  /// Why Save is unavailable, for the limit field to show. Null while the
+  /// field is empty: an untouched field isn't an error yet. A zero limit is
+  /// rejected rather than saved, because budgetStatus reads one as "on track"
+  /// unconditionally — a budget that can never be exceeded.
+  String? get _limitError {
+    if (_limitController.text.trim().isEmpty) return null;
+    return _parsedLimit == null ? r'Enter a limit over $0.00' : null;
   }
 
   bool get _canSave => _tag.isNotEmpty && _parsedLimit != null && !_saving;
@@ -79,48 +95,83 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   Future<void> _save() async {
     final limit = _parsedLimit;
     if (limit == null || !_canSave) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
 
     final now = utcNow();
+    // Both reads happen before the first await: `ref` throws once this sheet
+    // is disposed, and it can be dismissed while the write is in flight.
     final repo = ref.read(financeRepositoryProvider);
-    // Reuse an existing budget for the same tag rather than creating a
-    // duplicate that would double-count the same spending.
-    final budgets = await repo.listBudgets();
-    final match = budgets.cast<Budget?>().firstWhere(
-          (b) => b != null && b.tag.toLowerCase() == _tag.toLowerCase(),
-          orElse: () => null,
-        );
-    final target = widget.existing ?? match;
-
-    await repo.upsertBudget(
-      Budget(
-        id: target?.id ?? newId(),
-        createdAt: target?.createdAt ?? now,
-        updatedAt: now,
-        version: target == null ? 0 : target.version + 1,
-        tag: _tag,
-        limitCents: limit,
-      ),
-    );
-
-    // Give a brand-new tag a stable color so its chip matches elsewhere.
     final settingsRepo = ref.read(settingsRepositoryProvider);
-    final colors = await settingsRepo.getTagColors();
-    if (!colors.containsKey(_tag)) {
-      await settingsRepo.setTagColor(_tag, colorForTag(_tag));
-      ref.invalidate(tagColorsProvider);
-    }
+    final container = widget.container;
+    final tag = _tag;
 
-    ref.invalidate(budgetsProvider);
-    if (mounted) Navigator.of(context).pop();
+    try {
+      // Reuse an existing budget for the same tag rather than creating a
+      // duplicate that would double-count the same spending.
+      final budgets = await repo.listBudgets();
+      final match = budgets.cast<Budget?>().firstWhere(
+            (b) => b != null && b.tag.toLowerCase() == tag.toLowerCase(),
+            orElse: () => null,
+          );
+      final target = widget.existing ?? match;
+
+      await repo.upsertBudget(
+        Budget(
+          id: target?.id ?? newId(),
+          createdAt: target?.createdAt ?? now,
+          updatedAt: now,
+          version: target == null ? 0 : target.version + 1,
+          tag: tag,
+          limitCents: limit,
+        ),
+      );
+
+      // Give a brand-new tag a stable color so its chip matches elsewhere.
+      final colors = await settingsRepo.getTagColors();
+      if (!colors.containsKey(tag)) {
+        await settingsRepo.setTagColor(tag, colorForTag(tag));
+        container.invalidate(tagColorsProvider);
+      }
+
+      // Through the container, not `ref`: the invalidate has to land even
+      // when the sheet was dismissed mid-write.
+      container.invalidate(budgetsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not save: $e';
+      });
+    }
   }
 
   Future<void> _delete() async {
     final existing = widget.existing;
-    if (existing == null) return;
-    await ref.read(financeRepositoryProvider).softDeleteBudget(existing.id);
-    ref.invalidate(budgetsProvider);
-    if (mounted) Navigator.of(context).pop();
+    // _saving also guards the delete: the icon is only disabled by it, so two
+    // taps inside the await window would otherwise write two tombstones and
+    // burn two version numbers on one logical delete.
+    if (existing == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
+    try {
+      await repo.softDeleteBudget(existing.id);
+      container.invalidate(budgetsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not delete: $e';
+      });
+    }
   }
 
   /// Tags worth suggesting: everything already used on a transaction, most-used
@@ -234,10 +285,14 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                     const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  // Bounded so a long paste can't reach the range where
+                  // double.parse returns Infinity.
+                  LengthLimitingTextInputFormatter(12),
                 ],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Monthly limit',
                   prefixText: r'$ ',
+                  errorText: _limitError,
                 ),
                 onSubmitted: (_) => _save(),
               ),
@@ -247,6 +302,15 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                   'Keep #$_tag under ${formatCents(limit)} this month.',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (_saveError != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _saveError!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.error,
                   ),
                 ),
               ],
