@@ -17,17 +17,26 @@ Future<void> showCategoryModal(
   WidgetRef ref, {
   FinanceCategory? existing,
 }) async {
+  // Captured out here, not inside the sheet: the sheet builds its own
+  // ProviderScope, and that container is disposed the moment the sheet is
+  // dismissed — which can happen while a save is still in flight, when the
+  // invalidate still has to land.
+  final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
     builder: (ctx) => ProviderScope(
-      parent: ProviderScope.containerOf(context),
-      child: _CategoryModal(existing: existing),
+      parent: container,
+      child: _CategoryModal(container: container, existing: existing),
     ),
   );
 }
 
 class _CategoryModal extends ConsumerStatefulWidget {
-  const _CategoryModal({this.existing});
+  const _CategoryModal({required this.container, this.existing});
+
+  /// The app-level container, which outlives this sheet. See
+  /// [showCategoryModal].
+  final ProviderContainer container;
 
   final FinanceCategory? existing;
 
@@ -40,6 +49,10 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
   late Set<String> _selectedTags;
   late int _colorValue;
   bool _saving = false;
+
+  /// Set when a write throws, so the sheet says what went wrong instead of
+  /// silently sitting there with Save disabled forever.
+  String? _saveError;
 
   @override
   void initState() {
@@ -75,31 +88,64 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
 
   Future<void> _save() async {
     if (!_canSave) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     final now = utcNow();
     final existing = widget.existing;
+    // Read before the first await: `ref` throws once this sheet is disposed.
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
 
-    await ref.read(financeRepositoryProvider).upsertCategory(
-          FinanceCategory(
-            id: existing?.id ?? newId(),
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
-            version: existing == null ? 0 : existing.version + 1,
-            name: _nameController.text.trim(),
-            colorValue: _colorValue,
-            tags: _selectedTags.toList()..sort(),
-          ),
-        );
-    ref.invalidate(financeCategoriesProvider);
-    if (mounted) Navigator.of(context).pop();
+    try {
+      await repo.upsertCategory(
+        FinanceCategory(
+          id: existing?.id ?? newId(),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          version: existing == null ? 0 : existing.version + 1,
+          name: _nameController.text.trim(),
+          colorValue: _colorValue,
+          tags: _selectedTags.toList()..sort(),
+        ),
+      );
+      // Through the container, not `ref`: the invalidate has to land even
+      // when the sheet was dismissed mid-write.
+      container.invalidate(financeCategoriesProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not save: $e';
+      });
+    }
   }
 
   Future<void> _delete() async {
     final existing = widget.existing;
-    if (existing == null) return;
-    await ref.read(financeRepositoryProvider).softDeleteCategory(existing.id);
-    ref.invalidate(financeCategoriesProvider);
-    if (mounted) Navigator.of(context).pop();
+    // _saving also guards the delete: the icon is only disabled by it, so two
+    // taps inside the await window would otherwise write two tombstones and
+    // burn two version numbers on one logical delete.
+    if (existing == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
+    try {
+      await repo.softDeleteCategory(existing.id);
+      container.invalidate(financeCategoriesProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not delete: $e';
+      });
+    }
   }
 
   @override
@@ -211,6 +257,15 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                 onChanged: (c) => setState(() => _colorValue = c),
                 swatchRadius: 16,
               ),
+              if (_saveError != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _saveError!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               GlassButton(
                 onPressed: _canSave ? _save : null,

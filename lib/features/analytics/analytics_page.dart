@@ -4030,17 +4030,29 @@ class _DetailStatisticsSection extends ConsumerWidget {
         }
       case TrackerType.boolean:
         final trueCount = values.where((v) => v.boolValue == true).length;
-        rows.add(
-          _row(context, 'Recorded true', compactNumberLabel(trueCount)),
-        );
-        final completionRate = trueCount / values.length * 100;
+        // Virtual default trackers (Journal Entries, Dream Logged, Worked Out)
+        // derive their values true-only — a day without one gets no value at
+        // all rather than a false — so a true-count is really just a count of
+        // the days that have a value, and the completion rate is 100% by
+        // construction and says nothing. Real boolean trackers can record a
+        // deliberate false (see [_handleOutsideTap]), so both rows stay there.
         rows.add(
           _row(
             context,
-            'Completion rate',
-            '${completionRate.toStringAsFixed(0)}%',
+            tracker.isDefault ? 'Days logged' : 'Recorded true',
+            compactNumberLabel(trueCount),
           ),
         );
+        if (!tracker.isDefault) {
+          final completionRate = trueCount / values.length * 100;
+          rows.add(
+            _row(
+              context,
+              'Completion rate',
+              '${completionRate.toStringAsFixed(0)}%',
+            ),
+          );
+        }
         final truePeriods =
             (values
                   .where((v) => v.boolValue == true)

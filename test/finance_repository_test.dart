@@ -156,7 +156,11 @@ void main() {
     );
   }
 
-  test('subscriptions list soonest-due first', () async {
+  // The repository's order is deliberately time-independent: nextDue() is
+  // relative to now and subscriptionsProvider is keepAlive, so a due-order
+  // baked in here would decay at midnight. BillRadarPanel sorts by due date
+  // where it renders instead.
+  test('subscriptions list alphabetically, not by due date', () async {
     final soon = makeSub(
       amountCents: 500,
       period: BillingPeriod.monthly,
@@ -173,7 +177,13 @@ void main() {
     await repo.upsertSubscription(soon);
 
     final list = await repo.listSubscriptions();
-    expect(list.map((s) => s.name), ['Soon', 'Later']);
+    expect(list.map((s) => s.name), ['Later', 'Soon']);
+
+    // ...and the radar's own ordering still puts the nearest bill first.
+    final now = DateTime.now();
+    final byDue = [...list]
+      ..sort((a, b) => a.nextDue(now).compareTo(b.nextDue(now)));
+    expect(byDue.map((s) => s.name), ['Soon', 'Later']);
   });
 
   test('subscription round-trips period, color and anchor', () async {
@@ -607,6 +617,82 @@ void main() {
       makeGoal(name: 'g', targetCents: 100).daysUntilTarget(from),
       isNull,
     );
+  });
+
+  // Day counts are differenced in UTC so a DST transition inside the interval
+  // can't cost a day: two local midnights are 23h apart across the spring
+  // transition, and inDays truncates that to one day short — a bill due
+  // tomorrow rendered as "Due today".
+  test('day counts survive a DST transition', () {
+    // US DST begins 2026-03-08.
+    final beforeSpringForward = DateTime(2026, 3, 7);
+    expect(
+      makeSub(
+        amountCents: 500,
+        period: BillingPeriod.monthly,
+        anchorDueDate: DateTime(2026, 3, 8),
+      ).daysUntilDue(beforeSpringForward),
+      1,
+    );
+    expect(
+      makeGoal(
+        name: 'g',
+        targetCents: 100,
+        targetDate: DateTime(2026, 3, 8),
+      ).daysUntilTarget(beforeSpringForward),
+      1,
+    );
+  });
+
+  // Rolling a weekly cadence forward by an absolute Duration from a wall-clock
+  // midnight lands at 23:00 the day before across the spring transition, which
+  // moved the due date a day earlier for the rest of the year.
+  test('nextDueDate keeps a weekly bill on its weekday across DST', () {
+    final due = nextDueDate(
+      DateTime(2026, 3, 2), // a Monday, before the transition
+      BillingPeriod.weekly,
+      DateTime(2026, 3, 10),
+    );
+    expect(due, DateTime(2026, 3, 16));
+    expect(due.weekday, DateTime.monday);
+    expect(due.hour, 0);
+  });
+
+  group('parseAmountCents', () {
+    test('rejects amounts that round to nothing', () {
+      // Positive as a dollar value, zero once rounded to cents — this is what
+      // let a $0.00 row into the ledger.
+      expect(parseAmountCents('0.001'), isNull);
+      expect(parseAmountCents('0'), isNull);
+      expect(parseAmountCents(''), isNull);
+    });
+
+    test('rejects malformed input instead of throwing', () {
+      expect(parseAmountCents('1.2.3'), isNull);
+      expect(parseAmountCents('.'), isNull);
+      // 320 digits parse to Infinity, whose round() throws.
+      expect(parseAmountCents('9' * 320), isNull);
+    });
+
+    test('accepts the range the ledger supports', () {
+      expect(parseAmountCents('12.50'), 1250);
+      expect(parseAmountCents('99999999.99'), kMaxAmountCents);
+      expect(parseAmountCents('100000000'), isNull);
+    });
+  });
+
+  group('parseSignedAmountCents', () {
+    test('accepts a leading minus and zero', () {
+      expect(parseSignedAmountCents('-12.50'), -1250);
+      expect(parseSignedAmountCents('12.50'), 1250);
+      expect(parseSignedAmountCents('0'), 0);
+    });
+
+    test('rejects a misplaced minus rather than stripping it', () {
+      expect(parseSignedAmountCents('1-2'), isNull);
+      expect(parseSignedAmountCents('5-'), isNull);
+      expect(parseSignedAmountCents('1.2.3'), isNull);
+    });
   });
 
   test('settings persist the annualized-cost toggle', () async {

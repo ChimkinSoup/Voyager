@@ -21,7 +21,14 @@ class BillRadarPanel extends ConsumerWidget {
             .valueOrNull
             ?.showAnnualizedSubscriptionCost ??
         false;
-    final subscriptions = subscriptionsAsync.valueOrNull ?? const [];
+    // Ordered here rather than in the repository: nextDue() is relative to
+    // now, and subscriptionsProvider is keepAlive, so an order baked at fetch
+    // time decays — on a long desktop session a bill that has just come due
+    // stays sorted last while its own tile correctly reads "Due today".
+    final now = DateTime.now();
+    final subscriptions =
+        [...(subscriptionsAsync.valueOrNull ?? const <Subscription>[])]
+          ..sort((a, b) => a.nextDue(now).compareTo(b.nextDue(now)));
 
     // Sum of monthly-equivalent cost across every subscription.
     final monthlyEquivalentCents = subscriptions.fold<int>(

@@ -24,6 +24,15 @@ class FinanceGoalsView extends ConsumerWidget {
     final allocations =
         ref.watch(goalAllocationsProvider).valueOrNull ?? const [];
 
+    // Folded once here rather than calling goalAllocatedCents per goal: that
+    // is a full scan of every allocation, and it was being run three times
+    // per goal (the total, the completed count, and each card).
+    final allocatedByGoal = <String, int>{};
+    for (final a in allocations) {
+      allocatedByGoal[a.goalId] = (allocatedByGoal[a.goalId] ?? 0) +
+          a.amountCents;
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 880;
@@ -40,11 +49,10 @@ class FinanceGoalsView extends ConsumerWidget {
             goals.fold<int>(0, (s, g) => s + g.targetCents);
         final totalSaved = goals.fold<int>(
           0,
-          (s, g) => s + goalAllocatedCents(allocations, g.id),
+          (s, g) => s + (allocatedByGoal[g.id] ?? 0),
         );
         final completed = goals
-            .where((g) =>
-                goalAllocatedCents(allocations, g.id) >= g.targetCents)
+            .where((g) => (allocatedByGoal[g.id] ?? 0) >= g.targetCents)
             .length;
 
         return ListView(
@@ -101,7 +109,7 @@ class FinanceGoalsView extends ConsumerWidget {
                 for (final goal in goals)
                   _GoalCard(
                     goal: goal,
-                    allocatedCents: goalAllocatedCents(allocations, goal.id),
+                    allocatedCents: allocatedByGoal[goal.id] ?? 0,
                   ),
               ],
             ),

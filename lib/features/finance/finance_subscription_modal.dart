@@ -25,17 +25,26 @@ Future<void> showSubscriptionModal(
   WidgetRef ref, {
   Subscription? existing,
 }) async {
+  // Captured out here, not inside the sheet: the sheet builds its own
+  // ProviderScope, and that container is disposed the moment the sheet is
+  // dismissed — which can happen while a save is still in flight, when the
+  // invalidate still has to land.
+  final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
     builder: (ctx) => ProviderScope(
-      parent: ProviderScope.containerOf(context),
-      child: _SubscriptionModal(existing: existing),
+      parent: container,
+      child: _SubscriptionModal(container: container, existing: existing),
     ),
   );
 }
 
 class _SubscriptionModal extends ConsumerStatefulWidget {
-  const _SubscriptionModal({this.existing});
+  const _SubscriptionModal({required this.container, this.existing});
+
+  /// The app-level container, which outlives this sheet. See
+  /// [showSubscriptionModal].
+  final ProviderContainer container;
 
   final Subscription? existing;
 
@@ -52,6 +61,10 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   late int _colorValue;
   bool _datePopoverOpen = false;
   bool _saving = false;
+
+  /// Set when a write throws, so the sheet says what went wrong instead of
+  /// silently sitting there with Save disabled forever.
+  String? _saveError;
 
   @override
   void initState() {
@@ -82,12 +95,13 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
 
   void _onFieldChanged() => setState(() {});
 
-  int? get _parsedCents {
-    final cleaned = _amountController.text.replaceAll(RegExp(r'[^0-9.]'), '');
-    if (cleaned.isEmpty) return null;
-    final value = double.tryParse(cleaned);
-    if (value == null || value <= 0) return null;
-    return (value * 100).round();
+  int? get _parsedCents => parseAmountCents(_amountController.text);
+
+  /// Why Save is unavailable, for the amount field to show. Null while the
+  /// field is empty: an untouched field isn't an error yet.
+  String? get _amountError {
+    if (_amountController.text.trim().isEmpty) return null;
+    return _parsedCents == null ? r'Enter an amount over $0.00' : null;
   }
 
   bool get _canSave =>
@@ -124,7 +138,10 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   Future<void> _save() async {
     final cents = _parsedCents;
     if (cents == null || !_canSave) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
 
     final now = utcNow();
     final existing = widget.existing;
@@ -143,19 +160,47 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
           : _noteController.text.trim(),
     );
 
-    await ref.read(financeRepositoryProvider).upsertSubscription(subscription);
-    ref.invalidate(subscriptionsProvider);
-    if (mounted) Navigator.of(context).pop();
+    // Read before the first await: `ref` throws once this sheet is disposed.
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
+    try {
+      await repo.upsertSubscription(subscription);
+      // Through the container, not `ref`: the invalidate has to land even
+      // when the sheet was dismissed mid-write.
+      container.invalidate(subscriptionsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not save: $e';
+      });
+    }
   }
 
   Future<void> _delete() async {
     final existing = widget.existing;
-    if (existing == null) return;
-    await ref
-        .read(financeRepositoryProvider)
-        .softDeleteSubscription(existing.id);
-    ref.invalidate(subscriptionsProvider);
-    if (mounted) Navigator.of(context).pop();
+    // _saving also guards the delete: the icon is only disabled by it, so two
+    // taps inside the await window would otherwise write two tombstones and
+    // burn two version numbers on one logical delete.
+    if (existing == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
+    try {
+      await repo.softDeleteSubscription(existing.id);
+      container.invalidate(subscriptionsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not delete: $e';
+      });
+    }
   }
 
   @override
@@ -163,6 +208,9 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     final theme = Theme.of(context);
     final accent = Color(_colorValue);
     final cents = _parsedCents;
+    // What the radar will actually show for this anchor, so the editor and
+    // the radar can't disagree.
+    final nextDue = nextDueDate(_dueDate, _period, DateTime.now());
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
@@ -240,10 +288,14 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                       ),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                        // Bounded so a long paste can't reach the range where
+                        // double.parse returns Infinity.
+                        LengthLimitingTextInputFormatter(12),
                       ],
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Amount',
                         prefixText: r'$ ',
+                        errorText: _amountError,
                       ),
                     ),
                   ),
@@ -292,7 +344,12 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
               Row(
                 children: [
                   Text(
-                    'Next due',
+                    // This pill edits `anchorDueDate` — the date the cadence
+                    // is measured from, which nextDue() rolls forward. It is
+                    // not itself the next occurrence, and calling it "Next
+                    // due" made the editor contradict the radar for every
+                    // bill older than one billing cycle.
+                    widget.existing == null ? 'First due' : 'Recurs on',
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -309,6 +366,15 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                   ),
                 ],
               ),
+              if (nextDue != _dueDate) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Next due ${DateFormat('MMM d, yyyy').format(nextDue)}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               ColorPickerField(
                 label: 'Color',
@@ -316,6 +382,15 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                 onChanged: (c) => setState(() => _colorValue = c),
                 swatchRadius: 16,
               ),
+              if (_saveError != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _saveError!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               GlassButton(
                 onPressed: _canSave ? _save : null,

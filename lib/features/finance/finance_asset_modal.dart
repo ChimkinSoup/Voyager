@@ -24,17 +24,25 @@ Future<void> showAssetModal(
   WidgetRef ref, {
   Asset? existing,
 }) async {
+  // Captured out here, not inside the sheet: the sheet builds its own
+  // ProviderScope, and that container is disposed the moment the sheet is
+  // dismissed — which can happen while a save is still in flight, when the
+  // invalidate still has to land.
+  final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
     builder: (ctx) => ProviderScope(
-      parent: ProviderScope.containerOf(context),
-      child: _AssetModal(existing: existing),
+      parent: container,
+      child: _AssetModal(container: container, existing: existing),
     ),
   );
 }
 
 class _AssetModal extends ConsumerStatefulWidget {
-  const _AssetModal({this.existing});
+  const _AssetModal({required this.container, this.existing});
+
+  /// The app-level container, which outlives this sheet. See [showAssetModal].
+  final ProviderContainer container;
 
   final Asset? existing;
 
@@ -51,6 +59,10 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   bool _datePopoverOpen = false;
   bool _saving = false;
   bool _seededValue = false;
+
+  /// Set when a write throws, so the sheet says what went wrong instead of
+  /// silently sitting there with Save disabled forever.
+  String? _saveError;
 
   @override
   void initState() {
@@ -76,21 +88,24 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
 
   /// Parses the value field. Unlike transactions, assets accept a leading `-`
   /// so a debt can be tracked as a negative holding.
-  int? get _parsedCents {
-    final raw = _valueController.text.trim();
-    if (raw.isEmpty) return null;
-    final negative = raw.startsWith('-');
-    final cleaned = raw.replaceAll(RegExp(r'[^0-9.]'), '');
-    if (cleaned.isEmpty) return null;
-    final value = double.tryParse(cleaned);
-    if (value == null) return null;
-    final cents = (value * 100).round();
-    return negative ? -cents : cents;
+  int? get _parsedCents => parseSignedAmountCents(_valueController.text);
+
+  /// Why the value can't be used, for the field to show. Null while the field
+  /// is empty — an empty value is allowed when editing (see [_canSave]).
+  String? get _valueError {
+    if (_valueController.text.trim().isEmpty) return null;
+    return _parsedCents == null ? 'Enter a number, e.g. 1250.00' : null;
   }
 
+  /// A valuation is only required for a brand-new asset. An existing one can
+  /// have no valuation at all — its only one deleted, or a partial sync — and
+  /// requiring a figure there would make renaming or recolouring it
+  /// impossible without inventing a value.
   bool get _canSave =>
       _nameController.text.trim().isNotEmpty &&
-      _parsedCents != null &&
+      (widget.existing != null
+          ? _valueError == null
+          : _parsedCents != null) &&
       !_saving;
 
   Future<void> _pickDate(BuildContext buttonContext) async {
@@ -119,65 +134,102 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   }
 
   Future<void> _save() async {
+    if (!_canSave) return;
     final cents = _parsedCents;
-    if (cents == null || !_canSave) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
 
     final now = utcNow();
+    // Read before the first await: `ref` throws once this sheet is disposed.
     final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
     final existing = widget.existing;
     final assetId = existing?.id ?? newId();
 
-    await repo.upsertAsset(
-      Asset(
-        id: assetId,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-        version: existing == null ? 0 : existing.version + 1,
-        name: _nameController.text.trim(),
-        colorValue: _colorValue,
-        note: _noteController.text.trim().isEmpty
-            ? null
-            : _noteController.text.trim(),
-      ),
-    );
+    try {
+      await repo.upsertAsset(
+        Asset(
+          id: assetId,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          version: existing == null ? 0 : existing.version + 1,
+          name: _nameController.text.trim(),
+          colorValue: _colorValue,
+          note: _noteController.text.trim().isEmpty
+              ? null
+              : _noteController.text.trim(),
+        ),
+      );
 
-    // Re-valuing on a date that already has a valuation replaces that day's
-    // entry; any other date appends a new point to the history.
-    final valuations = await repo.listAssetValuations(assetId: assetId);
-    final sameDay = valuations.cast<AssetValuation?>().firstWhere(
-          (v) =>
-              v != null &&
-              v.asOf.year == _asOf.year &&
-              v.asOf.month == _asOf.month &&
-              v.asOf.day == _asOf.day,
-          orElse: () => null,
+      // No figure typed: this was a rename/recolour of an existing asset, so
+      // its valuation history is left exactly as it was.
+      if (cents != null) {
+        // Re-valuing on a date that already has a valuation replaces that
+        // day's entry; any other date appends a new point to the history.
+        final valuations = await repo.listAssetValuations(assetId: assetId);
+        final sameDay = valuations.cast<AssetValuation?>().firstWhere(
+              (v) =>
+                  v != null &&
+                  v.asOf.year == _asOf.year &&
+                  v.asOf.month == _asOf.month &&
+                  v.asOf.day == _asOf.day,
+              orElse: () => null,
+            );
+
+        await repo.upsertAssetValuation(
+          AssetValuation(
+            id: sameDay?.id ?? newId(),
+            createdAt: sameDay?.createdAt ?? now,
+            updatedAt: now,
+            version: sameDay == null ? 0 : sameDay.version + 1,
+            assetId: assetId,
+            valueCents: cents,
+            asOf: _asOf,
+          ),
         );
+      }
 
-    await repo.upsertAssetValuation(
-      AssetValuation(
-        id: sameDay?.id ?? newId(),
-        createdAt: sameDay?.createdAt ?? now,
-        updatedAt: now,
-        version: sameDay == null ? 0 : sameDay.version + 1,
-        assetId: assetId,
-        valueCents: cents,
-        asOf: _asOf,
-      ),
-    );
-
-    ref.invalidate(assetsProvider);
-    ref.invalidate(assetValuationsProvider);
-    if (mounted) Navigator.of(context).pop();
+      // Through the container, not `ref`: the invalidates have to land even
+      // when the sheet was dismissed mid-write.
+      container.invalidate(assetsProvider);
+      container.invalidate(assetValuationsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not save: $e';
+      });
+    }
   }
 
   Future<void> _delete() async {
     final existing = widget.existing;
-    if (existing == null) return;
-    await ref.read(financeRepositoryProvider).softDeleteAsset(existing.id);
-    ref.invalidate(assetsProvider);
-    ref.invalidate(assetValuationsProvider);
-    if (mounted) Navigator.of(context).pop();
+    // _saving also guards the delete: the icon is only disabled by it, so two
+    // taps inside the await window would otherwise write two tombstones and
+    // burn two version numbers on one logical delete — and run the per-child
+    // valuation tombstone loop twice.
+    if (existing == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
+    try {
+      await repo.softDeleteAsset(existing.id);
+      container.invalidate(assetsProvider);
+      container.invalidate(assetValuationsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not delete: $e';
+      });
+    }
   }
 
   @override
@@ -274,11 +326,15 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                 ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                  // Bounded so a long paste can't reach the range where
+                  // double.parse returns Infinity.
+                  LengthLimitingTextInputFormatter(13),
                 ],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Current value',
                   prefixText: r'$ ',
                   hintText: 'Use a minus sign for a debt',
+                  errorText: _valueError,
                 ),
               ),
               const SizedBox(height: 16),
@@ -311,7 +367,10 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                   ),
                 ],
               ),
-              if (existing != null) ...[
+              // Only true when there is a figure to record — an existing
+              // asset can now be saved with the value field left empty, which
+              // touches no valuation at all.
+              if (existing != null && _parsedCents != null) ...[
                 const SizedBox(height: 6),
                 Text(
                   'Saving records a new valuation on this date, keeping past '
@@ -328,6 +387,15 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                 onChanged: (c) => setState(() => _colorValue = c),
                 swatchRadius: 16,
               ),
+              if (_saveError != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _saveError!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               GlassButton(
                 onPressed: _canSave ? _save : null,

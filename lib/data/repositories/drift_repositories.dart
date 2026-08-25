@@ -1557,8 +1557,12 @@ class DriftFinanceRepository implements FinanceRepository {
         .where((r) => includeDeleted || r.deletedAt == null)
         .map(_mapSubscription)
         .toList();
-    // Soonest due first — the radar is a countdown to the next bill.
-    subscriptions.sort((a, b) => a.nextDue().compareTo(b.nextDue()));
+    // Time-independent: nextDue() is relative to now, so ordering by it here
+    // would bake a countdown into a list that is cached across the moment it
+    // describes. The radar sorts by due date where it renders.
+    subscriptions.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return subscriptions;
   }
 
@@ -2066,7 +2070,11 @@ class DriftFinanceRepository implements FinanceRepository {
 
   FinancialTransaction _map(TransactionsTableData row) => FinancialTransaction(
     id: row.id,
-    type: TransactionType.values.byName(row.type),
+    // Tolerant like the sync path's _enumFromName: byName throws on anything
+    // it doesn't recognise, and one row written by a newer build would fail
+    // the whole query and take the entire finance page down with it.
+    type: TransactionType.values.asNameMap()[row.type] ??
+        TransactionType.expense,
     amountCents: row.amountCents,
     note: row.note,
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),

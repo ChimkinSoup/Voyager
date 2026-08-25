@@ -22,17 +22,25 @@ Future<void> showGoalModal(
   WidgetRef ref, {
   SavingsGoal? existing,
 }) async {
+  // Captured out here, not inside the sheet: the sheet builds its own
+  // ProviderScope, and that container is disposed the moment the sheet is
+  // dismissed — which can happen while a save is still in flight, when the
+  // invalidate still has to land.
+  final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
     builder: (ctx) => ProviderScope(
-      parent: ProviderScope.containerOf(context),
-      child: _GoalModal(existing: existing),
+      parent: container,
+      child: _GoalModal(container: container, existing: existing),
     ),
   );
 }
 
 class _GoalModal extends ConsumerStatefulWidget {
-  const _GoalModal({this.existing});
+  const _GoalModal({required this.container, this.existing});
+
+  /// The app-level container, which outlives this sheet. See [showGoalModal].
+  final ProviderContainer container;
 
   final SavingsGoal? existing;
 
@@ -48,6 +56,10 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
   late int _colorValue;
   bool _datePopoverOpen = false;
   bool _saving = false;
+
+  /// Set when a write throws, so the sheet says what went wrong instead of
+  /// silently sitting there with Save disabled forever.
+  String? _saveError;
 
   @override
   void initState() {
@@ -74,12 +86,13 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
     super.dispose();
   }
 
-  int? get _parsedTarget {
-    final cleaned = _targetController.text.replaceAll(RegExp(r'[^0-9.]'), '');
-    if (cleaned.isEmpty) return null;
-    final value = double.tryParse(cleaned);
-    if (value == null || value <= 0) return null;
-    return (value * 100).round();
+  int? get _parsedTarget => parseAmountCents(_targetController.text);
+
+  /// Why Save is unavailable, for the target field to show. Null while the
+  /// field is empty: an untouched field isn't an error yet.
+  String? get _targetError {
+    if (_targetController.text.trim().isEmpty) return null;
+    return _parsedTarget == null ? r'Enter a target over $0.00' : null;
   }
 
   bool get _canSave =>
@@ -117,38 +130,70 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
   Future<void> _save() async {
     final target = _parsedTarget;
     if (target == null || !_canSave) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
 
     final now = utcNow();
     final existing = widget.existing;
-    await ref.read(financeRepositoryProvider).upsertSavingsGoal(
-          SavingsGoal(
-            id: existing?.id ?? newId(),
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
-            version: existing == null ? 0 : existing.version + 1,
-            name: _nameController.text.trim(),
-            targetCents: target,
-            colorValue: _colorValue,
-            note: _noteController.text.trim().isEmpty
-                ? null
-                : _noteController.text.trim(),
-            targetDate: _targetDate,
-          ),
-        );
-    ref.invalidate(savingsGoalsProvider);
-    if (mounted) Navigator.of(context).pop();
+    // Read before the first await: `ref` throws once this sheet is disposed.
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
+    try {
+      await repo.upsertSavingsGoal(
+        SavingsGoal(
+          id: existing?.id ?? newId(),
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+          version: existing == null ? 0 : existing.version + 1,
+          name: _nameController.text.trim(),
+          targetCents: target,
+          colorValue: _colorValue,
+          note: _noteController.text.trim().isEmpty
+              ? null
+              : _noteController.text.trim(),
+          targetDate: _targetDate,
+        ),
+      );
+      // Through the container, not `ref`: the invalidate has to land even
+      // when the sheet was dismissed mid-write.
+      container.invalidate(savingsGoalsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not save: $e';
+      });
+    }
   }
 
   Future<void> _delete() async {
     final existing = widget.existing;
-    if (existing == null) return;
-    await ref
-        .read(financeRepositoryProvider)
-        .softDeleteSavingsGoal(existing.id);
-    ref.invalidate(savingsGoalsProvider);
-    ref.invalidate(goalAllocationsProvider);
-    if (mounted) Navigator.of(context).pop();
+    // _saving also guards the delete: the icon is only disabled by it, so two
+    // taps inside the await window would otherwise write two tombstones and
+    // burn two version numbers on one logical delete — and run the per-child
+    // allocation tombstone loop twice.
+    if (existing == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    final repo = ref.read(financeRepositoryProvider);
+    final container = widget.container;
+    try {
+      await repo.softDeleteSavingsGoal(existing.id);
+      container.invalidate(savingsGoalsProvider);
+      container.invalidate(goalAllocationsProvider);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _saveError = 'Could not delete: $e';
+      });
+    }
   }
 
   @override
@@ -225,10 +270,14 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                     const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  // Bounded so a long paste can't reach the range where
+                  // double.parse returns Infinity.
+                  LengthLimitingTextInputFormatter(12),
                 ],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Target amount',
                   prefixText: r'$ ',
+                  errorText: _targetError,
                 ),
               ),
               const SizedBox(height: 16),
@@ -277,6 +326,15 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                 onChanged: (c) => setState(() => _colorValue = c),
                 swatchRadius: 16,
               ),
+              if (_saveError != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _saveError!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               GlassButton(
                 onPressed: _canSave ? _save : null,

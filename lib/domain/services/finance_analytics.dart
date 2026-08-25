@@ -41,7 +41,11 @@ DateTime cashFlowPeriodStart(
     case CashFlowGranularity.weekly:
       final offset =
           weekStartsMonday ? day.weekday - DateTime.monday : day.weekday % 7;
-      return day.subtract(Duration(days: offset));
+      // Calendar-day arithmetic, not a Duration: a Duration is absolute
+      // elapsed time, so subtracting one across a DST transition lands an
+      // hour off a wall-clock midnight and the bucket key stops matching the
+      // starts built by _stepBack.
+      return DateTime(day.year, day.month, day.day - offset);
     case CashFlowGranularity.monthly:
       return DateTime(day.year, day.month, 1);
     case CashFlowGranularity.yearly:
@@ -57,7 +61,10 @@ DateTime _stepBack(
 ) {
   switch (granularity) {
     case CashFlowGranularity.weekly:
-      return start.subtract(Duration(days: 7 * count));
+      // See cashFlowPeriodStart: stepping by a Duration drifts an hour across
+      // a DST boundary, which would leave these keys unable to match the
+      // bucket a transaction hashes to.
+      return DateTime(start.year, start.month, start.day - 7 * count);
     case CashFlowGranularity.monthly:
       return DateTime(start.year, start.month - count, 1);
     case CashFlowGranularity.yearly:
@@ -248,14 +255,22 @@ List<NetWorthPoint> netWorthSeries(
     list.sort((a, b) => b.asOf.compareTo(a.asOf));
   }
 
+  // Cumulative cash is a single sweep rather than a full pass per sample:
+  // the sample dates ascend, so each one only has to absorb the transactions
+  // the previous one didn't.
+  final ordered = [...transactions]
+    ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
+  var cursor = 0;
+  var cash = 0;
+
   final points = <NetWorthPoint>[];
   for (final date in dates) {
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
-    var cash = 0;
-    for (final t in transactions) {
-      if (t.occurredAt.isAfter(endOfDay)) continue;
-      cash += t.signedCents;
+    while (cursor < ordered.length &&
+        !ordered[cursor].occurredAt.isAfter(endOfDay)) {
+      cash += ordered[cursor].signedCents;
+      cursor++;
     }
 
     var assetTotal = 0;
