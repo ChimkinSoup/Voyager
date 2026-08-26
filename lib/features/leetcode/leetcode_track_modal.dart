@@ -849,12 +849,35 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     setState(() => _saving = true);
 
     final now = utcNow();
-    final existing = widget.existing;
+    final repo = ref.read(leetCodeRepositoryProvider);
+
+    // Whatever the row holds *now*, not what it held when the sheet opened. A
+    // sync tick can land another device's grade underneath an open modal, and
+    // the write below sets every column — so rebasing onto the live row is
+    // what stops the save from rolling that grade back (and from writing a
+    // version number that goes backwards, which the next pull would then
+    // resolve *against* this very edit).
+    final captured = widget.existing;
+    LeetCodeProblem? existing = captured;
+    if (captured != null) {
+      try {
+        // A row that has since been purged outright leaves `captured` as the
+        // only base there is, which is also what a failed read falls back to.
+        existing = await repo.getProblem(captured.id) ?? captured;
+      } catch (_) {
+        existing = captured;
+      }
+      if (!mounted) return;
+    }
+
     final problem = LeetCodeProblem(
       id: existing?.id ?? newId(),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       version: existing == null ? 0 : existing.version + 1,
+      // Omitting this resurrected a problem tombstoned while the sheet was
+      // open, since the upsert writes the column either way.
+      deletedAt: existing?.deletedAt,
       title: title,
       questionId: _questionId,
       questionFrontendId: _questionFrontendIdController.text.trim().isEmpty
@@ -875,13 +898,23 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       reviewCount: existing?.reviewCount ?? 0,
     );
 
-    final repo = ref.read(leetCodeRepositoryProvider);
-    await repo.upsertProblem(problem);
+    try {
+      await repo.upsertProblem(problem);
+    } catch (_) {
+      // The latch has to come off here or the Save button is dead for the life
+      // of the sheet — and in edit mode there is no draft, so closing it would
+      // be the only way out and would take the changes with it.
+      if (mounted) setState(() => _saving = false);
+      _reportRetrackFailure("Couldn't save — your changes are still here");
+      return;
+    }
     ref.read(remoteSyncServiceProvider).pushLeetCodeProblem(problem);
     ref.invalidate(leetcodeProblemsProvider);
 
     // The work is filed; there is nothing left to recover. Closing the slot
     // before the pop is what stops the dispose flush from writing it back.
+    // Only reached once the write has landed: clearing the draft on a failed
+    // save would discard the one remaining copy of the work.
     if (_isCreate) {
       _draftClosed = true;
       _draftTimer?.cancel();

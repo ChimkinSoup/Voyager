@@ -55,6 +55,9 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
   /// Id of the item whose title is currently being edited in place, if any.
   String? _editingId;
 
+  /// Set while an add is in flight — see [_addItem].
+  bool _adding = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,21 +80,35 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
   }
 
   Future<void> _addItem() async {
+    if (_adding) return;
     final title = _newItemController.text.trim();
     if (title.isEmpty) return;
-    final now = utcNow();
-    await ref
-        .read(bucketListRepositoryProvider)
-        .upsertItem(
-          BucketListItem(
-            id: newId(),
-            title: title,
-            sortOrder: DateTime.now().millisecondsSinceEpoch,
-            createdAt: now,
-            updatedAt: now,
-          ),
-        );
+    // Clear the field before the await, not after: onSubmitted fires on every
+    // Enter and the add button calls the same method, so a second press while
+    // the write is still in flight would otherwise read the same text again
+    // and add the item twice.
+    _adding = true;
     _newItemController.clear();
+    try {
+      final now = utcNow();
+      await ref
+          .read(bucketListRepositoryProvider)
+          .upsertItem(
+            BucketListItem(
+              id: newId(),
+              title: title,
+              sortOrder: DateTime.now().millisecondsSinceEpoch,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+    } finally {
+      _adding = false;
+    }
+    // The popup is barrier-dismissible, so clicking the paper behind it while
+    // the write is in flight disposes all of this — ref included, which
+    // asserts on use after disposal.
+    if (!mounted) return;
     // Submitting a TextField hands focus back to the surrounding scope, which
     // ends the run of "type, Enter, type, Enter" that adding several items in
     // one sitting is made of.
@@ -99,7 +116,14 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
     ref.invalidate(bucketListItemsProvider);
   }
 
-  void _startEdit(BucketListItem item) {
+  Future<void> _startEdit(BucketListItem item) async {
+    if (_editingId == item.id) return;
+    // Commit whatever editor is already open first. The controller is shared
+    // by every row, so assigning the new title below overwrites the in-flight
+    // text — and by the time the focus listener fires, _editingId already
+    // points at this row and _commitEdit has nothing left to save.
+    if (_editingId != null) await _commitEdit();
+    if (!mounted) return;
     setState(() {
       _editingId = item.id;
       _editController.text = item.title;
@@ -126,41 +150,49 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
     await ref
         .read(bucketListRepositoryProvider)
         .upsertItem(item.copyWith(title: title, updatedAt: utcNow()));
+    if (!mounted) return;
     ref.invalidate(bucketListItemsProvider);
   }
 
   void _cancelEdit() => setState(() => _editingId = null);
 
   Future<void> _toggle(BucketListItem item) async {
-    if (!item.completed) {
-      final note = await _promptForNote(context);
+    final repo = ref.read(bucketListRepositoryProvider);
+    final wasCompleted = item.completed;
+    String? note;
+    if (!wasCompleted) {
+      note = await _promptForNote(context);
       if (!mounted) return;
-      // Three outcomes, and an empty note is not the same as no answer:
-      // null means the prompt was skipped or dismissed, which leaves whatever
-      // note a previous completion wrote alone; '' means the user saved the
-      // field blank, which is how an old note is removed.
-      await ref
-          .read(bucketListRepositoryProvider)
-          .upsertItem(
-            item.copyWith(
+    }
+    // Re-read rather than writing back the row this was called with: an
+    // upsert writes every column, and the note dialog is modal only to the
+    // user — a background pull can have landed a rename, or a tombstone, on
+    // disk while it was open, and the pre-dialog snapshot would revert it.
+    final current = await repo.getItem(item.id);
+    if (current == null || current.deletedAt != null) {
+      if (mounted) ref.invalidate(bucketListItemsProvider);
+      return;
+    }
+    // Three outcomes, and an empty note is not the same as no answer:
+    // null means the prompt was skipped or dismissed, which leaves whatever
+    // note a previous completion wrote alone; '' means the user saved the
+    // field blank, which is how an old note is removed.
+    await repo.upsertItem(
+      wasCompleted
+          ? current.copyWith(
+              completed: false,
+              clearCompletedAt: true,
+              updatedAt: utcNow(),
+            )
+          : current.copyWith(
               completed: true,
               completedAt: utcNow(),
               note: note == null || note.isEmpty ? null : note,
               clearNote: note != null && note.isEmpty,
               updatedAt: utcNow(),
             ),
-          );
-    } else {
-      await ref
-          .read(bucketListRepositoryProvider)
-          .upsertItem(
-            item.copyWith(
-              completed: false,
-              clearCompletedAt: true,
-              updatedAt: utcNow(),
-            ),
-          );
-    }
+    );
+    if (!mounted) return;
     ref.invalidate(bucketListItemsProvider);
   }
 
@@ -177,6 +209,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
   Future<void> _deleteItem(String id) async {
     if (_editingId == id) setState(() => _editingId = null);
     await ref.read(bucketListRepositoryProvider).deleteItem(id);
+    if (!mounted) return;
     ref.invalidate(bucketListItemsProvider);
   }
 
@@ -236,7 +269,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                       accentColor: widget.accentColor,
                       onToggle: () => _toggle(item),
                       onDelete: () => _deleteItem(item.id),
-                      onEdit: () => _startEdit(item),
+                      onEdit: () => unawaited(_startEdit(item)),
                       isEditing: _editingId == item.id,
                       editController: _editController,
                       editFocusNode: _editFocusNode,

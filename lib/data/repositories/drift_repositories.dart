@@ -532,15 +532,16 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
 
   @override
   Future<void> softDeleteProblem(String id) async {
-    await (_db.update(
-      _db.leetCodeProblemsTable,
-    )..where((t) => t.id.equals(id))).write(
-      LeetCodeProblemsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeProblems);
+    // Read-bump-upsert rather than a raw column write, matching the sibling
+    // repositories. A tombstone that leaves `version` alone is the one
+    // revision on this table that has to win on `updatedAt` alone — and that
+    // comparison is between two client wall-clocks, so a device running a few
+    // minutes fast could keep a live copy alive against a later delete.
+    final current = await getProblem(id);
+    if (current == null) return;
+    // copyWith bumps version and stamps updatedAt; upsertProblem records the
+    // local save.
+    await upsertProblem(current.copyWith(deletedAt: utcNow()));
   }
 
   @override
@@ -1404,8 +1405,13 @@ class DriftBucketListRepository implements BucketListRepository {
   @override
   Future<List<BucketListItem>> listItems({bool includeDeleted = false}) async {
     final rows =
-        await (_db.select(_db.bucketListItemsTable)
-              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+        await (_db.select(_db.bucketListItemsTable)..orderBy([
+              (t) => OrderingTerm.asc(t.sortOrder),
+              // sortOrder is a millisecond timestamp, so two items added in
+              // the same millisecond tie on it and SQLite is free to return
+              // them in either order — which reshuffles the list on a reload.
+              (t) => OrderingTerm.asc(t.id),
+            ]))
             .get();
     return rows
         .where((r) => includeDeleted || r.deletedAt == null)

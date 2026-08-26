@@ -43,14 +43,25 @@ VoidCallback showLeetCodeToast(
   final overlay = Overlay.of(context, rootOverlay: true);
   final dismissRequested = ValueNotifier<bool>(false);
 
+  late final OverlayEntry entry;
+
   var dismissed = false;
   void dismiss() {
     if (dismissed) return;
     dismissed = true;
+    // Dismissed before the toast ever built — an overlay entry builds on the
+    // next frame, and a fetch that fails on a host lookup settles well inside
+    // that gap. There is no State yet to hear the notifier, so nothing would
+    // ever call `entry.remove()` and the toast would be pinned on screen for
+    // the life of the app. Take the entry out directly instead of animating.
+    if (!entry.mounted) {
+      entry.remove();
+      dismissRequested.dispose();
+      return;
+    }
     dismissRequested.value = true;
   }
 
-  late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (context) => _LeetCodeToast(
       message: message,
@@ -60,7 +71,10 @@ VoidCallback showLeetCodeToast(
       linger: linger,
       onDismissRequested: dismiss,
       dismissRequested: dismissRequested,
-      onDismissed: () => entry.remove(),
+      onDismissed: () {
+        entry.remove();
+        dismissRequested.dispose();
+      },
     ),
   );
 
@@ -107,6 +121,15 @@ class _LeetCodeToastState extends State<_LeetCodeToast>
       duration: const Duration(milliseconds: 180),
     )..forward();
     widget.dismissRequested.addListener(_handleDismissRequested);
+    // A listener only hears *changes*, so a flag already set before this build
+    // would otherwise go unheard. Off a post-frame callback because
+    // `onDismissed` removes the overlay entry, which must not run during
+    // build.
+    if (widget.dismissRequested.value) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _handleDismissRequested(),
+      );
+    }
     // The full dwell, always — a toast raised by another toast's button starts
     // its own clock here rather than inheriting what was left of the one it
     // replaced, and the hover it is born under then holds that clock.

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -27,17 +26,17 @@ class DataExportService {
   final List<BackupCollection> _collections;
   final SettingsRepository _settingsRepository;
 
-  Future<File> exportDataToZip() async {
+  /// Writes the whole backup archive to [destination], which the caller has
+  /// already picked. Written straight to its final home rather than staged in
+  /// the documents directory and copied: the copy left a stray archive behind
+  /// whenever the copy or the delete failed.
+  Future<File> exportDataToZip(File destination) async {
     final files = await buildArchiveContents();
 
     // Serializing and zipping is CPU-bound, so it runs off the UI isolate.
     final zipBytes = await compute(generateBackupZipIsolate, files);
 
-    final outputDir = await getApplicationDocumentsDirectory();
-    final exportFile = File(
-      '${outputDir.path}/voyager_backup_${DateTime.now().millisecondsSinceEpoch}.zip',
-    );
-    return await exportFile.writeAsBytes(zipBytes);
+    return await destination.writeAsBytes(zipBytes);
   }
 
   /// Every file the archive will hold, keyed by name, as JSON-encodable

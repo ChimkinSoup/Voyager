@@ -124,7 +124,7 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   Widget build(BuildContext context) {
     final geometry = ref.watch(lifeTreeGeometryProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
-    final cachedStats = ref.watch(lifeTrackerStatsProvider).valueOrNull;
+    final statsAsync = ref.watch(lifeTrackerStatsProvider);
     final grounded = ref.watch(lifeTreeGroundedLeavesProvider) ??
         _groundedLeavesFor(geometry, settings?.birthDate);
 
@@ -210,8 +210,12 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                   stat: blossom.stat,
                   birthDate: settings?.birthDate,
                   now: now,
-                  tasksConquered: cachedStats?.tasksConquered ?? 0,
-                  lifetimeMood: cachedStats?.lifetimeMood,
+                  // Nullable rather than defaulted: the cached stats are a
+                  // chain of table reads on a cold open, and a substituted 0
+                  // renders as a real count for the whole of it.
+                  tasksConquered: statsAsync.valueOrNull?.tasksConquered,
+                  lifetimeMood: statsAsync.valueOrNull?.lifetimeMood,
+                  moodKnown: statsAsync.hasValue,
                 );
                 final x = blossom.labelAnchor.dx * size.width;
                 return Positioned(

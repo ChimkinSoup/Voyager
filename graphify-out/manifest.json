@@ -295,8 +295,8 @@
     "semantic_hash": ""
   },
   "lib/core/sync/remote_sync_service.dart": {
-    "mtime": 1787680380.9362676,
-    "ast_hash": "5959330c199d35898f241eca8639ca78",
+    "mtime": 1787708414.4443424,
+    "ast_hash": "6c1b9baac94dc3d3a09e07d873612d45",
     "semantic_hash": ""
   },
   "lib/core/sync/soft_delete_policy.dart": {
@@ -575,8 +575,8 @@
     "semantic_hash": ""
   },
   "lib/data/repositories/drift_repositories.dart": {
-    "mtime": 1787693230.481162,
-    "ast_hash": "d122b503fb59545a94ecf2b4456d28df",
+    "mtime": 1787708414.445344,
+    "ast_hash": "56665240a736acecebd5c189d8fa0ca1",
     "semantic_hash": ""
   },
   "lib/data/services/quotes_loader.dart": {
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "lib/domain/models/analytics_models.dart": {
-    "mtime": 1787683164.1899827,
-    "ast_hash": "be67aabb5dd0393714be49370d2d6e0c",
+    "mtime": 1787708414.445344,
+    "ast_hash": "948f20b04c18bc67c97baf2edfec5c64",
     "semantic_hash": ""
   },
   "lib/domain/models/calendar_models.dart": {
@@ -1980,13 +1980,13 @@
     "semantic_hash": ""
   },
   "lib/features/dream_journal/dream_branch_painter.dart": {
-    "mtime": 1785132400.7666254,
-    "ast_hash": "4be2fe32107b4a15d228316723403581",
+    "mtime": 1787707662.2816637,
+    "ast_hash": "5d88b6668f8e692752beb8e06b5c4198",
     "semantic_hash": ""
   },
   "lib/features/dream_journal/dream_journal_page.dart": {
-    "mtime": 1786836611.9075794,
-    "ast_hash": "1c8e9de3848bf67f65ae2e264b3ad81e",
+    "mtime": 1787708310.8081956,
+    "ast_hash": "dd3a6b7431ca743d1255c3bcebd52f04",
     "semantic_hash": ""
   },
   "lib/features/dream_journal/dream_sticky_note.dart": {
@@ -3725,8 +3725,8 @@
     "semantic_hash": ""
   },
   "AUDIT.md": {
-    "mtime": 1787693969.1137822,
-    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "mtime": 1787694982.5285342,
+    "ast_hash": "2f6f10d73754f3d38d29b1fd639fc99b",
     "semantic_hash": ""
   },
   "JOBS.md": {
@@ -3852,6 +3852,11 @@
   "test/tracker_value_write_version_test.dart": {
     "mtime": 1787689232.6569943,
     "ast_hash": "c3210cacd6aa9d02fd328aa5c94903ce",
+    "semantic_hash": ""
+  },
+  "test/dream_journal_audit_test.dart": {
+    "mtime": 1787708380.5055096,
+    "ast_hash": "ca4e260f4b43d68b428bc7767b5b5bfb",
     "semantic_hash": ""
   }
 }

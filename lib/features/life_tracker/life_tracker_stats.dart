@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:intl/intl.dart';
 import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 
@@ -98,17 +100,27 @@ class LifeStatValue {
 
 final _integerFormat = NumberFormat.decimalPattern();
 
+/// Placeholder shown while a stat's source data is still being read, so a
+/// pending load never renders as a real figure.
+const String _unknownValue = '—';
+
 /// Resolves every blossom's current display value. [birthDate] is null until
 /// the user sets one in Settings, in which case age-based stats show a
 /// placeholder; [tasksConquered]/[lifetimeMood] come from the precomputed
 /// [LifeTrackerCachedStats][see app/providers.dart] rather than being
 /// recomputed here.
+///
+/// [tasksConquered] is null and [moodKnown] false while that cache is still
+/// loading — a chain of table reads on a cold open, not one frame. Both have
+/// to be distinguishable from the loaded-and-empty case, or the tree shows a
+/// confident "0" and "No journal moods yet" for data nobody has read yet.
 LifeStatValue resolveLifeStat({
   required LifeStat stat,
   required DateTime? birthDate,
   required DateTime now,
-  required int tasksConquered,
+  required int? tasksConquered,
   required double? lifetimeMood,
+  required bool moodKnown,
 }) {
   final title = _titleFor(stat);
   final shortLabel = _shortLabelFor(stat);
@@ -118,7 +130,10 @@ LifeStatValue resolveLifeStat({
       stat: stat,
       title: title,
       shortLabel: shortLabel,
-      value: _integerFormat.format(tasksConquered),
+      value: tasksConquered == null
+          ? _unknownValue
+          : _integerFormat.format(tasksConquered),
+      isPlaceholder: tasksConquered == null,
     );
   }
 
@@ -127,10 +142,12 @@ LifeStatValue resolveLifeStat({
       stat: stat,
       title: title,
       shortLabel: shortLabel,
-      value: lifetimeMood == null
+      value: !moodKnown
+          ? _unknownValue
+          : lifetimeMood == null
           ? 'No journal moods yet'
           : '${lifetimeMood.toStringAsFixed(1)}/10',
-      isPlaceholder: lifetimeMood == null,
+      isPlaceholder: !moodKnown || lifetimeMood == null,
     );
   }
 
@@ -147,6 +164,10 @@ LifeStatValue resolveLifeStat({
   final age = now.difference(birthDate);
   final daysLived = age.inDays.clamp(0, 1 << 30);
   final weeksLived = daysLived ~/ 7;
+  // Same floor as [daysLived], and needed for the same reason: a device clock
+  // that has moved behind the stored birth date gives a negative age, and an
+  // unclamped one reads as "-1,234,567 heartbeats" on the tree.
+  final minutesLived = math.max(0, age.inMinutes);
 
   switch (stat) {
     case LifeStat.weeksRemaining:
@@ -161,7 +182,6 @@ LifeStatValue resolveLifeStat({
       );
 
     case LifeStat.heartbeats:
-      final minutesLived = age.inMinutes;
       final beats = (minutesLived * assumedRestingHeartRateBpm).round();
       return LifeStatValue(
         stat: stat,
@@ -188,7 +208,7 @@ LifeStatValue resolveLifeStat({
       );
 
     case LifeStat.kmTraveled:
-      final km = (age.inMinutes / 60.0) * earthOrbitalSpeedKmh;
+      final km = (minutesLived / 60.0) * earthOrbitalSpeedKmh;
       return LifeStatValue(
         stat: stat,
         title: title,

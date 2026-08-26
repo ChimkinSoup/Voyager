@@ -136,20 +136,24 @@ void main() {
       const keywords = ['pointer'];
       expect(
         leetCodeMatchesBackOnly(
-          _problem(title: 'Two Sum', algorithm: 'Two pointer walk'),
+          leetCodeSearchTextFor(
+            _problem(title: 'Two Sum', algorithm: 'Two pointer walk'),
+          ),
           keywords,
         ),
         isTrue,
       );
       expect(
         leetCodeMatchesBackOnly(
-          _problem(title: 'Linked List Pointer', algorithm: 'Hash map'),
+          leetCodeSearchTextFor(
+            _problem(title: 'Linked List Pointer', algorithm: 'Hash map'),
+          ),
           keywords,
         ),
         isFalse,
       );
       expect(
-        leetCodeMatchesBackOnly(_problem(), const []),
+        leetCodeMatchesBackOnly(leetCodeSearchTextFor(_problem()), const []),
         isFalse,
       );
     });

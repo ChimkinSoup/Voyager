@@ -233,16 +233,21 @@ class LifeTreeGeometry {
   /// index is stable.
   final List<LeafDesign> leafDesigns;
 
+  List<int>? _byAngle;
+
   /// Leaves ordered by angle around the canopy center, so the leaves picked
   /// for the ground come out "evenly spread out across the tree".
+  ///
+  /// Keyed once and cached: computing the angle inside the comparator instead
+  /// costs ~2 n log n atan2 calls over 4,160 leaves, and this is a getter, so
+  /// every read paid for it again.
   List<int> get leafIndicesByAngle {
-    final indices = List<int>.generate(leaves.length, (i) => i);
-    indices.sort((a, b) {
-      final aa = _angleOf(leaves[a].position);
-      final ba = _angleOf(leaves[b].position);
-      return aa.compareTo(ba);
-    });
-    return indices;
+    final cached = _byAngle;
+    if (cached != null) return cached;
+    final keyed = [
+      for (var i = 0; i < leaves.length; i++) (i, _angleOf(leaves[i].position)),
+    ]..sort((a, b) => a.$2.compareTo(b.$2));
+    return _byAngle = [for (final entry in keyed) entry.$1];
   }
 
   double _angleOf(Offset p) {

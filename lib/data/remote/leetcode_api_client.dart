@@ -10,10 +10,18 @@ import 'package:voyager/domain/models/leetcode_api_models.dart';
 /// GraphQL endpoint — the same approach community LeetCode trackers use.
 /// No official public API exists for problem metadata.
 class LeetCodeApiClient {
-  LeetCodeApiClient({http.Client? httpClient})
-    : _http = httpClient ?? http.Client();
+  LeetCodeApiClient({http.Client? httpClient, Duration? timeout})
+    : _http = httpClient ?? http.Client(),
+      _timeout = timeout ?? const Duration(seconds: 12);
 
   final http.Client _http;
+
+  /// A bare [http.Client] carries no deadline of its own, so a connection that
+  /// opens and then stalls — a captive portal, a hung proxy, a half-open
+  /// socket after the laptop wakes — would leave every caller's future pending
+  /// forever. Every call site already treats a thrown request as "no result",
+  /// so a deadline needs no new handling anywhere.
+  final Duration _timeout;
 
   static final Uri _endpoint = Uri.parse('https://leetcode.com/graphql');
 
@@ -197,11 +205,16 @@ class LeetCodeApiClient {
     String query,
     Map<String, dynamic> variables,
   ) async {
-    final response = await _http.post(
-      _endpoint,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'query': query, 'variables': variables}),
-    );
+    final response = await _http
+        .post(
+          _endpoint,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'query': query, 'variables': variables}),
+        )
+        .timeout(
+          _timeout,
+          onTimeout: () => throw Exception('LeetCode API timed out.'),
+        );
     if (response.statusCode >= 400) {
       throw Exception('LeetCode API request failed (${response.statusCode}).');
     }
@@ -224,4 +237,6 @@ class LeetCodeApiClient {
     }
     return data;
   }
+
+  void close() => _http.close();
 }

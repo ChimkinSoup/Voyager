@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/widgets/leaf_shapes.dart';
 import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 
@@ -87,13 +88,25 @@ double fallenLeafDiameterFor(int leafIndex) {
 class LifeTreeCanvasController extends ChangeNotifier {
   final List<_LeafShudder> _pendingGusts = [];
 
+  /// Cap on the queue. Only the canvas drains it, so with no canvas listening
+  /// it would otherwise grow without bound — and more gusts than this are
+  /// indistinguishable on screen anyway.
+  static const _maxPendingGusts = 8;
+
   /// Shudders the foliage near [normalizedPosition] — called when a popup
   /// opens, so the tree visibly reacts.
   void gustAt(Offset normalizedPosition, {double radius = 0.22, double strength = 0.55}) {
+    if (_pendingGusts.length >= _maxPendingGusts) _pendingGusts.removeAt(0);
     _pendingGusts.add(
       _LeafShudder(center: normalizedPosition, radius: radius, strength: strength),
     );
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _pendingGusts.clear();
+    super.dispose();
   }
 }
 
@@ -111,6 +124,19 @@ List<Color> buildTonePalette(List<Color> base) {
       ..add(Color.lerp(color, const Color(0xFFC85466), 0.35)!);
   }
   return palette;
+}
+
+/// The per-frame animation state the painter reads: the clock the canopy
+/// sways on, the eased hover glow, and the live gust queue. Handed to
+/// [CustomPainter.repaint] so a frame repaints the canvas without rebuilding
+/// the widget subtree above it — the values here are the only thing that
+/// changes sixty times a second, and nothing in the tree depends on them.
+class _TreeAnimation extends ChangeNotifier {
+  double time = 0;
+  double hoverGlow = 0;
+  final List<_LeafShudder> gusts = [];
+
+  void frame() => notifyListeners();
 }
 
 class LifeTreeCanvas extends StatefulWidget {
@@ -167,8 +193,8 @@ class LifeTreeCanvas extends StatefulWidget {
   State<LifeTreeCanvas> createState() => _LifeTreeCanvasState();
 }
 
-class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
-  static const _frameInterval = Duration(milliseconds: 16);
+class _LifeTreeCanvasState extends State<LifeTreeCanvas>
+    with SingleTickerProviderStateMixin {
   static const _spriteExtent = 96.0;
 
   /// Alpha baked into every petal sprite (0-255). Kept light so stipple adds
@@ -187,17 +213,17 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   /// of re-bakes as the week count moves.
   static const _shedSteps = 24;
 
-  Timer? _timer;
-  final Stopwatch _clock = Stopwatch();
-  double _time = 0;
+  late final Ticker _ticker = createTicker(_tick);
+
+  /// Everything that changes per frame. Painted from, not rebuilt from — see
+  /// [_TreeAnimation]. The glow is eased toward [LifeTreeCanvas.hovered] every
+  /// tick rather than snapping, so it fades in and out.
+  final _animation = _TreeAnimation();
+
   double _lastTick = 0;
   var _tickerModeEnabled = true;
 
-  /// Eased 0-1 strength of the whole-tree hover glow, chasing [LifeTreeCanvas.
-  /// hovered] every tick rather than snapping, so the glow fades in and out.
-  double _hoverGlow = 0;
-
-  final List<_LeafShudder> _gusts = [];
+  List<_LeafShudder> get _gusts => _animation.gusts;
 
   ui.Image? _atlas;
   List<Color>? _atlasColors;
@@ -264,6 +290,20 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   /// disposal) landing afterwards and replacing a newer background.
   int _bakeGeneration = 0;
 
+  /// Shed level a re-bake is currently in flight for. Held separately from
+  /// [_sceneShed], which is only advanced once the new texture is actually in
+  /// hand — committing it up front pins the canopy at a level it was never
+  /// baked at if that bake fails, with no later build ever retrying.
+  double? _pendingShed;
+
+  /// Debounce for re-baking after a resize — see [_ensureScene].
+  Timer? _resizeSettle;
+
+  /// How long a resize has to settle before the texture is re-baked at the new
+  /// size. A full bake rasterizes ~328 wash cells over a 26-limb path union;
+  /// doing that on every frame of a window drag is what this avoids.
+  static const _resizeSettleDelay = Duration(milliseconds: 180);
+
   /// Ceiling on the backing texture's resolution. The background is soft
   /// washes and flat ink, so there is nothing to gain from rendering it beyond
   /// this, and the memory saving on a hidpi display is large.
@@ -272,37 +312,32 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   @override
   void initState() {
     super.initState();
-    _clock.start();
-    _startTimer();
+    _ticker.start();
     widget.controller.addListener(_onControllerEvent);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // The ticker itself is muted and unmuted by the mixin. The gusts are
+    // ours: they are only aged inside [_tick], so one queued while nothing is
+    // drawing would sit at zero elapsed and replay in full on return.
     final enabled = TickerMode.valuesOf(context).enabled;
     if (enabled == _tickerModeEnabled) return;
     _tickerModeEnabled = enabled;
-    if (enabled) {
-      _startTimer();
-    } else {
-      _timer?.cancel();
-      _timer = null;
-    }
-  }
-
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(_frameInterval, (_) => _tick());
+    if (!enabled) _gusts.clear();
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onControllerEvent);
-    _timer?.cancel();
+    _ticker.dispose();
+    _animation.dispose();
+    _resizeSettle?.cancel();
     _bakeGeneration++;
     _atlas?.dispose();
     _landedAtlas?.dispose();
+    _grainShader?.dispose();
     _grain?.dispose();
     _disposeScene();
     super.dispose();
@@ -323,24 +358,32 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     }
   }
 
-  void _tick() {
-    if (!mounted) return;
-    final now = _clock.elapsedMicroseconds / 1e6;
+  void _tick(Duration elapsed) {
+    final now = elapsed.inMicroseconds / 1e6;
     final dt = math.min(now - _lastTick, 0.1);
     _lastTick = now;
-    _time = now;
     if (dt <= 0) return;
 
+    // Accumulated rather than assigned: a muted ticker's elapsed time keeps
+    // running (see Ticker.muted), so on return from another shell branch the
+    // raw value has jumped by however long the page was away — and every sway
+    // term is sin(time * k + phase), which would land the canopy at a
+    // completely different point in its cycle than the frame before it left.
+    _animation.time += dt;
+
     final glowTarget = widget.hovered ? 1.0 : 0.0;
-    _hoverGlow += (glowTarget - _hoverGlow) * (1 - math.exp(-6.0 * dt));
-    if ((_hoverGlow - glowTarget).abs() < 0.001) _hoverGlow = glowTarget;
+    var glow = _animation.hoverGlow;
+    glow += (glowTarget - glow) * (1 - math.exp(-6.0 * dt));
+    if ((glow - glowTarget).abs() < 0.001) glow = glowTarget;
+    _animation.hoverGlow = glow;
 
     for (final gust in _gusts) {
       gust._elapsed += dt;
     }
     _gusts.removeWhere((g) => g.isDone);
 
-    setState(() {});
+    // Repaints the CustomPaint; rebuilds nothing.
+    _animation.frame();
   }
 
   /// How much of the canopy has washed out, following the share of leaves now
@@ -436,6 +479,11 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   /// pigment rather than vectors, so it goes over everything.
   void _ensureGrain(Color ink) {
     if (_grain != null && _grainInk == ink) return;
+    // The shader holds its own native handle and references the image below,
+    // so it has to go first, and it has to go at all — dropping it on the
+    // floor leaks it and leaves it pointing at an image that was just freed.
+    _grainShader?.dispose();
+    _grainShader = null;
     _grain?.dispose();
 
     final recorder = ui.PictureRecorder();
@@ -510,9 +558,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
   void _ensureScene(Size size, List<Color> palette, double dpr) {
     final scale = math.min(dpr, _maxBackgroundScale);
     final shed = _shedLevel();
-    final layoutValid = _background != null &&
+    final propsValid = _background != null &&
         _staticLayer != null &&
-        _sceneSize == size &&
         _sceneDpr == scale &&
         listEquals(_sceneColors, palette) &&
         _sceneInk == widget.inkColor &&
@@ -520,17 +567,39 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
         _sceneGrass == widget.grassColor &&
         _sceneShowDebugColors == widget.showDebugColors;
 
-    if (layoutValid) {
-      if (_sceneShed == shed) return;
+    if (propsValid && _sceneSize != size) {
+      // Only the texture's resolution changed, and paint() already stretches
+      // the background into whatever size it is handed — so keep showing the
+      // one we have and re-bake once the drag settles. Baking here instead
+      // runs the wood path union, the dry brush and ~328 wash cells, then a
+      // synchronous rasterization at up to 2x DPR, on every frame of a window
+      // resize. The shed level is re-read at fire time rather than captured:
+      // it can move while the timer is armed, and the palette can't (a change
+      // there fails [propsValid] and cancels this below).
+      _sceneSize = size;
+      _resizeSettle?.cancel();
+      _resizeSettle = Timer(_resizeSettleDelay, () {
+        if (!mounted) return;
+        _cachedWoodPath = null;
+        _cachedGlowPath = null;
+        unawaited(_rebakeFull(size, palette, scale, _shedLevel()));
+      });
+      return;
+    }
+
+    if (propsValid) {
+      if (_sceneShed == shed || _pendingShed == shed) return;
       // Only the canopy's thinning changed. Re-bake off the frame and keep
       // showing the current background until the new one is ready — doing this
       // synchronously drops a frame. The static wood+grass layer is reused
       // as-is since it doesn't depend on the shed level.
-      _sceneShed = shed;
-      _rebakeAsync(size, palette, scale, shed, _staticLayer!);
+      _pendingShed = shed;
+      unawaited(_rebakeAsync(size, palette, scale, shed, _staticLayer!));
       return;
     }
 
+    _resizeSettle?.cancel();
+    _resizeSettle = null;
     _disposeScene();
     _bakeGeneration++;
 
@@ -550,7 +619,70 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     _scenePaper = widget.paperColor;
     _sceneGrass = widget.grassColor;
     _sceneShed = shed;
+    _pendingShed = null;
     _sceneShowDebugColors = widget.showDebugColors;
+  }
+
+  /// Re-bakes both layers off the frame, at the size the scene is now laid out
+  /// at. Same work as the synchronous path in [_ensureScene], but the old
+  /// texture stays on screen (stretched) until the new one is in hand.
+  Future<void> _rebakeFull(
+    Size size,
+    List<Color> palette,
+    double scale,
+    double shed,
+  ) async {
+    final generation = ++_bakeGeneration;
+    final width = math.max(1, (size.width * scale).ceil());
+    final height = math.max(1, (size.height * scale).ceil());
+
+    ui.Image? staticLayer;
+    ui.Image? background;
+    try {
+      final staticPicture = _recordStaticLayer(size, scale);
+      try {
+        staticLayer = await staticPicture.toImage(width, height);
+      } finally {
+        staticPicture.dispose();
+      }
+      final picture = _recordBackground(size, palette, scale, shed, staticLayer);
+      try {
+        background = await picture.toImage(width, height);
+      } finally {
+        picture.dispose();
+      }
+    } catch (_) {
+      staticLayer?.dispose();
+      background?.dispose();
+      // Nothing here is recoverable and nothing awaits this. Forget the size
+      // the scene claims so the next build bakes it synchronously, rather than
+      // leaving a stretched texture up for the rest of the session.
+      if (generation == _bakeGeneration) {
+        _sceneSize = null;
+        _pendingShed = null;
+      }
+      return;
+    }
+
+    if (!mounted || generation != _bakeGeneration) {
+      staticLayer.dispose();
+      background.dispose();
+      return;
+    }
+
+    _disposeScene();
+    _staticLayer = staticLayer;
+    _background = background;
+    _sceneSize = size;
+    _sceneDpr = scale;
+    _sceneColors = palette;
+    _sceneInk = widget.inkColor;
+    _scenePaper = widget.paperColor;
+    _sceneGrass = widget.grassColor;
+    _sceneShed = shed;
+    _pendingShed = null;
+    _sceneShowDebugColors = widget.showDebugColors;
+    setState(() {});
   }
 
   Future<void> _rebakeAsync(Size size, List<Color> palette, double scale,
@@ -566,17 +698,22 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
     } catch (_) {
       // Nothing here is recoverable and nothing awaits this, so a failed
       // re-bake just leaves the previous canopy on screen rather than taking
-      // the page down with an unhandled async error.
+      // the page down with an unhandled async error. Releasing the pending
+      // level is what lets the next build try again.
       picture.dispose();
+      if (generation == _bakeGeneration) _pendingShed = null;
       return;
     }
     picture.dispose();
     if (!mounted || generation != _bakeGeneration) {
       image.dispose();
+      if (generation == _bakeGeneration) _pendingShed = null;
       return;
     }
     _background?.dispose();
     _background = image;
+    _sceneShed = shed;
+    _pendingShed = null;
     setState(() {});
   }
 
@@ -1014,9 +1151,6 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
         _ensureLandedAtlas(palette);
         _ensureGrain(widget.inkColor);
         _ensureScene(size, palette, MediaQuery.devicePixelRatioOf(context));
-        final glowPath = _hoverGlow > 0.001 || widget.hovered
-            ? _glowPathFor(size)
-            : null;
 
         final atlas = _atlas;
         final landedAtlas = _landedAtlas;
@@ -1049,12 +1183,16 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas> {
               restRotations: _restRotations,
               fallenDiameters: _fallenDiameters,
               colorCount: palette.length,
-              time: _time,
-              // Passed live rather than copied: the painter only reads them.
-              gusts: _gusts,
+              // The clock, the glow and the live gust queue, as a repaint
+              // listenable — a frame repaints the canvas without rebuilding
+              // anything above it.
+              animation: _animation,
               groundedLeafIndices: widget.groundedLeafIndices,
-              glowPath: glowPath,
-              hoverGlow: _hoverGlow,
+              // Resolved at paint time rather than here: the glow's own
+              // silhouette is only needed while the glow is up, and the
+              // painter is the one that knows, now that hoverGlow no longer
+              // passes through build. Cached by size on the state.
+              glowPathFor: _glowPathFor,
               glowColor: widget.accentColor,
             ),
           ),
@@ -1399,13 +1537,13 @@ class _LifeTreePainter extends CustomPainter {
     required this.restRotations,
     required this.fallenDiameters,
     required this.colorCount,
-    required this.time,
-    required this.gusts,
+    required this.animation,
     required this.groundedLeafIndices,
-    required this.glowPath,
-    required this.hoverGlow,
+    required this.glowPathFor,
     required this.glowColor,
-  });
+  })  : _gustCount = animation.gusts.length,
+        _groundedCount = groundedLeafIndices.length,
+        super(repaint: animation);
 
   static const _spriteExtent = 96.0;
 
@@ -1432,17 +1570,30 @@ class _LifeTreePainter extends CustomPainter {
   /// in the canopy, keyed by leaf index — see [fallenLeafDiameterFor].
   final Float32List fallenDiameters;
   final int colorCount;
-  final double time;
-  final List<_LeafShudder> gusts;
+
+  /// The per-frame values, shared with the state and listened to for repaints.
+  final _TreeAnimation animation;
   final Set<int> groundedLeafIndices;
 
-  /// The branches' own silhouette, for the hover glow — null whenever the
-  /// glow is fully faded out, so a hover that never happens costs nothing.
-  final Path? glowPath;
+  double get time => animation.time;
 
   /// Eased 0-1 strength of the branch hover glow.
-  final double hoverGlow;
+  double get hoverGlow => animation.hoverGlow;
+
+  List<_LeafShudder> get gusts => animation.gusts;
+
+  /// The branches' own silhouette, for the hover glow — asked for only while
+  /// the glow is up, so a hover that never happens costs nothing.
+  final Path Function(Size size) glowPathFor;
   final Color glowColor;
+
+  // [gusts] and [groundedLeafIndices] are passed live rather than copied, so
+  // the delegate handed to shouldRepaint holds the very same objects this one
+  // does and comparing them compares an object with itself. Their lengths are
+  // snapshotted at construction instead, which is what actually differs
+  // between two painters.
+  final int _gustCount;
+  final int _groundedCount;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1478,8 +1629,7 @@ class _LifeTreePainter extends CustomPainter {
   /// bucket-list tap responds to — hovering a branch lights only that
   /// branch fan, not the trunk, roots, or canopy.
   void _paintTreeGlow(Canvas canvas, Size size) {
-    final branches = glowPath;
-    if (branches == null) return;
+    final branches = glowPathFor(size);
     final alpha = hoverGlow;
 
     canvas.drawPath(
@@ -1631,13 +1781,17 @@ class _LifeTreePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LifeTreePainter oldDelegate) {
-    return oldDelegate.time != time ||
-        oldDelegate.gusts.length != gusts.length ||
-        oldDelegate.groundedLeafIndices.length !=
-            groundedLeafIndices.length ||
-        oldDelegate.hoverGlow != hoverGlow ||
+    // The clock and the glow repaint through [animation] rather than through
+    // here — this only has to catch what changes when the widget rebuilds.
+    return !identical(oldDelegate.animation, animation) ||
+        oldDelegate._gustCount != _gustCount ||
+        oldDelegate._groundedCount != _groundedCount ||
+        !identical(oldDelegate.groundedLeafIndices, groundedLeafIndices) ||
         !identical(oldDelegate.background, background) ||
         !identical(oldDelegate.atlas, atlas) ||
-        !identical(oldDelegate.landedAtlas, landedAtlas);
+        !identical(oldDelegate.landedAtlas, landedAtlas) ||
+        !identical(oldDelegate.geometry, geometry) ||
+        oldDelegate.colorCount != colorCount ||
+        oldDelegate.glowColor != glowColor;
   }
 }

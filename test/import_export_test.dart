@@ -1062,6 +1062,35 @@ void main() {
   });
 
   group('Import / Export Unit Tests', () {
+    // The rest of the suite drives buildArchiveContents and
+    // generateBackupZipIsolate by hand, which left exportDataToZip itself --
+    // the compute() hop and the write -- with no coverage at all.
+    test('exportDataToZip writes a readable archive to the chosen file', () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      await seedOneOfEverything(db);
+
+      final destination = File(
+        '${Directory.systemTemp.path}/voyager_export_destination.zip',
+      );
+      addTearDown(() async {
+        if (destination.existsSync()) await destination.delete();
+      });
+
+      final written = await exporterFor(db).exportDataToZip(destination);
+
+      expect(written.path, destination.path);
+      final archive = ZipDecoder().decodeBytes(await destination.readAsBytes());
+      expect(archive.findFile(backupManifestFileName), isNotNull);
+      for (final name in FirestoreCollections.records) {
+        expect(
+          archive.findFile('$name.json'),
+          isNotNull,
+          reason: '$name is missing from the archive',
+        );
+      }
+    });
+
     test('DataExportService JSON Chunking Test', () {
       final entries = List.generate(
         10000,

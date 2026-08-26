@@ -37,18 +37,28 @@ String leetCodeBackSearchText(LeetCodeProblem problem) => [
   ],
 ].join(' ');
 
-/// Whether [problem]'s only hit for [keywords] is on its back. The grid shows
-/// fronts, so those tiles start turned around instead.
-bool leetCodeMatchesBackOnly(LeetCodeProblem problem, List<String> keywords) {
-  bool matches(String text) {
-    final lower = text.toLowerCase();
-    return keywords.any(
-      (k) => k.trim().isNotEmpty && lower.contains(k.trim().toLowerCase()),
-    );
-  }
+/// One problem's two search haystacks, already lowercased.
+///
+/// Folding the case once at the source is what keeps the deck's filter off the
+/// per-keystroke path: [leetCodeFrontSearchText] and [leetCodeBackSearchText]
+/// each build a fresh joined string over the whole problem, and the grid used
+/// to derive and re-lowercase both of them twice per tile per character typed.
+typedef LeetCodeSearchText = ({String front, String back});
 
-  return !matches(leetCodeFrontSearchText(problem)) &&
-      matches(leetCodeBackSearchText(problem));
+/// [problem]'s haystacks, folded ready for matching.
+LeetCodeSearchText leetCodeSearchTextFor(LeetCodeProblem problem) => (
+  front: leetCodeFrontSearchText(problem).toLowerCase(),
+  back: leetCodeBackSearchText(problem).toLowerCase(),
+);
+
+/// Whether [text]'s only hit for [keywords] is on its back. The grid shows
+/// fronts, so those tiles start turned around instead.
+bool leetCodeMatchesBackOnly(LeetCodeSearchText text, List<String> keywords) {
+  bool matches(String lower) => keywords.any(
+    (k) => k.trim().isNotEmpty && lower.contains(k.trim().toLowerCase()),
+  );
+
+  return !matches(text.front) && matches(text.back);
 }
 
 /// One problem in the Review Deck's grid: a miniature version of the

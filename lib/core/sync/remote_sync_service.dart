@@ -2009,32 +2009,68 @@ class RemoteSyncService {
 
   void pushJournal(Journal journal) {
     cancelDocument(FirestoreCollections.journals, journal.id);
-    unawaited(_uploadJournalNow(journal));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.journals,
+        journal.id,
+        () => _uploadJournalNow(journal),
+      ),
+    );
   }
 
   void pushLeetCodeProblem(LeetCodeProblem problem) {
     cancelDocument(FirestoreCollections.leetcodeProblems, problem.id);
-    unawaited(_uploadLeetCodeProblemNow(problem));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.leetcodeProblems,
+        problem.id,
+        () => _uploadLeetCodeProblemNow(problem),
+      ),
+    );
   }
 
   void pushCustomQuote(CustomQuote quote) {
     cancelDocument(FirestoreCollections.customQuotes, quote.id);
-    unawaited(_uploadCustomQuoteNow(quote));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.customQuotes,
+        quote.id,
+        () => _uploadCustomQuoteNow(quote),
+      ),
+    );
   }
 
   void pushStudyFolder(StudyFolder folder) {
     cancelDocument(FirestoreCollections.studyFolders, folder.id);
-    unawaited(_uploadStudyFolderNow(folder));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.studyFolders,
+        folder.id,
+        () => _uploadStudyFolderNow(folder),
+      ),
+    );
   }
 
   void pushStudyDeck(StudyDeck deck) {
     cancelDocument(FirestoreCollections.studyDecks, deck.id);
-    unawaited(_uploadStudyDeckNow(deck));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.studyDecks,
+        deck.id,
+        () => _uploadStudyDeckNow(deck),
+      ),
+    );
   }
 
   void pushStudyCard(StudyCard card) {
     cancelDocument(FirestoreCollections.studyCards, card.id);
-    unawaited(_uploadStudyCardNow(card));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.studyCards,
+        card.id,
+        () => _uploadStudyCardNow(card),
+      ),
+    );
   }
 
   /// Batched counterpart to [pushStudyCard] for a set of cards that only
@@ -2060,27 +2096,57 @@ class RemoteSyncService {
 
   void pushExercise(Exercise exercise) {
     cancelDocument(FirestoreCollections.exercises, exercise.id);
-    unawaited(_uploadExerciseNow(exercise));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.exercises,
+        exercise.id,
+        () => _uploadExerciseNow(exercise),
+      ),
+    );
   }
 
   void pushWorkoutPlan(WorkoutPlan plan) {
     cancelDocument(FirestoreCollections.workoutPlans, plan.id);
-    unawaited(_uploadWorkoutPlanNow(plan));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.workoutPlans,
+        plan.id,
+        () => _uploadWorkoutPlanNow(plan),
+      ),
+    );
   }
 
   void pushWorkoutPlanEntry(WorkoutPlanEntry entry) {
     cancelDocument(FirestoreCollections.workoutPlanEntries, entry.id);
-    unawaited(_uploadWorkoutPlanEntryNow(entry));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.workoutPlanEntries,
+        entry.id,
+        () => _uploadWorkoutPlanEntryNow(entry),
+      ),
+    );
   }
 
   void pushWorkoutSession(WorkoutSession session) {
     cancelDocument(FirestoreCollections.workoutSessions, session.id);
-    unawaited(_uploadWorkoutSessionNow(session));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.workoutSessions,
+        session.id,
+        () => _uploadWorkoutSessionNow(session),
+      ),
+    );
   }
 
   void pushWorkoutSetLog(WorkoutSetLog log) {
     cancelDocument(FirestoreCollections.workoutSetLogs, log.id);
-    unawaited(_uploadWorkoutSetLogNow(log));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.workoutSetLogs,
+        log.id,
+        () => _uploadWorkoutSetLogNow(log),
+      ),
+    );
   }
 
   /// Batched counterpart to [pushWorkoutSetLog]. Materialising a session
@@ -2107,10 +2173,14 @@ class RemoteSyncService {
   void pushJobApplication(JobApplication application) {
     cancelDocument(FirestoreCollections.jobApplications, application.id);
     unawaited(
-      _uploadRecordNow(
-        collection: FirestoreCollections.jobApplications,
-        localId: application.id,
-        payload: jobApplicationToFirestore(application),
+      _runRemoteSave(
+        FirestoreCollections.jobApplications,
+        application.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.jobApplications,
+          localId: application.id,
+          payload: jobApplicationToFirestore(application),
+        ),
       ),
     );
   }
@@ -2146,10 +2216,14 @@ class RemoteSyncService {
   void pushJobStatusEvent(JobStatusEvent event) {
     cancelDocument(FirestoreCollections.jobStatusEvents, event.id);
     unawaited(
-      _uploadRecordNow(
-        collection: FirestoreCollections.jobStatusEvents,
-        localId: event.id,
-        payload: jobStatusEventToFirestore(event),
+      _runRemoteSave(
+        FirestoreCollections.jobStatusEvents,
+        event.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.jobStatusEvents,
+          localId: event.id,
+          payload: jobStatusEventToFirestore(event),
+        ),
       ),
     );
   }
@@ -2181,10 +2255,14 @@ class RemoteSyncService {
   void pushJobStage(JobStage stage) {
     cancelDocument(FirestoreCollections.jobStages, stage.id);
     unawaited(
-      _uploadRecordNow(
-        collection: FirestoreCollections.jobStages,
-        localId: stage.id,
-        payload: jobStageToFirestore(stage),
+      _runRemoteSave(
+        FirestoreCollections.jobStages,
+        stage.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.jobStages,
+          localId: stage.id,
+          payload: jobStageToFirestore(stage),
+        ),
       ),
     );
   }
@@ -2212,10 +2290,14 @@ class RemoteSyncService {
   void pushJobCompany(JobCompany company) {
     cancelDocument(FirestoreCollections.jobCompanies, company.id);
     unawaited(
-      _uploadRecordNow(
-        collection: FirestoreCollections.jobCompanies,
-        localId: company.id,
-        payload: jobCompanyToFirestore(company),
+      _runRemoteSave(
+        FirestoreCollections.jobCompanies,
+        company.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.jobCompanies,
+          localId: company.id,
+          payload: jobCompanyToFirestore(company),
+        ),
       ),
     );
   }
@@ -2245,10 +2327,14 @@ class RemoteSyncService {
   void pushJobCategory(JobCategory category) {
     cancelDocument(FirestoreCollections.jobCategories, category.id);
     unawaited(
-      _uploadRecordNow(
-        collection: FirestoreCollections.jobCategories,
-        localId: category.id,
-        payload: jobCategoryToFirestore(category),
+      _runRemoteSave(
+        FirestoreCollections.jobCategories,
+        category.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.jobCategories,
+          localId: category.id,
+          payload: jobCategoryToFirestore(category),
+        ),
       ),
     );
   }
@@ -2256,17 +2342,27 @@ class RemoteSyncService {
   void pushJobSeason(JobSeason season) {
     cancelDocument(FirestoreCollections.jobSeasons, season.id);
     unawaited(
-      _uploadRecordNow(
-        collection: FirestoreCollections.jobSeasons,
-        localId: season.id,
-        payload: jobSeasonToFirestore(season),
+      _runRemoteSave(
+        FirestoreCollections.jobSeasons,
+        season.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.jobSeasons,
+          localId: season.id,
+          payload: jobSeasonToFirestore(season),
+        ),
       ),
     );
   }
 
   void pushStudyReviewLog(StudyReviewLog log) {
     cancelDocument(FirestoreCollections.studyReviewLog, log.id);
-    unawaited(_uploadStudyReviewLogNow(log));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.studyReviewLog,
+        log.id,
+        () => _uploadStudyReviewLogNow(log),
+      ),
+    );
   }
 
   void pushJournalEntry(JournalEntry entry) {
@@ -2279,7 +2375,13 @@ class RemoteSyncService {
 
   void pushJournalEntryNow(JournalEntry entry) {
     cancelDocument(FirestoreCollections.journalEntries, entry.id);
-    unawaited(_uploadJournalEntryNow(entry));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.journalEntries,
+        entry.id,
+        () => _uploadJournalEntryNow(entry),
+      ),
+    );
   }
 
   void pushDreamEntry(DreamEntry entry) {
@@ -2292,12 +2394,24 @@ class RemoteSyncService {
 
   void pushDreamEntryNow(DreamEntry entry) {
     cancelDocument(FirestoreCollections.dreamEntries, entry.id);
-    unawaited(_uploadDreamEntryNow(entry));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.dreamEntries,
+        entry.id,
+        () => _uploadDreamEntryNow(entry),
+      ),
+    );
   }
 
   void pushTodoList(TodoListModel list) {
     cancelDocument(FirestoreCollections.todoLists, list.id);
-    unawaited(_uploadTodoListNow(list));
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.todoLists,
+        list.id,
+        () => _uploadTodoListNow(list),
+      ),
+    );
   }
 
   Future<void> pushTodoTaskNow(TodoTask task) {
@@ -2406,7 +2520,8 @@ class RemoteSyncService {
     });
   }
 
-  /// Runs a debounced upload, making sure a failure lands somewhere.
+  /// Runs an unawaited upload — debounced or immediate — making sure a
+  /// failure lands somewhere.
   ///
   /// These uploads are deliberately not awaited by their callers, so without
   /// this an exception would escape to the zone as an unhandled error and the

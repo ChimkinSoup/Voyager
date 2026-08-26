@@ -575,8 +575,8 @@
     "semantic_hash": ""
   },
   "lib/data/repositories/drift_repositories.dart": {
-    "mtime": 1787616680.8367722,
-    "ast_hash": "6d8ebd48c6fe6e3d493583971848dadb",
+    "mtime": 1787693230.481162,
+    "ast_hash": "d122b503fb59545a94ecf2b4456d28df",
     "semantic_hash": ""
   },
   "lib/data/services/quotes_loader.dart": {
@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1787689477.307982,
-    "ast_hash": "2746dc30b3cde48873117c9e5976a438",
+    "mtime": 1787690069.006411,
+    "ast_hash": "af2d07c3d6ebc25e5a91da3842fe9462",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -920,8 +920,8 @@
     "semantic_hash": ""
   },
   "lib/features/shell/shell_page_storage_keys.dart": {
-    "mtime": 1785205629.039661,
-    "ast_hash": "d54c965ff75a9f1ac634af8e95aa6bbb",
+    "mtime": 1787692599.5445318,
+    "ast_hash": "d9efc2a1d021cfefe76d50d51b43bc91",
     "semantic_hash": ""
   },
   "lib/features/shell/shell_page_transition.dart": {
@@ -1415,13 +1415,13 @@
     "semantic_hash": ""
   },
   "lib/domain/models/finance_models.dart": {
-    "mtime": 1784596204.861691,
-    "ast_hash": "b10ce8fd7f7510875b27570e070ee924",
+    "mtime": 1787693408.2128255,
+    "ast_hash": "a04f84b1152983abe39658c5050e824c",
     "semantic_hash": ""
   },
   "lib/domain/services/finance_analytics.dart": {
-    "mtime": 1784596204.8636918,
-    "ast_hash": "cf1b274b72488e510bbd6cf56fbcd050",
+    "mtime": 1787693350.338549,
+    "ast_hash": "9140df4fab99428339187e3b33ebe241",
     "semantic_hash": ""
   },
   "lib/features/analytics/sparkline_touch.dart": {
@@ -1440,8 +1440,8 @@
     "semantic_hash": ""
   },
   "lib/features/finance/finance_allocate_modal.dart": {
-    "mtime": 1786836611.9085793,
-    "ast_hash": "93736a74d68f22fed2eb0319b9d4c9fa",
+    "mtime": 1787692916.9927304,
+    "ast_hash": "c1e5e3f10673ee50288a1bf599b7a967",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_analytics_view.dart": {
@@ -1450,53 +1450,53 @@
     "semantic_hash": ""
   },
   "lib/features/finance/finance_asset_modal.dart": {
-    "mtime": 1786836611.9095793,
-    "ast_hash": "6ee4da0d26d0ce41f8e207701673bb2b",
+    "mtime": 1787693643.0216875,
+    "ast_hash": "becc5898beddc456322a6ea88f8e608f",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_bill_radar.dart": {
-    "mtime": 1785205629.0296607,
-    "ast_hash": "cafc82cdc15ca8596a93afe8676f3abe",
+    "mtime": 1787693221.879776,
+    "ast_hash": "1327e3658618d751439abac4f1c3d949",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_budget_modal.dart": {
-    "mtime": 1786836611.9095793,
-    "ast_hash": "97c64e7afc4e640aedb01dbe11229997",
+    "mtime": 1787693057.536959,
+    "ast_hash": "47f1c9744b9496dbfcc5cdca44fe89e2",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_budget_panel.dart": {
-    "mtime": 1785205629.0306609,
-    "ast_hash": "5cbb511203128449aa98f7dbf12a62e7",
+    "mtime": 1787693215.0606055,
+    "ast_hash": "bea99f98dddddbbe28e545467a00a781",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_category_modal.dart": {
-    "mtime": 1786836611.9105794,
-    "ast_hash": "f81839f2696120a44aa185d0ea6ff191",
+    "mtime": 1787693091.6971502,
+    "ast_hash": "22362d9212ce6a5b007ee33621c9ef58",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_goal_modal.dart": {
-    "mtime": 1786836611.9109435,
-    "ast_hash": "5fe6272f81c2c190de5366a0cb3893d8",
+    "mtime": 1787693133.2480078,
+    "ast_hash": "3488c289a7ee304c2f4a9599fb6eaa56",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_goals_view.dart": {
-    "mtime": 1786836611.911448,
-    "ast_hash": "fb9c1ff68c2d14b63381d92374bfb530",
+    "mtime": 1787693209.9681973,
+    "ast_hash": "606d50f5eff51866fa151fb03210736e",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_page.dart": {
-    "mtime": 1786836611.9119654,
-    "ast_hash": "3aba219d6982278f8e8287df6f67b8e6",
+    "mtime": 1787692599.5998943,
+    "ast_hash": "e02b797dedd9655fde0e0a7b121e6b83",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_subscription_modal.dart": {
-    "mtime": 1786836611.912481,
-    "ast_hash": "bd0df4ca8f6b4a65847485ca9e715d43",
+    "mtime": 1787693008.2340631,
+    "ast_hash": "22471a8e936b3df48c2700b021295a7a",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_transaction_modal.dart": {
-    "mtime": 1786836611.9129994,
-    "ast_hash": "f93ce78c12ff306563d65c77cb270c75",
+    "mtime": 1787692847.582585,
+    "ast_hash": "a84fb532cbcd1c361aa08ad6763a45a4",
     "semantic_hash": ""
   },
   "lib/features/finance/geometric_progress_ring.dart": {
@@ -1510,13 +1510,13 @@
     "semantic_hash": ""
   },
   "test/finance_analytics_test.dart": {
-    "mtime": 1784596204.8834538,
-    "ast_hash": "575becc3155c407fb3f1cf95ff711d9d",
+    "mtime": 1787693319.554518,
+    "ast_hash": "1fdc34b2c0b4a5ccff35344b5052ccde",
     "semantic_hash": ""
   },
   "test/finance_repository_test.dart": {
-    "mtime": 1784596204.8844538,
-    "ast_hash": "ee5b35fdb2726f0da2993b17c08b5121",
+    "mtime": 1787693376.7342737,
+    "ast_hash": "6716a7d5d2b4bf9e1eeeef36f7ed2364",
     "semantic_hash": ""
   },
   "test/interpolate_consecutive_test.dart": {
@@ -3725,7 +3725,7 @@
     "semantic_hash": ""
   },
   "AUDIT.md": {
-    "mtime": 1787689874.882313,
+    "mtime": 1787693969.1137822,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": ""
   },

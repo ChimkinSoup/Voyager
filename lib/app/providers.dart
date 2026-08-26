@@ -546,9 +546,16 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   /// provider and they all stay mounted behind the navigation shell, so that
   /// second pass is a whole-app rebuild for a value this method is already
   /// holding.
+  ///
+  /// Published *before* the await, not after. A menu row computes its delta
+  /// against the current settings, so while the write was in flight a second
+  /// tap read the pre-write value and its whole-object save silently undid the
+  /// first — two deltas against one base, each cancelling the other.
+  /// Publishing first makes each delta apply to the outcome of the one before
+  /// it.
   Future<void> saveSettings(AppSettings settings) async {
-    await ref.read(settingsRepositoryProvider).saveSettings(settings);
     state = AsyncData(settings);
+    await ref.read(settingsRepositoryProvider).saveSettings(settings);
   }
 }
 
@@ -790,7 +797,9 @@ final leetcodeProblemsProvider = FutureProvider<List<LeetCodeProblem>>((ref) {
 });
 
 final leetCodeApiClientProvider = Provider<LeetCodeApiClient>((ref) {
-  return LeetCodeApiClient();
+  final client = LeetCodeApiClient();
+  ref.onDispose(client.close);
+  return client;
 });
 
 /// Folders/decks directly under [parentFolderId] (null = root level), per
@@ -1139,12 +1148,27 @@ void invalidateAllDataProvidersFrom(WidgetRef ref) {
 /// Total published LeetCode problem counts per difficulty, used as the
 /// progress rings' denominators. Not persisted locally — on fetch failure
 /// the ring UI degrades gracefully rather than blocking the page.
-final leetcodeQuestionCountsProvider = FutureProvider<LeetCodeQuestionCounts>((
-  ref,
-) {
-  ref.keepAlive();
-  return ref.watch(leetCodeApiClientProvider).fetchQuestionCounts();
-});
+/// Autodispose so that [KeepAliveLink.close] means something: on a plain
+/// provider the element is never disposed, so `keepAlive` is a no-op and a
+/// settled error is cached for the life of the process either way.
+final leetcodeQuestionCountsProvider =
+    FutureProvider.autoDispose<LeetCodeQuestionCounts>((ref) async {
+      // Hold a *successful* answer past the last listener — the published
+      // counts move a handful of times a week. A failure is not worth caching
+      // at all: a settled error never re-runs on its own, and this is usually
+      // first read while the dashboard paints, often in the app's first
+      // seconds before Wi-Fi has associated. One failure there used to pin the
+      // rings' denominators off until the app was restarted.
+      final link = ref.keepAlive();
+      try {
+        return await ref
+            .watch(leetCodeApiClientProvider)
+            .fetchQuestionCounts();
+      } catch (_) {
+        link.close();
+        rethrow;
+      }
+    });
 
 /// Shared tag -> ARGB color map (reused across journal + finance tagging).
 final tagColorsProvider = FutureProvider<Map<String, int>>((ref) {
