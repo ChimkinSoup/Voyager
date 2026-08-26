@@ -27,14 +27,16 @@ class BlossomStatPopup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider).valueOrNull;
-    final cached = ref.watch(lifeTrackerStatsProvider).valueOrNull;
+    final statsAsync = ref.watch(lifeTrackerStatsProvider);
 
     final resolved = resolveLifeStat(
       stat: stat,
       birthDate: settings?.birthDate,
       now: DateTime.now(),
-      tasksConquered: cached?.tasksConquered ?? 0,
-      lifetimeMood: cached?.lifetimeMood,
+      // Null while the cache is still loading — see [resolveLifeStat].
+      tasksConquered: statsAsync.valueOrNull?.tasksConquered,
+      lifetimeMood: statsAsync.valueOrNull?.lifetimeMood,
+      moodKnown: statsAsync.hasValue,
     );
 
     final theme = Theme.of(context);

@@ -447,9 +447,19 @@ class SettingsPage extends ConsumerWidget {
             leading: const Icon(PhosphorIconsRegular.downloadSimple),
             onTap: () async {
               try {
-                String? selectedDirectory = await FilePicker.platform
-                    .getDirectoryPath();
-                if (selectedDirectory == null) return;
+                // saveFile, not getDirectoryPath: on Windows every other
+                // file_picker dialog runs on a spawned isolate, but
+                // getDirectoryPath drives COM's IFileOpenDialog inline on the
+                // platform thread and takes the process down with an access
+                // violation before it ever returns a path.
+                final targetPath = await FilePicker.platform.saveFile(
+                  dialogTitle: 'Export Backup',
+                  fileName:
+                      'voyager_backup_${DateTime.now().millisecondsSinceEpoch}.zip',
+                  type: FileType.custom,
+                  allowedExtensions: ['zip'],
+                );
+                if (targetPath == null) return;
 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -459,17 +469,12 @@ class SettingsPage extends ConsumerWidget {
 
                 final file = await ref
                     .read(dataExportServiceProvider)
-                    .exportDataToZip();
-
-                final finalPath =
-                    '$selectedDirectory/voyager_backup_${DateTime.now().millisecondsSinceEpoch}.zip';
-                await file.copy(finalPath);
-                await file.delete();
+                    .exportDataToZip(File(targetPath));
 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Backup exported to: $finalPath'),
+                      content: Text('Backup exported to: ${file.path}'),
                       duration: const Duration(seconds: 5),
                     ),
                   );

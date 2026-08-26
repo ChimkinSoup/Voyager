@@ -37,12 +37,16 @@ class LeetCodeReviewDeck extends ConsumerStatefulWidget {
 }
 
 class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
-  /// Problems whose face differs from the one the grid would show on its own
-  /// — normally the front, or the back for a problem the search only matched
-  /// there. Turning cards over is a browsing gesture, not a mode: flips pile
-  /// up as the user works through the grid and are only dropped when the page
-  /// goes away.
-  final Set<String> _flipped = {};
+  /// Problems the user turned over by hand, mapped to the baseline face that
+  /// was in force when they did it — normally the front, or the back for a
+  /// problem the search only matched there.
+  ///
+  /// Turning cards over is a browsing gesture, not a mode: flips pile up as
+  /// the user works through the grid and are only dropped when the page goes
+  /// away. Recording *which* baseline the override was made against is what
+  /// retires it once the search moves that baseline: an override only stands
+  /// while the question it answered is still the one being asked.
+  final Map<String, bool> _flipped = {};
 
   @override
   Widget build(BuildContext context) {
@@ -60,14 +64,18 @@ class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
     // Matched as one phrase, so the tiles highlight it as one phrase too.
     final keywords = query.trim().isEmpty ? const <String>[] : [query.trim()];
     final needle = query.trim().toLowerCase();
+    // Folded once per library revision rather than per problem per keystroke.
+    final searchIndex = ref.watch(leetCodeDeckSearchIndexProvider);
+    LeetCodeSearchText textFor(LeetCodeProblem p) =>
+        searchIndex[p.id] ?? leetCodeSearchTextFor(p);
     final filtered = problems.where((p) {
       if (difficulties.isNotEmpty && !difficulties.contains(p.difficulty)) {
         return false;
       }
       if (!tagFilter.every(p.tags.contains)) return false;
       if (needle.isEmpty) return true;
-      return leetCodeFrontSearchText(p).toLowerCase().contains(needle) ||
-          leetCodeBackSearchText(p).toLowerCase().contains(needle);
+      final text = textFor(p);
+      return text.front.contains(needle) || text.back.contains(needle);
     }).toList();
     final ordered = sortLeetCodeProblemsByMastery(filtered);
 
@@ -166,20 +174,28 @@ class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
                       // _flipped records the difference from that baseline
                       // rather than the face itself — otherwise flipping such
                       // a tile to the front would immediately snap it back.
+                      //
+                      // The override only counts while the baseline it was
+                      // made against still holds. Once the search moves that
+                      // baseline it has re-answered the question the flip was
+                      // answering, and the search wins.
                       final backOnly = leetCodeMatchesBackOnly(
-                        problem,
+                        textFor(problem),
                         keywords,
                       );
+                      final baseline = _flipped[problem.id];
+                      final overridden =
+                          baseline != null && baseline == backOnly;
                       return LeetCodeMiniFlashcard(
                         key: ValueKey(problem.id),
                         problem: problem,
                         keywords: keywords,
-                        showBack: backOnly != _flipped.contains(problem.id),
+                        showBack: backOnly != overridden,
                         onFlipped: (showingBack) => setState(() {
                           if (showingBack == backOnly) {
                             _flipped.remove(problem.id);
                           } else {
-                            _flipped.add(problem.id);
+                            _flipped[problem.id] = backOnly;
                           }
                         }),
                       );
@@ -286,16 +302,44 @@ class _EmptyDeck extends ConsumerWidget {
 /// No import button — problems come from the Track flow, not a JSON blob —
 /// and no reverse/multi-select, which a deck of one-sided problems has no
 /// use for.
-class _ControlBar extends ConsumerWidget {
+class _ControlBar extends ConsumerStatefulWidget {
   const _ControlBar({required this.problems});
 
   final List<LeetCodeProblem> problems;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ControlBar> createState() => _ControlBarState();
+}
+
+class _ControlBarState extends ConsumerState<_ControlBar> {
+  /// The field is a view of the query provider rather than a one-way writer
+  /// into it. Uncontrolled, it could push text out but nothing could push text
+  /// back in — so "Clear filters" un-filtered the grid while the box went on
+  /// displaying the query that had emptied it, and the next keystroke appended
+  /// to that invisible-but-live text.
+  late final TextEditingController _search = TextEditingController(
+    text: ref.read(leetCodeDeckSearchQueryProvider),
+  );
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final difficulties = ref.watch(leetCodeDeckDifficultyFilterProvider);
     final tagFilter = ref.watch(leetCodeDeckTagFilterProvider);
+
+    // Adopt any change made from outside the field — "Clear filters" is the
+    // only one today. The inequality guard is what keeps the field's own
+    // onChanged from bouncing back through here and resetting the caret
+    // mid-word.
+    ref.listen<String>(leetCodeDeckSearchQueryProvider, (_, next) {
+      if (_search.text != next) _search.text = next;
+    });
 
     void toggleDifficulty(LeetCodeDifficulty difficulty) {
       final next = {...difficulties};
@@ -307,6 +351,7 @@ class _ControlBar extends ConsumerWidget {
       children: [
         Expanded(
           child: VoyagerTextField(
+            controller: _search,
             onChanged: (v) =>
                 ref.read(leetCodeDeckSearchQueryProvider.notifier).state = v,
             decoration: const InputDecoration(
@@ -328,7 +373,7 @@ class _ControlBar extends ConsumerWidget {
           ),
           const SizedBox(width: 6),
         ],
-        _TagFilterButton(problems: problems, selected: tagFilter),
+        _TagFilterButton(problems: widget.problems, selected: tagFilter),
         if (tagFilter.isNotEmpty) ...[
           const SizedBox(width: 6),
           Text(
@@ -482,9 +527,23 @@ class _SessionDisplayList extends ConsumerWidget {
         ),
         for (final toggle in toggles)
           InkWell(
-            onTap: () => ref
-                .read(settingsProvider.notifier)
-                .saveSettings(toggle.apply(settings, !toggle.value)),
+            // Computed against the notifier's value at tap time rather than
+            // against the settings captured when this menu was built: a second
+            // tap that lands before the first has published would otherwise
+            // write a delta against a base the first tap has already moved,
+            // and silently undo it.
+            onTap: () {
+              final live = ref.read(settingsProvider).valueOrNull;
+              if (live == null) return;
+              // The captured `toggle.value` is exactly as stale as the
+              // settings it came from, so the flag is re-read too.
+              final current = _hideToggles(
+                live,
+              ).firstWhere((t) => t.label == toggle.label);
+              ref
+                  .read(settingsProvider.notifier)
+                  .saveSettings(current.apply(live, !current.value));
+            },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(

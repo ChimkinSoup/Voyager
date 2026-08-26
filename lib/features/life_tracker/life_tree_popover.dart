@@ -151,16 +151,20 @@ class _CenterOnAnchorDelegate extends SingleChildLayoutDelegate {
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
     // Never wider than the screen leaves room for, and never narrower than
     // [width] — a popup that shrank on a small window would just move the
-    // wrapping problem into the content.
-    final upper = math.max(
-      width,
-      math.min(maxWidth ?? width, constraints.maxWidth - 2 * _margin),
-    );
+    // wrapping problem into the content. The floor holds only while the
+    // window can afford it, though: CustomSingleChildLayout does not enforce
+    // the incoming constraints on what this returns, so an unconditional
+    // minWidth lays a 480dp popup out on a 411dp window with its right-hand
+    // column — the delete buttons — off the edge and untappable.
+    final available = math.max(0.0, constraints.maxWidth - 2 * _margin);
+    final availableHeight = math.max(0.0, constraints.maxHeight - 2 * _margin);
+    final preferred = math.min(width, available);
+    final upper = math.max(preferred, math.min(maxWidth ?? width, available));
     return BoxConstraints(
-      minWidth: width,
+      minWidth: preferred,
       maxWidth: upper,
       minHeight: 0,
-      maxHeight: height ?? constraints.maxHeight * 0.8,
+      maxHeight: math.min(height ?? availableHeight * 0.8, availableHeight),
     );
   }
 
