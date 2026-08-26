@@ -237,6 +237,9 @@ StatisticTracker buildDreamLoggedTracker({required int colorValue}) {
 List<TrackerValue> dreamLoggedTrackerValues(List<DreamEntry> entries) {
   final days = <DateTime>{};
   for (final entry in entries) {
+    // An abandoned "New dream" has neither, and must not mark the day
+    // logged.
+    if (entry.title.trim().isEmpty && entry.body.trim().isEmpty) continue;
     final d = entry.entryDate;
     days.add(DateTime(d.year, d.month, d.day));
   }
