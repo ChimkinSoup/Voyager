@@ -400,17 +400,16 @@ class DriftDreamRepository implements DreamRepository {
     }
   }
 
+  /// Bumps [version] along with [deletedAt], for the same reason
+  /// [DriftJournalRepository.softDeleteEntry] does: the tombstone is pushed
+  /// straight after this runs, and one that does not outrank the remote copy
+  /// is read as the loser by the next device to pull, which then pushes its
+  /// own live row back and resurrects the dream everywhere.
   @override
   Future<void> softDeleteEntry(String id) async {
-    await (_db.update(
-      _db.dreamEntriesTable,
-    )..where((t) => t.id.equals(id))).write(
-      DreamEntriesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.dreamEntries);
+    final current = await getEntry(id);
+    if (current == null) return;
+    await upsertEntry(current.copyWith(deletedAt: utcNow()));
   }
 
   @override

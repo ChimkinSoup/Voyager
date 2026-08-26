@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// A low-opacity, procedurally-painted watercolor cherry blossom branch
@@ -22,11 +23,19 @@ class DreamBranchOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: Opacity(
-        opacity: 0.14,
-        child: CustomPaint(
-          painter: _DreamBranchPainter(color: color, minorColors: minorColors),
-          size: Size.infinite,
+      // The branch is static once painted, but it sits under the whole page
+      // in a Stack — without this boundary it repaints with every autosave
+      // setState and every frame of a split-pane drag.
+      child: RepaintBoundary(
+        child: Opacity(
+          opacity: 0.14,
+          child: CustomPaint(
+            painter: _DreamBranchPainter(
+              color: color,
+              minorColors: minorColors,
+            ),
+            size: Size.infinite,
+          ),
         ),
       ),
     );
@@ -105,6 +114,10 @@ class _DreamBranchPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DreamBranchPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.minorColors != minorColors;
+    // `minorColors` is rebuilt from settings on every page build, so `!=` on
+    // the List — an identity comparison in Dart — was true every time and
+    // defeated this guard entirely.
+    return oldDelegate.color != color ||
+        !listEquals(oldDelegate.minorColors, minorColors);
   }
 }

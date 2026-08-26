@@ -2517,6 +2517,8 @@ class RemoteSyncService {
     );
   }
 
+  /// [entry] is uploaded as-is unless a version bump is actually asked for —
+  /// same hazard, and same reasoning, as [_uploadJournalEntryNow] above.
   Future<void> _uploadDreamEntryNow(
     DreamEntry entry, {
     bool bumpVersion = false,
@@ -2524,7 +2526,9 @@ class RemoteSyncService {
     return _uploadCrdtDocumentNow(
       collection: FirestoreCollections.dreamEntries,
       documentId: entry.id,
-      payload: dreamEntryToFirestore(entry.copyWith(bumpVersion: bumpVersion)),
+      payload: dreamEntryToFirestore(
+        bumpVersion ? entry.copyWith(bumpVersion: true) : entry,
+      ),
     );
   }
 
