@@ -95,9 +95,8 @@ void main() {
       ),
     );
     // Text is filled in after the first settle, and before the field takes
-    // focus: that is the one moment a multiline field runs a spellcheck pass
-    // of its own (see [forceSpellCheckDisplay]), and by then the dictionary
-    // future has resolved into the service.
+    // focus, so the dictionary future has resolved into the service by the
+    // time the squiggle layer runs its first pass over it.
     await tester.pumpAndSettle();
     controller.text = text;
     controller.selection = TextSelection.collapsed(offset: text.length);

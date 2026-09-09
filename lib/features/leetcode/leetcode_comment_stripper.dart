@@ -8,7 +8,8 @@
 /// A line that held nothing but a comment is dropped entirely; a line with code
 /// before the marker keeps the code, trailing whitespace trimmed. Lines that
 /// were already blank are left alone — this strips comments, it does not
-/// compact the source.
+/// compact the source. The one exception is the very last line, which is
+/// dropped when it is blank: see [stripLeetCodeTrailingBlankLine].
 library;
 
 /// How one language spells the things this scanner has to step over.
@@ -146,6 +147,23 @@ String stripLeetCodeLineComments(String code, String language) {
   }
 
   return stripped ? out.join('\n') : code;
+}
+
+/// Drops a single trailing blank line from [code].
+///
+/// Pasted code almost always arrives with the newline that ended the last
+/// statement still on it, which shows in the editor as an empty line under the
+/// code and as a blank final row wherever the snippet is later rendered. Only
+/// one line goes, and only the last one: blank lines *inside* the code are
+/// spacing the author chose, and so is a run of them at the end.
+///
+/// Whitespace-only counts as blank — a line of stray indentation is the same
+/// empty row on screen. Language-independent: nothing here reads as syntax.
+String stripLeetCodeTrailingBlankLine(String code) {
+  final lastBreak = code.lastIndexOf('\n');
+  if (lastBreak < 0) return code;
+  if (code.substring(lastBreak + 1).trim().isNotEmpty) return code;
+  return code.substring(0, lastBreak);
 }
 
 /// A string literal opening at an index: what was typed to open it, what closes

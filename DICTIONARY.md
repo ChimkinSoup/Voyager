@@ -20,7 +20,7 @@ Related: `lib/core/spellcheck/`, `lib/core/widgets/spell_check_popup.dart`, `Cus
 
 ### Non-goals (v1)
 
-- A **blocklist** for words that are already in the bundled dictionary. Bundled words stay allowed. "Remove" does not mean “flag `colour` even though it is English.”
+- A **blocklist** for words that are already in the bundled dictionary. Bundled words stay allowed. "Remove" does not mean “flag `colour` even though it is English.” **Superseded:** `FLAGGED_WORDS.md` shipped, and flagging is now how a bundled word is overridden — `known = (bundled ∪ custom) − flagged`. Removing a custom word still means only what it says here; the flag is a separate collection and a separate verb.
 - Editing or deleting bundled words.
 - Per-field / per-journal dictionaries.
 - Stemming, plurals, or “add all forms of this word.” Each token is its own entry, matching how the tokenizer works today.
@@ -105,7 +105,7 @@ The order is load-bearing rather than incidental, so it is documented at `loadDi
 A `ListTile` on the Settings page, next to **Custom quotes** / **Text snippets**.
 
 - Title: `Dictionary`
-- Subtitle: `Add extra words the spell checker should accept` when empty; otherwise `{n} custom word(s)`.
+- Subtitle: `Add extra words the spell checker should accept` when empty; otherwise `{n} custom word(s)`. **Superseded by `FLAGGED_WORDS.md` §7:** the subtitle now counts flags too — `{n} custom, {m} flagged` once any exist.
 - Opens `showDictionaryDialog` via `showVoyagerDialog`, same shell as quotes and snippets.
 
 ### 5.2 Dialog
@@ -122,7 +122,7 @@ Do not ship a second “add” field. Search-then-add is how you look up “is `
 **Empty query**
 
 - List custom extras, A–Z.
-- Empty state: “You haven’t added any extra words yet. Search the dictionary or type a word to add it.”
+- Empty state: “You haven’t added any extra words yet. Search the dictionary or type a word to add it.” **Superseded by `FLAGGED_WORDS.md` §7:** the empty query lists custom extras *then* flagged words, and the empty state mentions both.
 - Bundled words are not listed.
 
 **Non-empty query**
@@ -223,7 +223,7 @@ Keep using the outbox / `notifyOne` path, not a quotes-style explicit `pushCusto
 
 ## 10. Decisions locked in
 
-1. **Remove** = remove a custom extra, not a blocklist on bundled words.
+1. **Remove** = remove a custom extra, not a blocklist on bundled words. (Still true: overriding a bundled word is **Flag**, a different action on a different collection — `FLAGGED_WORDS.md`.)
 2. **Search the bundled list** if cheap — it is, because the set is already in memory. Empty search still shows overrides only; search results are capped, and ranked by the asset's own frequency order rather than alphabetically (§4).
 3. **Edit** = rename the spelling and remove. Bundled rows stay read-only.
 4. **Home** = Settings, same class of dialog as quotes and snippets. Popup add stays.

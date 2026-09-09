@@ -12,6 +12,7 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
+import 'package:voyager/features/todo/todo_settings_dialog.dart';
 
 Future<String?> showTodoListManageSheet(
   BuildContext context,
@@ -137,6 +138,14 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
     await _reload();
   }
 
+  /// The per-list settings sheet, reached from this dialog now that the
+  /// switcher has no nested ⋮ of its own to hang it off.
+  Future<void> _openSettings(TodoListModel list) async {
+    await showTodoListSettingsDialog(context, ref, list);
+    if (!mounted) return;
+    await _reload();
+  }
+
   Future<String?> _promptName(String title, {String? initial}) {
     return showPromptNameDialog(context, title: title, initial: initial);
   }
@@ -178,6 +187,8 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                             await _renameList(list);
                           case VoyagerMenuCatalogEntry.changeColor:
                             await _pickColor(list);
+                          case VoyagerMenuCatalogEntry.settings:
+                            await _openSettings(list);
                           case VoyagerMenuCatalogEntry.delete:
                             await _deleteList(list);
                           default:
@@ -187,11 +198,8 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                       itemBuilder: (context) => buildCatalogMenu(
                         context,
                         from: list.id == legacyTodoListId
-                            ? entityManageMenuEntries.where(
-                                (entry) =>
-                                    entry != VoyagerMenuCatalogEntry.delete,
-                              )
-                            : entityManageMenuEntries,
+                            ? defaultConfigurableManageMenuEntries
+                            : configurableManageMenuEntries,
                       ),
                     ),
                   );

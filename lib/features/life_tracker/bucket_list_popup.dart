@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/text/prose_editing_controller.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -206,11 +209,44 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
     );
   }
 
-  Future<void> _deleteItem(String id) async {
-    if (_editingId == id) setState(() => _editingId = null);
-    await ref.read(bucketListRepositoryProvider).deleteItem(id);
-    if (!mounted) return;
-    ref.invalidate(bucketListItemsProvider);
+  Future<void> _deleteItem(BucketListItem item) async {
+    // Captured before the write: deleting the item unmounts its row, and the
+    // toast offering the undo has to outlive it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
+    if (_editingId == item.id) setState(() => _editingId = null);
+    final repository = container.read(bucketListRepositoryProvider);
+    await repository.deleteItem(item.id);
+    container.invalidate(bucketListItemsProvider);
+
+    // No confirm dialog on a bucket-list line — it is a one-line row, and
+    // asking twice costs more than the delete does. The undo is what makes
+    // that safe rather than a new dialog.
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(item.title, fallback: 'item'),
+      restore: () async {
+        // The version is resolved against disk rather than against the
+        // snapshot — see [restoreVersionFrom].
+        final current = await repository.getItem(item.id);
+        abortIfAlreadyRestored(
+          found: current != null,
+          deletedAt: current?.deletedAt,
+        );
+        await repository.upsertItem(
+          item.copyWith(
+            clearDeletedAt: true,
+            updatedAt: utcNow(),
+            version: restoreVersionFrom(
+              preDeleteVersion: item.version,
+              currentVersion: current?.version,
+            ),
+          ),
+        );
+        container.invalidate(bucketListItemsProvider);
+      },
+    );
   }
 
   @override
@@ -268,7 +304,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                       item: item,
                       accentColor: widget.accentColor,
                       onToggle: () => _toggle(item),
-                      onDelete: () => _deleteItem(item.id),
+                      onDelete: () => _deleteItem(item),
                       onEdit: () => unawaited(_startEdit(item)),
                       isEditing: _editingId == item.id,
                       editController: _editController,
@@ -301,6 +337,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                     return VimOverlayHost(
                       session: vim.session,
               snippetSession: vim.snippetSession,
+              autocorrectSession: vim.autocorrectSession,
                       overlayPaintsSelection: vim.overlayPaintsSelection,
                       controller: _newItemController,
                       focusNode: _newItemFocusNode,
@@ -557,6 +594,7 @@ class _TitleEditor extends StatelessWidget {
           return VimOverlayHost(
             session: vim.session,
               snippetSession: vim.snippetSession,
+              autocorrectSession: vim.autocorrectSession,
             overlayPaintsSelection: vim.overlayPaintsSelection,
             controller: controller,
             focusNode: focusNode,
@@ -625,8 +663,26 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
 
+  /// The note is a multiline prose body, so emphasis is always on. This field
+  /// is a raw [TextField] rather than one of the shared widgets, so it does
+  /// its own wrapping (EMPHASIS_FORMATTING.md §5.2).
+  late final ProseEditingController _prose;
+
+  @override
+  void initState() {
+    super.initState();
+    // Eagerly, not lazily: a lazy `late final` would first *construct* the
+    // wrapper inside dispose on a dialog that never got to build.
+    _prose = ProseEditingController(
+      source: _controller,
+      focusNode: _focusNode,
+    );
+  }
+
   @override
   void dispose() {
+    // Before the focus node it listens to, and before the controller it wraps.
+    _prose.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -646,15 +702,24 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
           enabled: VimEnabledScope.of(context) && vimSuitsField(),
           controller: _controller,
           multiline: true,
+          proseEmphasis: true,
           builder: (context, vim) {
             final theme = Theme.of(context);
             final textStyle = theme.textTheme.bodyLarge ?? const TextStyle();
             const hintText = 'How did it go? (optional)';
+            final emphasisTheme = ProseEmphasisTheme.of(
+              theme.colorScheme,
+              theme.colorScheme.primary,
+            );
+            _prose.emphasis = emphasisTheme;
             return VimOverlayHost(
               session: vim.session,
               snippetSession: vim.snippetSession,
+              autocorrectSession: vim.autocorrectSession,
               overlayPaintsSelection: vim.overlayPaintsSelection,
-              controller: _controller,
+              spanBuilder: _prose.overlaySpan,
+              highlightFill: emphasisTheme.highlightColor,
+              controller: _prose,
               focusNode: _focusNode,
               style: textStyle,
               accentColor: theme.colorScheme.primary,
@@ -667,7 +732,7 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
               hintText: hintText,
               fit: StackFit.expand,
               child: TextField(
-                controller: _controller,
+                controller: _prose,
                 focusNode: _focusNode,
                 expands: true,
                 maxLines: null,

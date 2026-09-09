@@ -91,6 +91,8 @@ List<BackupCollection> buildBackupCollections({
   required BucketListRepository bucketListRepository,
   required SettingsRepository settingsRepository,
   required JobRepository jobRepository,
+  required RankingRepository rankingRepository,
+  required MediaRepository mediaRepository,
 }) {
   return [
     BackupCollection(
@@ -673,6 +675,88 @@ List<BackupCollection> buildBackupCollections({
         return event;
       },
     ),
+    // Assets before the references that point at them, so a restore never
+    // writes a reference to an asset row that does not exist yet.
+    // Categories before their entries, entries before their units: nothing
+    // here is an enforced foreign key, but a restore that lands them in that
+    // order never has a row pointing at something not written yet.
+    BackupCollection(
+      name: FirestoreCollections.rankingCategories,
+      read: () async => [
+        for (final category in await rankingRepository.getAllCategories())
+          BackupRecord(
+            id: category.id,
+            data: rankingCategoryToFirestore(category),
+          ),
+      ],
+      restore: (id, data) async {
+        final category = mergeRankingCategoryFromRemote(data, id);
+        await rankingRepository.upsertCategory(
+          category,
+          recordLocalActivity: false,
+        );
+        return category;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.rankingParents,
+      read: () async => [
+        for (final parent in await rankingRepository.getAllParents())
+          BackupRecord(id: parent.id, data: rankingParentToFirestore(parent)),
+      ],
+      restore: (id, data) async {
+        final parent = mergeRankingParentFromRemote(data, id);
+        await rankingRepository.upsertParent(
+          parent,
+          recordLocalActivity: false,
+        );
+        return parent;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.rankingChildren,
+      read: () async => [
+        for (final child in await rankingRepository.getAllChildren())
+          BackupRecord(id: child.id, data: rankingChildToFirestore(child)),
+      ],
+      restore: (id, data) async {
+        final child = mergeRankingChildFromRemote(data, id);
+        await rankingRepository.upsertChild(child, recordLocalActivity: false);
+        return child;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.mediaAssets,
+      read: () async => [
+        for (final asset in await mediaRepository.getAllAssets())
+          BackupRecord(id: asset.id, data: mediaAssetToFirestore(asset)),
+      ],
+      restore: (id, data) async {
+        final local = await mediaRepository.getAsset(id);
+        final asset = mergeMediaAssetFromRemote(data, id, local: local);
+        await mediaRepository.upsertAsset(asset, recordLocalActivity: false);
+        return asset;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.mediaReferences,
+      read: () async => [
+        for (final reference in await mediaRepository.getAllReferences())
+          BackupRecord(
+            id: reference.id,
+            data: mediaReferenceToFirestore(reference),
+          ),
+      ],
+      restore: (id, data) async {
+        final local = await mediaRepository.getReference(id);
+        final reference = mergeMediaReferenceFromRemote(data, id, local: local);
+        await mediaRepository.upsertReference(
+          reference,
+          recordLocalActivity: false,
+        );
+        return reference;
+      },
+    ),
     BackupCollection(
       name: FirestoreCollections.tagColors,
       // Keyed by the tag itself.
@@ -699,6 +783,22 @@ List<BackupCollection> buildBackupCollections({
       restore: (id, data) async {
         final word = mergeCustomWordFromRemote(data, id);
         await settingsRepository.upsertCustomWord(
+          word,
+          recordLocalActivity: false,
+        );
+        return word;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.flaggedWords,
+      // Keyed by the word itself.
+      read: () async => [
+        for (final word in await settingsRepository.getFlaggedWordRecords())
+          BackupRecord(id: word.word, data: flaggedWordToFirestore(word)),
+      ],
+      restore: (id, data) async {
+        final word = mergeFlaggedWordFromRemote(data, id);
+        await settingsRepository.upsertFlaggedWord(
           word,
           recordLocalActivity: false,
         );

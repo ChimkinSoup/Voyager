@@ -15,6 +15,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -22,6 +23,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
+import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/services/periodic_prompt_service.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -753,31 +755,37 @@ class _SparklineStackState extends ConsumerState<_SparklineStack> {
 
   @override
   Widget build(BuildContext context) {
-    return ReorderableListView(
-      primary: false,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      onReorderItem: _handleReorder,
-      onReorderStart: (_) =>
-          ref.read(_heatmapDraggingProvider.notifier).state = true,
-      onReorderEnd: (_) =>
-          ref.read(_heatmapDraggingProvider.notifier).state = false,
-      proxyDecorator: (child, index, animation) =>
-          Material(type: MaterialType.transparency, child: child),
-      children: [
-        for (var i = 0; i < _items.length; i++)
-          _SparklineRow(
-            key: ValueKey(_items[i].id),
-            tracker: _items[i],
-            analytics: widget.analytics,
-            // The drag handle is the row's chrome, not the whole row — see
-            // [_StatTile]. Wrapping the row itself would have made a hold on
-            // the sparkline drag it, stealing the press that means "edit this
-            // period".
-            dragIndex: i,
-          ),
-      ],
+    // The section is mounted only while a consecutive tracker exists, so
+    // creating the first one (or undoing the delete of the last) mounts this
+    // list fresh into a page that is already scrolled — see
+    // [ScrollOffsetIsolate].
+    return ScrollOffsetIsolate(
+      child: ReorderableListView(
+        primary: false,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        buildDefaultDragHandles: false,
+        onReorderItem: _handleReorder,
+        onReorderStart: (_) =>
+            ref.read(_heatmapDraggingProvider.notifier).state = true,
+        onReorderEnd: (_) =>
+            ref.read(_heatmapDraggingProvider.notifier).state = false,
+        proxyDecorator: (child, index, animation) =>
+            Material(type: MaterialType.transparency, child: child),
+        children: [
+          for (var i = 0; i < _items.length; i++)
+            _SparklineRow(
+              key: ValueKey(_items[i].id),
+              tracker: _items[i],
+              analytics: widget.analytics,
+              // The drag handle is the row's chrome, not the whole row — see
+              // [_StatTile]. Wrapping the row itself would have made a hold on
+              // the sparkline drag it, stealing the press that means "edit this
+              // period".
+              dragIndex: i,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1632,24 +1640,29 @@ class _HeatmapBucketState extends ConsumerState<_HeatmapBucket> {
         ],
       );
     }
-    return ReorderableListView(
-      // Nested inside [KeepAliveScrollView]'s ListView — must not claim the
-      // primary scroll controller or the first membership change after a hot
-      // restart can fight the outer scrollable and jerk the section.
-      primary: false,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      onReorderItem: _handleReorder,
-      onReorderStart: (_) =>
-          ref.read(_heatmapDraggingProvider.notifier).state = true,
-      onReorderEnd: (_) =>
-          ref.read(_heatmapDraggingProvider.notifier).state = false,
-      proxyDecorator: (child, index, animation) =>
-          Material(type: MaterialType.transparency, child: child),
-      children: [
-        for (var i = 0; i < _items.length; i++) _row(i, dragIndex: i),
-      ],
+    // Crossing the boundary above mounts this list fresh into a page that
+    // is already scrolled, so its rows would start off the top of their own
+    // viewport and slide down into place. See [ScrollOffsetIsolate].
+    return ScrollOffsetIsolate(
+      child: ReorderableListView(
+        // Nested inside [KeepAliveScrollView]'s ListView — must not claim the
+        // primary scroll controller or the first membership change after a hot
+        // restart can fight the outer scrollable and jerk the section.
+        primary: false,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        buildDefaultDragHandles: false,
+        onReorderItem: _handleReorder,
+        onReorderStart: (_) =>
+            ref.read(_heatmapDraggingProvider.notifier).state = true,
+        onReorderEnd: (_) =>
+            ref.read(_heatmapDraggingProvider.notifier).state = false,
+        proxyDecorator: (child, index, animation) =>
+            Material(type: MaterialType.transparency, child: child),
+        children: [
+          for (var i = 0; i < _items.length; i++) _row(i, dragIndex: i),
+        ],
+      ),
     );
   }
 }
@@ -3651,12 +3664,60 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
       if (mounted) Navigator.of(context).pop();
       return;
     }
+    // Captured before the editor closes: the toast offering the undo outlives
+    // this route, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final navigator = Navigator.of(context);
+    final onSaved = widget.onSaved;
+
     final current = widget.initialValue;
     if (current != null) {
-      await ref.read(trackerRepositoryProvider).softDeleteValue(current.id);
-      widget.onSaved();
+      final repository = container.read(trackerRepositoryProvider);
+      // The delete button only. Clearing the field and pressing Save also
+      // removes the reading (see [_save]), but that is an edit — a toast
+      // raised while someone is retyping a number would be noise.
+      await softDeleteWithUndo(
+        overlay: overlay,
+        message: 'Deleted logged value',
+        delete: () async {
+          await repository.softDeleteValue(current.id);
+          onSaved();
+        },
+        restore: () async {
+          // Rebuilt rather than `copyWith`'d — not because `copyWith` cannot
+          // clear the tombstone (its `_unset` sentinel means it can, unlike
+          // the rest of the app's models) but because it offers no way to set
+          // an explicit version, and the restore has to outrank the tombstone.
+          //
+          // The version is resolved against disk rather than against the
+          // snapshot — see [restoreVersionFrom].
+          final onDisk = await repository.getValue(current.id);
+          abortIfAlreadyRestored(
+            found: onDisk != null,
+            deletedAt: onDisk?.deletedAt,
+          );
+          await repository.upsertValue(
+            TrackerValue(
+              id: current.id,
+              createdAt: current.createdAt,
+              updatedAt: utcNow(),
+              version: restoreVersionFrom(
+                preDeleteVersion: current.version,
+                currentVersion: onDisk?.version,
+              ),
+              trackerId: current.trackerId,
+              periodStart: current.periodStart,
+              intValue: current.intValue,
+              boolValue: current.boolValue,
+              enumValue: current.enumValue,
+            ),
+          );
+          onSaved();
+        },
+      );
     }
-    if (mounted) Navigator.of(context).pop();
+    navigator.pop();
   }
 
   Future<void> _save() async {
@@ -3903,14 +3964,70 @@ Future<void> _deleteTracker(
   WidgetRef ref,
   StatisticTracker tracker,
 ) async {
+  // Captured before the confirm: the delete unmounts the tile that asked for
+  // it, and the toast offering the undo has to outlive it.
+  final container = ProviderScope.containerOf(context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
+
   final confirmed = await showConfirmDialog(
     context,
     title: 'Delete statistic?',
     message: '"${tracker.name}" and its logged values will be moved to trash.',
   );
   if (!confirmed) return;
-  await ref.read(trackerRepositoryProvider).softDeleteTracker(tracker.id);
-  ref.invalidate(trackersProvider);
+  final repository = container.read(trackerRepositoryProvider);
+
+  await softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(tracker.name, fallback: 'statistic'),
+    delete: () async {
+      await repository.softDeleteTracker(tracker.id);
+      container.invalidate(trackersProvider);
+    },
+    restore: () async {
+      // Rebuilt rather than `copyWith`'d: `copyWith` reads
+      // `deletedAt ?? this.deletedAt`, so it cannot clear a tombstone.
+      //
+      // Only the tracker row is tombstoned — `softDeleteTracker` leaves the
+      // logged values alone, and they are filtered out by the tracker being
+      // gone rather than by tombstones of their own. So putting the tracker
+      // back brings its whole history with it.
+      //
+      // The version is resolved against disk rather than against the snapshot
+      // — see [restoreVersionFrom].
+      final current = await repository.getTracker(tracker.id);
+      abortIfAlreadyRestored(
+        found: current != null,
+        deletedAt: current?.deletedAt,
+      );
+      await repository.upsertTracker(
+        StatisticTracker(
+          id: tracker.id,
+          createdAt: tracker.createdAt,
+          updatedAt: utcNow(),
+          version: restoreVersionFrom(
+            preDeleteVersion: tracker.version,
+            currentVersion: current?.version,
+          ),
+          name: tracker.name,
+          type: tracker.type,
+          cadence: tracker.cadence,
+          colorValue: tracker.colorValue,
+          showOnCalendar: tracker.showOnCalendar,
+          integerCap: tracker.integerCap,
+          defaultInt: tracker.defaultInt,
+          defaultBool: tracker.defaultBool,
+          enumOptions: tracker.enumOptions,
+          defaultEnumOption: tracker.defaultEnumOption,
+          trackingStyle: tracker.trackingStyle,
+          starred: tracker.starred,
+          sortOrder: tracker.sortOrder,
+          isDefault: tracker.isDefault,
+        ),
+      );
+      container.invalidate(trackersProvider);
+    },
+  );
 }
 
 void _showTrackerStatistics(BuildContext context, StatisticTracker tracker) {
@@ -5908,56 +6025,61 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
               if (_type == TrackerType.enumType) ...[
                 const SizedBox(height: _kTrackerOptionGap),
                 if (_optionControllers.isNotEmpty) ...[
-                  ReorderableListView(
-                    primary: false,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    buildDefaultDragHandles: false,
-                    onReorderItem: _reorderOptions,
-                    proxyDecorator: roundedDragProxy,
-                    children: [
-                      for (var i = 0; i < _optionControllers.length; i++)
-                        Padding(
-                          key: ValueKey(_optionControllers[i]),
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              ReorderableDragStartListener(
-                                index: i,
-                                child: Icon(
-                                  Icons.drag_handle,
-                                  color: Theme.of(context).colorScheme.onSurface
-                                      .withValues(alpha: 0.5),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: VoyagerTextField(
-                                  controller: _optionControllers[i],
-                                  focusNode: _optionFocusNodes[i],
-                                  accentColor: accent,
-                                  decoration: const InputDecoration(
-                                    isDense: true,
-                                    contentPadding: _kTrackerFieldPadding,
+                  // Mounted only once an option exists, into a dialog body
+                  // that may already be scrolled — see
+                  // [ScrollOffsetIsolate].
+                  ScrollOffsetIsolate(
+                    child: ReorderableListView(
+                      primary: false,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      buildDefaultDragHandles: false,
+                      onReorderItem: _reorderOptions,
+                      proxyDecorator: roundedDragProxy,
+                      children: [
+                        for (var i = 0; i < _optionControllers.length; i++)
+                          Padding(
+                            key: ValueKey(_optionControllers[i]),
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                ReorderableDragStartListener(
+                                  index: i,
+                                  child: Icon(
+                                    Icons.drag_handle,
+                                    color: Theme.of(context).colorScheme.onSurface
+                                        .withValues(alpha: 0.5),
                                   ),
-                                  onChanged: (_) => setState(() {
-                                    _optionError = null;
-                                    if (!_enumOptions.contains(
-                                      _defaultEnumOption,
-                                    )) {
-                                      _defaultEnumOption = null;
-                                    }
-                                  }),
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(PhosphorIconsRegular.trash),
-                                onPressed: () => _removeOption(i),
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: VoyagerTextField(
+                                    controller: _optionControllers[i],
+                                    focusNode: _optionFocusNodes[i],
+                                    accentColor: accent,
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      contentPadding: _kTrackerFieldPadding,
+                                    ),
+                                    onChanged: (_) => setState(() {
+                                      _optionError = null;
+                                      if (!_enumOptions.contains(
+                                        _defaultEnumOption,
+                                      )) {
+                                        _defaultEnumOption = null;
+                                      }
+                                    }),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(PhosphorIconsRegular.trash),
+                                  onPressed: () => _removeOption(i),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                 ],

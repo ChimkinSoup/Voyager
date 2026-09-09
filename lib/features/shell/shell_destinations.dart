@@ -11,6 +11,7 @@ import 'package:voyager/features/jobs/jobs_page.dart';
 import 'package:voyager/features/journal/journal_page.dart';
 import 'package:voyager/features/leetcode/leetcode_page.dart';
 import 'package:voyager/features/life_tracker/life_tracker_page.dart';
+import 'package:voyager/features/rankings/rankings_page.dart';
 import 'package:voyager/features/search/search_page.dart';
 import 'package:voyager/features/settings/settings_page.dart';
 import 'package:voyager/features/study/study_page.dart';
@@ -92,6 +93,12 @@ const shellDestinations = <ShellDestination>[
     icon: PhosphorIconsRegular.code,
     label: 'LeetCode',
     page: LeetCodePage(),
+  ),
+  ShellDestination(
+    path: '/rankings',
+    icon: PhosphorIconsRegular.ranking,
+    label: 'Rankings',
+    page: RankingsPage(),
   ),
   ShellDestination(
     path: '/jobs',

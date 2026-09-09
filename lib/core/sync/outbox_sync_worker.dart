@@ -347,6 +347,21 @@ class OutboxSyncWorker {
           (category) => category.id,
           jobCategoryToFirestore,
         );
+      case FirestoreCollections.rankingCategories:
+        return byId(
+          DriftRankingRepository(_db).getCategory,
+          rankingCategoryToFirestore,
+        );
+      case FirestoreCollections.rankingParents:
+        return byId(
+          DriftRankingRepository(_db).getParent,
+          rankingParentToFirestore,
+        );
+      case FirestoreCollections.rankingChildren:
+        return byId(
+          DriftRankingRepository(_db).getChild,
+          rankingChildToFirestore,
+        );
       case FirestoreCollections.jobSeasons:
         return fromList(
           await DriftJobRepository(_db).getAllSeasons(),
@@ -457,6 +472,11 @@ class OutboxSyncWorker {
         return byId(
           DriftSettingsRepository(_db).getCustomWordRecord,
           customWordToFirestore,
+        );
+      case FirestoreCollections.flaggedWords:
+        return byId(
+          DriftSettingsRepository(_db).getFlaggedWordRecord,
+          flaggedWordToFirestore,
         );
       case FirestoreCollections.settings:
         // One document, not a collection, and it always exists — `getSettings`

@@ -18,12 +18,14 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/petal_field.dart' show petalColorWeights;
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
 import 'package:voyager/features/settings/dictionary_dialog.dart';
+import 'package:voyager/features/settings/media_storage_dialog.dart';
 import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
@@ -238,6 +240,18 @@ class SettingsPage extends ConsumerWidget {
             onChanged: (v) =>
                 _save(ref, settings.copyWith(capsLockIndicatorEnabled: v)),
           ),
+          SwitchListTile(
+            title: const Text('Autocorrect'),
+            subtitle: const Text(
+              'Fixes obvious typos in multi-line text boxes as you finish a '
+              'word — only when one dictionary word is a single swapped, '
+              'missing or extra letter away. Backspace right after undoes it '
+              'and stops it happening again for that word',
+            ),
+            value: settings.autocorrectEnabled,
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(autocorrectEnabled: v)),
+          ),
           ListTile(
             title: const Text('Text snippets'),
             subtitle: Text(
@@ -267,6 +281,15 @@ class SettingsPage extends ConsumerWidget {
               ref,
               settings.copyWith(showAnnualizedSubscriptionCost: v),
             ),
+          ),
+          const SizedBox(height: 16),
+          Text('Jobs', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Job application profile'),
+            subtitle: Text(_jobProfileSummary(settings)),
+            trailing: const Icon(PhosphorIconsRegular.caretRight),
+            onTap: () => _showJobProfileDialog(context, ref, settings),
           ),
           const SizedBox(height: 16),
           Text('LeetCode', style: Theme.of(context).textTheme.titleMedium),
@@ -418,6 +441,65 @@ class SettingsPage extends ConsumerWidget {
             onChanged: (v) =>
                 _save(ref, settings.copyWith(showWorkoutStatistics: v)),
           ),
+          const SizedBox(height: 16),
+          Text('Images', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          SwitchListTile(
+            title: const Text('Upload images to the cloud'),
+            subtitle: const Text(
+              'Off keeps attached images on this device forever. Your other '
+              'devices still see that an image exists, but can never get the '
+              'picture itself',
+            ),
+            value: settings.mediaRemoteUploadsEnabled,
+            onChanged: (v) async {
+              await _save(ref, settings.copyWith(mediaRemoteUploadsEnabled: v));
+              // Turning uploads on is the moment everything attached while
+              // they were off can finally leave — without this those images
+              // would stay stranded on one device forever.
+              if (!v) return;
+              final queued = await ref
+                  .read(mediaServiceProvider)
+                  .queueLocalOnlyUploads();
+              if (queued == 0 || !context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Queued $queued image${queued == 1 ? '' : 's'} for upload.',
+                  ),
+                ),
+              );
+            },
+          ),
+          SwitchListTile(
+            title: const Text('Download images from the cloud'),
+            subtitle: const Text(
+              'Off shows "Download disabled" wherever an image is not already '
+              'on this device, instead of a spinner that never finishes',
+            ),
+            value: settings.mediaRemoteDownloadsEnabled,
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(mediaRemoteDownloadsEnabled: v)),
+          ),
+          SwitchListTile(
+            title: const Text('Download images in the background'),
+            subtitle: Text(
+              settings.mediaRemoteDownloadsEnabled
+                  ? 'Fetches every synced image after a sync, so they are '
+                        'there next time you are offline'
+                  : 'Needs "Download images from the cloud" to be on',
+            ),
+            value: settings.mediaBackgroundPrefetchEnabled,
+            // Prefetch is meaningless while downloads are off, so it is
+            // disabled rather than left on as a setting with no effect.
+            onChanged: settings.mediaRemoteDownloadsEnabled
+                ? (v) => _save(
+                    ref,
+                    settings.copyWith(mediaBackgroundPrefetchEnabled: v),
+                  )
+                : null,
+          ),
+          const _MediaStorageTile(),
           const SizedBox(height: 16),
           Text('Navigation', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -701,6 +783,46 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
+  /// Names the slots that carry a link, so the tile says what the Jobs header
+  /// will actually show without opening the dialog.
+  static String _jobProfileSummary(AppSettings settings) {
+    final filled = [
+      if ((settings.jobProfileLinkedInUrl ?? '').isNotEmpty) 'LinkedIn',
+      if ((settings.jobProfileGitHubUrl ?? '').isNotEmpty) 'GitHub',
+      if ((settings.jobProfilePortfolioUrl ?? '').isNotEmpty) 'Portfolio',
+    ];
+    if (filled.isEmpty) {
+      return 'Not set — no copy buttons on the Jobs page';
+    }
+    return '${filled.join(', ')} set';
+  }
+
+  Future<void> _showJobProfileDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _JobProfileDialog(
+        settings: settings,
+        onSave: (linkedIn, gitHub, portfolio) {
+          _save(
+            ref,
+            settings.copyWith(
+              jobProfileLinkedInUrl: linkedIn.isEmpty ? null : linkedIn,
+              clearJobProfileLinkedInUrl: linkedIn.isEmpty,
+              jobProfileGitHubUrl: gitHub.isEmpty ? null : gitHub,
+              clearJobProfileGitHubUrl: gitHub.isEmpty,
+              jobProfilePortfolioUrl: portfolio.isEmpty ? null : portfolio,
+              clearJobProfilePortfolioUrl: portfolio.isEmpty,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _showLeetCodeUsernameDialog(
     BuildContext context,
     WidgetRef ref,
@@ -825,18 +947,81 @@ class SettingsPage extends ConsumerWidget {
 /// Its own widget so that count — which changes every time a word is added
 /// from a misspelling popup anywhere in the app — rebuilds one tile instead of
 /// the whole settings page.
+/// How much disk the image cache is using, plus the low-disk warning.
+///
+/// Its own widget rather than a row in the list above so that recomputing the
+/// cache size — which walks the media directory — rebuilds only this tile and
+/// not the whole settings page.
+class _MediaStorageTile extends ConsumerWidget {
+  const _MediaStorageTile();
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    const units = ['KB', 'MB', 'GB'];
+    var value = bytes / 1024;
+    var unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit++;
+    }
+    return '${value.toStringAsFixed(value >= 10 ? 0 : 1)} ${units[unit]}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final usage = ref.watch(mediaStorageUsageProvider).valueOrNull;
+    final diskLow = ref.watch(mediaDiskLowProvider).valueOrNull ?? false;
+    final theme = Theme.of(context);
+
+    final pending = usage == null
+        ? 0
+        : usage.pendingUploadCount + usage.pendingDownloadCount;
+
+    return ListTile(
+      title: const Text('Image storage'),
+      subtitle: Text(
+        usage == null
+            ? 'Measuring…'
+            : [
+                '${usage.assetCount} '
+                    '${usage.assetCount == 1 ? 'image' : 'images'}',
+                _formatBytes(usage.byteSize),
+                if (pending > 0) '$pending waiting to sync',
+                if (diskLow) 'Less than 5% of this disk is free',
+              ].join(' · '),
+        style: diskLow
+            ? theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)
+            : null,
+      ),
+      trailing: Icon(
+        diskLow
+            ? PhosphorIconsRegular.warningCircle
+            : PhosphorIconsRegular.hardDrives,
+        color: diskLow ? theme.colorScheme.error : null,
+      ),
+      onTap: () => showMediaStorageDialog(context),
+    );
+  }
+}
+
 class _DictionaryTile extends ConsumerWidget {
   const _DictionaryTile();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = ref.watch(customWordsProvider).valueOrNull?.length ?? 0;
+    final flagged = ref.watch(flaggedWordsProvider).valueOrNull?.length ?? 0;
+    // Both numbers once either is non-zero: "custom words" alone stopped
+    // describing this list when flags arrived (`FLAGGED_WORDS.md` §7).
     return ListTile(
       title: const Text('Dictionary'),
       subtitle: Text(
-        count == 0
-            ? 'Add extra words the spell checker should accept'
-            : '$count custom ${count == 1 ? 'word' : 'words'}',
+        count == 0 && flagged == 0
+            ? 'Add extra words the spell checker should accept, or flag ones '
+                  'it should mark'
+            : flagged == 0
+            ? '$count custom ${count == 1 ? 'word' : 'words'}'
+            : '$count custom, $flagged flagged',
       ),
       trailing: const Icon(PhosphorIconsRegular.bookOpen),
       onTap: () => showDictionaryDialog(context),
@@ -1055,6 +1240,108 @@ class _PetalSlider extends StatelessWidget {
 
 /// Owns the username field's controller and focus node so Enter-to-save cannot
 /// dispose them while the dialog's dismiss animation still rebuilds the field.
+/// Edits all three profile-link slots together (§3.4). One save path, so the
+/// three `clear` flags travel in a single [AppSettings.copyWith].
+class _JobProfileDialog extends StatefulWidget {
+  const _JobProfileDialog({required this.settings, required this.onSave});
+
+  final AppSettings settings;
+  final void Function(String linkedIn, String gitHub, String portfolio) onSave;
+
+  @override
+  State<_JobProfileDialog> createState() => _JobProfileDialogState();
+}
+
+class _JobProfileDialogState extends State<_JobProfileDialog> {
+  late final _linkedInController = TextEditingController(
+    text: widget.settings.jobProfileLinkedInUrl ?? '',
+  );
+  late final _gitHubController = TextEditingController(
+    text: widget.settings.jobProfileGitHubUrl ?? '',
+  );
+  late final _portfolioController = TextEditingController(
+    text: widget.settings.jobProfilePortfolioUrl ?? '',
+  );
+
+  @override
+  void dispose() {
+    _linkedInController.dispose();
+    _gitHubController.dispose();
+    _portfolioController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    widget.onSave(
+      _linkedInController.text.trim(),
+      _gitHubController.text.trim(),
+      _portfolioController.text.trim(),
+    );
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Job application profile'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _field(
+              controller: _linkedInController,
+              label: 'LinkedIn',
+              hint: 'https://linkedin.com/in/…',
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            _field(
+              controller: _gitHubController,
+              label: 'GitHub',
+              hint: 'https://github.com/…',
+            ),
+            const SizedBox(height: 12),
+            _field(
+              controller: _portfolioController,
+              label: 'Portfolio',
+              hint: 'https://…',
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        GlassButton(
+          dense: true,
+          onPressed: () => Navigator.of(context).pop(),
+          label: 'Cancel',
+        ),
+        GlassButton(dense: true, onPressed: _submit, label: 'Save'),
+      ],
+    );
+  }
+
+  Widget _field({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    bool autofocus = false,
+  }) {
+    return VoyagerTextField(
+      controller: controller,
+      autofocus: autofocus,
+      // Enter commits from any of the three, the way the one-field dialogs
+      // in this page already behave.
+      onSubmitted: (_) => _submit(),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        contentPadding: kM3OutlinedContentPadding,
+      ),
+    );
+  }
+}
+
 class _LeetCodeUsernameDialog extends StatefulWidget {
   const _LeetCodeUsernameDialog({
     required this.initialUsername,

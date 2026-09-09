@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/widgets/voyager_spinner_wheel.dart';
 
 /// The scroll feel shared by every Voyager picker wheel.
 ///
@@ -166,29 +167,36 @@ class _VoyagerNumberWheelState extends State<VoyagerNumberWheel> {
               }
               return false;
             },
-            child: ListWheelScrollView.useDelegate(
-              controller: _controller,
-              itemExtent: widget.itemHeight,
-              physics: const VoyagerWheelPhysics(),
-              perspective: 0.004,
-              diameterRatio: 1.6,
-              onSelectedItemChanged: (index) {
-                setState(() => _displayIndex = index);
-                if (_programmatic) return;
-                widget.onSelectedIndexChanged(index);
-              },
-              childDelegate: ListWheelChildBuilderDelegate(
-                childCount: widget.itemCount,
-                builder: (context, index) {
-                  final isSelected = index == _displayIndex;
-                  return Center(
-                    child: Text(
-                      widget.labelForIndex(index),
-                      maxLines: 1,
-                      style: isSelected ? selectedStyle : unselectedStyle,
-                    ),
-                  );
-                },
+            child: ScrollConfiguration(
+              behavior: voyagerWheelScrollBehavior(context),
+              child: VoyagerWheelNotch(
+                controller: _controller,
+                itemCount: widget.itemCount,
+                child: ListWheelScrollView.useDelegate(
+                  controller: _controller,
+                  itemExtent: widget.itemHeight,
+                  physics: const VoyagerWheelPhysics(),
+                  perspective: 0.004,
+                  diameterRatio: 1.6,
+                  onSelectedItemChanged: (index) {
+                    setState(() => _displayIndex = index);
+                    if (_programmatic) return;
+                    widget.onSelectedIndexChanged(index);
+                  },
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    childCount: widget.itemCount,
+                    builder: (context, index) {
+                      final isSelected = index == _displayIndex;
+                      return Center(
+                        child: Text(
+                          widget.labelForIndex(index),
+                          maxLines: 1,
+                          style: isSelected ? selectedStyle : unselectedStyle,
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),

@@ -1,22 +1,31 @@
 # FEEDBACK
 Here is some feedback, implement fixes in the best way you see fit. If there is any unclarity, ask questions before proceeding. If the change is applicable to other parts of the app (Such as a universal change like changing a textbox or a repeated UI), apply the change to wherever necessary. If there are contradictory requests, ask before implementing.
-## Global Inbox
-- [ ] Clicking on a reminder that has already been added to edit it causes the text box to open, but it is smaller than the row itself, so then the row size of the reminder you clicked on decreases. Ensure this doesn't happen
-- [ ] There is currently a button that clears all notifications, can you also add a button that returns all notifications, basically the inverse of the clear all notifications button?
+## Journal
+- [ ] When the user toggles off the mood bar, the body text box shifts slightly upwards, can you stop this from happening?
+- [ ] If the user is viewing a journal, then creates another journal, they are left viewing the same entry from the old journal even when they have entered their new journal. Instead make this behavior identical to if the user exits out of the new journal and enters it again (So create a new empty journal entry and show that instead when the user switches to their newly created journal)
+## Todo
+- [ ] Remove the "Image" text above the image gallery and the "Subtask" text above the subtask list
+- [ ] 
+## Search
+- [ ] If the user clicks "Close" when editing a journal entry can you instead make it discard all changes the user made in the search page? 
 ## Calendar
-- [ ] When adding a new event, the "X" and "All day" toggle buttons in the popup UI have such big hitboxes that they overlap. Additionally the grey highlight around them when the user hovers over them overlaps too. Fix this
-## LeetCode Tracker
-- [ ] Also remove newlines from question description too when using GraphQL query (Remove lines that have no characters in them)
-- [ ] Add a bit more padding between two separate solutions (Just like how you added padding between separate examples)
-- [ ] When the user adds multiple solutions, can you make each solution's background (Like the background of all the fields that make up that solution, like the algorithm, time/space complexity, code box, etc) a slightly different color so that it is easier to distinguish between solutions? This is only in the editor UI for when the user is tracking a new question or editing an already tracked question, this should not appear on flashcards 
+- [ ] Can you save the last calendar that was viewed and open that up automatically (This includes view all calendars)?
+- [x] If the user enters all calendar views, then the calendar dropdown menu should also switch
+- [ ] If the user clicks on a recurring event, then the small press-down animation plays out for every single recurring event, can you make it just the one they clicked on?
+## LeetCode
+- [ ] Can you remove the background that appears if the user selects multiple solutions when editing a question (Like the background that appears that separates each solution from each other)
+- [ ] If the user adds multiple solutions to a question, then can you make the "solution x" text that states the question's number be in the main accent color instead of being black? 
+- [ ] Add just a little bit of padding between the "Solution X" text and the algorithm text box when the user enters multiple solutions
+- [ ] When the user presses the "Strip" button above a code text box, currently it only gets rid of comments. But can you also make it check the very last line (Only the last line) of the code text box and if it is a newline (Completely empty newline) then delete that too? This should happen for all languages
+- [ ] If I open up the statistics and scroll down to the calendar view, then whenever the user's cursor hovers over a square it displays an informative popup next to user's cursor. Except if I scroll down a bit, then hover very close to the top of the calendar near the cutoff where it displays the year, the informative popup is covered by this header, instead of properly flipping and showing it below the cursor instead of above, fix this
 ## Finance
-- [ ] In the net worth tracker, if you hover over the sparkline, there is a dot for the time period you are viewing the details of, and from that dot a straight line descends downwards to the bottom of the graph. This bottom bar extends from the bottom of the graph, but that means that for stuff like "$0" there is still a slight bar at the bottom. Can you make the bar extend from higher up so that you don't see a little blip if the graph is at 0?
-- [ ] In the Income Vs Expense graph, the X-axis is marked such that the current value is not shown (Since only every OTHER time period is marked on the X-axis), like if I go to the yearly view then 2026 won't be shown (The current year), only 2025. This is because only 12 values are shown, but the FIRST value is marked on the X-axis, which means that the last value must always be unmarked since there are an even number of values shown. Instead make the first (Left most) value not shown, so that the last (Right most) value will be marked. Do the same for all graphs including weekly, monthly, and yearly
-- [ ] In the Income Vs Expense graph, for periods where the bars are $0 (Like nothing happened in that time period), if the user hovers their mouse over a certain place (The X-axis of the graph), then you can still see a popup that says $0.00. Make an edge case specifically so that if the value is $0.00 then the user won't see an informative popup when hovering over the bar (Since the bar isn't supposed to exist)
+- [ ] If I hover over a transaction in the ledger page, while also scrolling down a little so that half of the transaction row is hidden underneath the top of the scrollable area (Like half of it is hidden under the Ledger/Analytics/Goal area), then the grey hitbox that appears from hovering over the transaction still appears on top of the Ledger/Analytics/Goal area, fix this
+## Job Tracker
+- [ ] The "Clear" button next to the search bar is not a proper glass button. Same thing with the "Open" button under the application URL
+- [ ] If  the user copies their linked profiles to their clipboard, make the confirmation a toast notification instead the bar at the bottom of the page. Additionally make the buttons for copying the user's linked profiles larger
+- [ ] Move the application date capsule from where it is right now to next to the "History" text at the bottom, aligned to the right. Then replace the application date capsule with the season capsule so that the status and season capsules both take up half of the horizontal width of the editor
+- [ ] Make the search text bar slightly taller
 ## Settings
-- [ ] When the user goes to edit a quote, the text box appears and this shifts the entire list around since it is a different size. Fix this
-- [ ] When the user adds a snippet, if they click a checkbox (For expanding automatically or only at word boundaries), there is confetti. This should not happen in settings (Only in todo should there be confetti)
-	- [ ] Additionally if the user clicks "Expand automatically", there is some text that appears below explaining it, I want this removed. 
-- [ ] When the user goes to edit a dictionary entry, and click the edit button, then the row shrinks since the row switches to a text box, ensure they are both the same vertical height so that this shift doesn't happen
-## Life Tracker
-- [ ] In the bucket list, if the user tries to edit an event that has already been added, they must specifically click on the text, not the whole row. Make sure that the user can click on the whole row to edit an event, not just the text itself (This is an issue especially if the text is short and doesn't take up much of the row)
+- [ ] If the user tries to add Job application profiles, the cancel and save buttons are not proper glass buttons
+## Miscellaneous
+- [ ] When the user right clicks a word and then chooses to add it as a snippet, the popup has a "Manage all snippets" button, but it is not a proper glass button, fix this

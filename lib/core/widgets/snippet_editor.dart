@@ -142,6 +142,7 @@ class _SnippetEditorState extends State<SnippetEditor> {
                     // The one field in the app that must never expand a
                     // snippet — see [showSnippetsDialog].
                     snippetsAllowed: false,
+                    autocorrectAllowed: false,
                     onSubmitted: (_) => _save(),
                   ),
                 ),
@@ -158,6 +159,7 @@ class _SnippetEditorState extends State<SnippetEditor> {
                       vertical: 12,
                     ),
                     snippetsAllowed: false,
+                    autocorrectAllowed: false,
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _save(),
                   ),

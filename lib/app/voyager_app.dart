@@ -7,6 +7,7 @@ import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
+import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_settings_launcher.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
@@ -39,6 +40,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _selectionOnResume.install();
+    WindowsKeyboardReconciler.instance.install();
     if (desktopWindowChromeActive) {
       windowManager.addListener(this);
     }
@@ -49,6 +51,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
     }
+    WindowsKeyboardReconciler.instance.uninstall();
     _selectionOnResume.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -100,6 +103,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       settingsProvider.select((s) => s.value?.vimModeEnabled ?? false),
     );
     final snippetScope = ref.watch(snippetScopeProvider);
+    final autocorrectScope = ref.watch(autocorrectScopeProvider);
     final capsLockIndicator = ref.watch(
       settingsProvider.select((s) => s.value?.capsLockIndicatorEnabled ?? true),
     );
@@ -117,25 +121,28 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
             enabled: vimEnabled,
             child: CapsLockIndicatorScope(
               enabled: capsLockIndicator,
-              child: SnippetEnabledScope(
-                data: snippetScope,
-                // Lets a field's right-click quick-add reach the full settings
-                // dialog without core importing features — see
-                // [SnippetSettingsLauncher].
-                child: SnippetSettingsLauncher(
-                  open: showSnippetsDialog,
-                  child: Stack(
-                    children: [
-                      const _AppBackground(),
-                      RepaintBoundary(
-                        child: DefaultTextStyle(
-                          style: AppFonts.style(
-                            color: theme.colorScheme.onSurface,
+              child: AutocorrectEnabledScope(
+                data: autocorrectScope,
+                child: SnippetEnabledScope(
+                  data: snippetScope,
+                  // Lets a field's right-click quick-add reach the full
+                  // settings dialog without core importing features — see
+                  // [SnippetSettingsLauncher].
+                  child: SnippetSettingsLauncher(
+                    open: showSnippetsDialog,
+                    child: Stack(
+                      children: [
+                        const _AppBackground(),
+                        RepaintBoundary(
+                          child: DefaultTextStyle(
+                            style: AppFonts.style(
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            child: child ?? const SizedBox.shrink(),
                           ),
-                          child: child ?? const SizedBox.shrink(),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

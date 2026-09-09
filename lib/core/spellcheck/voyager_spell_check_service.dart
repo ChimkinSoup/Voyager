@@ -14,6 +14,7 @@ import 'package:voyager/core/spellcheck/spell_check_tokenizer.dart';
 class VoyagerSpellCheckService implements SpellCheckService {
   Set<String> _dictionary = const {};
   Set<String> _customWords = const {};
+  Map<String, String?> _flaggedWords = const {};
   Set<String> _known = const {};
   final Map<String, List<String>> _suggestionCache = {};
 
@@ -38,6 +39,28 @@ class VoyagerSpellCheckService implements SpellCheckService {
 
   final ValueNotifier<int> _generation = ValueNotifier<int>(0);
 
+  /// Every word this service treats as correctly spelled: `bundled ∪ custom`,
+  /// lowercased.
+  ///
+  /// Exposed for autocorrect, which needs the whole set rather than one
+  /// yes/no answer: its cascade asks whether each of a few hundred candidate
+  /// strings is a word (see `autocorrectFor`).
+  ///
+  /// Non-empty is *not* "loaded" — see [dictionaryLoaded].
+  Set<String> get knownWords => _known;
+
+  /// Whether the bundled dictionary has finished loading.
+  ///
+  /// The two halves of [knownWords] are filled by two independent listeners
+  /// (see `voyagerSpellCheckServiceProvider`), and the local custom-word read
+  /// usually settles before the asset parse does. In that window [knownWords]
+  /// is non-empty and holds nothing but the handful of names the user added,
+  /// so every real English word reads as unknown and the only correction
+  /// targets are those names — `todo` would be rewritten to a custom `todos`.
+  /// Callers that do something on "the dictionary is up" must ask this, not
+  /// `knownWords.isNotEmpty`. [checkTextSync] gates on the same set.
+  bool get dictionaryLoaded => _dictionary.isNotEmpty;
+
   // Private incremental cache for [fetchSpellCheckSuggestions] specifically:
   // that method's signature is fixed by the [SpellCheckService] interface
   // (Locale, String) -> Future, so it has no way to receive a caller-owned
@@ -46,18 +69,44 @@ class VoyagerSpellCheckService implements SpellCheckService {
   String _fetchLastText = '';
   List<SuggestionSpan> _fetchLastSpans = const [];
 
+  /// The user's flagged words, lowercased, mapped to the replacement each one
+  /// stores (null for a flag with no replacement) — `FLAGGED_WORDS.md` §4.
+  ///
+  /// Exposed for the field menu and the flag popover, which need to know
+  /// whether the word under the cursor is flagged and what it rewrites to.
+  Map<String, String?> get flaggedWords => _flaggedWords;
+
+  bool isFlagged(String word) => _flaggedWords.containsKey(word.toLowerCase());
+
+  /// The replacement stored for [word], or null when it is not flagged or the
+  /// flag carries no replacement (`FLAGGED_WORDS.md` §5).
+  String? replacementFor(String word) => _flaggedWords[word.toLowerCase()];
+
   void updateDictionary(Set<String> words) {
     _dictionary = words;
-    _known = _dictionary.union(_customWords);
-    _suggestionCache.clear();
-    _fetchLastText = '';
-    _fetchLastSpans = const [];
-    _generation.value++;
+    _rebuildKnown();
   }
 
   void updateCustomWords(Set<String> words) {
     _customWords = words;
-    _known = _dictionary.union(_customWords);
+    _rebuildKnown();
+  }
+
+  void updateFlaggedWords(Map<String, String?> words) {
+    _flaggedWords = words;
+    _rebuildKnown();
+  }
+
+  /// `known = (bundled u custom) - flagged` (`FLAGGED_WORDS.md` §4).
+  ///
+  /// The subtraction is what makes a flagged word squiggle, and it is also
+  /// what keeps it from being a correction *target*: suggestions and the
+  /// autocorrect cascade both read this set, so `nvee` can never be rewritten
+  /// to a flagged `neve`.
+  void _rebuildKnown() {
+    final known = _dictionary.union(_customWords);
+    if (_flaggedWords.isNotEmpty) known.removeAll(_flaggedWords.keys);
+    _known = known;
     _suggestionCache.clear();
     _fetchLastText = '';
     _fetchLastSpans = const [];
@@ -71,10 +120,9 @@ class VoyagerSpellCheckService implements SpellCheckService {
   ///
   /// Used directly for: the very first check of a field (nothing to diff
   /// against yet), and callers that need a guaranteed-complete result right
-  /// now regardless of cost (see [forceSpellCheckDisplay] in
-  /// spell_check_field_support.dart, used when a field's text is set
-  /// programmatically rather than typed, since EditableText never
-  /// spellchecks on its own in that case).
+  /// now regardless of cost (see `misspellingAtCursor` in
+  /// spell_check_field_support.dart, which answers a right-click off a fresh
+  /// pass rather than off anything cached).
   ///
   /// Suggestion strings are *not* computed here by default. Flagging a word
   /// is a set lookup; generating corrections is a Norvig edit-distance
@@ -163,11 +211,14 @@ class VoyagerSpellCheckService implements SpellCheckService {
         ? TextRange(start: prefix, end: newEnd)
         : null;
     final known = _known;
-    for (final range in tokenizeWords(newText.substring(scanStart, scanEnd))) {
-      final absRange = TextRange(
-        start: range.start + scanStart,
-        end: range.end + scanStart,
-      );
+    // The window is passed as bounds rather than as a substring: an exclusion
+    // zone can open before it (a `` ` `` or `$` on an earlier line), and a
+    // substring has no way to know it is inside one.
+    for (final absRange in tokenizeWords(
+      newText,
+      start: scanStart,
+      end: scanEnd,
+    )) {
       if (activeRange != null &&
           absRange.start < activeRange.end &&
           absRange.end > activeRange.start) {

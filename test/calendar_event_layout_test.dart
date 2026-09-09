@@ -27,6 +27,52 @@ CalendarEvent _timed({
 }
 
 void main() {
+  // A recurring event is one row rendered on many days, so the id alone cannot
+  // say which occurrence a tap landed on. Every segment used to broadcast that
+  // bare id, and every segment matching it pressed — so clicking one repeat
+  // played the press animation on all of them at once.
+  group('calendarEventTapKey', () {
+    final daily = _timed(
+      id: 'standup',
+      start: _d(2026, 3, 2, 9),
+      end: _d(2026, 3, 2, 10),
+      recurrence: const RecurrenceRule(frequency: EventRecurrence.daily),
+    );
+
+    test('two occurrences of one series get different keys', () {
+      expect(
+        calendarEventTapKey(daily, _d(2026, 3, 2)),
+        isNot(calendarEventTapKey(daily, _d(2026, 3, 3))),
+      );
+    });
+
+    test('every day of one multi-day occurrence shares a key', () {
+      final block = _timed(
+        id: 'conference',
+        start: _d(2026, 3, 2, 9),
+        end: _d(2026, 3, 4, 17),
+        recurrence: const RecurrenceRule(
+          frequency: EventRecurrence.monthly,
+        ),
+      );
+      final first = calendarEventTapKey(block, _d(2026, 3, 2));
+      expect(calendarEventTapKey(block, _d(2026, 3, 3)), first);
+      expect(calendarEventTapKey(block, _d(2026, 3, 4)), first);
+      // ...and the next month's run of the same block does not.
+      expect(calendarEventTapKey(block, _d(2026, 4, 2)), isNot(first));
+    });
+
+    test('a non-repeating event is still keyed by its own id', () {
+      final once = _timed(
+        id: 'one-off',
+        start: _d(2026, 3, 2, 9),
+        end: _d(2026, 3, 2, 10),
+      );
+      expect(calendarEventTapKey(once, null), 'one-off');
+      expect(calendarEventTapKey(once, _d(2026, 3, 2)), startsWith('one-off'));
+    });
+  });
+
   group('Calendar event layout and styling', () {
     test('calendarMonthEventBarHeight expands for 4 events to reach bottom padding', () {
       const style = MonthDayCellStyle.full;

@@ -11,15 +11,21 @@ enum RevealTargetType { task, event }
 class RevealRequest {
   const RevealRequest.task(this.task)
       : type = RevealTargetType.task,
-        event = null;
+        event = null,
+        day = null;
 
-  const RevealRequest.event(this.event)
+  const RevealRequest.event(this.event, {this.day})
       : type = RevealTargetType.event,
         task = null;
 
   final RevealTargetType type;
   final TodoTask? task;
   final CalendarEvent? event;
+
+  /// Which occurrence of [event] to land on, for a repeating series whose
+  /// anchor is months away from the occurrence the inbox was showing. Null
+  /// falls back to the event's own start.
+  final DateTime? day;
 }
 
 final revealRequestProvider = StateProvider<RevealRequest?>((ref) => null);

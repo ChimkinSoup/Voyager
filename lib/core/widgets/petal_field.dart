@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/motion/window_visibility.dart';
 import 'package:voyager/core/widgets/leaf_shapes.dart';
 
 /// How often each minor color is chosen relative to the primary [Color],
@@ -307,11 +308,15 @@ class PetalField extends StatefulWidget {
   State<PetalField> createState() => _PetalFieldState();
 }
 
-class _PetalFieldState extends State<PetalField> {
+class _PetalFieldState extends State<PetalField>
+    with WindowVisibility<PetalField> {
   // Driven by a Timer rather than a Ticker for the same reason the geometric
   // background is (see geometric_texture.dart): a Ticker requests a frame on
   // every vsync and pins the whole app's pipeline at the display's refresh
   // rate. A drifting petal gains nothing from 120fps.
+  //
+  // The half of the Ticker contract that swap gave up — stopping when the app
+  // has nothing on screen — is restored by [WindowVisibility]; see there.
   static const _frameInterval = Duration(milliseconds: 16); // ~60fps
 
   /// How long a petal takes to fade out once it reaches the bottom band.
@@ -336,11 +341,21 @@ class _PetalFieldState extends State<PetalField> {
   List<ui.Image>? _sprites;
   List<Color>? _spriteColors;
 
+  /// Bumped once per tick to drive the repaint.
+  ///
+  /// A [Listenable] handed to the painter rather than a [setState]: the petals
+  /// are mutated in place and nothing in the widget tree above them changes
+  /// from one frame to the next, so rebuilding re-ran the [LayoutBuilder],
+  /// copied all 160 petals into a fresh list and allocated a new painter — a
+  /// whole build phase, sixty times a second, for a repaint that needed none
+  /// of it. Marking the render object dirty directly skips all of it.
+  final _repaint = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
     _clock.start();
-    _startTimer();
+    _syncTimer();
     widget.controller?.addListener(_onControllerBurst);
   }
 
@@ -354,17 +369,25 @@ class _PetalFieldState extends State<PetalField> {
     final enabled = TickerMode.valuesOf(context).enabled;
     if (enabled == _tickerModeEnabled) return;
     _tickerModeEnabled = enabled;
-    if (enabled) {
-      _startTimer();
+    _syncTimer();
+  }
+
+  @override
+  void onWindowVisibilityChanged() => _syncTimer();
+
+  void _syncTimer() {
+    final shouldRun = _tickerModeEnabled && windowVisible;
+    if (shouldRun == (_timer != null)) return;
+    if (shouldRun) {
+      // The stopwatch runs through the pause, so restart the simulation from
+      // now rather than from whenever it last ticked — otherwise coming back
+      // from a minimised window spends its first frame on one huge step.
+      _lastTick = _clock.elapsedMicroseconds / 1e6;
+      _timer = Timer.periodic(_frameInterval, (_) => _tick());
     } else {
       _timer?.cancel();
       _timer = null;
     }
-  }
-
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(_frameInterval, (_) => _tick());
   }
 
   @override
@@ -387,6 +410,7 @@ class _PetalFieldState extends State<PetalField> {
   void dispose() {
     widget.controller?.removeListener(_onControllerBurst);
     _timer?.cancel();
+    _repaint.dispose();
     _disposeSprites();
     super.dispose();
   }
@@ -415,7 +439,7 @@ class _PetalFieldState extends State<PetalField> {
     if (dt <= 0) return;
 
     _advance(dt);
-    setState(() {});
+    _repaint.value++;
   }
 
   void _advance(double dt) {
@@ -655,9 +679,9 @@ class _PetalFieldState extends State<PetalField> {
             isComplex: true,
             willChange: true,
             painter: _PetalPainter(
-              petals: List<_Petal>.unmodifiable(_petals),
+              repaint: _repaint,
+              petals: _petals,
               sprites: _spritesFor(colors),
-              repaintTick: _time,
             ),
           ),
         );
@@ -687,20 +711,19 @@ class _PetalFieldState extends State<PetalField> {
 /// batching them through `drawAtlas`.
 class _PetalPainter extends CustomPainter {
   _PetalPainter({
+    required Listenable super.repaint,
     required this.petals,
     required this.sprites,
-    required this.repaintTick,
   });
 
+  /// The state's live list, not a snapshot of it: the petals are mutated in
+  /// place and the frame is signalled through `repaint`, so copying all of
+  /// them every 16ms only produced garbage.
   final List<_Petal> petals;
 
   /// One sprite per configured color: index 0 is the primary, 1-3 are the
   /// minor colors in rank order. See [_Petal.colorIndex].
   final List<ui.Image> sprites;
-
-  /// Simulation time. Only used to force a repaint — petal state is mutated in
-  /// place, so comparing the list itself would never report a change.
-  final double repaintTick;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -744,9 +767,10 @@ class _PetalPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PetalPainter oldDelegate) {
-    return oldDelegate.repaintTick != repaintTick ||
-        !listEquals(oldDelegate.sprites, sprites) ||
-        oldDelegate.petals.length != petals.length;
+    // Frame-to-frame movement arrives through `repaint`; this only has to
+    // catch a painter swapped in with different inputs.
+    return !identical(oldDelegate.petals, petals) ||
+        !listEquals(oldDelegate.sprites, sprites);
   }
 }
 

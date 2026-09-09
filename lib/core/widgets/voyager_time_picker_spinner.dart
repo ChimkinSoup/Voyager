@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/voyager_spinner_wheel.dart';
 
 class VoyagerTimePickerSpinner extends StatefulWidget {
   const VoyagerTimePickerSpinner({
@@ -236,28 +237,20 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
     int? itemCount,
     double width = 40,
   }) {
-    Widget wheel = SizedBox(
+    Widget wheel = VoyagerSpinnerWheel(
       width: width,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (n) {
-          if ((n is ScrollStartNotification || n is ScrollUpdateNotification) &&
-              !_isProgrammaticScroll) {
-            widget.onInteraction?.call();
-          }
-          return false;
-        },
-        child: ListWheelScrollView.useDelegate(
-          controller: controller,
-          itemExtent: widget.itemHeight,
-          physics: const _HighFrictionFixedExtentScrollPhysics(),
-          perspective: 0.005,
-          onSelectedItemChanged: onSelectedItemChanged,
-          childDelegate: ListWheelChildBuilderDelegate(
-            builder: (ctx, index) => builder(ctx, index, index == selectedItem),
-            childCount: itemCount,
-          ),
-        ),
-      ),
+      controller: controller,
+      itemExtent: widget.itemHeight,
+      itemCount: itemCount,
+      onSelectedItemChanged: onSelectedItemChanged,
+      itemBuilder: (ctx, index) => builder(ctx, index, index == selectedItem),
+      onNotification: (n) {
+        if ((n is ScrollStartNotification || n is ScrollUpdateNotification) &&
+            !_isProgrammaticScroll) {
+          widget.onInteraction?.call();
+        }
+        return false;
+      },
     );
 
     if (DevFlags.showTimeSelectorHitboxes) {
@@ -281,16 +274,7 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
 
     return SizedBox(
       height: widget.itemHeight * 4,
-      child: ShaderMask(
-        shaderCallback: (Rect bounds) {
-          return const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
-            stops: [0.0, 0.25, 0.75, 1.0],
-          ).createShader(bounds);
-        },
-        blendMode: BlendMode.dstIn,
+      child: VoyagerSpinnerFade(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -375,19 +359,5 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
         ),
       ),
     );
-  }
-}
-
-class _HighFrictionFixedExtentScrollPhysics extends FixedExtentScrollPhysics {
-  const _HighFrictionFixedExtentScrollPhysics({super.parent});
-
-  @override
-  _HighFrictionFixedExtentScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return _HighFrictionFixedExtentScrollPhysics(parent: buildParent(ancestor));
-  }
-
-  @override
-  Simulation? createBallisticSimulation(ScrollMetrics position, double velocity) {
-    return super.createBallisticSimulation(position, velocity * 0.4);
   }
 }

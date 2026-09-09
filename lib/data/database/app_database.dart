@@ -484,7 +484,34 @@ class SettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get snippetsEnabled =>
       boolean().withDefault(const Constant(true))();
+
+  /// Whether prose fields fix obvious typos on a boundary key. See
+  /// AUTOCORRECT.md §10 — on by default, like snippets.
+  BoolColumn get autocorrectEnabled =>
+      boolean().withDefault(const Constant(true))();
   BoolColumn get capsLockIndicatorEnabled =>
+      boolean().withDefault(const Constant(true))();
+
+  /// Whether attached images may be uploaded to Firebase Storage at all.
+  ///
+  /// Off means images stay on the device that made them forever: other
+  /// devices still learn that an image exists (the asset row and its
+  /// references sync as ordinary documents) but can never obtain the bytes.
+  BoolColumn get mediaRemoteUploadsEnabled =>
+      boolean().withDefault(const Constant(true))();
+
+  /// Whether image bytes may be downloaded at all — both the background
+  /// prefetch and an on-demand fetch when something is on screen. Off shows
+  /// the "Download disabled" empty state instead of a spinner that can never
+  /// resolve.
+  BoolColumn get mediaRemoteDownloadsEnabled =>
+      boolean().withDefault(const Constant(true))();
+
+  /// Whether to proactively pull every synced image after a document sync,
+  /// rather than waiting for one to be looked at. Meaningless while
+  /// [mediaRemoteDownloadsEnabled] is off, which is why it is gated on it
+  /// rather than merged with it.
+  BoolColumn get mediaBackgroundPrefetchEnabled =>
       boolean().withDefault(const Constant(true))();
 
   /// [SnippetExpandKey] name — 'tab' or 'space'.
@@ -498,6 +525,11 @@ class SettingsTable extends Table {
   TextColumn get deviceId => text().nullable()();
   TextColumn get lastViewedJournalId => text().nullable()();
   TextColumn get lastViewedTodoListId => text().nullable()();
+
+  /// The calendar the calendar page reopens into. Its all-view twin is
+  /// [calendarShowAllCalendars], split apart for the same reason the journal
+  /// and todo pair is (see below).
+  TextColumn get lastViewedCalendarId => text().nullable()();
 
   /// The journal the journal page always opens into, overriding
   /// [lastViewedJournalId] and [journalShowAllEntries]. Null means "restore
@@ -515,6 +547,8 @@ class SettingsTable extends Table {
   BoolColumn get journalShowAllEntries =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get todoShowAllTasks =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get calendarShowAllCalendars =>
       boolean().withDefault(const Constant(false))();
   TextColumn get weatherLocationLabel => text().nullable()();
   RealColumn get weatherLat => real().nullable()();
@@ -637,6 +671,17 @@ class SettingsTable extends Table {
   /// Whether the Jobs page starts with archived applications shown (§3.1).
   BoolColumn get jobsIncludeArchived =>
       boolean().withDefault(const Constant(false))();
+
+  /// Rankings categories whose Queue section the user has collapsed, as a JSON
+  /// list of category ids. The collapsed set rather than the expanded one, so
+  /// a category that appears from another device opens expanded.
+  TextColumn get rankingsCollapsedQueueCategoriesJson => text().nullable()();
+
+  /// Profile links the Jobs header copies to the clipboard (§3.4). Null means
+  /// the slot is unset and its button is not rendered.
+  TextColumn get jobProfileLinkedInUrl => text().nullable()();
+  TextColumn get jobProfileGitHubUrl => text().nullable()();
+  TextColumn get jobProfilePortfolioUrl => text().nullable()();
   RealColumn get dreamSplitWidth => real().nullable()();
   BoolColumn get showDreamStatistics =>
       boolean().withDefault(const Constant(false))();
@@ -661,6 +706,10 @@ class SettingsTable extends Table {
   BoolColumn get leetCodeHideComplexity =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get leetCodeHideCode =>
+      boolean().withDefault(const Constant(false))();
+
+  /// [AppSettings.leetCodeEnableScratchCode].
+  BoolColumn get leetCodeEnableScratchCode =>
       boolean().withDefault(const Constant(false))();
   TextColumn get srsFailKey =>
       text().withDefault(const Constant(defaultStudyFailKey))();
@@ -724,6 +773,30 @@ class CustomWordsTable extends Table {
 
   /// Set when the word is removed from the dictionary, so the removal reaches
   /// other devices instead of the word reappearing on their next pull.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {word};
+}
+
+/// Words the user has flagged as wrong for them, per `FLAGGED_WORDS.md`.
+///
+/// Deliberately *not* a row in [CustomWordsTable]: a row there means "allow",
+/// and a tombstone there means "stop allowing this extra" — neither of which
+/// can express "deny a word the bundled list has".
+class FlaggedWordsTable extends Table {
+  TextColumn get word => text()();
+
+  /// The word finishing this token rewrites to, or null for a flag with no
+  /// replacement. Clearing it keeps the flag.
+  TextColumn get replacement => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+
+  /// Set when the flag is lifted, so a bundled word becoming allowed again
+  /// reaches other devices instead of being re-flagged on their next pull.
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
   @override
@@ -1000,6 +1073,11 @@ class StudyReviewLogTable extends Table {
   TextColumn get grade => text()();
   DateTimeColumn get reviewedAt => dateTime()();
 
+  /// Bumped only by a delete or a restore — the other columns never change
+  /// once the row is written. See [StudyReviewLog].
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1016,8 +1094,10 @@ class JobApplicationsTable extends Table {
   TextColumn get applicationUrl => text().nullable()();
   TextColumn get notes => text().nullable()();
 
-  /// Null while active; the season this application was archived into once set.
-  TextColumn get seasonId => text().nullable()();
+  /// JSON array of season ids, one per cycle this application is filed under.
+  /// Empty array for "no season". Replaced the single `season_id` column in
+  /// migration 99 — an application can sit in more than one cycle at once.
+  TextColumn get seasonIdsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1050,6 +1130,10 @@ class JobStagesTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Null until the user picks one, which is what leaves the stage on the
+  /// position-derived colour the header falls back to.
+  IntColumn get colorValue => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1092,6 +1176,186 @@ class JobSeasonsTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Null while the season is still running. Set when the cycle is retired,
+  /// which archives every application filed under it at once.
+  DateTimeColumn get archivedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One row per unique blob of image bytes — see [MediaAsset].
+///
+/// [contentHash] is indexed rather than made the primary key: dedupe looks a
+/// blob up by hash on every ingest, but the id is what references quote, and
+/// it has to survive the bytes being replaced.
+@TableIndex(name: 'idx_media_assets_content_hash', columns: {#contentHash})
+class MediaAssetsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get contentHash => text()();
+  IntColumn get byteSize => integer()();
+  TextColumn get mimeType => text()();
+  IntColumn get width => integer()();
+  IntColumn get height => integer()();
+
+  /// [MediaUploadState] / [MediaDownloadState] by `name`, not index — the
+  /// enum's declaration order is then free to change without rewriting rows.
+  TextColumn get uploadState =>
+      text().withDefault(const Constant('localOnly'))();
+  TextColumn get downloadState =>
+      text().withDefault(const Constant('present'))();
+
+  /// Why the last transfer gave up, kept for the retry UI.
+  TextColumn get failureReason => text().nullable()();
+
+  /// When the refcount last hit zero. Distinct from [deletedAt] so that an
+  /// asset which becomes referenced again keeps its bytes — see
+  /// [MediaAsset.unreferencedAt].
+  DateTimeColumn get unreferencedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One row per placement of an asset on a parent document — see
+/// [MediaReference].
+///
+/// Indexed both ways because both directions are hot: a surface asks "what
+/// images does this document have" on every open, and the refcount GC asks
+/// "does anything still point at this asset" on every detach.
+@TableIndex(
+  name: 'idx_media_references_owner',
+  columns: {#collection, #documentId},
+)
+@TableIndex(name: 'idx_media_references_media_id', columns: {#mediaId})
+class MediaReferencesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get mediaId => text()();
+  TextColumn get collection => text()();
+  TextColumn get documentId => text()();
+
+  /// [MediaFacet] by `name`.
+  TextColumn get facet => text().withDefault(const Constant('gallery'))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  IntColumn get displayWidthPx => integer().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One kind of thing the user ranks, and the whole shape of it: scales,
+/// child units, image surfaces, and the two field templates.
+///
+/// The templates are JSON rather than rows of their own because a template is
+/// never read apart from its category, and a field removed from one has to
+/// survive as an orphan the editor can offer back — a table would either lose
+/// it or need a tombstone column doing the same job with more moving parts.
+class RankingCategoriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get colorValue => integer()();
+
+  /// Key into `rankingCategoryIcons`, not a code point: the icon package is
+  /// free to move those between versions.
+  TextColumn get iconKey => text().withDefault(const Constant('star'))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  BoolColumn get childUnitsEnabled =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get childUnitLabel =>
+      text().withDefault(const Constant('Episode'))();
+  BoolColumn get imagesOnParent =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get imagesOnChild =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get parentScoreMax => integer().withDefault(const Constant(5))();
+  IntColumn get childScoreMax => integer().withDefault(const Constant(5))();
+  /// [RankingScorePrecision] by `name`. Replaced the two half-step booleans in
+  /// schema 100, which had no way to spell a tenth.
+  TextColumn get parentScorePrecision =>
+      text().withDefault(const Constant('half'))();
+  TextColumn get childScorePrecision =>
+      text().withDefault(const Constant('half'))();
+  TextColumn get parentTemplateJson =>
+      text().withDefault(const Constant('[]'))();
+  TextColumn get childTemplateJson =>
+      text().withDefault(const Constant('[]'))();
+
+  /// The ranked list's sort, per category. Lives here rather than in a page
+  /// prefs table so it syncs with the category it belongs to.
+  TextColumn get sortMode =>
+      text().withDefault(const Constant('overallScore'))();
+  TextColumn get sortFieldId => text().nullable()();
+  BoolColumn get sortAscending =>
+      boolean().withDefault(const Constant(false))();
+
+  /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
+  /// does not cascade.
+  DateTimeColumn get archivedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One tracked entry. A null [overallScore] is the whole of what "unranked"
+/// means, so the page's two sections can never disagree with the data.
+@TableIndex(name: 'idx_ranking_parents_category', columns: {#categoryId})
+class RankingParentsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get categoryId => text()();
+  TextColumn get title => text()();
+  RealColumn get overallScore => real().nullable()();
+  TextColumn get notes => text().withDefault(const Constant(''))();
+
+  /// `fieldId -> {score?, notes?}` against the category's parent template.
+  TextColumn get fieldValuesJson => text().withDefault(const Constant('{}'))();
+
+  /// Structured classification tags, as a JSON array of names without the
+  /// leading `#`. A column rather than a join table: they are only ever read
+  /// with the parent they hang off, and the one query anyone wants of them is
+  /// "what does this category use", which is a scan of parents either way.
+  TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+
+  /// [RankingStatus] by `name`. Only read while unranked.
+  TextColumn get status => text().withDefault(const Constant('queued'))();
+  BoolColumn get starred => boolean().withDefault(const Constant(false))();
+  IntColumn get queueSortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One unit under a parent — an episode, a dish. Flat, ordered by
+/// [sortOrder] alone.
+@TableIndex(name: 'idx_ranking_children_parent', columns: {#parentId})
+class RankingChildrenTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get parentId => text()();
+  TextColumn get name => text()();
+  RealColumn get overallScore => real().nullable()();
+  TextColumn get notes => text().withDefault(const Constant(''))();
+  TextColumn get fieldValuesJson => text().withDefault(const Constant('{}'))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1127,6 +1391,7 @@ class JobSeasonsTable extends Table {
     PinnedNotesTable,
     DismissedNotificationsTable,
     CustomWordsTable,
+    FlaggedWordsTable,
     CustomQuotesTable,
     BucketListItemsTable,
     LeetCodeProblemsTable,
@@ -1145,13 +1410,18 @@ class JobSeasonsTable extends Table {
     JobCompaniesTable,
     JobCategoriesTable,
     JobSeasonsTable,
+    MediaAssetsTable,
+    MediaReferencesTable,
+    RankingCategoriesTable,
+    RankingParentsTable,
+    RankingChildrenTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 89;
+  int get schemaVersion => 103;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2153,8 +2423,243 @@ class AppDatabase extends _$AppDatabase {
         await _deleteVirtualTrackerValues();
         await _reanchorWeeklyTrackerValuesToMonday();
       }
+      if (from < 90) {
+        await migrator.createTable(mediaAssetsTable);
+        await migrator.createTable(mediaReferencesTable);
+        // Declared via @TableIndex, so createAll() covers fresh databases;
+        // existing ones need them made here.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_media_assets_content_hash '
+          'ON media_assets_table (content_hash)',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_media_references_owner '
+          'ON media_references_table (collection, document_id)',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_media_references_media_id '
+          'ON media_references_table (media_id)',
+        );
+        for (final column in [
+          settingsTable.mediaRemoteUploadsEnabled,
+          settingsTable.mediaRemoteDownloadsEnabled,
+          settingsTable.mediaBackgroundPrefetchEnabled,
+        ]) {
+          await _addSettingsColumnIfNotExists(migrator, column);
+        }
+      }
+      if (from < 91) {
+        // Seasons used to *mean* archived — an application was archived iff it
+        // carried a season id. Existing seasons come across un-archived, so
+        // the applications already filed under one return to the active list
+        // and the user archives the cycle themselves when it ends.
+        await _addColumnIfNotExists(
+          migrator,
+          'job_seasons_table',
+          jobSeasonsTable,
+          jobSeasonsTable.archivedAt,
+        );
+      }
+      if (from < 92) {
+        // Left null on every existing stage: an unset colour is what keeps the
+        // position-derived one the header already showed, so upgrading does
+        // not repaint a pipeline the user never asked to change.
+        await _addColumnIfNotExists(
+          migrator,
+          'job_stages_table',
+          jobStagesTable,
+          jobStagesTable.colorValue,
+        );
+      }
+      if (from < 93) {
+        for (final column in [
+          settingsTable.jobProfileLinkedInUrl,
+          settingsTable.jobProfileGitHubUrl,
+          settingsTable.jobProfilePortfolioUrl,
+        ]) {
+          await _addSettingsColumnIfNotExists(migrator, column);
+        }
+      }
+      if (from < 94) {
+        await migrator.createTable(rankingCategoriesTable);
+        await migrator.createTable(rankingParentsTable);
+        await migrator.createTable(rankingChildrenTable);
+        // Declared via @TableIndex, so createAll() covers fresh databases;
+        // existing ones need them made here.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_ranking_parents_category '
+          'ON ranking_parents_table (category_id)',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_ranking_children_parent '
+          'ON ranking_children_table (parent_id)',
+        );
+      }
+      if (from < 95) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.rankingsCollapsedQueueCategoriesJson,
+        );
+      }
+      if (from < 96) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.lastViewedCalendarId,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.calendarShowAllCalendars,
+        );
+      }
+      if (from < 97) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.leetCodeEnableScratchCode,
+        );
+      }
+      if (from < 98) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.autocorrectEnabled,
+        );
+      }
+      if (from < 99) {
+        await _addColumnIfNotExists(
+          migrator,
+          'job_applications_table',
+          jobApplicationsTable,
+          jobApplicationsTable.seasonIdsJson,
+        );
+        await _foldJobApplicationSeasonColumn();
+        await _dropJobApplicationColumnIfExists(migrator, 'season_id');
+      }
+      if (from < 100) {
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_categories_table',
+          rankingCategoriesTable,
+          rankingCategoriesTable.parentScorePrecision,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_categories_table',
+          rankingCategoriesTable,
+          rankingCategoriesTable.childScorePrecision,
+        );
+        await _foldRankingHalfStepColumns();
+        await _dropRankingCategoryColumnIfExists(
+          migrator,
+          'parent_half_steps_enabled',
+        );
+        await _dropRankingCategoryColumnIfExists(
+          migrator,
+          'child_half_steps_enabled',
+        );
+      }
+      if (from < 101) {
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_parents_table',
+          rankingParentsTable,
+          rankingParentsTable.tagsJson,
+        );
+      }
+      if (from < 102) {
+        // The review log used to be append-only. Undoing a grade now takes its
+        // row back, which needs a tombstone the delete can win on.
+        await _addColumnIfNotExists(
+          migrator,
+          'study_review_log_table',
+          studyReviewLogTable,
+          studyReviewLogTable.version,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'study_review_log_table',
+          studyReviewLogTable,
+          studyReviewLogTable.deletedAt,
+        );
+      }
+      if (from < 103) {
+        await migrator.createTable(flaggedWordsTable);
+      }
     },
   );
+
+  /// Rewrites the two half-step booleans a category used to carry into the
+  /// precision names that replaced them: on became `half`, off became
+  /// `integers`. Tenths is new, so no existing row can be one.
+  ///
+  /// Done in SQL because the mapping is a two-case CASE and there is no shape
+  /// to get wrong — but only for rows the old column actually reached, so a
+  /// database created fresh on schema 100 is left with its column default.
+  Future<void> _foldRankingHalfStepColumns() async {
+    for (final (legacy, target) in [
+      ('parent_half_steps_enabled', 'parent_score_precision'),
+      ('child_half_steps_enabled', 'child_score_precision'),
+    ]) {
+      final exists = await customSelect(
+        "SELECT 1 FROM pragma_table_info('ranking_categories_table') "
+        'WHERE name = ?',
+        variables: [Variable.withString(legacy)],
+      ).get();
+      if (exists.isEmpty) continue;
+      await customStatement(
+        'UPDATE ranking_categories_table SET $target = '
+        "CASE WHEN $legacy = 0 THEN 'integers' ELSE 'half' END",
+      );
+    }
+  }
+
+  Future<void> _dropRankingCategoryColumnIfExists(
+    Migrator migrator,
+    String columnName,
+  ) async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('ranking_categories_table') "
+      'WHERE name = ?',
+      variables: [Variable.withString(columnName)],
+    ).get();
+    if (exists.isNotEmpty) {
+      await migrator.dropColumn(rankingCategoriesTable, columnName);
+    }
+  }
+
+  /// Rewrites the one season an application could be filed under — the single
+  /// `season_id` column it lived in before an application could belong to more
+  /// than one cycle — into the `season_ids_json` list every read goes through
+  /// now. A row with no season becomes an empty list.
+  ///
+  /// Done in SQL rather than in Dart: the value is a bare id, so the list is
+  /// just the id wrapped in quotes and brackets, and there is no shape to get
+  /// wrong.
+  Future<void> _foldJobApplicationSeasonColumn() async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('job_applications_table') "
+      "WHERE name = 'season_id'",
+    ).get();
+    if (exists.isEmpty) return;
+    await customStatement(
+      "UPDATE job_applications_table "
+      "SET season_ids_json = json_array(season_id) "
+      "WHERE season_id IS NOT NULL AND season_id != ''",
+    );
+  }
+
+  /// Skips DROP COLUMN when the local DB doesn't have it (e.g. after branch
+  /// churn, or a database old enough to predate the column's own ADD).
+  Future<void> _dropJobApplicationColumnIfExists(
+    Migrator migrator,
+    String columnName,
+  ) async {
+    final exists = await customSelect(
+      "SELECT 1 FROM pragma_table_info('job_applications_table') WHERE name = ?",
+      variables: [Variable.withString(columnName)],
+    ).get();
+    if (exists.isNotEmpty) {
+      await migrator.dropColumn(jobApplicationsTable, columnName);
+    }
+  }
 
   /// Rewrites every problem's one-and-only solution — the flat columns it was
   /// stored in before problems could hold alternatives — into the

@@ -11,6 +11,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
+import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
@@ -21,7 +23,8 @@ import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
-import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
@@ -38,6 +41,15 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
+import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
+import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/core/widgets/voyager_checkbox.dart';
+
+/// The metric every field in this panel takes, matching the one the Jobs and
+/// Rankings editors share (`jobsFieldContentPadding`). Not imported from jobs:
+/// a shared number is not worth a feature-to-feature dependency.
+const _fieldContentPadding = EdgeInsets.symmetric(horizontal: 14, vertical: 14);
 
 class TodoEditPanel extends ConsumerStatefulWidget {
   const TodoEditPanel({
@@ -45,8 +57,7 @@ class TodoEditPanel extends ConsumerStatefulWidget {
     required this.task,
     required this.onClose,
     required this.onChanged,
-    required this.onDeleted,
-    required this.onToggleStar,
+    required this.onToggleCompleted,
     this.onTaskOptimistic,
     this.onSortBatchApplied,
     this.listColor,
@@ -56,8 +67,10 @@ class TodoEditPanel extends ConsumerStatefulWidget {
   final TodoTask task;
   final VoidCallback onClose;
   final VoidCallback onChanged;
-  final VoidCallback onDeleted;
-  final VoidCallback onToggleStar;
+
+  /// Ticks the task off (or back on) through the page's own completion path,
+  /// so the panel's checkbox and the row's are the same action.
+  final ValueChanged<bool> onToggleCompleted;
   final ValueChanged<TodoTask>? onTaskOptimistic;
   final ValueChanged<TodoSortBatch>? onSortBatchApplied;
   final int? listColor;
@@ -148,15 +161,21 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   void didUpdateWidget(covariant TodoEditPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.id != widget.task.id) {
-      _unregisterPendingNotesListener(oldWidget.task.id);
+      _handOffFrom(oldWidget.task);
       _lastNonEmptyTitle = widget.task.title;
       _titleController.text = widget.task.title;
       _notesController.text = widget.task.notes ?? '';
       _lastNotesText = _notesController.text;
       _dueDate = widget.task.dueDate;
-    _recurrence = widget.task.recurrence;
+      _recurrence = widget.task.recurrence;
+      // Cleared, not left to the query below: until it resolves the panel
+      // would otherwise still be listing the previous task's subtasks, and
+      // the draft in the add-subtask field belongs to that task too.
+      _subtasks = const [];
+      _subtaskController.clear();
       _loadSubtasks();
       _registerPendingNotesListener(widget.task.id);
+      _setNotesEditingFlag(_notesFocusNode.hasFocus);
       _beginEditingSession(ref.read(remoteSyncServiceProvider));
     } else if (oldWidget.task.dueDate != widget.task.dueDate) {
       // Same task, but its due date changed externally (e.g. via the row's
@@ -166,6 +185,58 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _dueDate = widget.task.dueDate;
     _recurrence = widget.task.recurrence;
     }
+  }
+
+  /// Everything [dispose] does for the task the panel is leaving, when it is
+  /// being pointed at another one instead of going away.
+  ///
+  /// The page used to key this widget on the task id, so every hand-off
+  /// destroyed the State and built a new one — a full unmount and remount of
+  /// the panel, fresh controllers, and a Firestore flush plus a new editing
+  /// session, per step. Walking search matches with Enter does that at the
+  /// keyboard's repeat rate, which is what made the walk stutter.
+  void _handOffFrom(TodoTask from) {
+    // The debounced timers save through widget.task.id, which is already the
+    // new task by the time they would fire, so pending text has to be flushed
+    // here against the id it was typed for. Same reasoning as dispose().
+    final hasPendingText =
+        (_titleSaveTimer?.isActive ?? false) ||
+        (_notesSaveTimer?.isActive ?? false);
+    _titleSaveTimer?.cancel();
+    _notesSaveTimer?.cancel();
+    final notesAtHandOff = _notesController.text;
+    if (hasPendingText) {
+      unawaited(
+        _savePendingText(
+          taskId: from.id,
+          title: _titleController.text.trim(),
+          notes: notesAtHandOff.trim(),
+        ),
+      );
+    }
+    _unregisterPendingNotesListener(from.id);
+    final remoteSync = _remoteSync;
+    if (remoteSync == null) return;
+    remoteSync.setDocumentEditing(
+      collection: FirestoreCollections.todoTasks,
+      documentId: from.id,
+      isEditing: false,
+    );
+    // Unlike dispose(), the merge result is dropped rather than written back
+    // to the notes field: that field is showing the *new* task now.
+    unawaited(
+      remoteSync
+          .applyPendingTodoTaskNotesMerge(
+            taskId: from.id,
+            currentLocalNotes: notesAtHandOff,
+          )
+          .then(
+            (_) => remoteSync.flushDocument(
+              FirestoreCollections.todoTasks,
+              from.id,
+            ),
+          ),
+    );
   }
 
   void _registerPendingNotesListener(String taskId) {
@@ -794,14 +865,84 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   Future<void> _deleteSubtask(TodoTask subtask) async {
+    // Captured while this widget is certainly mounted: the toast that offers
+    // the undo outlives the row it deleted, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final deleted = subtask.copyWith(deletedAt: utcNow());
     setState(() {
       _subtasks.removeWhere((s) => s.id == subtask.id);
     });
-    ref.read(todoRepositoryProvider).upsertTask(deleted).then((_) {
-      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
-      widget.onChanged();
+    await ref.read(todoRepositoryProvider).upsertTask(deleted);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    widget.onChanged();
+
+    // No confirm dialog on a subtask — it is a one-line row, and asking twice
+    // costs more than the delete does. The undo is what makes that safe.
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(subtask.title, fallback: 'subtask'),
+      restore: () => _undoSubtaskDelete(container, subtask),
+    );
+  }
+
+  /// Brings back a subtask the toast's Undo was pressed for.
+  ///
+  /// The panel keeps its own [_subtasks] list rather than re-reading on every
+  /// change, so the row has to be put back into it at the position it held —
+  /// [_subtasks] is ordered by `sortOrder`, and appending would move the
+  /// restored row to the bottom of a list the user did not reorder.
+  ///
+  /// Rebuilt field by field rather than `copyWith`'d, because `copyWith` reads
+  /// `deletedAt ?? this.deletedAt` and so cannot clear a tombstone.
+  Future<void> _undoSubtaskDelete(
+    ProviderContainer container,
+    TodoTask subtask,
+  ) async {
+    final repo = container.read(todoRepositoryProvider);
+    // The version is resolved against disk rather than against the snapshot —
+    // see [restoreVersionFrom].
+    final current = await repo.getTask(subtask.id);
+    abortIfAlreadyRestored(
+      found: current != null,
+      deletedAt: current?.deletedAt,
+    );
+    final restored = TodoTask(
+      id: subtask.id,
+      createdAt: subtask.createdAt,
+      updatedAt: utcNow(),
+      version: restoreVersionFrom(
+        preDeleteVersion: subtask.version,
+        currentVersion: current?.version,
+      ),
+      listId: subtask.listId,
+      title: subtask.title,
+      notes: subtask.notes,
+      dueDate: subtask.dueDate,
+      completed: subtask.completed,
+      starred: subtask.starred,
+      sortOrder: subtask.sortOrder,
+      dueDateSetAt: subtask.dueDateSetAt,
+      parentTaskId: subtask.parentTaskId,
+      recurrence: subtask.recurrence,
+      recurrenceAnchor: subtask.recurrenceAnchor,
+    );
+    await repo.upsertTask(restored);
+    container.read(remoteSyncServiceProvider).pushTodoTaskNow(restored);
+    // Unconditional, and through the container: the panel is closed by the
+    // user in the ordinary course of things, and closing it is the likeliest
+    // thing to happen during an eight-second undo window. These providers are
+    // `keepAlive`, so an invalidation skipped on `mounted` never happens at
+    // all — the subtask stays on disk and off screen indefinitely.
+    invalidateTodoTaskProvidersIn(container, {restored.listId});
+    if (!mounted) return;
+    setState(() {
+      _subtasks
+        ..add(restored)
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     });
+    widget.onChanged();
   }
 
   void _reorderSubtasks(int oldIndex, int newIndex) {
@@ -884,17 +1025,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     return 'due date: $before → $after, sortOrder: ${previous.sortOrder} → ${next.sortOrder}';
   }
 
-  Future<void> _deleteTask() async {
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Delete task?',
-      message: 'Delete "${widget.task.title}"?',
-    );
-    if (!confirmed) return;
-    widget.onDeleted();
-    unawaited(softDeleteTaskWithSubtasks(ref, widget.task));
-  }
-
   String _formatDue(DateTime dateTime) {
     final local = dateTime.toLocal();
     if (local.hour == 0 && local.minute == 0) {
@@ -906,90 +1036,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   int _listFlagColor(TodoListModel list) =>
       list.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32();
 
-  Widget _buildHeader(BuildContext context, ThemeData theme, Color listColor) {
-    Widget starButton() => IconButton(
-      onPressed: widget.onToggleStar,
-      icon: Icon(
-        widget.task.starred
-            ? PhosphorIconsFill.star
-            : PhosphorIconsRegular.star,
-        color: widget.task.starred ? listColor : null,
-      ),
-      tooltip: widget.task.starred ? 'Unstar task' : 'Star task',
-    );
-
-    Widget deleteButton() => IconButton(
-      onPressed: _deleteTask,
-      icon: Icon(PhosphorIconsRegular.trash, color: theme.colorScheme.error),
-      tooltip: 'Delete task',
-    );
-
-    Widget closeButton() => IconButton(
-      onPressed: _close,
-      icon: const Icon(PhosphorIconsRegular.x),
-      tooltip: 'Close',
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final title = Text(
-          'Edit task',
-          style: theme.textTheme.titleMedium,
-          overflow: TextOverflow.ellipsis,
-        );
-        final useOverflowMenu = constraints.maxWidth < 128;
-
-        if (useOverflowMenu) {
-          return Row(
-            children: [
-              Expanded(child: title),
-              PopupMenuButton<_HeaderAction>(
-                padding: EdgeInsets.zero,
-                iconSize: 20,
-                tooltip: 'Task actions',
-                onSelected: (action) {
-                  switch (action) {
-                    case _HeaderAction.star:
-                      widget.onToggleStar();
-                    case _HeaderAction.delete:
-                      _deleteTask();
-                    case _HeaderAction.close:
-                      _close();
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: _HeaderAction.star,
-                    child: Text(
-                      widget.task.starred ? 'Unstar task' : 'Star task',
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: _HeaderAction.delete,
-                    child: Text('Delete task'),
-                  ),
-                  const PopupMenuItem(
-                    value: _HeaderAction.close,
-                    child: Text('Close'),
-                  ),
-                ],
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(child: title),
-            starButton(),
-            deleteButton(),
-            closeButton(),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
@@ -997,21 +1043,102 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final listColor = _listAccentColor;
     return EnterToSubmitScope(
       onSubmit: () => unawaited(_close()),
-      child: Material(
-        elevation: 0,
-        color: theme.colorScheme.surface,
+      // Wraps the whole panel, not just the strip below: an image on the
+      // clipboard has no other target here, so Ctrl+V anywhere in the editor
+      // — including from the title or notes field, which have nothing to
+      // paste from an image-only clipboard — attaches it.
+      child: MediaPasteScope(
+        collection: FirestoreCollections.todoTasks,
+        documentId: widget.task.id,
         child: Container(
           width: double.infinity,
+          // No fill of its own, and a hairline instead of a divider: the panel
+          // is a column of the same page the list is on, and a surface behind
+          // it made the two read as separate screens. Same chrome as the Jobs
+          // and Rankings editors.
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: theme.dividerColor)),
+            border: Border(
+              left: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
           ),
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildHeader(context, theme, listColor),
-              const SizedBox(height: 12),
-              Stack(
+              _PanelHeader(onClose: () => unawaited(_close())),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // The fields scroll; the subtask list takes what is
+                      // left. Capped rather than given a flex share of its
+                      // own: a scroll view handed one takes all of it whether
+                      // or not its content fills it, which on a tall panel
+                      // would leave the reorder list a strip at the bottom
+                      // and the space the fields did not use as a gap under
+                      // it.
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: constraints.maxHeight * 0.6,
+                        ),
+                        child: VoyagerScrollView(
+                          // The top inset clears the title's floating label,
+                          // which rides half its own height above the field
+                          // and would otherwise be clipped by the viewport.
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: _buildFields(theme, listColor),
+                        ),
+                      ),
+                      Expanded(child: _buildSubtaskList(listColor)),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Divider(height: 24),
+                    Text(
+                      'Created ${DateFormat.yMMMd().add_jm().format(widget.task.createdAt.toLocal())}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Everything above the subtask list, in one scrollable column.
+  Widget _buildFields(ThemeData theme, Color listColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // The checkbox sits on the title's own row. Ticking the task off
+        // without leaving the editor is routed through the page rather than
+        // saved here, so it is the same action the row's own checkbox is —
+        // including the deferred write and, on a repeating task, the roll
+        // forward to the next occurrence.
+        Row(
+          children: [
+            VoyagerCheckbox(
+              value: widget.task.completed,
+              accentColor: listColor,
+              onChanged: widget.onToggleCompleted,
+            ),
+            Expanded(
+              child: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   LabeledTextField(
@@ -1023,8 +1150,16 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                     onChanged: _scheduleTitleSave,
                     accentColor: listColor,
                     dense: true,
-                    borderRadius: 12,
-                    contentPadding: const EdgeInsets.fromLTRB(15, 15, 40, 15),
+                    allowShortHeight: true,
+                    // The shared metric, except on the right, where the list flag
+                    // is pinned to the field's corner and the title has to stop
+                    // short of it.
+                    contentPadding: EdgeInsets.fromLTRB(
+                      14,
+                      14,
+                      widget.lists.isEmpty ? 14 : 40,
+                      14,
+                    ),
                   ),
                   if (widget.lists.isNotEmpty)
                     Positioned(
@@ -1032,8 +1167,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                       right: 10,
                       child: JournalTitleCornerFlag(
                         colorValue:
-                            widget.listColor ??
-                            theme.colorScheme.primary.toARGB32(),
+                            widget.listColor ?? theme.colorScheme.primary.toARGB32(),
                         onSelected: _moveToList,
                         menuEntries: (_) => [
                           for (var i = 0; i < widget.lists.length; i++)
@@ -1065,237 +1199,260 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                     ),
                 ],
               ),
-              const SizedBox(height: 16),
-              // The pill and the repeat toggle group on the left; "Reset due
-              // date" is pushed to the right edge by the Expanded, so it reads
-              // as the row's escape hatch rather than as a third setting.
-              Row(
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        // The pill and the repeat toggle group on the left; "Reset due
+        // date" is pushed to the right edge by the Expanded, so it reads
+        // as the row's escape hatch rather than as a third setting.
+        Row(
+          children: [
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Builder(
-                            builder: (context) {
-                              final localDue = _dueDate?.toLocal();
-                              final hasTime =
-                                  localDue != null &&
-                                  (localDue.hour != 0 || localDue.minute != 0);
-                              final label = localDue == null
-                                  ? 'Set date & time'
-                                  : DateFormat(
-                                          'EEE, MMM d',
-                                        ).format(_dueDate!.toLocal()) +
-                                        (hasTime
-                                            ? ' at ${formatTime12Hour(_dueDate!.toLocal())}'
-                                            : '');
+                  Flexible(
+                    child: Builder(
+                      builder: (context) {
+                        final localDue = _dueDate?.toLocal();
+                        final hasTime =
+                            localDue != null &&
+                            (localDue.hour != 0 || localDue.minute != 0);
+                        final label = localDue == null
+                            ? 'Set date & time'
+                            : DateFormat(
+                                    'EEE, MMM d',
+                                  ).format(_dueDate!.toLocal()) +
+                                  (hasTime
+                                      ? ' at ${formatTime12Hour(_dueDate!.toLocal())}'
+                                      : '');
 
-                              return SelectorPill(
-                                dense: false,
-                                isActive: _isDatePickerOpen,
-                                label: label,
-                                accentColor: listColor,
-                                onTap: () async {
-                                  setState(() => _isDatePickerOpen = true);
+                        return SelectorPill(
+                          dense: false,
+                          isActive: _isDatePickerOpen,
+                          label: label,
+                          accentColor: listColor,
+                          onTap: () async {
+                            setState(() => _isDatePickerOpen = true);
 
-                                  final initialDt = _dueDate != null && hasTime
-                                      ? _dueDate!.toLocal()
-                                      : (_dueDate != null
-                                            ? _dueDate!.toLocal().copyWith(
-                                                hour: 12,
-                                                minute: 0,
-                                              ) // default time 12:00 PM if none
-                                            : DateTime.now().toLocal());
+                            final initialDt = _dueDate != null && hasTime
+                                ? _dueDate!.toLocal()
+                                : (_dueDate != null
+                                      ? _dueDate!.toLocal().copyWith(
+                                          hour: 12,
+                                          minute: 0,
+                                        ) // default time 12:00 PM if none
+                                      : DateTime.now().toLocal());
 
-                                  final pickedDt =
-                                      await showContextualPopover<DateTime>(
-                                        context: context,
-                                        buttonContext: context,
-                                        width: 500,
-                                        height: 380,
-                                        accentColor: listColor,
-                                        builder: (ctx) => DateTimeSelectorPopover(
-                                          initialDateTime: initialDt,
-                                          accentColor: listColor,
-                                          optionalTime: true,
-                                          initialHasTime: hasTime,
-                                        ),
-                                      );
+                            final pickedDt =
+                                await showContextualPopover<DateTime>(
+                                  context: context,
+                                  buttonContext: context,
+                                  width: 500,
+                                  height: 380,
+                                  accentColor: listColor,
+                                  builder: (ctx) => DateTimeSelectorPopover(
+                                    initialDateTime: initialDt,
+                                    accentColor: listColor,
+                                    optionalTime: true,
+                                    initialHasTime: hasTime,
+                                  ),
+                                );
 
-                                  if (mounted)
-                                    setState(() => _isDatePickerOpen = false);
+                            if (mounted)
+                              setState(() => _isDatePickerOpen = false);
 
-                                  if (pickedDt != null) {
-                                    final newDue = pickedDt.toUtc();
-                                    final previousDue = widget.task.dueDate;
-                                    setState(() => _dueDate = newDue);
-                                    widget.onTaskOptimistic?.call(
-                                      widget.task.copyWith(
-                                        dueDate: newDue,
-                                        dueDateSetAt: utcNow(),
-                                      ),
-                                    );
-                                    unawaited(
-                                      _save(
-                                        dueDate: newDue,
-                                        reorderDueDate: previousDue != newDue,
-                                      ),
-                                    );
-                                  }
-                                },
+                            if (pickedDt != null) {
+                              final newDue = pickedDt.toUtc();
+                              final previousDue = widget.task.dueDate;
+                              setState(() => _dueDate = newDue);
+                              widget.onTaskOptimistic?.call(
+                                widget.task.copyWith(
+                                  dueDate: newDue,
+                                  dueDateSetAt: utcNow(),
+                                ),
                               );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Builder(
-                          builder: (buttonContext) => RepeatIconButton(
-                            rule: _recurrence,
-                            anchor: (_dueDate ?? DateTime.now()).toLocal(),
-                            accentColor: listColor,
-                            isOpen: _isRepeatPickerOpen,
-                            // A repeat is measured from the due date, so
-                            // without one there is nothing to repeat. The rule
-                            // itself is left alone: clearing a due date parks
-                            // the repeat rather than throwing it away, and
-                            // setting a due date again lights it back up.
-                            enabled: _dueDate != null,
-                            disabledTooltip: 'Set a due date to repeat',
-                            onPressed: () => _openRepeatPicker(buttonContext),
-                          ),
-                        ),
-                      ],
+                              unawaited(
+                                _save(
+                                  dueDate: newDue,
+                                  reorderDueDate: previousDue != newDue,
+                                ),
+                              );
+                            }
+                          },
+                        );
+                      },
                     ),
                   ),
-                  if (_dueDate != null) ...[
-                    const SizedBox(width: 8),
-                    GlassButton(
-                      dense: true,
-                      onPressed: _clearDueDate,
-                      label: 'Reset due date',
-                      textColor: listColor,
+                  const SizedBox(width: 4),
+                  Builder(
+                    builder: (buttonContext) => RepeatIconButton(
+                      rule: _recurrence,
+                      anchor: (_dueDate ?? DateTime.now()).toLocal(),
+                      accentColor: listColor,
+                      isOpen: _isRepeatPickerOpen,
+                      // A repeat is measured from the due date, so
+                      // without one there is nothing to repeat. The rule
+                      // itself is left alone: clearing a due date parks
+                      // the repeat rather than throwing it away, and
+                      // setting a due date again lights it back up.
+                      enabled: _dueDate != null,
+                      disabledTooltip: 'Set a due date to repeat',
+                      onPressed: () => _openRepeatPicker(buttonContext),
                     ),
-                  ],
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 120,
-                child: Listener(
-                  onPointerDown: (_) => _setNotesEditingFlag(true),
-                  child: LabeledTextField(
-                    label: 'Notes',
-                    controller: _notesController,
-                    focusNode: _notesFocusNode,
-                    expands: true,
-                    keyboardType: TextInputType.multiline,
-                    textInputAction: TextInputAction.newline,
-                    accentColor: listColor,
-                    dense: true,
-                    borderRadius: 12,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 15,
-                      vertical: 15,
-                    ),
-                    onChanged: _handleNotesChanged,
-                  ),
-                ),
+            ),
+            if (_dueDate != null) ...[
+              const SizedBox(width: 8),
+              GlassButton(
+                dense: true,
+                onPressed: _clearDueDate,
+                label: 'Reset due date',
+                textColor: listColor,
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Subtasks',
-                style: theme.textTheme.titleSmall?.copyWith(color: listColor),
-              ),
-              const SizedBox(height: 8),
-              // IntrinsicHeight so the "+" is exactly as tall as the field
-              // rather than approximately so: the two have unrelated padding
-              // rules, and stretch makes the shorter one follow the taller.
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: LabeledTextField(
-                        label: '',
-                        showLabel: false,
-                        hintText: 'Add subtask',
-                        controller: _subtaskController,
-                        focusNode: _subtaskFocusNode,
-                        accentColor: listColor,
-                        dense: true,
-                        borderRadius: 12,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 15,
-                          vertical: 8,
-                        ),
-                        onSubmitted: (_) => _addSubtask(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GlassButton(
-                      dense: true,
-                      onPressed: _addSubtask,
-                      color: listColor,
-                      iconColor: listColor,
-                      icon: const Icon(PhosphorIconsRegular.plus),
-                      tooltip: 'Add subtask',
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
+            ],
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: Listener(
+            onPointerDown: (_) => _setNotesEditingFlag(true),
+            child: TagHighlightedTextField(
+              label: 'Notes',
+              controller: _notesController,
+              focusNode: _notesFocusNode,
+              expands: true,
+              maxLines: null,
+              keyboardType: TextInputType.multiline,
+              accentColor: listColor,
+              style: theme.textTheme.bodySmall,
+              contentPadding: _fieldContentPadding,
+              onChanged: _handleNotesChanged,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Main tasks only — the design gives subtasks and notes no
+        // images, so the strip is not offered on the subtask rows below.
+        MediaGalleryStrip(
+          collection: FirestoreCollections.todoTasks,
+          documentId: widget.task.id,
+          accentColor: listColor,
+          emptyLabel: 'No images yet',
+        ),
+        const SizedBox(height: 16),
+        // IntrinsicHeight so the "+" is exactly as tall as the field
+        // rather than approximately so: the two have unrelated padding
+        // rules, and stretch makes the shorter one follow the taller.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Expanded(
-                child: ReorderableListView(
-                  key: _subtaskListKey,
-                  cacheExtent: 10000.0,
-                  buildDefaultDragHandles: false,
-                  proxyDecorator: (child, index, animation) {
-                    return ClampToTargetBounds(
-                      targetKey: _subtaskListKey,
-                      child: Material(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(14),
-                        clipBehavior: Clip.antiAlias,
-                        child: child,
-                      ),
-                    );
-                  },
-                  onReorderItem: _reorderSubtasks,
-                  children: [
-                    for (var i = 0; i < _subtasks.length; i++)
-                      ReorderableDragStartListener(
-                        key: ValueKey(_subtasks[i].id),
-                        index: i,
-                        child: _SubtaskRow(
-                          subtask: _subtasks[i],
-                          listColor: listColor,
-                          onToggle: (completed) =>
-                              _toggleSubtask(_subtasks[i], completed),
-                          onRename: (title) =>
-                              _renameSubtask(_subtasks[i], title),
-                          onDelete: () => _deleteSubtask(_subtasks[i]),
-                          onPromote: () => _promoteSubtask(_subtasks[i]),
-                          onSubmitRename: () {
-                            _subtaskFocusNode.requestFocus();
-                          },
-                        ),
-                      ),
-                  ],
+                child: LabeledTextField(
+                  label: '',
+                  showLabel: false,
+                  hintText: 'Add subtask',
+                  controller: _subtaskController,
+                  focusNode: _subtaskFocusNode,
+                  accentColor: listColor,
+                  dense: true,
+                  contentPadding: _fieldContentPadding,
+                  onSubmitted: (_) => _addSubtask(),
                 ),
               ),
-              const Divider(height: 24),
-              Text(
-                'Created ${DateFormat.yMMMd().add_jm().format(widget.task.createdAt.toLocal())}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+              const SizedBox(width: 8),
+              GlassButton(
+                dense: true,
+                onPressed: _addSubtask,
+                color: listColor,
+                iconColor: listColor,
+                icon: const Icon(PhosphorIconsRegular.plus),
+                tooltip: 'Add subtask',
               ),
-              const SizedBox(height: 8),
-              GlassButton(onPressed: _close, label: 'Save', color: listColor),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildSubtaskList(Color listColor) {
+    // The panel holds other scrollables that share one page-storage slot
+    // with this list — see [ScrollOffsetIsolate].
+    return ScrollOffsetIsolate(
+      child: ReorderableListView(
+        key: _subtaskListKey,
+        // Its own, because it sits outside the scroll view's padding: the
+        // rows line up with the fields above them.
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        cacheExtent: 10000.0,
+        buildDefaultDragHandles: false,
+        proxyDecorator: (child, index, animation) {
+          return ClampToTargetBounds(
+            targetKey: _subtaskListKey,
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: child,
+            ),
+          );
+        },
+        onReorderItem: _reorderSubtasks,
+        children: [
+          for (var i = 0; i < _subtasks.length; i++)
+            ReorderableDragStartListener(
+              key: ValueKey(_subtasks[i].id),
+              index: i,
+              child: _SubtaskRow(
+                subtask: _subtasks[i],
+                listColor: listColor,
+                onToggle: (completed) =>
+                    _toggleSubtask(_subtasks[i], completed),
+                onRename: (title) => _renameSubtask(_subtasks[i], title),
+                onDelete: () => _deleteSubtask(_subtasks[i]),
+                onPromote: () => _promoteSubtask(_subtasks[i]),
+                onSubmitRename: () {
+                  _subtaskFocusNode.requestFocus();
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Close, and nothing else, matching the Jobs and Rankings editors.
+///
+/// The title is gone because the panel edits whatever row is selected, and the
+/// star and trash with it: both are on the row's own context menu, where an
+/// action on the task belongs, rather than one mis-aim from the close button.
+class _PanelHeader extends StatelessWidget {
+  const _PanelHeader({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      child: Row(
+        children: [
+          const Spacer(),
+          IconButton(
+            onPressed: onClose,
+            tooltip: 'Close',
+            iconSize: 16,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(PhosphorIconsRegular.x),
+          ),
+        ],
       ),
     );
   }
@@ -1326,6 +1483,8 @@ class _SubtaskRow extends StatefulWidget {
 
 class _SubtaskRowState extends State<_SubtaskRow>
     with SingleTickerProviderStateMixin {
+  final _menuKey = GlobalKey<ContextMenuRegionState>();
+  final _moreKey = GlobalKey();
   late final AnimationController _controller;
   late final Animation<double> _strikeProgress;
   late final TextEditingController _editController;
@@ -1433,6 +1592,30 @@ class _SubtaskRowState extends State<_SubtaskRow>
     }
   }
 
+  List<ContextMenuItem> _menuItems() => [
+    ContextMenuItem(
+      label: 'Promote to task',
+      icon: PhosphorIconsRegular.arrowLineUp,
+      onTap: widget.onPromote,
+    ),
+    ContextMenuItem(
+      label: 'Delete subtask',
+      icon: PhosphorIconsRegular.trash,
+      isDestructive: true,
+      onTap: widget.onDelete,
+    ),
+  ];
+
+  /// Opens the row's context menu from the "⋮" button, so the button and a
+  /// right-click reach the same menu instead of two lookalikes.
+  void _openMenu() {
+    final box = _moreKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    _menuKey.currentState?.openMenuAt(
+      box.localToGlobal(box.size.centerLeft(Offset.zero)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strikeColor = Theme.of(
@@ -1442,7 +1625,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
       color: _displayCompleted ? strikeColor : null,
     );
 
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -1571,8 +1754,11 @@ class _SubtaskRowState extends State<_SubtaskRow>
               },
             ),
           ),
-          PopupMenuButton<_SubtaskAction>(
+          IconButton(
+            key: _moreKey,
+            onPressed: _openMenu,
             padding: EdgeInsets.zero,
+            tooltip: 'More actions',
             icon: Icon(
               PhosphorIconsBold.dotsThreeVertical,
               size: 18,
@@ -1580,34 +1766,18 @@ class _SubtaskRowState extends State<_SubtaskRow>
                 context,
               ).colorScheme.onSurface.withValues(alpha: 0.72),
             ),
-            onSelected: (action) {
-              switch (action) {
-                case _SubtaskAction.promote:
-                  widget.onPromote();
-                case _SubtaskAction.delete:
-                  widget.onDelete();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: _SubtaskAction.promote,
-                child: Text('Promote to task'),
-              ),
-              PopupMenuItem(
-                value: _SubtaskAction.delete,
-                child: Text('Delete subtask'),
-              ),
-            ],
           ),
         ],
       ),
     );
+
+    return ContextMenuRegion(
+      key: _menuKey,
+      itemsBuilder: _menuItems,
+      child: row,
+    );
   }
 }
-
-enum _SubtaskAction { promote, delete }
-
-enum _HeaderAction { star, delete, close }
 
 class _MultilineStrikePainter extends CustomPainter {
   _MultilineStrikePainter({

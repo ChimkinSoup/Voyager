@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 
@@ -280,4 +281,90 @@ void main() {
       expect(merged.name, 'Local name');
     },
   );
+
+  group('job application seasons', () {
+    final now = DateTime.utc(2026, 8, 20);
+
+    test('a document from a device that still writes seasonId reads as a '
+        'one-entry list', () {
+      // Back-compat: the other device has not been updated yet, and its
+      // documents carry the single `seasonId` this field replaced.
+      final merged = mergeJobApplicationFromRemote({
+        'company': 'Tesla',
+        'title': 'SWE Intern',
+        'status': 'Applied',
+        'dateApplied': now.toIso8601String(),
+        'seasonId': 'fall',
+        'createdAt': now.toIso8601String(),
+        'updatedAt': now.toIso8601String(),
+        'version': 1,
+      }, 'app-1');
+
+      expect(merged.seasonIds, ['fall']);
+    });
+
+    test('seasonIds wins when a document carries both', () {
+      final merged = mergeJobApplicationFromRemote({
+        'company': 'Tesla',
+        'title': 'SWE Intern',
+        'status': 'Applied',
+        'dateApplied': now.toIso8601String(),
+        'seasonId': 'fall',
+        'seasonIds': ['fall', 'spring'],
+        'createdAt': now.toIso8601String(),
+        'updatedAt': now.toIso8601String(),
+        'version': 1,
+      }, 'app-1');
+
+      expect(merged.seasonIds, ['fall', 'spring']);
+    });
+
+    test('an empty list is taken as written, not inherited from local', () {
+      // Taking an application out of every season is expressed as the list
+      // going empty; falling back to the local value would make it impossible
+      // to sync.
+      final local = JobApplication(
+        id: 'app-1',
+        company: 'Tesla',
+        title: 'SWE Intern',
+        status: 'Applied',
+        dateApplied: now,
+        seasonIds: const ['fall'],
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+      );
+      final merged = mergeJobApplicationFromRemote({
+        'company': 'Tesla',
+        'title': 'SWE Intern',
+        'status': 'Applied',
+        'dateApplied': now.toIso8601String(),
+        'seasonIds': const <String>[],
+        'createdAt': now.toIso8601String(),
+        'updatedAt': DateTime.utc(2026, 9).toIso8601String(),
+        'version': 2,
+      }, 'app-1', local: local);
+
+      expect(merged.seasonIds, isEmpty);
+    });
+
+    test('the list round-trips through the write side', () {
+      final application = JobApplication(
+        id: 'app-1',
+        company: 'Tesla',
+        title: 'SWE Intern',
+        status: 'Applied',
+        dateApplied: now,
+        seasonIds: const ['fall', 'spring'],
+        createdAt: now,
+        updatedAt: now,
+      );
+      final document = jobApplicationToFirestore(application);
+      expect(document['seasonIds'], ['fall', 'spring']);
+      expect(
+        mergeJobApplicationFromRemote(document, 'app-1').seasonIds,
+        ['fall', 'spring'],
+      );
+    });
+  });
 }

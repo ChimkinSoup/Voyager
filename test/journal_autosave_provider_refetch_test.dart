@@ -130,6 +130,10 @@ Future<void> _settleSave(WidgetTester tester) async {
 
 Finder get _bodyField => find.widgetWithText(TextField, 'Start writing...');
 
+/// The title box, found by the seeded entry's title — the label itself is
+/// painted into the field's border, not a [Text] widget.
+Finder get _titleField => find.widgetWithText(TextField, 'Seeded entry');
+
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
@@ -167,6 +171,57 @@ void main() {
           'listEntries=${repo.listEntriesCalls} '
           'getAllEntries=${repo.getAllEntriesCalls} '
           'countEntries=${repo.countEntriesCalls}.',
+    );
+
+    await disposeJournalPage(tester);
+  });
+
+  testWidgets('Enter in the title moves to the body without reloading', (
+    tester,
+  ) async {
+    late _CountingJournalRepository repo;
+    final db = await pumpJournalPage(
+      tester,
+      extraOverrides: (db) => [
+        journalRepositoryProvider.overrideWith((ref) {
+          return repo = _CountingJournalRepository(DriftJournalRepository(db));
+        }),
+      ],
+    );
+
+    await tester.tap(_titleField);
+    await tester.pump();
+    await tester.enterText(_titleField, 'Renamed');
+    await tester.pump();
+    repo.resetCounts();
+
+    // Enter (TextInputAction.next) saves the title and hands focus to the body.
+    // Focus never leaves the entry, so nothing that reads the whole table has
+    // anything new to learn — the blur that follows used to fire a second,
+    // concurrent flush that swept every list on the same frame.
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await _settleSave(tester);
+
+    expect(
+      repo.tableScans,
+      0,
+      reason:
+          'moving from the title to the body of the same entry is not a '
+          'commitment point: the row on screen already follows the title live, '
+          'and the body blur refreshes the lists later. Saw '
+          'listEntries=${repo.listEntriesCalls} '
+          'getAllEntries=${repo.getAllEntriesCalls} '
+          'countEntries=${repo.countEntriesCalls}.',
+    );
+    expect(
+      tester.widget<TextField>(_bodyField).focusNode?.hasFocus,
+      isTrue,
+      reason: 'Enter should still hand focus to the body',
+    );
+    expect(
+      (await DriftJournalRepository(db).getEntry('harness-entry'))?.title,
+      'Renamed',
+      reason: 'skipping the refresh must not skip the save',
     );
 
     await disposeJournalPage(tester);

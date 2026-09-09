@@ -31,11 +31,13 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/weather_service.dart';
 
@@ -49,11 +51,13 @@ class RemoteSyncService {
     required StudyRepository studyRepository,
     required WorkoutRepository workoutRepository,
     required JobRepository jobRepository,
+    required RankingRepository rankingRepository,
     required CalendarRepository calendarRepository,
     required TrackerRepository trackerRepository,
     required FinanceRepository financeRepository,
     required NotificationRepository notificationRepository,
     required BucketListRepository bucketListRepository,
+    required MediaRepository mediaRepository,
     required SettingsRepository settingsRepository,
     required WeatherService weatherService,
     required SyncEngine syncEngine,
@@ -73,11 +77,13 @@ class RemoteSyncService {
        _studyRepository = studyRepository,
        _workoutRepository = workoutRepository,
        _jobRepository = jobRepository,
+       _rankingRepository = rankingRepository,
        _calendarRepository = calendarRepository,
        _trackerRepository = trackerRepository,
        _financeRepository = financeRepository,
        _notificationRepository = notificationRepository,
        _bucketListRepository = bucketListRepository,
+       _mediaRepository = mediaRepository,
        _settingsRepository = settingsRepository,
        _weatherService = weatherService,
        _syncEngine = syncEngine,
@@ -97,11 +103,13 @@ class RemoteSyncService {
   final StudyRepository _studyRepository;
   final WorkoutRepository _workoutRepository;
   final JobRepository _jobRepository;
+  final RankingRepository _rankingRepository;
   final CalendarRepository _calendarRepository;
   final TrackerRepository _trackerRepository;
   final FinanceRepository _financeRepository;
   final NotificationRepository _notificationRepository;
   final BucketListRepository _bucketListRepository;
+  final MediaRepository _mediaRepository;
   final SettingsRepository _settingsRepository;
   final WeatherService _weatherService;
   final SyncEngine _syncEngine;
@@ -1065,6 +1073,16 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.mediaAssets:
+        return pullMediaAssets(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.mediaReferences:
+        return pullMediaReferences(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -1137,6 +1155,21 @@ class RemoteSyncService {
         );
       case FirestoreCollections.jobSeasons:
         return pullJobSeasons(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.rankingCategories:
+        return pullRankingCategories(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.rankingParents:
+        return pullRankingParents(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.rankingChildren:
+        return pullRankingChildren(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -1227,6 +1260,11 @@ class RemoteSyncService {
         );
       case FirestoreCollections.customWords:
         return pullCustomWords(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.flaggedWords:
+        return pullFlaggedWords(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -1522,6 +1560,103 @@ class RemoteSyncService {
     );
   }
 
+  Future<bool> pullRankingCategories({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.rankingCategories,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _rankingRepository.getCategory(id);
+        final merged = mergeRankingCategoryFromRemote(data, id, local: local);
+        await _rankingRepository.upsertCategory(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullRankingParents({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.rankingParents,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _rankingRepository.getParent(id);
+        final merged = mergeRankingParentFromRemote(data, id, local: local);
+        await _rankingRepository.upsertParent(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullRankingChildren({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.rankingChildren,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _rankingRepository.getChild(id);
+        final merged = mergeRankingChildFromRemote(data, id, local: local);
+        await _rankingRepository.upsertChild(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullMediaAssets({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.mediaAssets,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _mediaRepository.getAsset(id);
+        final merged = mergeMediaAssetFromRemote(data, id, local: local);
+        await _mediaRepository.upsertAsset(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullMediaReferences({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.mediaReferences,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _mediaRepository.getReference(id);
+        final merged = mergeMediaReferenceFromRemote(data, id, local: local);
+        await _mediaRepository.upsertReference(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
   Future<bool> pullStudyFolders({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
@@ -1583,8 +1718,12 @@ class RemoteSyncService {
       documentData: documentData,
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
-        final merged = mergeStudyReviewLogFromRemote(data, id);
-        await _studyRepository.logReview(merged);
+        // Resolved against the local row: a log row can now be taken back, and
+        // without the local copy a stale remote revision would un-delete a
+        // grade the user undid here.
+        final local = await _studyRepository.getReviewLog(id);
+        final merged = mergeStudyReviewLogFromRemote(data, id, local: local);
+        await _studyRepository.logReview(merged, recordLocalActivity: false);
       },
     );
   }
@@ -2040,6 +2179,36 @@ class RemoteSyncService {
     );
   }
 
+  void pushMediaAsset(MediaAsset asset) {
+    cancelDocument(FirestoreCollections.mediaAssets, asset.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.mediaAssets,
+        asset.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.mediaAssets,
+          localId: asset.id,
+          payload: mediaAssetToFirestore(asset),
+        ),
+      ),
+    );
+  }
+
+  void pushMediaReference(MediaReference reference) {
+    cancelDocument(FirestoreCollections.mediaReferences, reference.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.mediaReferences,
+        reference.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.mediaReferences,
+          localId: reference.id,
+          payload: mediaReferenceToFirestore(reference),
+        ),
+      ),
+    );
+  }
+
   void pushStudyFolder(StudyFolder folder) {
     cancelDocument(FirestoreCollections.studyFolders, folder.id);
     unawaited(
@@ -2287,6 +2456,126 @@ class RemoteSyncService {
     );
   }
 
+  void pushRankingCategory(RankingCategory category) {
+    cancelDocument(FirestoreCollections.rankingCategories, category.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.rankingCategories,
+        category.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.rankingCategories,
+          localId: category.id,
+          payload: rankingCategoryToFirestore(category),
+        ),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushRankingCategory]: one drag in the category
+  /// strip renumbers every category it moved past.
+  Future<void> pushRankingCategoriesBatch(
+    List<RankingCategory> categories,
+  ) async {
+    if (categories.isEmpty) return;
+    for (final category in categories) {
+      cancelDocument(FirestoreCollections.rankingCategories, category.id);
+    }
+    final payloads = {
+      for (final category in categories)
+        category.id: rankingCategoryToFirestore(category),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(
+        FirestoreCollections.rankingCategories,
+        entry.key,
+        entry.value,
+      );
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.rankingCategories,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
+    );
+  }
+
+  void pushRankingParent(RankingParent parent) {
+    cancelDocument(FirestoreCollections.rankingParents, parent.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.rankingParents,
+        parent.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.rankingParents,
+          localId: parent.id,
+          payload: rankingParentToFirestore(parent),
+        ),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushRankingParent]. A queue drag renumbers a run
+  /// of entries, and deleting a category tombstones every entry in it at once.
+  Future<void> pushRankingParentsBatch(List<RankingParent> parents) async {
+    if (parents.isEmpty) return;
+    for (final parent in parents) {
+      cancelDocument(FirestoreCollections.rankingParents, parent.id);
+    }
+    final payloads = {
+      for (final parent in parents) parent.id: rankingParentToFirestore(parent),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(
+        FirestoreCollections.rankingParents,
+        entry.key,
+        entry.value,
+      );
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.rankingParents,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
+    );
+  }
+
+  void pushRankingChild(RankingChild child) {
+    cancelDocument(FirestoreCollections.rankingChildren, child.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.rankingChildren,
+        child.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.rankingChildren,
+          localId: child.id,
+          payload: rankingChildToFirestore(child),
+        ),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushRankingChild]: a child reorder, and the
+  /// cascade that goes with deleting the parent they hang off.
+  Future<void> pushRankingChildrenBatch(List<RankingChild> children) async {
+    if (children.isEmpty) return;
+    for (final child in children) {
+      cancelDocument(FirestoreCollections.rankingChildren, child.id);
+    }
+    final payloads = {
+      for (final child in children) child.id: rankingChildToFirestore(child),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(
+        FirestoreCollections.rankingChildren,
+        entry.key,
+        entry.value,
+      );
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.rankingChildren,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
+    );
+  }
+
   void pushJobCompany(JobCompany company) {
     cancelDocument(FirestoreCollections.jobCompanies, company.id);
     unawaited(
@@ -2351,6 +2640,26 @@ class RemoteSyncService {
           payload: jobSeasonToFirestore(season),
         ),
       ),
+    );
+  }
+
+  /// Batched counterpart to [pushJobSeason]: one drag in the season list
+  /// renumbers every season it moved past.
+  Future<void> pushJobSeasonsBatch(List<JobSeason> seasons) async {
+    if (seasons.isEmpty) return;
+    for (final season in seasons) {
+      cancelDocument(FirestoreCollections.jobSeasons, season.id);
+    }
+    final payloads = {
+      for (final season in seasons) season.id: jobSeasonToFirestore(season),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(FirestoreCollections.jobSeasons, entry.key, entry.value);
+    }
+    await _syncEngine.syncDocumentsImmediately(
+      collection: FirestoreCollections.jobSeasons,
+      payloadsByDocumentId: payloads,
+      logOperation: false,
     );
   }
 
@@ -3103,6 +3412,21 @@ class RemoteSyncService {
       case FirestoreCollections.jobSeasons:
         if (record is! JobSeason) return null;
         return (id: record.id, payload: jobSeasonToFirestore(record));
+      case FirestoreCollections.rankingCategories:
+        if (record is! RankingCategory) return null;
+        return (id: record.id, payload: rankingCategoryToFirestore(record));
+      case FirestoreCollections.rankingParents:
+        if (record is! RankingParent) return null;
+        return (id: record.id, payload: rankingParentToFirestore(record));
+      case FirestoreCollections.rankingChildren:
+        if (record is! RankingChild) return null;
+        return (id: record.id, payload: rankingChildToFirestore(record));
+      case FirestoreCollections.mediaAssets:
+        if (record is! MediaAsset) return null;
+        return (id: record.id, payload: mediaAssetToFirestore(record));
+      case FirestoreCollections.mediaReferences:
+        if (record is! MediaReference) return null;
+        return (id: record.id, payload: mediaReferenceToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -3160,6 +3484,9 @@ class RemoteSyncService {
       case FirestoreCollections.customWords:
         if (record is! CustomWord) return null;
         return (id: record.word, payload: customWordToFirestore(record));
+      case FirestoreCollections.flaggedWords:
+        if (record is! FlaggedWord) return null;
+        return (id: record.word, payload: flaggedWordToFirestore(record));
     }
     return null;
   }
@@ -3530,6 +3857,25 @@ class RemoteSyncService {
     );
   }
 
+  Future<bool> pullFlaggedWords({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.flaggedWords,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (word, data, {required fromCrdt}) async {
+        final local = await _settingsRepository.getFlaggedWordRecord(word);
+        await _settingsRepository.upsertFlaggedWord(
+          mergeFlaggedWordFromRemote(data, word, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
   Future<void> pushSettings(AppSettings settings) async {
     try {
       // Merged into the existing `settings/app` document rather than
@@ -3686,6 +4032,10 @@ class RemoteSyncService {
       FirestoreCollections.customWords,
       await _settingsRepository.getCustomWordRecords(),
     );
+    await pushRecords(
+      FirestoreCollections.flaggedWords,
+      await _settingsRepository.getFlaggedWordRecords(),
+    );
     await pushSettings(await _settingsRepository.getSettings());
 
     // Recorded last, and only on a clean run: an interrupted backfill should
@@ -3787,8 +4137,12 @@ class LiveSyncController {
     FirestoreCollections.jobCompanies,
     FirestoreCollections.jobCategories,
     FirestoreCollections.jobSeasons,
+    FirestoreCollections.rankingCategories,
+    FirestoreCollections.rankingParents,
+    FirestoreCollections.rankingChildren,
     FirestoreCollections.tagColors,
     FirestoreCollections.customWords,
+    FirestoreCollections.flaggedWords,
     FirestoreCollections.settings,
   ];
 

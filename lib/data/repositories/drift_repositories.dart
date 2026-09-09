@@ -21,7 +21,9 @@ import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
@@ -1512,6 +1514,14 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
+  Future<FinancialTransaction?> getTransaction(String id) async {
+    final row = await (_db.select(
+      _db.transactionsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _map(row);
+  }
+
+  @override
   Future<void> upsertTransaction(
     FinancialTransaction transaction, {
     bool recordLocalActivity = true,
@@ -1569,6 +1579,14 @@ class DriftFinanceRepository implements FinanceRepository {
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
     );
     return subscriptions;
+  }
+
+  @override
+  Future<Subscription?> getSubscription(String id) async {
+    final row = await (_db.select(
+      _db.subscriptionsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapSubscription(row);
   }
 
   @override
@@ -2091,6 +2109,383 @@ class DriftFinanceRepository implements FinanceRepository {
   );
 }
 
+class DriftMediaRepository implements MediaRepository {
+  DriftMediaRepository(this._db, {SyncActivityController? syncActivity})
+    : _syncActivity = syncActivity;
+
+  final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<List<MediaAsset>> listAssets({bool includeDeleted = false}) async {
+    final rows = await _db.select(_db.mediaAssetsTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapAsset)
+        .toList();
+  }
+
+  @override
+  Future<MediaAsset?> getAsset(String id) async {
+    final row = await (_db.select(
+      _db.mediaAssetsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapAsset(row);
+  }
+
+  @override
+  Future<Map<String, MediaAsset>> getAssets(Iterable<String> ids) async {
+    final wanted = ids.toSet();
+    if (wanted.isEmpty) return const {};
+    final rows = await (_db.select(
+      _db.mediaAssetsTable,
+    )..where((t) => t.id.isIn(wanted))).get();
+    return {for (final row in rows) row.id: _mapAsset(row)};
+  }
+
+  @override
+  Future<MediaAsset?> findAssetByContentHash(String contentHash) async {
+    // Tombstoned rows are deliberately in scope: re-pasting bytes the user
+    // deleted last week should land back on the asset that already holds
+    // them rather than minting a second row for the same file on disk. The
+    // caller revives it — see MediaService.attachBytes.
+    final rows =
+        await (_db.select(_db.mediaAssetsTable)
+              ..where((t) => t.contentHash.equals(contentHash))
+              ..limit(1))
+            .get();
+    return rows.isEmpty ? null : _mapAsset(rows.first);
+  }
+
+  @override
+  Future<void> upsertAsset(
+    MediaAsset asset, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.mediaAssetsTable)
+        .insertOnConflictUpdate(
+          MediaAssetsTableCompanion(
+            id: Value(asset.id),
+            contentHash: Value(asset.contentHash),
+            byteSize: Value(asset.byteSize),
+            mimeType: Value(asset.mimeType),
+            width: Value(asset.width),
+            height: Value(asset.height),
+            uploadState: Value(asset.uploadState.name),
+            downloadState: Value(asset.downloadState.name),
+            failureReason: Value(asset.failureReason),
+            unreferencedAt: Value(asset.unreferencedAt),
+            createdAt: Value(asset.createdAt),
+            updatedAt: Value(asset.updatedAt),
+            version: Value(asset.version),
+            deletedAt: Value(asset.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.mediaAssets);
+    }
+  }
+
+  @override
+  Future<void> softDeleteAsset(String id) async {
+    await (_db.update(
+      _db.mediaAssetsTable,
+    )..where((t) => t.id.equals(id))).write(
+      MediaAssetsTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.mediaAssets);
+  }
+
+  @override
+  Future<List<MediaAsset>> listAssetsByUploadState(
+    Set<MediaUploadState> states,
+  ) async {
+    if (states.isEmpty) return const [];
+    final names = [for (final state in states) state.name];
+    final rows =
+        await (_db.select(_db.mediaAssetsTable)
+              ..where((t) => t.uploadState.isIn(names) & t.deletedAt.isNull()))
+            .get();
+    return rows.map(_mapAsset).toList();
+  }
+
+  @override
+  Future<List<MediaAsset>> listAssetsByDownloadState(
+    Set<MediaDownloadState> states,
+  ) async {
+    if (states.isEmpty) return const [];
+    final names = [for (final state in states) state.name];
+    final rows =
+        await (_db.select(_db.mediaAssetsTable)
+              ..where((t) => t.downloadState.isIn(names) & t.deletedAt.isNull()))
+            .get();
+    return rows.map(_mapAsset).toList();
+  }
+
+  @override
+  Future<List<MediaReference>> listReferences({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.mediaReferencesTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapReference)
+        .toList();
+  }
+
+  @override
+  Future<List<MediaReference>> listReferencesForOwner(
+    String collection,
+    String documentId, {
+    MediaFacet? facet,
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.mediaReferencesTable)..where(
+              (t) =>
+                  t.collection.equals(collection) &
+                  t.documentId.equals(documentId),
+            ))
+            .get();
+    final filtered = rows.where(
+      (r) =>
+          (includeDeleted || r.deletedAt == null) &&
+          (facet == null || r.facet == facet.name),
+    );
+    final references = filtered.map(_mapReference).toList()
+      ..sort((a, b) {
+        final bySortOrder = a.sortOrder.compareTo(b.sortOrder);
+        // Two references can share a sort order after an offline add on each
+        // of two devices. Falling through to creation time keeps the strip's
+        // order stable across rebuilds instead of letting it depend on
+        // whatever order SQLite happened to return.
+        return bySortOrder != 0
+            ? bySortOrder
+            : a.createdAt.compareTo(b.createdAt);
+      });
+    return references;
+  }
+
+  @override
+  Future<List<MediaReference>> listReferencesForAsset(String mediaId) async {
+    final rows =
+        await (_db.select(_db.mediaReferencesTable)..where(
+              (t) => t.mediaId.equals(mediaId) & t.deletedAt.isNull(),
+            ))
+            .get();
+    return rows.map(_mapReference).toList();
+  }
+
+  @override
+  Future<MediaReference?> getReference(String id) async {
+    final row = await (_db.select(
+      _db.mediaReferencesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapReference(row);
+  }
+
+  @override
+  Future<void> upsertReference(
+    MediaReference reference, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.mediaReferencesTable)
+        .insertOnConflictUpdate(
+          MediaReferencesTableCompanion(
+            id: Value(reference.id),
+            mediaId: Value(reference.mediaId),
+            collection: Value(reference.collection),
+            documentId: Value(reference.documentId),
+            facet: Value(reference.facet.name),
+            sortOrder: Value(reference.sortOrder),
+            displayWidthPx: Value(reference.displayWidthPx),
+            createdAt: Value(reference.createdAt),
+            updatedAt: Value(reference.updatedAt),
+            version: Value(reference.version),
+            deletedAt: Value(reference.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.mediaReferences);
+    }
+  }
+
+  @override
+  Future<void> softDeleteReference(String id) async {
+    await (_db.update(
+      _db.mediaReferencesTable,
+    )..where((t) => t.id.equals(id))).write(
+      MediaReferencesTableCompanion(
+        deletedAt: Value(utcNow()),
+        updatedAt: Value(utcNow()),
+      ),
+    );
+    _syncActivity?.recordLocalSave(FirestoreCollections.mediaReferences);
+  }
+
+  @override
+  Future<List<MediaReference>> softDeleteReferencesForOwner(
+    String collection,
+    String documentId,
+  ) async {
+    final live = await listReferencesForOwner(collection, documentId);
+    if (live.isEmpty) return const [];
+    final now = utcNow();
+    // Version-bumped, not just stamped: the tombstone has to beat the live
+    // row it replaces when the two meet on another device, and
+    // `remoteVersionWins` compares versions before timestamps.
+    final tombstones = [
+      for (final reference in live)
+        reference.copyWith(deletedAt: now, updatedAt: now, bumpVersion: true),
+    ];
+    await _db.batch((batch) {
+      for (final reference in tombstones) {
+        batch.update(
+          _db.mediaReferencesTable,
+          MediaReferencesTableCompanion(
+            deletedAt: Value(now),
+            updatedAt: Value(now),
+            version: Value(reference.version),
+          ),
+          where: (t) => t.id.equals(reference.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.mediaReferences);
+    return tombstones;
+  }
+
+  @override
+  Future<List<MediaReference>> restoreReferencesForOwner(
+    String collection,
+    String documentId,
+    DateTime deletedAt,
+  ) async {
+    final all = await listReferencesForOwner(
+      collection,
+      documentId,
+      includeDeleted: true,
+    );
+    final revived = [
+      for (final reference in all)
+        if (reference.deletedAt == deletedAt)
+          reference.copyWith(clearDeletedAt: true, bumpVersion: true),
+    ];
+    if (revived.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final reference in revived) {
+        batch.update(
+          _db.mediaReferencesTable,
+          MediaReferencesTableCompanion(
+            deletedAt: const Value(null),
+            updatedAt: Value(reference.updatedAt),
+            version: Value(reference.version),
+          ),
+          where: (t) => t.id.equals(reference.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.mediaReferences);
+    return revived;
+  }
+
+  @override
+  Future<List<MediaAsset>> purgeExpiredDeleted(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
+
+    // References first, so that an asset whose last reference expires in this
+    // same pass is seen as unreferenced by the sweep below rather than
+    // surviving until the next launch.
+    await (_db.delete(_db.mediaReferencesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+
+    // Both clocks purge on the same rule: an image the user deleted and an
+    // image nothing points at any more have each been unwanted for 30 days.
+    final expired =
+        await (_db.select(_db.mediaAssetsTable)..where(
+              (t) =>
+                  t.deletedAt.isSmallerOrEqualValue(cutoff) |
+                  t.unreferencedAt.isSmallerOrEqualValue(cutoff),
+            ))
+            .get();
+    if (expired.isEmpty) return const [];
+
+    final ids = [for (final row in expired) row.id];
+    await (_db.delete(
+      _db.mediaAssetsTable,
+    )..where((t) => t.id.isIn(ids))).go();
+    return expired.map(_mapAsset).toList();
+  }
+
+  @override
+  Future<List<MediaAsset>> getAllAssets({bool includeDeleted = true}) {
+    return listAssets(includeDeleted: includeDeleted);
+  }
+
+  @override
+  Future<List<MediaReference>> getAllReferences({bool includeDeleted = true}) {
+    return listReferences(includeDeleted: includeDeleted);
+  }
+}
+
+MediaAsset _mapAsset(MediaAssetsTableData row) => MediaAsset(
+  id: row.id,
+  contentHash: row.contentHash,
+  byteSize: row.byteSize,
+  mimeType: row.mimeType,
+  width: row.width,
+  height: row.height,
+  uploadState: _enumByName(
+    MediaUploadState.values,
+    row.uploadState,
+    MediaUploadState.localOnly,
+  ),
+  downloadState: _enumByName(
+    MediaDownloadState.values,
+    row.downloadState,
+    MediaDownloadState.missing,
+  ),
+  failureReason: row.failureReason,
+  unreferencedAt: row.unreferencedAt,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
+
+MediaReference _mapReference(MediaReferencesTableData row) => MediaReference(
+  id: row.id,
+  mediaId: row.mediaId,
+  collection: row.collection,
+  documentId: row.documentId,
+  facet: _enumByName(MediaFacet.values, row.facet, MediaFacet.gallery),
+  sortOrder: row.sortOrder,
+  displayWidthPx: row.displayWidthPx,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  version: row.version,
+  deletedAt: row.deletedAt,
+);
+
+/// `values.byName` but total.
+///
+/// These columns hold enum names written by whatever version of the app last
+/// touched the row, and a newer device syncing down a state this build has
+/// never heard of must not take the whole media table with it.
+T _enumByName<T extends Enum>(List<T> values, String name, T fallback) {
+  for (final value in values) {
+    if (value.name == name) return value;
+  }
+  return fallback;
+}
+
 class DriftSettingsRepository implements SettingsRepository {
   DriftSettingsRepository(this._db, {SyncedWriteNotifier? syncedWrites})
     : _syncedWrites = syncedWrites;
@@ -2140,7 +2535,11 @@ class DriftSettingsRepository implements SettingsRepository {
       hideCompletedTasks: row.hideCompletedTasks,
       vimModeEnabled: row.vimModeEnabled,
       snippetsEnabled: row.snippetsEnabled,
+      autocorrectEnabled: row.autocorrectEnabled,
       capsLockIndicatorEnabled: row.capsLockIndicatorEnabled,
+      mediaRemoteUploadsEnabled: row.mediaRemoteUploadsEnabled,
+      mediaRemoteDownloadsEnabled: row.mediaRemoteDownloadsEnabled,
+      mediaBackgroundPrefetchEnabled: row.mediaBackgroundPrefetchEnabled,
       snippetExpandKey: SnippetExpandKey.values.byName(row.snippetExpandKey),
       snippets: row.snippetsJson == null
           ? const []
@@ -2148,10 +2547,12 @@ class DriftSettingsRepository implements SettingsRepository {
       deviceId: row.deviceId,
       lastViewedJournalId: row.lastViewedJournalId,
       lastViewedTodoListId: row.lastViewedTodoListId,
+      lastViewedCalendarId: row.lastViewedCalendarId,
       defaultJournalId: row.defaultJournalId,
       defaultTodoListId: row.defaultTodoListId,
       journalShowAllEntries: row.journalShowAllEntries,
       todoShowAllTasks: row.todoShowAllTasks,
+      calendarShowAllCalendars: row.calendarShowAllCalendars,
       weatherLocationLabel: row.weatherLocationLabel,
       weatherLat: row.weatherLat,
       weatherLon: row.weatherLon,
@@ -2223,6 +2624,15 @@ class DriftSettingsRepository implements SettingsRepository {
           ? const []
           : List<String>.from(jsonDecode(row.jobsHiddenColumnsJson!) as List),
       jobsIncludeArchived: row.jobsIncludeArchived,
+      rankingsCollapsedQueueCategories:
+          row.rankingsCollapsedQueueCategoriesJson == null
+          ? const []
+          : List<String>.from(
+              jsonDecode(row.rankingsCollapsedQueueCategoriesJson!) as List,
+            ),
+      jobProfileLinkedInUrl: row.jobProfileLinkedInUrl,
+      jobProfileGitHubUrl: row.jobProfileGitHubUrl,
+      jobProfilePortfolioUrl: row.jobProfilePortfolioUrl,
       startupPageMode: StartupPageMode.values.byName(row.startupPageMode),
       customStartupPage: row.customStartupPage,
       lastSeenNavPage: row.lastSeenNavPage,
@@ -2241,6 +2651,7 @@ class DriftSettingsRepository implements SettingsRepository {
       leetCodeHideExamples: row.leetCodeHideExamples,
       leetCodeHideComplexity: row.leetCodeHideComplexity,
       leetCodeHideCode: row.leetCodeHideCode,
+      leetCodeEnableScratchCode: row.leetCodeEnableScratchCode,
       srsFailKey: row.srsFailKey,
       srsHardKey: row.srsHardKey,
       srsGoodKey: row.srsGoodKey,
@@ -2340,8 +2751,18 @@ class DriftSettingsRepository implements SettingsRepository {
             hideCompletedTasks: Value(settings.hideCompletedTasks),
             vimModeEnabled: Value(settings.vimModeEnabled),
             snippetsEnabled: Value(settings.snippetsEnabled),
+            autocorrectEnabled: Value(settings.autocorrectEnabled),
             capsLockIndicatorEnabled: Value(
               settings.capsLockIndicatorEnabled,
+            ),
+            mediaRemoteUploadsEnabled: Value(
+              settings.mediaRemoteUploadsEnabled,
+            ),
+            mediaRemoteDownloadsEnabled: Value(
+              settings.mediaRemoteDownloadsEnabled,
+            ),
+            mediaBackgroundPrefetchEnabled: Value(
+              settings.mediaBackgroundPrefetchEnabled,
             ),
             snippetExpandKey: Value(settings.snippetExpandKey.name),
             snippetsJson: Value(
@@ -2350,10 +2771,14 @@ class DriftSettingsRepository implements SettingsRepository {
             deviceId: Value(settings.deviceId),
             lastViewedJournalId: Value(settings.lastViewedJournalId),
             lastViewedTodoListId: Value(settings.lastViewedTodoListId),
+            lastViewedCalendarId: Value(settings.lastViewedCalendarId),
             defaultJournalId: Value(settings.defaultJournalId),
             defaultTodoListId: Value(settings.defaultTodoListId),
             journalShowAllEntries: Value(settings.journalShowAllEntries),
             todoShowAllTasks: Value(settings.todoShowAllTasks),
+            calendarShowAllCalendars: Value(
+              settings.calendarShowAllCalendars,
+            ),
             weatherLocationLabel: Value(settings.weatherLocationLabel),
             weatherLat: Value(settings.weatherLat),
             weatherLon: Value(settings.weatherLon),
@@ -2443,6 +2868,11 @@ class DriftSettingsRepository implements SettingsRepository {
                   : jsonEncode(settings.jobsHiddenColumns),
             ),
             jobsIncludeArchived: Value(settings.jobsIncludeArchived),
+            rankingsCollapsedQueueCategoriesJson: Value(
+              settings.rankingsCollapsedQueueCategories.isEmpty
+                  ? null
+                  : jsonEncode(settings.rankingsCollapsedQueueCategories),
+            ),
             startupPageMode: Value(settings.startupPageMode.name),
             customStartupPage: Value(settings.customStartupPage),
             lastSeenNavPage: Value(settings.lastSeenNavPage),
@@ -2456,6 +2886,9 @@ class DriftSettingsRepository implements SettingsRepository {
             dreamSplitWidth: Value(settings.dreamSplitWidth),
             showDreamStatistics: Value(settings.showDreamStatistics),
             dreamNotesPinned: Value(settings.dreamNotesPinned),
+            jobProfileLinkedInUrl: Value(settings.jobProfileLinkedInUrl),
+            jobProfileGitHubUrl: Value(settings.jobProfileGitHubUrl),
+            jobProfilePortfolioUrl: Value(settings.jobProfilePortfolioUrl),
             leetcodeUsername: Value(settings.leetcodeUsername),
             showNeetCode150: Value(settings.showNeetCode150),
             leetCodeHideDifficulty: Value(settings.leetCodeHideDifficulty),
@@ -2465,6 +2898,9 @@ class DriftSettingsRepository implements SettingsRepository {
             leetCodeHideExamples: Value(settings.leetCodeHideExamples),
             leetCodeHideComplexity: Value(settings.leetCodeHideComplexity),
             leetCodeHideCode: Value(settings.leetCodeHideCode),
+            leetCodeEnableScratchCode: Value(
+              settings.leetCodeEnableScratchCode,
+            ),
             srsFailKey: Value(settings.srsFailKey),
             srsHardKey: Value(settings.srsHardKey),
             srsGoodKey: Value(settings.srsGoodKey),
@@ -2668,12 +3104,156 @@ class DriftSettingsRepository implements SettingsRepository {
   }
 
   @override
+  Future<Map<String, String?>> getFlaggedWords() async {
+    final rows = await _db.select(_db.flaggedWordsTable).get();
+    return {
+      for (final r in rows)
+        if (r.deletedAt == null) r.word: r.replacement,
+    };
+  }
+
+  @override
+  Future<List<FlaggedWord>> getFlaggedWordRecords() async {
+    final rows = await _db.select(_db.flaggedWordsTable).get();
+    return rows.map(_mapFlaggedWord).toList();
+  }
+
+  @override
+  Future<FlaggedWord?> getFlaggedWordRecord(String word) async {
+    final row = await (_db.select(
+      _db.flaggedWordsTable,
+    )..where((t) => t.word.equals(word))).getSingleOrNull();
+    return row == null ? null : _mapFlaggedWord(row);
+  }
+
+  /// See [SettingsRepository.flagWord]. The custom tombstone and the flag go
+  /// in one transaction so a crash between them can't leave the word neither
+  /// custom nor flagged; the notifications fire after the commit, in that
+  /// order, so a device that sees only the first still has the word unknown —
+  /// the safe half to land alone (`FLAGGED_WORDS.md` §10).
+  @override
+  Future<void> flagWord(String word, {String? replacement}) async {
+    final normalized = normalizeCustomWord(word);
+    if (!isCustomWordToken(normalized)) return;
+    final target = replacement == null
+        ? null
+        : normalizeCustomWord(replacement);
+    if (target != null &&
+        (!isCustomWordToken(target) || target == normalized)) {
+      return;
+    }
+
+    CustomWord? tombstoned;
+    FlaggedWord? flagged;
+    await _db.transaction(() async {
+      final existingCustom = await getCustomWordRecord(normalized);
+      if (existingCustom != null && existingCustom.deletedAt == null) {
+        final now = utcNow();
+        tombstoned = CustomWord(
+          word: normalized,
+          createdAt: existingCustom.createdAt,
+          updatedAt: now,
+          version: existingCustom.version + 1,
+          deletedAt: now,
+        );
+        await upsertCustomWord(tombstoned!, recordLocalActivity: false);
+      }
+      final existing = await getFlaggedWordRecord(normalized);
+      flagged = FlaggedWord(
+        word: normalized,
+        replacement: target,
+        createdAt: existing?.createdAt ?? utcNow(),
+        updatedAt: utcNow(),
+        version: (existing?.version ?? -1) + 1,
+        // Re-flagging a word whose flag was lifted clears its tombstone.
+      );
+      await upsertFlaggedWord(flagged!, recordLocalActivity: false);
+    });
+
+    final custom = tombstoned;
+    if (custom != null) {
+      _syncedWrites?.notifyOne(FirestoreCollections.customWords, custom);
+    }
+    final flag = flagged;
+    if (flag != null) {
+      _syncedWrites?.notifyOne(FirestoreCollections.flaggedWords, flag);
+    }
+  }
+
+  @override
+  Future<void> setFlaggedReplacement(String word, String? replacement) async {
+    final normalized = normalizeCustomWord(word);
+    final target = replacement == null
+        ? null
+        : normalizeCustomWord(replacement);
+    if (target != null &&
+        (!isCustomWordToken(target) || target == normalized)) {
+      return;
+    }
+    final existing = await getFlaggedWordRecord(normalized);
+    if (existing == null || existing.deletedAt != null) return;
+    await upsertFlaggedWord(
+      FlaggedWord(
+        word: normalized,
+        replacement: target,
+        createdAt: existing.createdAt,
+        updatedAt: utcNow(),
+        version: existing.version + 1,
+      ),
+    );
+  }
+
+  /// Lifting a flag tombstones it rather than dropping the row, so the word
+  /// becoming allowed again reaches the user's other devices.
+  @override
+  Future<void> unflagWord(String word) async {
+    final normalized = normalizeCustomWord(word);
+    final existing = await getFlaggedWordRecord(normalized);
+    if (existing == null) return;
+    await upsertFlaggedWord(
+      FlaggedWord(
+        word: normalized,
+        // The replacement goes with the flag: "stop flagging" is not a state
+        // that keeps a rewrite rule the user can no longer see.
+        createdAt: existing.createdAt,
+        updatedAt: utcNow(),
+        version: existing.version + 1,
+        deletedAt: utcNow(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> upsertFlaggedWord(
+    FlaggedWord word, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.flaggedWordsTable)
+        .insertOnConflictUpdate(
+          FlaggedWordsTableCompanion(
+            word: Value(word.word),
+            replacement: Value(word.replacement),
+            createdAt: Value(word.createdAt),
+            updatedAt: Value(word.updatedAt),
+            version: Value(word.version),
+            deletedAt: Value(word.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.flaggedWords, word);
+    }
+  }
+
+  @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    await (_db.delete(_db.customWordsTable)
-          ..where(
-            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)),
-          ))
-        .go();
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(
+      _db.customWordsTable,
+    )..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff))).go();
+    await (_db.delete(
+      _db.flaggedWordsTable,
+    )..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff))).go();
   }
 
   TagColorRecord _mapTagColor(TagColorsTableData row) => TagColorRecord(
@@ -2685,6 +3265,15 @@ class DriftSettingsRepository implements SettingsRepository {
 
   CustomWord _mapCustomWord(CustomWordsTableData row) => CustomWord(
     word: row.word,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  FlaggedWord _mapFlaggedWord(FlaggedWordsTableData row) => FlaggedWord(
+    word: row.word,
+    replacement: row.replacement,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -2897,12 +3486,16 @@ class DriftStudyRepository implements StudyRepository {
 
   @override
   Future<void> softDeleteFolder(String id) async {
-    await (_db.update(
-      _db.studyFoldersTable,
-    )..where((t) => t.id.equals(id))).write(
-      StudyFoldersTableCompanion(deletedAt: Value(utcNow()), updatedAt: Value(utcNow())),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyFolders);
+    // Read-bump-upsert rather than a raw column write, matching every sibling
+    // repository. Conflict resolution is version-first, so a tombstone left at
+    // the live row's version loses outright to any device holding a later
+    // revision — and `mergeDeletedAtFromRemote` then adopts that copy's absent
+    // tombstone and un-deletes the row everywhere.
+    final current = await getFolder(id);
+    if (current == null || current.deletedAt != null) return;
+    // copyWith bumps version and stamps updatedAt; upsertFolder records the
+    // local save.
+    await upsertFolder(current.copyWith(deletedAt: utcNow()));
   }
 
   @override
@@ -2929,15 +3522,17 @@ class DriftStudyRepository implements StudyRepository {
     if (await wouldCreateCycle(folderId, newParentFolderId)) {
       throw StateError('Cannot move a folder into its own descendant.');
     }
-    await (_db.update(
-      _db.studyFoldersTable,
-    )..where((t) => t.id.equals(folderId))).write(
-      StudyFoldersTableCompanion(
-        parentFolderId: Value(newParentFolderId),
-        updatedAt: Value(utcNow()),
+    final current = await getFolder(folderId);
+    if (current == null) return;
+    // Through the model so the move bumps `version`. Pushed at the unchanged
+    // version it loses the comparison to any device holding a later revision,
+    // and the move is reverted everywhere.
+    await upsertFolder(
+      current.copyWith(
+        parentFolderId: newParentFolderId,
+        clearParentFolderId: newParentFolderId == null,
       ),
     );
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyFolders);
   }
 
   @override
@@ -2997,25 +3592,23 @@ class DriftStudyRepository implements StudyRepository {
 
   @override
   Future<void> softDeleteDeck(String id) async {
-    await (_db.update(
-      _db.studyDecksTable,
-    )..where((t) => t.id.equals(id))).write(
-      StudyDecksTableCompanion(deletedAt: Value(utcNow()), updatedAt: Value(utcNow())),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyDecks);
+    // Version-bumped — see softDeleteFolder.
+    final current = await getDeck(id);
+    if (current == null || current.deletedAt != null) return;
+    await upsertDeck(current.copyWith(deletedAt: utcNow()));
   }
 
   @override
   Future<void> moveDeck(String deckId, String? newParentFolderId) async {
-    await (_db.update(
-      _db.studyDecksTable,
-    )..where((t) => t.id.equals(deckId))).write(
-      StudyDecksTableCompanion(
-        parentFolderId: Value(newParentFolderId),
-        updatedAt: Value(utcNow()),
+    // Version-bumped — see moveFolder.
+    final current = await getDeck(deckId);
+    if (current == null) return;
+    await upsertDeck(
+      current.copyWith(
+        parentFolderId: newParentFolderId,
+        clearParentFolderId: newParentFolderId == null,
       ),
     );
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyDecks);
   }
 
   @override
@@ -3067,54 +3660,63 @@ class DriftStudyRepository implements StudyRepository {
 
   @override
   Future<void> softDeleteCard(String id) async {
-    await (_db.update(
-      _db.studyCardsTable,
-    )..where((t) => t.id.equals(id))).write(
-      StudyCardsTableCompanion(deletedAt: Value(utcNow()), updatedAt: Value(utcNow())),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyCards);
+    // Version-bumped — see softDeleteFolder.
+    final current = await getCard(id);
+    if (current == null || current.deletedAt != null) return;
+    await upsertCard(current.copyWith(deletedAt: utcNow()));
   }
 
   @override
   Future<void> moveCards(List<String> cardIds, String targetDeckId) async {
-    final now = utcNow();
+    // Version-bumped — see moveFolder. The bump is also what lets a running
+    // session notice the move: `refreshFromLive` only adopts a live copy whose
+    // version is strictly greater, so an unbumped move leaves the session
+    // holding the pre-move `deckId` and invalidating the wrong deck.
     for (final id in cardIds) {
-      await (_db.update(
-        _db.studyCardsTable,
-      )..where((t) => t.id.equals(id))).write(
-        StudyCardsTableCompanion(deckId: Value(targetDeckId), updatedAt: Value(now)),
+      final current = await getCard(id);
+      if (current == null) continue;
+      await upsertCard(current.copyWith(deckId: targetDeckId));
+    }
+  }
+
+  @override
+  Future<Map<String, String>> duplicateCards(List<String> cardIds) async {
+    final now = utcNow();
+    final copies = <String, String>{};
+    for (final id in cardIds) {
+      final source = await getCard(id);
+      // A tombstoned id in the selection would otherwise duplicate back into a
+      // live card.
+      if (source == null || source.deletedAt != null) continue;
+      final copyId = newId();
+      await upsertCard(
+        StudyCard(
+          id: copyId,
+          createdAt: now,
+          updatedAt: now,
+          deckId: source.deckId,
+          frontText: source.frontText,
+          backText: source.backText,
+          // The copy is the same memory item to the scheduler — see
+          // reverseStudyCard, which preserves SRS state on the same grounds.
+          // Dropped, a card with a 90-day interval and 14 reviews duplicates
+          // into a brand-new card that is immediately due.
+          interval: source.interval,
+          ease: source.ease,
+          dueAt: source.dueAt,
+          reviewCount: source.reviewCount,
+        ),
       );
+      copies[id] = copyId;
     }
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyCards);
+    return copies;
   }
 
   @override
-  Future<void> duplicateCards(List<String> cardIds) async {
-    final now = utcNow();
-    for (final id in cardIds) {
-      final row = await (_db.select(
-        _db.studyCardsTable,
-      )..where((t) => t.id.equals(id))).getSingleOrNull();
-      if (row == null) continue;
-      await _db
-          .into(_db.studyCardsTable)
-          .insert(
-            StudyCardsTableCompanion.insert(
-              id: newId(),
-              deckId: row.deckId,
-              frontText: row.frontText,
-              backText: row.backText,
-              dueAt: now,
-              createdAt: now,
-              updatedAt: now,
-            ),
-          );
-    }
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyCards);
-  }
-
-  @override
-  Future<void> logReview(StudyReviewLog log) async {
+  Future<void> logReview(
+    StudyReviewLog log, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.studyReviewLogTable)
         .insertOnConflictUpdate(
@@ -3123,24 +3725,51 @@ class DriftStudyRepository implements StudyRepository {
             cardId: Value(log.cardId),
             grade: Value(log.grade.name),
             reviewedAt: Value(log.reviewedAt),
+            version: Value(log.version),
+            deletedAt: Value(log.deletedAt),
           ),
         );
-    _syncActivity?.recordLocalSave(FirestoreCollections.studyReviewLog);
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.studyReviewLog);
+    }
+  }
+
+  @override
+  Future<StudyReviewLog?> getReviewLog(String id) async {
+    final row = await (_db.select(
+      _db.studyReviewLogTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapReviewLog(row);
+  }
+
+  @override
+  Future<void> softDeleteReviewLog(String id) async {
+    final current = await getReviewLog(id);
+    if (current == null || current.deletedAt != null) return;
+    // Version-bumped: the tombstone has to beat the live row it replaces when
+    // the two meet on another device.
+    await logReview(current.deleted());
   }
 
   @override
   Future<int> countCardsReviewedToday({DateTime? now}) async {
     final n = now ?? DateTime.now();
     final startOfDayUtc = DateTime(n.year, n.month, n.day).toUtc();
-    final rows = await (_db.select(
-      _db.studyReviewLogTable,
-    )..where((t) => t.reviewedAt.isBiggerOrEqualValue(startOfDayUtc))).get();
+    final rows =
+        await (_db.select(_db.studyReviewLogTable)..where(
+              (t) =>
+                  t.deletedAt.isNull() &
+                  t.reviewedAt.isBiggerOrEqualValue(startOfDayUtc),
+            ))
+            .get();
     return rows.length;
   }
 
   @override
   Future<int> countCardsReviewedTotal() async {
-    final rows = await _db.select(_db.studyReviewLogTable).get();
+    final rows = await (_db.select(
+      _db.studyReviewLogTable,
+    )..where((t) => t.deletedAt.isNull())).get();
     return rows.length;
   }
 
@@ -3179,6 +3808,9 @@ class DriftStudyRepository implements StudyRepository {
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
         .go();
     await (_db.delete(_db.studyFoldersTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.studyReviewLogTable)
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
         .go();
   }
@@ -3221,6 +3853,8 @@ class DriftStudyRepository implements StudyRepository {
     cardId: row.cardId,
     grade: StudyGrade.values.byName(row.grade),
     reviewedAt: row.reviewedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
   );
 
   StudyFolder _mapFolder(StudyFoldersTableData row) => StudyFolder(
@@ -3930,11 +4564,16 @@ class DriftJobRepository implements JobRepository {
   deleteApplication(String id) async {
     final existing = await getApplication(id);
     final now = utcNow();
-    // Everything the user typed is blanked, not just hidden. The row survives
-    // only as a tombstone the other devices need in order to learn about the
-    // deletion at all — `watchCollection` drops Firestore document removals,
-    // so an actually-deleted document is invisible to every other device and
-    // would be pushed back by the first one that still holds it.
+    // A soft delete like every other one in the app: `deletedAt` is stamped
+    // and the fields are left alone. The row survives as a tombstone the other
+    // devices need in order to learn about the deletion at all —
+    // `watchCollection` drops Firestore document removals, so an
+    // actually-deleted document is invisible to every other device and would
+    // be pushed back by the first one that still holds it.
+    //
+    // The content used to be blanked here as well, which made the delete
+    // one-way: there was nothing left to restore from. It is kept now so the
+    // undo the toast offers has an application to put back.
     final tombstone =
         (existing ??
                 JobApplication(
@@ -3946,15 +4585,7 @@ class DriftJobRepository implements JobRepository {
                   createdAt: now,
                   updatedAt: now,
                 ))
-            .copyWith(
-              company: '',
-              title: '',
-              status: '',
-              clearApplicationUrl: true,
-              clearNotes: true,
-              clearSeasonId: true,
-              deletedAt: now,
-            );
+            .copyWith(deletedAt: now);
     await upsertApplication(tombstone, recordLocalActivity: false);
 
     final events = await listStatusEvents(id);
@@ -4199,6 +4830,32 @@ class DriftJobRepository implements JobRepository {
   }
 
   @override
+  Future<List<JobSeason>> reorderSeasons(List<String> orderedIds) async {
+    // Archived seasons are reordered alongside the rest: they keep their place
+    // in the Seasons list even though the picker no longer offers them.
+    final seasons = await listSeasons();
+    final byId = {for (final season in seasons) season.id: season};
+    final written = <JobSeason>[];
+    for (var i = 0; i < orderedIds.length; i++) {
+      final season = byId[orderedIds[i]];
+      if (season == null || season.sortOrder == i) continue;
+      written.add(season.copyWith(sortOrder: i));
+    }
+    if (written.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final season in written) {
+        batch.update(
+          _db.jobSeasonsTable,
+          _seasonCompanion(season),
+          where: (t) => t.id.equals(season.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.jobSeasons);
+    return written;
+  }
+
+  @override
   Future<List<JobApplication>> softDeleteSeason(String id) async {
     final now = utcNow();
     await (_db.update(
@@ -4210,11 +4867,17 @@ class DriftJobRepository implements JobRepository {
 
     // Back to active rather than stranded: an application whose season is gone
     // would otherwise be hidden from the default list with nothing left in the
-    // UI to explain why or to un-archive it.
+    // UI to explain why or to un-archive it. Only that one season is dropped —
+    // the other cycles it is filed under are untouched.
     final released = [
       for (final application in await listApplications())
-        if (application.seasonId == id)
-          application.copyWith(clearSeasonId: true),
+        if (application.seasonIds.contains(id))
+          application.copyWith(
+            seasonIds: [
+              for (final seasonId in application.seasonIds)
+                if (seasonId != id) seasonId,
+            ],
+          ),
     ];
     for (final application in released) {
       await upsertApplication(application, recordLocalActivity: false);
@@ -4290,7 +4953,7 @@ class DriftJobRepository implements JobRepository {
     dateApplied: Value(application.dateApplied),
     applicationUrl: Value(application.applicationUrl),
     notes: Value(application.notes),
-    seasonId: Value(application.seasonId),
+    seasonIdsJson: Value(jsonEncode(application.seasonIds)),
     createdAt: Value(application.createdAt),
     updatedAt: Value(application.updatedAt),
     version: Value(application.version),
@@ -4315,6 +4978,7 @@ class DriftJobRepository implements JobRepository {
         id: Value(stage.id),
         name: Value(stage.name),
         sortOrder: Value(stage.sortOrder),
+        colorValue: Value(stage.colorValue),
         createdAt: Value(stage.createdAt),
         updatedAt: Value(stage.updatedAt),
         version: Value(stage.version),
@@ -4349,6 +5013,7 @@ class DriftJobRepository implements JobRepository {
         id: Value(season.id),
         name: Value(season.name),
         sortOrder: Value(season.sortOrder),
+        archivedAt: Value(season.archivedAt),
         createdAt: Value(season.createdAt),
         updatedAt: Value(season.updatedAt),
         version: Value(season.version),
@@ -4364,7 +5029,7 @@ class DriftJobRepository implements JobRepository {
         dateApplied: row.dateApplied,
         applicationUrl: row.applicationUrl,
         notes: row.notes,
-        seasonId: row.seasonId,
+        seasonIds: List<String>.from(jsonDecode(row.seasonIdsJson) as List),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         version: row.version,
@@ -4388,6 +5053,7 @@ class DriftJobRepository implements JobRepository {
     id: row.id,
     name: row.name,
     sortOrder: row.sortOrder,
+    colorValue: row.colorValue,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -4418,6 +5084,543 @@ class DriftJobRepository implements JobRepository {
   JobSeason _mapSeason(JobSeasonsTableData row) => JobSeason(
     id: row.id,
     name: row.name,
+    sortOrder: row.sortOrder,
+    archivedAt: row.archivedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+}
+
+/// Rankings' local store.
+///
+/// The two cascades — deleting a category, deleting a parent — stamp every row
+/// they touch with the *same* `deletedAt` instant, and the matching restore
+/// only clears rows carrying that exact instant. That is what keeps an entry
+/// the user deleted on its own from riding back in on a category restore.
+class DriftRankingRepository implements RankingRepository {
+  DriftRankingRepository(this._db, {SyncActivityController? syncActivity})
+    : _syncActivity = syncActivity;
+
+  final AppDatabase _db;
+  final SyncActivityController? _syncActivity;
+  final _policy = const SoftDeletePolicy();
+
+  @override
+  Future<List<RankingCategory>> listCategories({
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.rankingCategoriesTable)
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapCategory(row),
+    ];
+  }
+
+  @override
+  Future<RankingCategory?> getCategory(String id) async {
+    final row = await (_db.select(
+      _db.rankingCategoriesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCategory(row);
+  }
+
+  @override
+  Future<void> upsertCategory(
+    RankingCategory category, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.rankingCategoriesTable)
+        .insertOnConflictUpdate(_categoryCompanion(category));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.rankingCategories);
+    }
+  }
+
+  @override
+  Future<List<RankingCategory>> reorderCategories(
+    List<String> orderedIds,
+  ) async {
+    // Archived categories keep their place in the order: the strip stops
+    // offering them, but unarchiving one should put it back where it was.
+    final categories = await listCategories();
+    final byId = {for (final category in categories) category.id: category};
+    final written = <RankingCategory>[];
+    for (var i = 0; i < orderedIds.length; i++) {
+      final category = byId[orderedIds[i]];
+      if (category == null || category.sortOrder == i) continue;
+      written.add(category.copyWith(sortOrder: i));
+    }
+    if (written.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final category in written) {
+        batch.update(
+          _db.rankingCategoriesTable,
+          _categoryCompanion(category),
+          where: (t) => t.id.equals(category.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.rankingCategories);
+    return written;
+  }
+
+  @override
+  Future<
+    ({
+      RankingCategory category,
+      List<RankingParent> parents,
+      List<RankingChild> children,
+    })
+  >
+  softDeleteCategory(String id) async {
+    final existing = await getCategory(id);
+    if (existing == null) throw StateError('no ranking category $id');
+    final now = utcNow();
+    final category = existing.copyWith(deletedAt: now);
+
+    final parents = [
+      for (final parent in await listParents(id)) parent.copyWith(deletedAt: now),
+    ];
+    final children = <RankingChild>[];
+    for (final parent in parents) {
+      for (final child in await listChildren(parent.id)) {
+        children.add(child.copyWith(deletedAt: now));
+      }
+    }
+
+    await _writeCascade(category, parents, children);
+    return (category: category, parents: parents, children: children);
+  }
+
+  @override
+  Future<
+    ({
+      RankingCategory category,
+      List<RankingParent> parents,
+      List<RankingChild> children,
+    })
+  >
+  restoreCategory(String id) async {
+    final existing = await getCategory(id);
+    if (existing == null || existing.deletedAt == null) {
+      throw StateError('no deleted ranking category $id');
+    }
+    final cascade = existing.deletedAt!;
+    final category = existing.copyWith(clearDeletedAt: true);
+
+    final parents = [
+      for (final parent in await listParents(id, includeDeleted: true))
+        if (parent.deletedAt == cascade) parent.copyWith(clearDeletedAt: true),
+    ];
+    final children = <RankingChild>[];
+    for (final parent in parents) {
+      for (final child in await listChildren(parent.id, includeDeleted: true)) {
+        if (child.deletedAt == cascade) {
+          children.add(child.copyWith(clearDeletedAt: true));
+        }
+      }
+    }
+
+    await _writeCascade(category, parents, children);
+    return (category: category, parents: parents, children: children);
+  }
+
+  Future<void> _writeCascade(
+    RankingCategory category,
+    List<RankingParent> parents,
+    List<RankingChild> children,
+  ) async {
+    await _db.transaction(() async {
+      await _db
+          .into(_db.rankingCategoriesTable)
+          .insertOnConflictUpdate(_categoryCompanion(category));
+      await _db.batch((batch) {
+        for (final parent in parents) {
+          batch.update(
+            _db.rankingParentsTable,
+            _parentCompanion(parent),
+            where: (t) => t.id.equals(parent.id),
+          );
+        }
+        for (final child in children) {
+          batch.update(
+            _db.rankingChildrenTable,
+            _childCompanion(child),
+            where: (t) => t.id.equals(child.id),
+          );
+        }
+      });
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.rankingCategories);
+    if (parents.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.rankingParents);
+    }
+    if (children.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.rankingChildren);
+    }
+  }
+
+  @override
+  Future<List<RankingParent>> listParents(
+    String categoryId, {
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(
+      _db.rankingParentsTable,
+    )..where((t) => t.categoryId.equals(categoryId))).get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapParent(row),
+    ];
+  }
+
+  @override
+  Future<RankingParent?> getParent(String id) async {
+    final row = await (_db.select(
+      _db.rankingParentsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapParent(row);
+  }
+
+  @override
+  Future<void> upsertParent(
+    RankingParent parent, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.rankingParentsTable)
+        .insertOnConflictUpdate(_parentCompanion(parent));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.rankingParents);
+    }
+  }
+
+  @override
+  Future<({RankingParent parent, List<RankingChild> children})> softDeleteParent(
+    String id,
+  ) async {
+    final existing = await getParent(id);
+    if (existing == null) throw StateError('no ranking parent $id');
+    final now = utcNow();
+    final parent = existing.copyWith(deletedAt: now);
+    final children = [
+      for (final child in await listChildren(id)) child.copyWith(deletedAt: now),
+    ];
+    await _writeParentCascade(parent, children);
+    return (parent: parent, children: children);
+  }
+
+  @override
+  Future<({RankingParent parent, List<RankingChild> children})> restoreParent(
+    String id,
+  ) async {
+    final existing = await getParent(id);
+    if (existing == null || existing.deletedAt == null) {
+      throw StateError('no deleted ranking parent $id');
+    }
+    final cascade = existing.deletedAt!;
+    final parent = existing.copyWith(clearDeletedAt: true);
+    final children = [
+      for (final child in await listChildren(id, includeDeleted: true))
+        if (child.deletedAt == cascade) child.copyWith(clearDeletedAt: true),
+    ];
+    await _writeParentCascade(parent, children);
+    return (parent: parent, children: children);
+  }
+
+  Future<void> _writeParentCascade(
+    RankingParent parent,
+    List<RankingChild> children,
+  ) async {
+    await _db.transaction(() async {
+      await _db
+          .into(_db.rankingParentsTable)
+          .insertOnConflictUpdate(_parentCompanion(parent));
+      await _db.batch((batch) {
+        for (final child in children) {
+          batch.update(
+            _db.rankingChildrenTable,
+            _childCompanion(child),
+            where: (t) => t.id.equals(child.id),
+          );
+        }
+      });
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.rankingParents);
+    if (children.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.rankingChildren);
+    }
+  }
+
+  @override
+  Future<List<RankingParent>> reorderQueue(List<String> orderedIds) async {
+    final byId = <String, RankingParent>{};
+    for (final id in orderedIds) {
+      final parent = await getParent(id);
+      if (parent != null) byId[id] = parent;
+    }
+    final written = <RankingParent>[];
+    for (var i = 0; i < orderedIds.length; i++) {
+      final parent = byId[orderedIds[i]];
+      if (parent == null || parent.queueSortOrder == i) continue;
+      written.add(parent.copyWith(queueSortOrder: i));
+    }
+    if (written.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final parent in written) {
+        batch.update(
+          _db.rankingParentsTable,
+          _parentCompanion(parent),
+          where: (t) => t.id.equals(parent.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.rankingParents);
+    return written;
+  }
+
+  @override
+  Future<List<RankingChild>> listChildren(
+    String parentId, {
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.rankingChildrenTable)
+              ..where((t) => t.parentId.equals(parentId))
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapChild(row),
+    ];
+  }
+
+  @override
+  Future<RankingChild?> getChild(String id) async {
+    final row = await (_db.select(
+      _db.rankingChildrenTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapChild(row);
+  }
+
+  @override
+  Future<void> upsertChild(
+    RankingChild child, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.rankingChildrenTable)
+        .insertOnConflictUpdate(_childCompanion(child));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.rankingChildren);
+    }
+  }
+
+  @override
+  Future<RankingChild> softDeleteChild(String id) async {
+    final existing = await getChild(id);
+    if (existing == null) throw StateError('no ranking child $id');
+    final child = existing.copyWith(deletedAt: utcNow());
+    await upsertChild(child);
+    return child;
+  }
+
+  @override
+  Future<RankingChild> restoreChild(String id) async {
+    final existing = await getChild(id);
+    if (existing == null) throw StateError('no ranking child $id');
+    final child = existing.copyWith(clearDeletedAt: true);
+    await upsertChild(child);
+    return child;
+  }
+
+  @override
+  Future<List<RankingChild>> reorderChildren(List<String> orderedIds) async {
+    final byId = <String, RankingChild>{};
+    for (final id in orderedIds) {
+      final child = await getChild(id);
+      if (child != null) byId[id] = child;
+    }
+    final written = <RankingChild>[];
+    for (var i = 0; i < orderedIds.length; i++) {
+      final child = byId[orderedIds[i]];
+      if (child == null || child.sortOrder == i) continue;
+      written.add(child.copyWith(sortOrder: i));
+    }
+    if (written.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final child in written) {
+        batch.update(
+          _db.rankingChildrenTable,
+          _childCompanion(child),
+          where: (t) => t.id.equals(child.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.rankingChildren);
+    return written;
+  }
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.rankingChildrenTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.rankingParentsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.rankingCategoriesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+  }
+
+  @override
+  Future<List<RankingCategory>> getAllCategories({
+    bool includeDeleted = true,
+  }) => listCategories(includeDeleted: includeDeleted);
+
+  @override
+  Future<List<RankingParent>> getAllParents({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.rankingParentsTable).get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapParent(row),
+    ];
+  }
+
+  @override
+  Future<List<RankingChild>> getAllChildren({bool includeDeleted = true}) async {
+    final rows = await _db.select(_db.rankingChildrenTable).get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapChild(row),
+    ];
+  }
+
+  RankingCategoriesTableCompanion _categoryCompanion(RankingCategory category) =>
+      RankingCategoriesTableCompanion(
+        id: Value(category.id),
+        name: Value(category.name),
+        colorValue: Value(category.colorValue),
+        iconKey: Value(category.iconKey),
+        sortOrder: Value(category.sortOrder),
+        childUnitsEnabled: Value(category.childUnitsEnabled),
+        childUnitLabel: Value(category.childUnitLabel),
+        imagesOnParent: Value(category.imagesOnParent),
+        imagesOnChild: Value(category.imagesOnChild),
+        parentScoreMax: Value(category.parentScoreMax),
+        childScoreMax: Value(category.childScoreMax),
+        parentScorePrecision: Value(category.parentScorePrecision.name),
+        childScorePrecision: Value(category.childScorePrecision.name),
+        parentTemplateJson: Value(
+          encodeRankingTemplate(category.parentTemplate),
+        ),
+        childTemplateJson: Value(encodeRankingTemplate(category.childTemplate)),
+        sortMode: Value(category.sortMode.name),
+        sortFieldId: Value(category.sortFieldId),
+        sortAscending: Value(category.sortAscending),
+        archivedAt: Value(category.archivedAt),
+        createdAt: Value(category.createdAt),
+        updatedAt: Value(category.updatedAt),
+        version: Value(category.version),
+        deletedAt: Value(category.deletedAt),
+      );
+
+  RankingParentsTableCompanion _parentCompanion(RankingParent parent) =>
+      RankingParentsTableCompanion(
+        id: Value(parent.id),
+        categoryId: Value(parent.categoryId),
+        title: Value(parent.title),
+        overallScore: Value(parent.overallScore),
+        notes: Value(parent.notes),
+        fieldValuesJson: Value(encodeRankingFieldValues(parent.fieldValues)),
+        tagsJson: Value(encodeRankingTags(parent.tags)),
+        status: Value(parent.status.name),
+        starred: Value(parent.starred),
+        queueSortOrder: Value(parent.queueSortOrder),
+        createdAt: Value(parent.createdAt),
+        updatedAt: Value(parent.updatedAt),
+        version: Value(parent.version),
+        deletedAt: Value(parent.deletedAt),
+      );
+
+  RankingChildrenTableCompanion _childCompanion(RankingChild child) =>
+      RankingChildrenTableCompanion(
+        id: Value(child.id),
+        parentId: Value(child.parentId),
+        name: Value(child.name),
+        overallScore: Value(child.overallScore),
+        notes: Value(child.notes),
+        fieldValuesJson: Value(encodeRankingFieldValues(child.fieldValues)),
+        sortOrder: Value(child.sortOrder),
+        createdAt: Value(child.createdAt),
+        updatedAt: Value(child.updatedAt),
+        version: Value(child.version),
+        deletedAt: Value(child.deletedAt),
+      );
+
+  RankingCategory _mapCategory(RankingCategoriesTableData row) =>
+      RankingCategory(
+        id: row.id,
+        name: row.name,
+        colorValue: row.colorValue,
+        iconKey: row.iconKey,
+        sortOrder: row.sortOrder,
+        childUnitsEnabled: row.childUnitsEnabled,
+        childUnitLabel: row.childUnitLabel,
+        imagesOnParent: row.imagesOnParent,
+        imagesOnChild: row.imagesOnChild,
+        parentScoreMax: row.parentScoreMax,
+        childScoreMax: row.childScoreMax,
+        parentScorePrecision: RankingScorePrecision.fromName(
+          row.parentScorePrecision,
+        ),
+        childScorePrecision: RankingScorePrecision.fromName(
+          row.childScorePrecision,
+        ),
+        parentTemplate: decodeRankingTemplate(row.parentTemplateJson),
+        childTemplate: decodeRankingTemplate(row.childTemplateJson),
+        sortMode: RankingSortMode.fromName(row.sortMode),
+        sortFieldId: row.sortFieldId,
+        sortAscending: row.sortAscending,
+        archivedAt: row.archivedAt,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  RankingParent _mapParent(RankingParentsTableData row) => RankingParent(
+    id: row.id,
+    categoryId: row.categoryId,
+    title: row.title,
+    overallScore: row.overallScore,
+    notes: row.notes,
+    fieldValues: decodeRankingFieldValues(row.fieldValuesJson),
+    tags: decodeRankingTags(row.tagsJson),
+    status: RankingStatus.fromName(row.status),
+    starred: row.starred,
+    queueSortOrder: row.queueSortOrder,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  RankingChild _mapChild(RankingChildrenTableData row) => RankingChild(
+    id: row.id,
+    parentId: row.parentId,
+    name: row.name,
+    overallScore: row.overallScore,
+    notes: row.notes,
+    fieldValues: decodeRankingFieldValues(row.fieldValuesJson),
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

@@ -5,11 +5,13 @@ import 'package:voyager/core/spellcheck/word_token.dart';
 /// word in here?" and start being a list to scroll.
 const int dictionarySearchLimit = 100;
 
-/// One query's answer, split by what the user can do with each half: [custom]
-/// words are theirs to rename or remove, [bundled] ones are read-only.
+/// One query's answer, split by what the user can do with each part: [custom]
+/// words are theirs to rename or remove, [flagged] ones to edit or unflag, and
+/// [bundled] ones are read-only.
 class DictionarySearchResult {
   const DictionarySearchResult({
     required this.custom,
+    required this.flagged,
     required this.bundled,
     required this.truncated,
     required this.candidates,
@@ -18,6 +20,7 @@ class DictionarySearchResult {
 
   static const empty = DictionarySearchResult(
     custom: <String>[],
+    flagged: <String>[],
     bundled: <String>[],
     truncated: false,
     candidates: <String>[],
@@ -28,6 +31,11 @@ class DictionarySearchResult {
   /// of the list is to reach the user's own words, and there are dozens of
   /// those, not thousands.
   final List<String> custom;
+
+  /// Matching flagged words, ranked like [custom] and never capped for the
+  /// same reason. A flagged word appears only here: it is one row with one
+  /// state, never also a faint bundled row (`FLAGGED_WORDS.md` §7).
+  final List<String> flagged;
 
   /// Matching bundled words, most common first, capped at the search limit.
   final List<String> bundled;
@@ -71,15 +79,18 @@ DictionarySearchResult searchDictionary({
   required String query,
   required Set<String> bundled,
   required Set<String> custom,
+  Set<String> flagged = const <String>{},
   List<String>? candidates,
   int limit = dictionarySearchLimit,
 }) {
   final q = normalizeCustomWord(query);
   // No query is not a query for all 65k words: with nothing typed the list is
-  // the user's own words, which is what they came to manage.
+  // the user's own words and their own flags, which is what they came to
+  // manage.
   if (q.isEmpty) {
     return DictionarySearchResult(
       custom: custom.toList()..sort(),
+      flagged: flagged.toList()..sort(),
       bundled: const <String>[],
       truncated: false,
       candidates: const <String>[],
@@ -87,7 +98,8 @@ DictionarySearchResult searchDictionary({
     );
   }
 
-  final customMatches = _rankCustom(q, custom);
+  final customMatches = _rankUserWords(q, custom);
+  final flaggedMatches = _rankUserWords(q, flagged);
 
   final matches = <String>[];
   var prefixCount = 0;
@@ -109,8 +121,10 @@ DictionarySearchResult searchDictionary({
   // A word in both sets would be listed twice; the check is skipped entirely
   // when there are no custom words, which is the common case and the only one
   // where this loop is long.
-  final overlapPossible = custom.isNotEmpty;
-  if (bundled.contains(q) && !custom.contains(q)) ranked.add(q);
+  final overlapPossible = custom.isNotEmpty || flagged.isNotEmpty;
+  if (bundled.contains(q) && !custom.contains(q) && !flagged.contains(q)) {
+    ranked.add(q);
+  }
   for (var pass = 0; pass < 2 && ranked.length < limit; pass++) {
     for (final word in matches) {
       if (ranked.length >= limit) {
@@ -119,13 +133,17 @@ DictionarySearchResult searchDictionary({
       }
       if (word == q) continue;
       if (word.startsWith(q) != (pass == 0)) continue;
-      if (overlapPossible && custom.contains(word)) continue;
+      if (overlapPossible &&
+          (custom.contains(word) || flagged.contains(word))) {
+        continue;
+      }
       ranked.add(word);
     }
   }
 
   return DictionarySearchResult(
     custom: customMatches,
+    flagged: flaggedMatches,
     bundled: ranked,
     truncated: truncated,
     candidates: matches,
@@ -133,13 +151,14 @@ DictionarySearchResult searchDictionary({
   );
 }
 
-/// The custom set ranked the same way, but alphabetically within each rank —
-/// the user's own words have no frequency to sort by.
-List<String> _rankCustom(String q, Set<String> custom) {
+/// One of the user's own sets — custom words, or flagged ones — ranked the
+/// same way as [bundled], but alphabetically within each rank: their words
+/// have no frequency to sort by.
+List<String> _rankUserWords(String q, Set<String> words) {
   final prefix = <String>[];
   final contains = <String>[];
   var exact = false;
-  for (final word in custom) {
+  for (final word in words) {
     if (word == q) {
       exact = true;
     } else if (word.startsWith(q)) {

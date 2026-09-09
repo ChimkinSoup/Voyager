@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/spellcheck/autocorrect_engine.dart';
+import 'package:voyager/core/spellcheck/autocorrect_session.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
+import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/widgets/text_field_context_menu.dart';
 
@@ -131,84 +134,69 @@ VoyagerSpellCheckService readVoyagerSpellCheckService(BuildContext context) {
   ).read(voyagerSpellCheckServiceProvider);
 }
 
-/// Builds the shared [SpellCheckConfiguration] backed by
-/// [voyagerSpellCheckServiceProvider]. A one-time `read` (not `watch`) is
-/// correct: the service is a stable singleton whose internal word sets
-/// mutate in place, so the field never needs to rebuild when the
-/// dictionary/custom words change — the next spellcheck pass just sees the
-/// updated data automatically.
-SpellCheckConfiguration buildVoyagerSpellCheckConfiguration(
-  BuildContext context, {
-  bool snippetsAllowed = true,
-}) {
-  return SpellCheckConfiguration(
-    spellCheckService: readVoyagerSpellCheckService(context),
-    spellCheckSuggestionsToolbarBuilder: voyagerTextContextMenuBuilder(
-      context,
-      snippetsAllowed: snippetsAllowed,
-    ),
-    // The visible squiggle is painted separately by SpellCheckSquiggleLayer,
-    // which can apply a narrower "hide only while actively being typed" rule
-    // instead of Flutter's own "hide whenever the cursor is anywhere inside
-    // the word" rule (project_flutter_spellcheck_freeze memory, bug 4). An
-    // empty style here is a deliberate no-op — TextStyle.merge only
-    // overrides non-null fields, so merging this onto the real text style
-    // leaves it unchanged. It must still be non-null: EditableText asserts
-    // misspelledTextStyle is set whenever spellCheckService is.
-    misspelledTextStyle: const TextStyle(),
-  );
-}
-
-/// EditableText only ever calls [SpellCheckService] in response to real
-/// keyboard/IME input (see `_formatAndSetValue` in Flutter's
-/// editable_text.dart) — never on mount, and never when a controller's text
-/// is set programmatically (e.g. loading a different journal entry into a
-/// reused controller). That leaves squiggles stale/missing until the user's
-/// next real keystroke.
+/// The flagged word the cursor sits on, hydrated with corrections — or null
+/// when the cursor is not on one.
 ///
-/// This paints fresh results immediately by writing directly to
-/// [EditableTextState.spellCheckResults] (public API) and calling its own
-/// [State.setState] to trigger a repaint — deliberately NOT going through
-/// [EditableTextState.userUpdateTextEditingValue]/the controller, since that
-/// path also fires the field's `onChanged` (used by callers like the journal
-/// editor to mark entries dirty and schedule autosave/sync) even when the
-/// text hasn't actually changed.
+/// Voyager gives its fields no [SpellCheckConfiguration] at all, so there
+/// are no [EditableTextState.spellCheckResults] to look this up in.
+/// Deliberately: `EditableTextState.buildTextSpan` takes a *different
+/// branch* the moment Flutter has spell results of its own, building the
+/// paragraph from `value.text` and the misspelled ranges and never calling
+/// the controller's own `buildTextSpan` (editable_text.dart). That branch
+/// discards whatever the controller built, all for a misspelled-word style
+/// this app neutralized anyway, since [SpellCheckSquiggleLayer] paints the
+/// squiggles itself.
 ///
-/// Only call this when [focusNode] is unfocused — a focused field can only
-/// have gotten new text via real typing, which Flutter already spellchecks
-/// on its own; re-running here too would double the per-keystroke cost we
-/// just finished bounding (see project_flutter_spellcheck_freeze memory).
-void forceSpellCheckDisplay({
-  required BuildContext context,
-  required GlobalKey<State<TextField>> fieldKey,
-  required FocusNode focusNode,
-}) {
-  if (focusNode.hasFocus) return;
-  final editableState = editableTextStateOf(fieldKey);
-  if (editableState == null) return;
-  paintSpellCheckResultsNow(context, editableState);
-}
-
-/// Same repaint as [forceSpellCheckDisplay], for callers that already hold a
-/// genuine [EditableTextState] (e.g. [TextFieldContextMenu], which gets one
-/// from [TextField.contextMenuBuilder]) and don't need the focus-gating or
-/// the `dynamic` reach into [TextField]'s private state.
-void paintSpellCheckResultsNow(
+/// So the one thing those results were still used for — finding the word a
+/// right-click landed on — is done here instead, straight off the service.
+/// A full [VoyagerSpellCheckService.checkTextSync] per right-click is cheap
+/// at human speed, and unlike cached results it can never be stale.
+///
+/// The range is inclusive at both ends, matching the
+/// `findSuggestionSpanAtCursorIndex` this replaces: a caret resting just
+/// past the last letter of a flagged word still offers its corrections.
+SuggestionSpan? misspellingAtCursor(
   BuildContext context,
-  EditableTextState editableState,
+  String text,
+  int cursor,
 ) {
-  final text = editableState.textEditingValue.text;
-  if (text.isEmpty) return;
-  final suggestions = readVoyagerSpellCheckService(context).checkTextSync(text);
-  // setState is @protected — there's no public "repaint spellcheck now" API
-  // on EditableTextState, and the alternative (userUpdateTextEditingValue)
-  // has the onChanged side effect this function exists to avoid. Safe here:
-  // we're only ever called with a GlobalKey/EditableTextState we were handed
-  // or created ourselves.
-  // ignore: invalid_use_of_protected_member
-  editableState.setState(() {
-    editableState.spellCheckResults = SpellCheckResults(text, suggestions);
-  });
+  if (text.isEmpty || cursor < 0 || cursor > text.length) return null;
+  final service = readVoyagerSpellCheckService(context);
+  for (final span in service.checkTextSync(text)) {
+    if (cursor < span.range.start) break;
+    if (cursor <= span.range.end) return service.hydrateSuggestions(text, span);
+  }
+  return null;
+}
+
+/// The word the cursor sits on when the checker currently *accepts* it — the
+/// only state "Flag as misspelling…" is offered for (`FLAGGED_WORDS.md` §8).
+///
+/// Resolved with [autocorrectTokenAt], autocorrect's own word-pick, rather
+/// than off a [SuggestionSpan]: a known word produces no span at all, so
+/// [misspellingAtCursor] has nothing to answer with. A flagged word is *not*
+/// known — it has been subtracted from the set — so it comes back from
+/// [misspellingAtCursor] as an ordinary misspelling instead, which is what
+/// gives it suggestions and "Stop flagging".
+///
+/// Null until the bundled dictionary has loaded: before then nothing is known,
+/// and offering to flag the whole language would be nonsense.
+({TextRange range, String word})? knownWordAtCursor(
+  BuildContext context,
+  String text,
+  int cursor,
+) {
+  if (text.isEmpty || cursor < 0 || cursor > text.length) return null;
+  final service = readVoyagerSpellCheckService(context);
+  if (!service.dictionaryLoaded) return null;
+  final range = autocorrectTokenAt(text, cursor);
+  if (range == null) return null;
+  final word = text.substring(range.start, range.end);
+  // The same shape a dictionary entry has to have: a token the flag can be
+  // stored and looked up under (`FLAGGED_WORDS.md` §11, hyphens and digits).
+  if (!isCustomWordToken(normalizeCustomWord(word))) return null;
+  if (!service.knownWords.contains(word.toLowerCase())) return null;
+  return (range: range, word: word);
 }
 
 /// [TextField]'s State class (and its `editableTextKey` field, which holds
@@ -342,28 +330,72 @@ String? resolveSnippetTrigger(EditableTextState editableTextState) {
 /// [snippetsAllowed] is the field's own opt-out — false for the LeetCode code
 /// editor and for the boxes snippets are written in, where offering to make
 /// one more would be wrong.
+///
+/// [spellcheckAllowed] is the field's `isMultilineField` answer, and gates
+/// **only** the flag items (`FLAGGED_WORDS.md` §8): a field with no squiggles
+/// has no business offering to flag a word. The suggestions and "Add to
+/// dictionary" a single-line field shows today are left exactly as they are.
+///
+/// [autocorrectSession] is the field's live session, needed so "Replace this
+/// one" goes through the apply path that flashes (§5.4). Null on a field that
+/// runs none, where the offer is simply not made.
 EditableTextContextMenuBuilder voyagerTextContextMenuBuilder(
   BuildContext context, {
   bool snippetsAllowed = true,
+  bool spellcheckAllowed = false,
+  AutocorrectSession? autocorrectSession,
 }) {
   final canAddSnippet =
       snippetsAllowed && SnippetEnabledScope.of(context).enabled;
   return (menuContext, editableTextState) {
-    final cursor = editableTextState.textEditingValue.selection.extentOffset;
-    final span = editableTextState.findSuggestionSpanAtCursorIndex(cursor);
-    final hydrated = span == null
-        ? null
-        : readVoyagerSpellCheckService(
-            menuContext,
-          ).hydrateSuggestions(editableTextState.textEditingValue.text, span);
+    final value = editableTextState.textEditingValue;
+    final hydrated = misspellingAtCursor(
+      menuContext,
+      value.text,
+      value.selection.extentOffset,
+    );
+    final flaggable = (spellcheckAllowed && hydrated == null)
+        ? _flaggableWordAt(menuContext, value)
+        : null;
     final trigger = canAddSnippet
         ? resolveSnippetTrigger(editableTextState)
         : null;
-    if (hydrated == null && trigger == null) return const SizedBox.shrink();
+    if (hydrated == null && flaggable == null && trigger == null) {
+      return const SizedBox.shrink();
+    }
     return TextFieldContextMenu(
       editableTextState: editableTextState,
       span: hydrated,
+      flaggableWord: flaggable,
+      spellcheckAllowed: spellcheckAllowed,
+      autocorrectSession: autocorrectSession,
       snippetTrigger: trigger,
     );
   };
+}
+
+/// The known word under the cursor that Flag would act on, or null.
+///
+/// A selection reaching past the token is a multi-word selection as far as
+/// §6 is concerned — the user meant the phrase, not the word — so nothing is
+/// offered. A collapsed caret, or the single-word selection
+/// [wrapWithSecondaryTapWordSelect] makes on a right-click, both pass.
+({TextRange range, String word})? _flaggableWordAt(
+  BuildContext context,
+  TextEditingValue value,
+) {
+  final selection = value.selection;
+  if (!selection.isValid) return null;
+  final found = knownWordAtCursor(
+    context,
+    value.text,
+    selection.extentOffset,
+  );
+  if (found == null) return null;
+  if (!selection.isCollapsed &&
+      (selection.start < found.range.start ||
+          selection.end > found.range.end)) {
+    return null;
+  }
+  return found;
 }

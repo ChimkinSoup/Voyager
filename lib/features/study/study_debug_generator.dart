@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/features/study/study_actions.dart';
 
 /// Pre-defined seed cards containing varied content styles:
 /// - Simple LaTeX
@@ -228,10 +229,10 @@ Future<void> populateDebugStudyDeck(
   }
 
   ref.invalidate(studyDecksProvider);
-  ref.invalidate(studyCardsProvider);
-  ref.invalidate(studyDeckStatsProvider);
-  ref.invalidate(studyStatsProvider);
   ref.invalidate(studyFoldersProvider);
+  // Both card lists: the generated cards are invisible to the Hub's
+  // "Study N due" button until the flattened one is refetched too.
+  invalidateStudyCards(ref);
 
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(

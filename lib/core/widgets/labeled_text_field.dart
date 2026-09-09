@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/text/prose_editing_controller.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
+import 'package:voyager/core/widgets/prose_highlight_layer.dart';
 import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
@@ -31,9 +35,11 @@ class LabeledTextField extends StatefulWidget {
     this.textInputAction,
     this.accentColor,
     this.dense = false,
+    this.allowShortHeight = false,
     this.borderRadius,
     this.alignLabelToTop,
     this.snippetsAllowed = true,
+    this.autocorrectAllowed = true,
   });
 
   final String label;
@@ -59,12 +65,29 @@ class LabeledTextField extends StatefulWidget {
   final TextInputAction? textInputAction;
   final Color? accentColor;
   final bool dense;
+
+  /// Lets the field be shorter than Material's 48px interactive minimum.
+  ///
+  /// [InputDecorator] enforces that minimum by stretching its container and
+  /// then centring the text inside it, which walks the paragraph off the
+  /// [contentPadding] offset every overlay here is positioned from — the Vim
+  /// caret, the snippet tabstop marks and the squiggles all drift by half the
+  /// slack. Set this on a non-[dense] field given a [contentPadding] tight
+  /// enough to fall under 48, so the decorator lays the text out where the
+  /// padding says instead.
+  final bool allowShortHeight;
+
   final double? borderRadius;
   final bool? alignLabelToTop;
 
   /// Whether text snippets may expand here. Set false for a field that edits
   /// snippets themselves, where a trigger has to stay literal.
   final bool snippetsAllowed;
+
+  /// Whether autocorrect may run here, on top of the user's own setting and
+  /// the multiline rule. Set false for the fields whose text is a literal —
+  /// a snippet trigger, a dictionary word (AUTOCORRECT.md §4.1).
+  final bool autocorrectAllowed;
 
   @override
   State<LabeledTextField> createState() => _LabeledTextFieldState();
@@ -80,6 +103,14 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
 
   bool _hasText = false;
   bool _focused = false;
+
+  ProseEditingController? _prose;
+
+  /// The controller the [TextField] and every overlay below are given: the
+  /// caller's, wrapped for emphasis wherever this field is eligible for it.
+  /// See [ProseEditingController] for why the wrapping happens here rather
+  /// than at the call sites.
+  TextEditingController get _controller => _prose ?? widget.controller;
 
   bool get _spellcheckOn => isMultilineField(
     expands: widget.expands,
@@ -97,9 +128,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     _focused = _focusNode.hasFocus;
     widget.controller.addListener(_handleTextChanged);
     _focusNode.addListener(_handleFocusChanged);
-    if (_spellcheckOn) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
-    }
+    _syncProseController();
   }
 
   @override
@@ -117,24 +146,43 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       _focusNode.addListener(_handleFocusChanged);
       _focused = _focusNode.hasFocus;
     }
+    // The shape too: `_emphasisOn` is derived from it, so a field rebuilt from
+    // `maxLines: 1` to `maxLines: null` would otherwise keep the stale
+    // decision — emphasis off in a field that is now multiline, or still on in
+    // one that is now single-line, where §10 says v1 renders plain text and
+    // where the overlay layers below are no longer mounted to match.
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.focusNode != widget.focusNode ||
+        oldWidget.expands != widget.expands ||
+        oldWidget.maxLines != widget.maxLines ||
+        oldWidget.minLines != widget.minLines) {
+      _syncProseController();
+    }
+  }
+
+  /// Emphasis rides on the same multiline predicate as spellcheck: v1 leaves
+  /// single-line fields on plain text (EMPHASIS_FORMATTING.md §10), which is
+  /// also what keeps the §4.1 exclusions — the snippet trigger and replacement
+  /// boxes, and the dictionary word box — literal without a flag of their own.
+  void _syncProseController() {
+    _prose?.dispose();
+    _prose = _spellcheckOn
+        ? ProseEditingController(
+            source: widget.controller,
+            focusNode: _focusNode,
+          )
+        : null;
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_handleTextChanged);
     _focusNode.removeListener(_handleFocusChanged);
+    // Before the focus node it listens to, and never the caller's controller.
+    _prose?.dispose();
     _ownedFocusNode?.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _forceSpellCheck() {
-    if (!mounted || !_spellcheckOn) return;
-    forceSpellCheckDisplay(
-      context: context,
-      fieldKey: _fieldKey,
-      focusNode: _focusNode,
-    );
   }
 
   void _handleTextChanged() {
@@ -142,7 +190,6 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
-    if (_spellcheckOn) _forceSpellCheck();
   }
 
   void _handleFocusChanged() {
@@ -163,8 +210,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     return VimTextScope(
       enabled: VimEnabledScope.of(context) && suits,
       snippetsAllowed: widget.snippetsAllowed && suits,
+      autocorrectAllowed: widget.autocorrectAllowed && suits,
       controller: widget.controller,
       multiline: _spellcheckOn,
+      proseEmphasis: _prose != null,
       accentColor: widget.accentColor,
       builder: _buildField,
     );
@@ -173,6 +222,14 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
   Widget _buildField(BuildContext context, VimFieldBinding vim) {
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
+    final emphasisTheme = ProseEmphasisTheme.of(theme.colorScheme, accent);
+    _prose?.emphasis = emphasisTheme;
+    // A `==highlight==` run carries only a mark; [ProseHighlightLayer] is what
+    // fills it — see [kProseHighlightMark].
+    final highlightFill = emphasisTheme.highlightColor!;
+    // Null on a field with emphasis off, which is exactly the flat paragraph
+    // every layer built for itself before emphasis existed.
+    final spanBuilder = _prose?.overlaySpan;
     final showLabel = widget.showLabel && widget.label.isNotEmpty;
     final contentPadding =
         widget.contentPadding ??
@@ -187,11 +244,11 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     final effectiveHint = showLabel
         ? (floated ? widget.hintText : null)
         : (widget.hintText ?? widget.label);
-    final spellcheckOn = isMultilineField(
-      expands: widget.expands,
-      maxLines: widget.maxLines,
-      minLines: widget.minLines,
-    );
+    // The same getter the prose controller was built from, not a second
+    // reading of the same three properties: §5.2's invariant is that the
+    // paragraph and the layers stacked around it agree about whether emphasis
+    // applies, and two copies of one predicate is how they drift apart.
+    final spellcheckOn = _spellcheckOn;
 
     // Dense fields use bodyMedium so the resting floating label fits the
     // short box (snippet Trigger/Replacement). Pin height to 1.0 so every
@@ -217,14 +274,15 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         contextMenuBuilder: voyagerTextContextMenuBuilder(
           context,
           snippetsAllowed: vim.snippetsAllowed,
+          spellcheckAllowed: spellcheckOn,
+          autocorrectSession: vim.autocorrectSession,
         ),
-        spellCheckConfiguration: spellcheckOn
-            ? buildVoyagerSpellCheckConfiguration(
-                context,
-                snippetsAllowed: vim.snippetsAllowed,
-              )
-            : const SpellCheckConfiguration.disabled(),
-        controller: widget.controller,
+        // No spell config: squiggles come from [SpellCheckSquiggleLayer] and
+        // the right-click corrections from [misspellingAtCursor]. Giving
+        // EditableText results of its own makes it build the paragraph itself
+        // and drop the controller's span.
+        spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+        controller: _controller,
         focusNode: _focusNode,
         scrollController: _scrollController,
         expands: widget.expands,
@@ -248,7 +306,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         undoController: vim.undoController,
         scrollPadding: kVoyagerFieldScrollPadding,
         decoration: InputDecoration(
-          isDense: widget.dense,
+          isDense: widget.dense || widget.allowShortHeight,
           hintText: effectiveHint,
           hintStyle: fieldHintStyle(context, textStyle),
           contentPadding: contentPadding,
@@ -276,6 +334,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     );
     final vimSession = vim.session;
     final snippetSession = vim.snippetSession;
+    final autocorrectSession = vim.autocorrectSession;
     final needsTextOverlay = vimSession != null || snippetSession != null;
 
     // Same predicate as [spellcheckOn]: only a wrapped paragraph can show the
@@ -291,13 +350,36 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       field = Stack(
         fit: StackFit.passthrough,
         children: [
+          // Bottom of the stack: the tint sits behind the squiggle as well as
+          // behind the glyphs.
+          if (autocorrectSession != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: AutocorrectFlashLayer(
+                    spanBuilder: spanBuilder,
+                    session: autocorrectSession,
+                    controller: _controller,
+                    style: textStyle ?? const TextStyle(),
+                    color: accent,
+                    strutStyle: StrutStyle.fromTextStyle(
+                      textStyle ?? const TextStyle(),
+                      forceStrutHeight: true,
+                    ),
+                    scrollController: _scrollController,
+                  ),
+                ),
+              ),
+            ),
           if (spellcheckOn)
             Positioned.fill(
               child: IgnorePointer(
                 child: Padding(
                   padding: overlayPadding,
                   child: SpellCheckSquiggleLayer(
-                    controller: widget.controller,
+                    spanBuilder: spanBuilder,
+                    controller: _controller,
                     focusNode: _focusNode,
                     style: textStyle ?? const TextStyle(),
                     scrollController: _scrollController,
@@ -314,7 +396,8 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
                 child: Padding(
                   padding: overlayPadding,
                   child: SelectionHighlightLayer(
-                    controller: widget.controller,
+                    spanBuilder: spanBuilder,
+                    controller: _controller,
                     focusNode: _focusNode,
                     style: textStyle ?? const TextStyle(),
                     // This field hands its TextField no strut, so the paragraph
@@ -331,6 +414,28 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
                 ),
               ),
             ),
+          // Above the selection and still beneath the field: this is where the
+          // paragraph itself used to fill a `==highlight==`, back when the
+          // fill was a `backgroundColor` and its corners were square.
+          if (spanBuilder != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: ProseHighlightLayer(
+                    spanBuilder: spanBuilder,
+                    controller: _controller,
+                    style: textStyle ?? const TextStyle(),
+                    strutStyle: StrutStyle.fromTextStyle(
+                      textStyle ?? const TextStyle(),
+                      forceStrutHeight: true,
+                    ),
+                    color: highlightFill,
+                    scrollController: _scrollController,
+                  ),
+                ),
+              ),
+            ),
           field,
           // Above the field, not behind it — see [VimTextOverlay]. Mounted for
           // a snippet session too, which is what puts dotted tabstop marks on
@@ -341,9 +446,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
                 child: Padding(
                   padding: overlayPadding,
                   child: VimTextOverlay(
+                    spanBuilder: spanBuilder,
                     session: vimSession,
                     snippetSession: snippetSession,
-                    controller: widget.controller,
+                    controller: _controller,
                     focusNode: _focusNode,
                     style: textStyle ?? const TextStyle(),
                     accentColor: accent,

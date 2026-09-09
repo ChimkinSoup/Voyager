@@ -15,6 +15,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 
 import 'fakes/fake_weather_api_client.dart';
@@ -82,8 +83,7 @@ Future<void> _pumpPanel(
                 listColor: 0xFF3366FF,
                 onClose: () {},
                 onChanged: () {},
-                onDeleted: () {},
-                onToggleStar: () {},
+                onToggleCompleted: (_) {},
               ),
             ),
           ),
@@ -95,6 +95,24 @@ Future<void> _pumpPanel(
 }
 
 void main() {
+  // The gallery and the subtask list each announce themselves — an image strip
+  // reads as images, a list of checkboxes reads as subtasks — so the captions
+  // over them were a row of labels naming what was already on screen.
+  testWidgets('the gallery and subtask list carry no captions', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final container = await _container();
+    await _pumpPanel(tester, container, task());
+
+    expect(find.text('Images'), findsNothing);
+    expect(find.text('Subtasks'), findsNothing);
+    // Still there, just unlabelled.
+    expect(find.byType(MediaGalleryStrip), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Add subtask'), findsOneWidget);
+  });
+
   testWidgets('reset sits at the right edge with repeat beside the pill', (
     tester,
   ) async {

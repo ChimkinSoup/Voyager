@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_charts.dart';
 
-/// The always-visible compact header (§3.1): lifetime total, per-status counts,
-/// a 30-day sparkline and the Sankey, in one row.
+/// The always-visible compact header (§3.1): lifetime total, per-status counts
+/// and a 30-day sparkline, in one row.
 class JobsHeader extends StatelessWidget {
   const JobsHeader({
     super.key,
     required this.lifetimeTotal,
     required this.statusCounts,
-    required this.sankeyCounts,
     required this.dailyCounts,
     required this.stages,
     required this.includeArchived,
@@ -17,6 +19,9 @@ class JobsHeader extends StatelessWidget {
     required this.activeStatuses,
     required this.onStatusTapped,
     required this.statusColors,
+    this.profileLinkedInUrl,
+    this.profileGitHubUrl,
+    this.profilePortfolioUrl,
   });
 
   /// Every application ever, archived and tombstoned-excluded alike (§8.1).
@@ -32,9 +37,6 @@ class JobsHeader extends StatelessWidget {
   /// status name still reaches those rows (§6.1).
   final List<({String status, int count})> statusCounts;
 
-  /// The Sankey's own counts (§8.4), which unlike [statusCounts] do follow the
-  /// include-archived toggle.
-  final List<({String status, int count})> sankeyCounts;
   final List<int> dailyCounts;
   final List<JobStage> stages;
   final bool includeArchived;
@@ -46,9 +48,36 @@ class JobsHeader extends StatelessWidget {
   final ValueChanged<String> onStatusTapped;
   final Color Function(String status) statusColors;
 
+  /// The user's own profile links (§3.4), straight from settings. Each
+  /// non-empty one gets a copy button; with all three unset the whole group
+  /// disappears, its spacing included.
+  final String? profileLinkedInUrl;
+  final String? profileGitHubUrl;
+  final String? profilePortfolioUrl;
+
   @override
   Widget build(BuildContext context) {
     final stageNames = {for (final stage in stages) stage.name};
+    final profileLinks = [
+      if ((profileLinkedInUrl ?? '').isNotEmpty)
+        (
+          label: 'LinkedIn',
+          icon: PhosphorIconsRegular.linkedinLogo,
+          url: profileLinkedInUrl!,
+        ),
+      if ((profileGitHubUrl ?? '').isNotEmpty)
+        (
+          label: 'GitHub',
+          icon: PhosphorIconsRegular.githubLogo,
+          url: profileGitHubUrl!,
+        ),
+      if ((profilePortfolioUrl ?? '').isNotEmpty)
+        (
+          label: 'Portfolio',
+          icon: PhosphorIconsRegular.globeHemisphereWest,
+          url: profilePortfolioUrl!,
+        ),
+    ];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
@@ -84,27 +113,30 @@ class JobsHeader extends StatelessWidget {
             ),
             const SizedBox(width: 18),
             Expanded(
-              flex: 3,
-              child: _LabelledChart(
-                label: 'Last 30 days',
-                child: JobsSparkline(counts: dailyCounts),
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              flex: 2,
-              child: _LabelledChart(
-                label: 'Pipeline',
-                child: JobsSankey(
-                  flows: [
-                    for (final entry in sankeyCounts)
-                      (
-                        status: entry.status,
-                        count: entry.count,
-                        color: statusColors(entry.status),
-                      ),
+              flex: 5,
+              // The chart caps itself at 260px and sits right-aligned, so the
+              // slack in this half is to its left — which is exactly where the
+              // copy buttons belong (§3.4). Sharing the half keeps them beside
+              // the chart at any width instead of stranded mid-row.
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (profileLinks.isNotEmpty) ...[
+                    _ProfileCopyButtons(links: profileLinks),
+                    const SizedBox(width: 12),
                   ],
-                ),
+                  // Flexible so the chart gives ground first when the half
+                  // is narrow. It caps itself at 260px and its Align keeps it
+                  // right of whatever it is given, so it only ever shrinks —
+                  // and the copy buttons, which cannot, stay whole.
+                  Flexible(
+                    child: _LabelledChart(
+                      label: 'Last 30 days',
+                      child: JobsSparkline(counts: dailyCounts),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -328,8 +360,92 @@ class _IncludeArchivedToggle extends StatelessWidget {
   }
 }
 
+/// One-tap clipboard copies of the user's own profile links (§3.4).
+///
+/// Icon-only: the header row is a fixed 76px and the chart beside it already
+/// claims half the width, so labelled buttons would take their width off the
+/// status chips. The tooltip carries the slot name instead.
+class _ProfileCopyButtons extends StatelessWidget {
+  const _ProfileCopyButtons({required this.links});
+
+  final List<({String label, IconData icon, String url})> links;
+
+  @override
+  Widget build(BuildContext context) {
+    // The header row stretches its children to its full 76px; centre the
+    // buttons in that rather than letting them stand full height.
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final link in links)
+            _ProfileCopyButton(
+              label: link.label,
+              icon: link.icon,
+              url: link.url,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileCopyButton extends StatelessWidget {
+  const _ProfileCopyButton({
+    required this.label,
+    required this.icon,
+    required this.url,
+  });
+
+  final String label;
+  final IconData icon;
+  final String url;
+
+  Future<void> _copy(BuildContext context) async {
+    // Read the overlay before the await: the header rebuilds on every settings
+    // change, so this context may be gone once the copy resolves.
+    final overlay = Overlay.of(context, rootOverlay: true);
+    await Clipboard.setData(ClipboardData(text: url));
+    showVoyagerToastIn(
+      overlay,
+      message: '$label copied',
+      icon: PhosphorIconsRegular.check,
+      dwell: const Duration(seconds: 2),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: 'Copy $label URL',
+      waitDuration: const Duration(milliseconds: 500),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: () => _copy(context),
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(
+              icon,
+              size: 24,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LabelledChart extends StatelessWidget {
   const _LabelledChart({required this.label, required this.child});
+
+  /// Thirty days spread across the header's full half stretch the line into a
+  /// near-flat drift rather than a chart; capped, a day is ~8.7px and the
+  /// day-to-day swings are steep enough to read.
+  static const double _maxWidth = 260;
 
   final String label;
   final Widget child;
@@ -337,18 +453,32 @@ class _LabelledChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-          ),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _maxWidth),
+        child: Column(
+          // Stretch, not start: it hands both children *tight* cross-axis
+          // constraints, which centres the label over the chart's real width
+          // and keeps the chart — which sizes itself to its box rather than
+          // to any content, so a loose width would collapse it — the full
+          // capped width.
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant.withValues(
+                  alpha: 0.7,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(child: child),
+          ],
         ),
-        const SizedBox(height: 4),
-        Expanded(child: child),
-      ],
+      ),
     );
   }
 }

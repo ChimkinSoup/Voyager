@@ -851,6 +851,10 @@ class _DayTimedColumn extends StatelessWidget {
                       : CalendarWeekEventBlock(
                           key: ValueKey('event-${slot.entry.event!.id}'),
                           event: slot.entry.event!,
+                          // The column's day, so a recurring event's press
+                          // animation stays on the occurrence that was tapped
+                          // rather than firing on every repeat in the week.
+                          day: day,
                           highlighted: editingEventId == slot.entry.event!.id,
                           onTap: () => onEventTap(slot.entry.event!),
                         ),

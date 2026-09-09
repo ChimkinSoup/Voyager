@@ -11,6 +11,7 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_card_bulk_import.dart';
+import 'package:voyager/features/study/study_actions.dart';
 
 class _ImportOutcome {
   const _ImportOutcome({required this.importedCount, required this.skipped});
@@ -97,28 +98,50 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
     final repo = ref.read(studyRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
 
-    for (final entry in cards) {
-      final card = StudyCard(
-        id: newId(),
-        createdAt: now,
-        updatedAt: now,
-        deckId: widget.deckId,
-        frontText: entry.front,
-        backText: entry.back,
-        dueAt: now,
+    try {
+      for (final entry in cards) {
+        final card = StudyCard(
+          id: newId(),
+          createdAt: now,
+          updatedAt: now,
+          deckId: widget.deckId,
+          frontText: entry.front,
+          backText: entry.back,
+          dueAt: now,
+        );
+        await repo.upsertCard(card);
+        remoteSync.pushStudyCard(card);
+      }
+
+      // The flattened list too: without it the Hub's "Study N due" never counts
+      // the cards this sheet just made.
+      invalidateStudyCards(ref);
+
+      if (!mounted) return;
+      Navigator.of(context).pop(
+        _ImportOutcome(importedCount: cards.length, skipped: skipped),
       );
-      await repo.upsertCard(card);
-      remoteSync.pushStudyCard(card);
+    } catch (error, stackTrace) {
+      // Reported rather than swallowed into the zone: the sheet stays open on
+      // the user's typing, so they need to be told why it did not close.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'study import',
+          context: ErrorDescription('while importing ${cards.length} cards'),
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not import.')),
+        );
+      }
+    } finally {
+      // Cleared however the write ended. Left set, the Import button is
+      // disabled for good and the only way out discards the paste.
+      if (mounted) setState(() => _importing = false);
     }
-
-    ref.invalidate(studyCardsProvider);
-    ref.invalidate(studyDeckStatsProvider);
-    ref.invalidate(studyStatsProvider);
-
-    if (!mounted) return;
-    Navigator.of(context).pop(
-      _ImportOutcome(importedCount: cards.length, skipped: skipped),
-    );
   }
 
   @override

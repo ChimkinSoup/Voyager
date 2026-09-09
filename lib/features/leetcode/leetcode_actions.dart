@@ -4,13 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/leetcode_srs_engine.dart';
-import 'package:voyager/features/leetcode/leetcode_loading_toast.dart';
 import 'package:voyager/features/leetcode/leetcode_track_draft.dart';
 import 'package:voyager/features/leetcode/leetcode_track_draft_store.dart';
 import 'package:voyager/features/leetcode/leetcode_track_modal.dart';
@@ -22,6 +24,13 @@ Future<void> _save(WidgetRef ref, LeetCodeProblem problem) async {
   ref.read(remoteSyncServiceProvider).pushLeetCodeProblem(problem);
   ref.invalidate(leetcodeProblemsProvider);
 }
+
+/// Held across the lookup below and released the moment the modal goes up —
+/// from there the sheet's own barrier covers the button. Without it a second
+/// press landing in the fetch's gap opened a second sheet over the first, and
+/// both were reading and writing the one draft slot, so whichever closed last
+/// overwrote the other. Module level because two buttons open the same flow.
+bool _trackFlowInFlight = false;
 
 /// Opens the Track flow: with a LeetCode username saved, the user's most
 /// recent accepted submission is fetched first so the form arrives prefilled.
@@ -38,28 +47,37 @@ Future<void> _save(WidgetRef ref, LeetCodeProblem problem) async {
 /// Shared by the Track button and the Review Deck's empty state, which offers
 /// the same action rather than pointing at the button.
 Future<void> startLeetCodeTrackFlow(BuildContext context, WidgetRef ref) async {
-  // Started before the network call rather than awaited first: a local file
-  // read has no business adding to the time the fetch toast is up.
-  final draftFuture = ref.read(leetCodeTrackDraftStoreProvider).load();
-  final username = ref.read(settingsProvider).value?.leetcodeUsername?.trim();
-
+  if (_trackFlowInFlight) return;
+  _trackFlowInFlight = true;
   LeetCodeApiQuestion? recent;
-  if (username != null && username.isNotEmpty) {
-    final dismissToast = showLeetCodeToast(
-      context,
-      message: 'Fetching your latest submission…',
-    );
-    try {
-      recent = await ref
-          .read(leetCodeApiClientProvider)
-          .fetchMostRecentAcceptedSubmission(username);
-    } catch (_) {
-      // Handled the same as "no submission": the draft, or an empty form.
-    }
-    dismissToast();
-  }
+  LeetCodeTrackDraft? draft;
+  try {
+    // Started before the network call rather than awaited first: a local file
+    // read has no business adding to the time the fetch toast is up.
+    final draftFuture = ref.read(leetCodeTrackDraftStoreProvider).load();
+    final username = ref.read(settingsProvider).value?.leetcodeUsername?.trim();
 
-  final draft = await draftFuture;
+    if (username != null && username.isNotEmpty) {
+      final dismissToast = showVoyagerToast(
+        context,
+        message: 'Fetching your latest submission…',
+      );
+      try {
+        recent = await ref
+            .read(leetCodeApiClientProvider)
+            .fetchMostRecentAcceptedSubmission(username);
+      } catch (_) {
+        // Handled the same as "no submission": the draft, or an empty form.
+      }
+      dismissToast.dismiss();
+    }
+
+    draft = await draftFuture;
+  } finally {
+    // Nothing awaits between here and the push below, so the button is never
+    // live and unguarded: the sheet is up in the same turn of the event loop.
+    _trackFlowInFlight = false;
+  }
   if (!context.mounted) return;
 
   if (recent == null) {
@@ -74,7 +92,8 @@ Future<void> startLeetCodeTrackFlow(BuildContext context, WidgetRef ref) async {
     return;
   }
 
-  final resume = draft != null && leetCodeTrackDraftMatches(draft, recent.title);
+  final resume =
+      draft != null && leetCodeTrackDraftMatches(draft, recent.title);
   await showLeetCodeTrackModal(
     context,
     ref,
@@ -119,22 +138,84 @@ Future<bool> deleteLeetCodeProblem(
   WidgetRef ref,
   LeetCodeProblem problem,
 ) async {
+  // Captured while the caller is still mounted: deleting the problem unmounts
+  // the tile that asked for it, and the toast offering the undo has to outlive
+  // it.
+  final container = ProviderScope.containerOf(context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
+
   final confirmed = await showConfirmDialog(
     context,
     title: 'Delete "${problem.title}"?',
     message: 'This problem and everything tracked with it — code, notes, and '
-        'review history — will be removed.',
+        'review history — will be moved to trash.',
   );
   if (!confirmed) return false;
 
-  final repo = ref.read(leetCodeRepositoryProvider);
+  late final LeetCodeProblem snapshot;
+  await softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(problem.title, fallback: 'problem'),
+    delete: () async => snapshot = await _softDeleteProblem(container, problem),
+    restore: () => _restoreProblem(container, snapshot),
+  );
+  return true;
+}
+
+Future<LeetCodeProblem> _softDeleteProblem(
+  ProviderContainer container,
+  LeetCodeProblem problem,
+) async {
+  final repo = container.read(leetCodeRepositoryProvider);
+  // Read off disk rather than taken from `problem`: the deck renders from a
+  // provider that lags an in-flight save, and restoring from a stale snapshot
+  // would quietly roll the last edit back with the undo.
+  final snapshot = await repo.getProblem(problem.id) ?? problem;
   await repo.softDeleteProblem(problem.id);
   final tombstone = await repo.getProblem(problem.id);
   if (tombstone != null) {
-    ref.read(remoteSyncServiceProvider).pushLeetCodeProblem(tombstone);
+    container.read(remoteSyncServiceProvider).pushLeetCodeProblem(tombstone);
   }
-  ref.invalidate(leetcodeProblemsProvider);
-  return true;
+  container.invalidate(leetcodeProblemsProvider);
+  return snapshot;
+}
+
+/// Rebuilt field by field rather than `copyWith`'d, because `copyWith` reads
+/// `deletedAt ?? this.deletedAt` and so cannot clear a tombstone.
+Future<void> _restoreProblem(
+  ProviderContainer container,
+  LeetCodeProblem snapshot,
+) async {
+  final repository = container.read(leetCodeRepositoryProvider);
+  // Resolved against disk rather than the snapshot — see [restoreVersionFrom].
+  final current = await repository.getProblem(snapshot.id);
+  abortIfAlreadyRestored(found: current != null, deletedAt: current?.deletedAt);
+  final restored = LeetCodeProblem(
+    id: snapshot.id,
+    createdAt: snapshot.createdAt,
+    updatedAt: utcNow(),
+    version: restoreVersionFrom(
+      preDeleteVersion: snapshot.version,
+      currentVersion: current?.version,
+    ),
+    title: snapshot.title,
+    questionId: snapshot.questionId,
+    questionFrontendId: snapshot.questionFrontendId,
+    titleSlug: snapshot.titleSlug,
+    difficulty: snapshot.difficulty,
+    tags: snapshot.tags,
+    description: snapshot.description,
+    examples: snapshot.examples,
+    solutions: snapshot.solutions,
+    solvedAt: snapshot.solvedAt,
+    interval: snapshot.interval,
+    ease: snapshot.ease,
+    dueAt: snapshot.dueAt,
+    reviewCount: snapshot.reviewCount,
+  );
+  await repository.upsertProblem(restored);
+  container.read(remoteSyncServiceProvider).pushLeetCodeProblem(restored);
+  container.invalidate(leetcodeProblemsProvider);
 }
 
 /// The right-click menu for a tracked problem, wherever one is listed.
@@ -224,10 +305,10 @@ Future<void> copyLeetCodeCode(
 ) async {
   await Clipboard.setData(ClipboardData(text: _firstCodeOf(problem) ?? ''));
   if (!context.mounted) return;
-  final dismiss = showLeetCodeToast(
+  final dismiss = showVoyagerToast(
     context,
     message: 'Code copied',
     icon: PhosphorIconsRegular.check,
   );
-  Future.delayed(const Duration(milliseconds: 1400), dismiss);
+  Future.delayed(const Duration(milliseconds: 1400), dismiss.dismiss);
 }

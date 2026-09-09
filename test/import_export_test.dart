@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:archive/archive.dart';
@@ -14,9 +15,11 @@ import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
@@ -26,6 +29,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
+import 'package:voyager/data/services/media_file_store.dart';
 import 'package:voyager/features/settings/services/data_import_service.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -134,11 +138,13 @@ List<BackupCollection> collectionsFor(AppDatabase db) => buildBackupCollections(
   studyRepository: DriftStudyRepository(db),
   workoutRepository: DriftWorkoutRepository(db),
   jobRepository: DriftJobRepository(db),
+  rankingRepository: DriftRankingRepository(db),
   calendarRepository: DriftCalendarRepository(db),
   trackerRepository: DriftTrackerRepository(db),
   financeRepository: DriftFinanceRepository(db),
   notificationRepository: DriftNotificationRepository(db),
   bucketListRepository: DriftBucketListRepository(db),
+  mediaRepository: DriftMediaRepository(db),
   settingsRepository: DriftSettingsRepository(db),
 );
 
@@ -184,6 +190,8 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
   final bucketListRepo = DriftBucketListRepository(db);
   final settingsRepo = DriftSettingsRepository(db);
   final jobRepo = DriftJobRepository(db);
+  final rankingRepo = DriftRankingRepository(db);
+  final mediaRepo = DriftMediaRepository(db);
 
   await journalRepo.upsertJournal(
     Journal(
@@ -506,6 +514,68 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await rankingRepo.upsertCategory(
+    RankingCategory(
+      id: 'ranking-category-1',
+      name: 'Shows',
+      colorValue: 0xFF7C9EFF,
+      iconKey: 'television',
+      childUnitsEnabled: true,
+      childUnitLabel: 'Episode',
+      parentScoreMax: 10,
+      childScoreMax: 5,
+      parentTemplate: [
+        const RankingTemplateField(
+          id: 'field-writing',
+          label: 'Writing',
+          sortOrder: 0,
+          scoreMax: 10,
+        ),
+      ],
+      childTemplate: [
+        const RankingTemplateField(
+          id: 'field-pacing',
+          label: 'Pacing',
+          sortOrder: 0,
+          notesEnabled: false,
+        ),
+      ],
+      sortMode: RankingSortMode.customField,
+      sortFieldId: 'field-writing',
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await rankingRepo.upsertParent(
+    RankingParent(
+      id: 'ranking-parent-1',
+      categoryId: 'ranking-category-1',
+      title: 'Severance',
+      overallScore: 9.5,
+      notes: 'Slow burn #scifi',
+      fieldValues: const {
+        'field-writing': RankingFieldValue(score: 9, notes: 'tight'),
+      },
+      status: RankingStatus.inProgress,
+      starred: true,
+      queueSortOrder: 2,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await rankingRepo.upsertChild(
+    RankingChild(
+      id: 'ranking-child-1',
+      parentId: 'ranking-parent-1',
+      name: 'Good News About Hell',
+      overallScore: 4.5,
+      notes: 'cold open #pilot',
+      fieldValues: const {'field-pacing': RankingFieldValue(score: 4)},
+      sortOrder: 0,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await jobRepo.upsertStage(
     JobStage(
       id: 'stage-1',
@@ -559,11 +629,168 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await mediaRepo.upsertAsset(
+    MediaAsset(
+      id: 'media-1',
+      contentHash:
+          '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+      byteSize: 2048,
+      mimeType: 'image/jpeg',
+      width: 800,
+      height: 600,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await mediaRepo.upsertReference(
+    MediaReference(
+      id: 'media-ref-1',
+      mediaId: 'media-1',
+      collection: FirestoreCollections.todoTasks,
+      documentId: 'task-1',
+      sortOrder: 0,
+      displayWidthPx: 320,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await settingsRepo.setTagColor('food', 0xFF00FF00);
   await settingsRepo.addCustomWord('voyagerish');
+  await settingsRepo.flagWord('neve', replacement: 'never');
 }
 
 void main() {
+
+  group('Backup media binaries', () {
+    late Directory sourceMediaDir;
+    late Directory targetMediaDir;
+
+    setUp(() async {
+      sourceMediaDir = await Directory.systemTemp.createTemp('voyager_bk_src');
+      targetMediaDir = await Directory.systemTemp.createTemp('voyager_bk_dst');
+    });
+
+    tearDown(() async {
+      for (final dir in [sourceMediaDir, targetMediaDir]) {
+        if (await dir.exists()) await dir.delete(recursive: true);
+      }
+    });
+
+    test('image bytes round-trip through the archive', () async {
+      final source = AppDatabase.inMemory();
+      addTearDown(source.close);
+      final sourceStore = MediaFileStore(root: sourceMediaDir);
+      final sourceMedia = DriftMediaRepository(source);
+
+      final bytes = Uint8List.fromList(
+        List<int>.generate(512, (i) => (i * 7) % 256),
+      );
+      const contentHash = 'roundtriphash';
+      final now = DateTime.utc(2026, 3, 4);
+      await sourceMedia.upsertAsset(
+        MediaAsset(
+          id: 'media-blob-1',
+          contentHash: contentHash,
+          byteSize: bytes.length,
+          mimeType: 'image/jpeg',
+          width: 40,
+          height: 30,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await sourceStore.writeBytes(
+        contentHash,
+        MediaImageFormat.jpeg,
+        bytes,
+      );
+
+      final exported = await DataExportService(
+        collections: collectionsFor(source),
+        settingsRepository: DriftSettingsRepository(source),
+        mediaRepository: sourceMedia,
+        mediaFileStore: sourceStore,
+      ).buildArchiveContents();
+
+      expect(
+        exported.keys,
+        contains('${backupMediaDirectory}$contentHash.jpg'),
+        reason: 'the archive must carry the bytes, not just the asset row',
+      );
+
+      final zip = await writeBackupZip(exported, 'voyager_media_roundtrip');
+      addTearDown(() async {
+        if (await zip.exists()) await zip.delete();
+      });
+
+      final target = AppDatabase.inMemory();
+      addTearDown(target.close);
+      final targetStore = MediaFileStore(root: targetMediaDir);
+      final targetMedia = DriftMediaRepository(target);
+
+      final summary = await DataImportService(
+        db: target,
+        collections: collectionsFor(target),
+        settingsRepository: DriftSettingsRepository(target),
+        pushRecords: RecordingUploader().pushRecords,
+        pushSettings: RecordingUploader().pushSettings,
+        mediaRepository: targetMedia,
+        mediaFileStore: targetStore,
+      ).importFromZip(zip);
+
+      expect(summary.mediaFilesRestored, 1);
+
+      final restored = (await targetMedia.getAsset('media-blob-1'))!;
+      expect(await targetStore.readBytes(restored), bytes);
+      expect(
+        restored.downloadState,
+        MediaDownloadState.present,
+        reason: 'a restored blob must not sit waiting for a download',
+      );
+    });
+
+    test('an archive with no media still restores its rows', () async {
+      final source = AppDatabase.inMemory();
+      addTearDown(source.close);
+      final now = DateTime.utc(2026, 3, 4);
+      await DriftMediaRepository(source).upsertAsset(
+        MediaAsset(
+          id: 'media-no-bytes',
+          contentHash: 'noblob',
+          byteSize: 10,
+          mimeType: 'image/jpeg',
+          width: 1,
+          height: 1,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      // No media file store on the exporter: the row travels, the bytes
+      // cannot — exactly the case of an image another device holds.
+      final zip = await writeBackupZip(
+        await exporterFor(source).buildArchiveContents(),
+        'voyager_media_rowsonly',
+      );
+      addTearDown(() async {
+        if (await zip.exists()) await zip.delete();
+      });
+
+      final target = AppDatabase.inMemory();
+      addTearDown(target.close);
+      final summary = await importerFor(
+        target,
+        RecordingUploader(),
+      ).importFromZip(zip);
+
+      expect(summary.mediaFilesRestored, 0);
+      expect(
+        await DriftMediaRepository(target).getAsset('media-no-bytes'),
+        isNotNull,
+      );
+    });
+  });
+
   group('Backup coverage', () {
     test('every synced collection is in the backup registry', () async {
       final db = AppDatabase.inMemory();
@@ -681,8 +908,14 @@ void main() {
         'job_companies_table',
         'job_categories_table',
         'job_seasons_table',
+        'ranking_categories_table',
+        'ranking_parents_table',
+        'ranking_children_table',
+        'media_assets_table',
+        'media_references_table',
         'tag_colors_table',
         'custom_words_table',
+        'flagged_words_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };
@@ -1034,11 +1267,13 @@ void main() {
           studyRepository: DriftStudyRepository(db),
           workoutRepository: DriftWorkoutRepository(db),
           jobRepository: DriftJobRepository(db),
+          rankingRepository: DriftRankingRepository(db),
           calendarRepository: DriftCalendarRepository(db),
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
           notificationRepository: DriftNotificationRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
+          mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
         ),
         settingsRepository: DriftSettingsRepository(db),
@@ -1282,11 +1517,13 @@ void main() {
           studyRepository: studyRepo,
           workoutRepository: DriftWorkoutRepository(db),
           jobRepository: DriftJobRepository(db),
+          rankingRepository: DriftRankingRepository(db),
           calendarRepository: DriftCalendarRepository(db),
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
           notificationRepository: DriftNotificationRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
+          mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
           weatherService: weatherService,
           syncEngine: syncEngine,
@@ -1364,11 +1601,13 @@ void main() {
           studyRepository: DriftStudyRepository(db),
           workoutRepository: DriftWorkoutRepository(db),
           jobRepository: DriftJobRepository(db),
+          rankingRepository: DriftRankingRepository(db),
           calendarRepository: DriftCalendarRepository(db),
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
           notificationRepository: DriftNotificationRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
+          mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
           weatherService: WeatherService(
             settingsRepository: DriftSettingsRepository(db),

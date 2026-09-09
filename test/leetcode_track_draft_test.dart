@@ -255,6 +255,57 @@ Future<void> _type(WidgetTester tester, Finder field, String text) async {
 }
 
 void main() {
+  group('one press, one form', () {
+    testWidgets('a second press during the lookup opens nothing', (
+      tester,
+    ) async {
+      // The flow fetches the last accepted submission and reads the draft slot
+      // before anything is on screen. Two presses landing in that gap used to
+      // open two sheets — and both would have been reading and writing the one
+      // draft slot, so closing the first left the second sitting there ready
+      // to overwrite what it had just saved.
+      final harness = await _pump(
+        tester,
+        api: _FakeLeetCodeApi(
+          recent: _twoSum,
+          latency: const Duration(milliseconds: 200),
+        ),
+      );
+
+      await tester.tap(find.text('track'));
+      await tester.pump();
+      // Still fetching: nothing is on screen but the in-flight toast.
+      expect(find.byTooltip('Close'), findsNothing);
+      await tester.tap(find.text('track'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(harness.api.fetches, 1);
+      expect(find.byTooltip('Close'), findsOneWidget);
+
+      await _close(tester);
+      expect(find.byTooltip('Close'), findsNothing);
+    });
+
+    testWidgets('the button works again once the form is closed', (
+      tester,
+    ) async {
+      final harness = await _pump(
+        tester,
+        api: _FakeLeetCodeApi(recent: _twoSum),
+      );
+
+      await _track(tester);
+      await _close(tester);
+      await _track(tester);
+
+      expect(harness.api.fetches, 2);
+      expect(find.byTooltip('Close'), findsOneWidget);
+      await _close(tester);
+    });
+  });
+
   group('draft slot', () {
     testWidgets('a prefilled form closed untouched leaves the slot alone', (
       tester,

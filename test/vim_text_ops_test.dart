@@ -160,6 +160,13 @@ void main() {
       expect(vimApplyCase('aBc', VimCaseOp.toUpper), 'ABC');
       expect(vimApplyCase('aBc', VimCaseOp.toLower), 'abc');
     });
+
+    test('one object is one character', () {
+      const prose = 'one two';
+      expect(vimObjectEndForward(prose, 0), 1);
+      expect(vimObjectStartBackward(prose, 3), 2);
+      expect(vimClampCaret(prose, 4), 4);
+    });
   });
 
   group('search', () {

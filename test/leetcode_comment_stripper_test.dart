@@ -91,4 +91,33 @@ class Solution {
       expect(stripLeetCodeLineComments('', 'java'), '');
     });
   });
+
+  group('stripLeetCodeTrailingBlankLine', () {
+    test('drops the empty line pasted code arrives with', () {
+      expect(stripLeetCodeTrailingBlankLine('int a = 1;\n'), 'int a = 1;');
+    });
+
+    test('whitespace-only counts as blank', () {
+      expect(stripLeetCodeTrailingBlankLine('int a = 1;\n   '), 'int a = 1;');
+      expect(stripLeetCodeTrailingBlankLine('int a = 1;\n\t'), 'int a = 1;');
+    });
+
+    test('takes one line, not the whole run', () {
+      expect(
+        stripLeetCodeTrailingBlankLine('int a = 1;\n\n\n'),
+        'int a = 1;\n\n',
+      );
+    });
+
+    test('leaves blank lines inside the code alone', () {
+      const code = 'int a = 1;\n\nint b = 2;';
+      expect(identical(stripLeetCodeTrailingBlankLine(code), code), isTrue);
+    });
+
+    test('leaves a buffer that already ends in code alone', () {
+      const code = 'int a = 1;';
+      expect(identical(stripLeetCodeTrailingBlankLine(code), code), isTrue);
+      expect(stripLeetCodeTrailingBlankLine(''), '');
+    });
+  });
 }

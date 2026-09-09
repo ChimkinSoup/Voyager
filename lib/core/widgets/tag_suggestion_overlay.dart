@@ -118,7 +118,7 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
     }
     if (oldWidget.focusNode != widget.focusNode) {
       oldWidget.focusNode.removeListener(_handleFocusChanged);
-      oldWidget.focusNode.onKeyEvent = null;
+      _releaseKeyEvent(oldWidget.focusNode);
       widget.focusNode.addListener(_handleFocusChanged);
       widget.focusNode.onKeyEvent = _handleKeyEvent;
     }
@@ -138,8 +138,23 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
   void dispose() {
     widget.controller.removeListener(_handleEditingChanged);
     widget.focusNode.removeListener(_handleFocusChanged);
-    widget.focusNode.onKeyEvent = null;
+    _releaseKeyEvent(widget.focusNode);
     super.dispose();
+  }
+
+  /// Unhooks this state's handler from [node], but only if it is still the
+  /// one installed.
+  ///
+  /// A field whose surrounding widget structure changes shape (the journal
+  /// body gains its [MediaPasteScope] wrapper once the entry it belongs to
+  /// exists) is re-inflated around the same [FocusNode]: the replacement
+  /// portal's `initState` runs first, and the outgoing element is not
+  /// unmounted until the end of the frame. Clearing unconditionally there
+  /// would drop the live handler the new state had just installed, leaving
+  /// the field with no key handling at all — no Tab indent, no smart
+  /// Backspace, no completion popup — until it was rebuilt again.
+  void _releaseKeyEvent(FocusNode node) {
+    if (node.onKeyEvent == _handleKeyEvent) node.onKeyEvent = null;
   }
 
   void _handleFocusChanged() {

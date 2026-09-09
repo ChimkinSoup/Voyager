@@ -174,4 +174,140 @@ void main() {
       findsOneWidget,
     );
   });
+
+  // `FLAGGED_WORDS.md` §7: the third override the dialog manages.
+  group('flagged words', () {
+    testWidgets('a bundled row can be flagged, with a replacement', (
+      tester,
+    ) async {
+      await openDialog(tester);
+      await type(tester, 'sad');
+
+      await tester.tap(find.byTooltip('Flag as misspelling'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'say');
+      await tester.tap(find.byTooltip('Flag word'));
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), {'sad': 'say'});
+    });
+
+    testWidgets('flagging with no replacement is a flag on its own', (
+      tester,
+    ) async {
+      await openDialog(tester);
+      await type(tester, 'sad');
+
+      await tester.tap(find.byTooltip('Flag as misspelling'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '');
+      await tester.tap(find.byTooltip('Flag word'));
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), {'sad': null});
+    });
+
+    testWidgets('a replacement the checker does not know is refused', (
+      tester,
+    ) async {
+      await openDialog(tester);
+      await type(tester, 'sad');
+
+      await tester.tap(find.byTooltip('Flag as misspelling'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'sadd');
+      await tester.tap(find.byTooltip('Flag word'));
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), isEmpty);
+      expect(find.textContaining('add it to the'), findsOneWidget);
+    });
+
+    testWidgets('a flagged word is one row, not also a faint bundled one', (
+      tester,
+    ) async {
+      await repo.flagWord('sad', replacement: 'say');
+      await openDialog(tester);
+      await type(tester, 'sad');
+
+      expect(find.text('sad → say'), findsOneWidget);
+      expect(find.byTooltip('In the built-in dictionary'), findsNothing);
+      expect(find.byTooltip('Stop flagging'), findsOneWidget);
+    });
+
+    testWidgets('the empty query lists flags beside custom words', (
+      tester,
+    ) async {
+      await repo.addCustomWord('voyager');
+      await repo.flagWord('sad');
+      await openDialog(tester);
+
+      expect(find.text('voyager'), findsOneWidget);
+      // No arrow: the flag carries no replacement.
+      expect(find.text('sad'), findsOneWidget);
+      expect(find.text('Flagged'), findsOneWidget);
+    });
+
+    testWidgets('editing a flagged row can clear the replacement', (
+      tester,
+    ) async {
+      await repo.flagWord('sad', replacement: 'say');
+      await openDialog(tester);
+
+      await tester.tap(find.byTooltip('Edit replacement'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '');
+      await tester.tap(find.byTooltip('Save replacement'));
+      await tester.pumpAndSettle();
+
+      // Clearing the replacement keeps the flag.
+      expect(await repo.getFlaggedWords(), {'sad': null});
+    });
+
+    testWidgets('stop flagging puts a bundled word back', (tester) async {
+      await repo.flagWord('sad', replacement: 'say');
+      await openDialog(tester);
+
+      await tester.tap(find.byTooltip('Stop flagging'));
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), isEmpty);
+      expect(await repo.getCustomWords(), isEmpty);
+    });
+
+    testWidgets('adding a flagged bundled word clears the flag', (
+      tester,
+    ) async {
+      // Allow wins (§4), and a bundled spelling gains no redundant custom row.
+      await repo.flagWord('sad');
+      await openDialog(tester);
+      await type(tester, 'sad');
+
+      await tester.tap(find.byTooltip('Add word'));
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), isEmpty);
+      expect(await repo.getCustomWords(), isEmpty);
+      expect(
+        find.textContaining('No longer flagging "sad"'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('flagging the target of an existing pair is refused', (
+      tester,
+    ) async {
+      await repo.flagWord('sad', replacement: 'say');
+      await openDialog(tester);
+      await type(tester, 'say');
+
+      await tester.tap(find.byTooltip('Flag as misspelling'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Flag word'));
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), {'sad': 'say'});
+      expect(find.textContaining('already replaces with it'), findsOneWidget);
+    });
+  });
 }

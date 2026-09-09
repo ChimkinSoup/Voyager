@@ -130,6 +130,64 @@ DateTime? calendarOccurrenceStartOn(CalendarEvent event, DateTime day) =>
       DateUtils.dateOnly(day.toLocal()),
     );
 
+/// How many occurrence starts [nextCalendarOccurrence] will step over before
+/// giving up.
+///
+/// Only exception dates and already-finished occurrences make it loop, so the
+/// scan is normally one or two steps; the cap is what stops a series whose
+/// every occurrence has been excepted from spinning forever.
+const int _occurrenceScanLimit = 500;
+
+/// The occurrence of [event] that is running at [from], or the next one due
+/// after it, as concrete local instants.
+///
+/// [CalendarEvent.start]/[end] are the *anchor's* instants, so for a repeating
+/// event they sit on the first occurrence and nowhere near the next one. Any
+/// caller asking "when does this event happen next" has to resolve that slide
+/// itself, or a series whose first occurrence has passed reads as an event
+/// that is permanently over — which is exactly how repeating events used to
+/// fall out of the notification feed.
+///
+/// Skips exception dates, stops at [CalendarEvent.recurrenceEndDate], and
+/// carries the whole span forward, so a multi-day occurrence still counts as
+/// current until its last day is over. Returns null when nothing is left.
+({DateTime start, DateTime end})? nextCalendarOccurrence(
+  CalendarEvent event,
+  DateTime from,
+) {
+  final localStart = event.start.toLocal();
+  final localEnd = event.end.toLocal();
+  if (!event.recurrence.repeats) {
+    return localEnd.isBefore(from) ? null : (start: localStart, end: localEnd);
+  }
+
+  final n = NormalizedCalendarEvent(event);
+  final until = n.untilLocal;
+  final span = n.durationDays;
+  final fromDay = DateUtils.dateOnly(from.toLocal());
+
+  // Starts from the earliest occurrence whose span could still reach [from]:
+  // one beginning more than [span] days before that day ended before it. The
+  // probe sits a day earlier still because [nextOccurrenceAfter] is strict.
+  var cursor = addDays(fromDay, -span - 1);
+  if (cursor.isBefore(n.startLocal)) cursor = addDays(n.startLocal, -1);
+
+  for (var step = 0; step < _occurrenceScanLimit; step++) {
+    final day = nextOccurrenceAfter(n.startLocal, event.recurrence, cursor);
+    if (day == null) return null;
+    if (until != null && day.isAfter(until)) return null;
+    cursor = day;
+    if (n.exceptionDays.contains(epochDay(day))) continue;
+    // Slid by whole calendar days rather than by a Duration, so an occurrence
+    // on the far side of a DST change keeps the series' wall-clock time.
+    final shift = epochDay(day) - epochDay(n.startLocal);
+    final start = addDaysKeepingTime(localStart, shift);
+    final end = addDaysKeepingTime(localEnd, shift);
+    if (!end.isBefore(from)) return (start: start, end: end);
+  }
+  return null;
+}
+
 bool _areConsecutiveCalendarDays(DateTime earlier, DateTime later) {
   final a = DateUtils.dateOnly(earlier.toLocal());
   final b = DateUtils.dateOnly(later.toLocal());

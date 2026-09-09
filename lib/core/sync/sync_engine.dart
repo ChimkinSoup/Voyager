@@ -400,9 +400,11 @@ class BackgroundSyncOrchestrator {
     required StudyRepository studyRepository,
     required WorkoutRepository workoutRepository,
     required JobRepository jobRepository,
+    required RankingRepository rankingRepository,
     required NotificationRepository notificationRepository,
     required BucketListRepository bucketListRepository,
     required SettingsRepository settingsRepository,
+    MediaPurge? mediaPurge,
   }) : _journalRepository = journalRepository,
        _dreamRepository = dreamRepository,
        _todoRepository = todoRepository,
@@ -413,9 +415,11 @@ class BackgroundSyncOrchestrator {
        _studyRepository = studyRepository,
        _workoutRepository = workoutRepository,
        _jobRepository = jobRepository,
+       _rankingRepository = rankingRepository,
        _notificationRepository = notificationRepository,
        _bucketListRepository = bucketListRepository,
-       _settingsRepository = settingsRepository;
+       _settingsRepository = settingsRepository,
+       _mediaPurge = mediaPurge;
 
   final JournalRepository _journalRepository;
   final DreamRepository _dreamRepository;
@@ -427,9 +431,16 @@ class BackgroundSyncOrchestrator {
   final StudyRepository _studyRepository;
   final WorkoutRepository _workoutRepository;
   final JobRepository _jobRepository;
+  final RankingRepository _rankingRepository;
   final NotificationRepository _notificationRepository;
   final BucketListRepository _bucketListRepository;
   final SettingsRepository _settingsRepository;
+
+  /// Purges expired media rows, local blobs and Storage objects. Injected
+  /// rather than taken as a repository because deleting an image is three
+  /// deletes in three places, and `MediaService` is what knows the order.
+  /// Null in tests that build no media stack.
+  final MediaPurge? _mediaPurge;
 
   Future<void> purgeExpiredDeleted({DateTime? now}) async {
     final cutoff = now ?? DateTime.now().toUtc();
@@ -448,14 +459,25 @@ class BackgroundSyncOrchestrator {
       // see. Purging on the same retention as everything else is what stops
       // them accumulating forever.
       _jobRepository.purgeExpiredDeleted(cutoff),
+      // Categories, entries and units all soft-delete, and a category's
+      // cascade leaves three tables' worth of tombstones on the same clock.
+      _rankingRepository.purgeExpiredDeleted(cutoff),
       // The tombstones that let an unpin, an un-dismissal, a removed bucket
       // list item or a removed dictionary word reach the other devices.
       _notificationRepository.purgeExpiredDeleted(cutoff),
       _bucketListRepository.purgeExpiredDeleted(cutoff),
       _settingsRepository.purgeExpiredDeleted(cutoff),
+      // Images run on the same 30-day clock as the entries holding them, so
+      // a journal page and its pictures expire together rather than leaving
+      // orphaned blobs behind.
+      if (_mediaPurge != null) _mediaPurge(cutoff),
     ]);
   }
 }
+
+/// Permanently deletes media whose retention window has closed —
+/// `MediaService.purgeExpired` in the app.
+typedef MediaPurge = Future<void> Function(DateTime now);
 
 class GoogleCalendarSyncService {
   GoogleCalendarSyncService(

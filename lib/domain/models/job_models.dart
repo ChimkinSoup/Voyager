@@ -20,7 +20,7 @@ class JobApplication extends SoftDeletable {
     required this.dateApplied,
     this.applicationUrl,
     this.notes,
-    this.seasonId,
+    this.seasonIds = const [],
   });
 
   final String company;
@@ -37,10 +37,14 @@ class JobApplication extends SoftDeletable {
   final String? applicationUrl;
   final String? notes;
 
-  /// Null while the application is active; set once archived into a season.
-  final String? seasonId;
-
-  bool get isArchived => seasonId != null;
+  /// The seasons this application belongs to, empty when it is filed under
+  /// none. An application may sit in more than one cycle at once — a role
+  /// re-posted for a later term is the same application to the user.
+  ///
+  /// Not an archive flag: whether an application is archived is decided by its
+  /// *seasons'* [JobSeason.archivedAt], and only once every one of them is
+  /// retired. See [jobIsArchived].
+  final List<String> seasonIds;
 
   JobApplication copyWith({
     String? company,
@@ -51,8 +55,7 @@ class JobApplication extends SoftDeletable {
     bool clearApplicationUrl = false,
     String? notes,
     bool clearNotes = false,
-    String? seasonId,
-    bool clearSeasonId = false,
+    List<String>? seasonIds,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -71,7 +74,7 @@ class JobApplication extends SoftDeletable {
           ? null
           : (applicationUrl ?? this.applicationUrl),
       notes: clearNotes ? null : (notes ?? this.notes),
-      seasonId: clearSeasonId ? null : (seasonId ?? this.seasonId),
+      seasonIds: seasonIds ?? this.seasonIds,
     );
   }
 }
@@ -131,14 +134,23 @@ class JobStage extends SoftDeletable {
     super.deletedAt,
     required this.name,
     this.sortOrder = 0,
+    this.colorValue,
   });
 
   final String name;
   final int sortOrder;
 
+  /// The colour the user picked for this stage, or null while it has never
+  /// been set. Nullable rather than defaulted: an unset stage keeps the
+  /// position-derived colour the header has always given it, so adding the
+  /// field changes nothing on screen until a colour is actually chosen.
+  final int? colorValue;
+
   JobStage copyWith({
     String? name,
     int? sortOrder,
+    int? colorValue,
+    bool clearColorValue = false,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -151,6 +163,7 @@ class JobStage extends SoftDeletable {
       deletedAt: deletedAt ?? this.deletedAt,
       name: name ?? this.name,
       sortOrder: sortOrder ?? this.sortOrder,
+      colorValue: clearColorValue ? null : (colorValue ?? this.colorValue),
     );
   }
 }
@@ -232,7 +245,16 @@ class JobCategory extends SoftDeletable {
   }
 }
 
-/// A named archive bucket, e.g. `Fall 2025`.
+/// A named application cycle, e.g. `Fall 2025`.
+///
+/// A season is picked while tracking an application, not applied to it after
+/// the fact — filing something under a season says when it went out, and says
+/// nothing yet about whether that cycle is over.
+///
+/// Archiving is a property of the *season*: setting [archivedAt] retires the
+/// whole cycle at once, which is what hides its applications from the default
+/// list and what takes the season out of the picker for new ones. [sortOrder]
+/// is the user's manual order, and it is the order the picker offers too.
 class JobSeason extends SoftDeletable {
   const JobSeason({
     required super.id,
@@ -242,14 +264,23 @@ class JobSeason extends SoftDeletable {
     super.deletedAt,
     required this.name,
     this.sortOrder = 0,
+    this.archivedAt,
   });
 
   final String name;
   final int sortOrder;
 
+  /// When the season was retired, or null while it is still running. Kept as
+  /// an instant rather than a bool so the archive carries its own date.
+  final DateTime? archivedAt;
+
+  bool get isArchived => archivedAt != null;
+
   JobSeason copyWith({
     String? name,
     int? sortOrder,
+    DateTime? archivedAt,
+    bool clearArchivedAt = false,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -262,6 +293,7 @@ class JobSeason extends SoftDeletable {
       deletedAt: deletedAt ?? this.deletedAt,
       name: name ?? this.name,
       sortOrder: sortOrder ?? this.sortOrder,
+      archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
     );
   }
 }

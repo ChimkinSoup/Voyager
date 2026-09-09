@@ -258,8 +258,22 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     );
   }
 
+  /// Reading the log off disk happens with nothing on screen, so a second
+  /// press landing in that gap would stack a second dialog on the first.
+  static bool _logDialogOpen = false;
+
   Future<void> _showLogDialog(BuildContext context, WidgetRef ref) async {
-    final text = await ref.read(syncCompareLoggerProvider).readLog();
+    if (_logDialogOpen) return;
+    _logDialogOpen = true;
+    final String text;
+    try {
+      text = await ref.read(syncCompareLoggerProvider).readLog();
+    } finally {
+      // Released before the dialog rather than after it: the dialog's
+      // own barrier covers the tile from the moment it is pushed, and
+      // nothing awaits in between.
+      _logDialogOpen = false;
+    }
     if (!context.mounted) return;
 
     await showDialog<void>(

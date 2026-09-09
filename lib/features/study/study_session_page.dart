@@ -3,21 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
-import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
 import 'package:voyager/features/study/study_actions.dart';
 import 'package:voyager/features/study/study_card_editor_modal.dart';
+import 'package:voyager/features/study/study_card_face.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_grading_row.dart';
 import 'package:voyager/features/study/study_history_controls.dart';
 import 'package:voyager/features/study/study_keyboard_shortcuts.dart';
-import 'package:voyager/features/study/study_rich_text.dart';
 
 /// Distraction-free full-screen SRS review: only the active flashcard and
 /// its grading buttons — no roster, no admin chrome. Grading a card
@@ -49,6 +50,7 @@ class _GradeStep {
   const _GradeStep({
     required this.before,
     required this.after,
+    required this.log,
     required this.queueBefore,
     required this.queueAfter,
   });
@@ -56,6 +58,11 @@ class _GradeStep {
   /// The card's SRS state on either side of the grade.
   final StudyCard before;
   final StudyCard after;
+
+  /// The review-log row this grade wrote. Undo tombstones it and redo revives
+  /// the same id, so stepping back and forth can never leave the Hub's
+  /// "reviewed today" counting a grade the schedule no longer shows.
+  final StudyReviewLog log;
 
   final List<StudyCard> queueBefore;
   final List<StudyCard> queueAfter;
@@ -182,11 +189,38 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     final card = _current;
     if (card == null || _grading) return;
 
-    final deleted = await deleteStudyCard(context, ref, card);
+    final deleted = await deleteStudyCard(
+      context,
+      ref,
+      card,
+      onRestored: () => _requeueRestoredCard(card.id),
+    );
     if (!mounted || !deleted) return;
 
     setState(() {
       _queue = [...?_queue]..removeWhere((c) => c.id == card.id);
+      _clearHistory();
+    });
+    _showFront();
+  }
+
+  /// Puts a card the toast's Undo brought back at the head of the queue, so
+  /// the session returns to the card the delete took it off.
+  ///
+  /// The wait on [studyAllCardsProvider] is what makes it stick. [_syncQueue]
+  /// drops any queued card the provider's list no longer has, and re-queueing
+  /// before the restore has landed there would have the card dropped again on
+  /// the very next build — permanently, since the queue is only ever refreshed
+  /// *from* itself and so can never re-admit a card it has lost.
+  Future<void> _requeueRestoredCard(String cardId) async {
+    final live = await ref.read(studyAllCardsProvider.future);
+    if (!mounted) return;
+    final restored = live.where((c) => c.id == cardId).firstOrNull;
+    if (restored == null) return;
+    setState(() {
+      _queue = [restored, ...?_queue?.where((c) => c.id != cardId)];
+      // The round is arranged differently from every step already taken, for
+      // the same reason a reset clears the history.
       _clearHistory();
     });
     _showFront();
@@ -198,9 +232,28 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     setState(() => _grading = true);
 
     final current = queue.first;
-    final graded = gradeStudyCard(current, grade);
     final repo = ref.read(studyRepositoryProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
+
+    // Graded off the row as it stands on disk, not off the queue's snapshot.
+    // `copyWith` carries `deletedAt ?? this.deletedAt`, so grading a card the
+    // queue still holds but a delete has since tombstoned would write
+    // `deletedAt: null` straight back over the tombstone and resurrect it —
+    // orphaned inside a deleted deck, pushed to Firestore, with a review log
+    // row to match.
+    final live = await repo.getCard(current.id);
+    if (!mounted) return;
+    if (live == null || live.deletedAt != null) {
+      setState(() {
+        _queue = [...queue]..removeAt(0);
+        _grading = false;
+        _clearHistory();
+      });
+      _flipController.showFront();
+      return;
+    }
+
+    final graded = gradeStudyCard(live, grade);
     await repo.upsertCard(graded);
     remoteSync.pushStudyCard(graded);
     final log = StudyReviewLog(
@@ -211,6 +264,10 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     );
     await repo.logReview(log);
     remoteSync.pushStudyReviewLog(log);
+    // Closing the session mid-write — the X button, or Escape — disposes this
+    // State across those two awaits. The card and the log are both durably
+    // written by here, so bailing loses nothing.
+    if (!mounted) return;
 
     setState(() {
       final next = [...queue]..removeAt(0);
@@ -220,8 +277,11 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       _grading = false;
       _graded.add(
         _GradeStep(
-          before: current,
+          // The live row, not the queue's copy: undo puts back the state the
+          // grade actually replaced, which is what was on disk a moment ago.
+          before: live,
           after: graded,
+          log: log,
           queueBefore: queue,
           queueAfter: next,
         ),
@@ -239,12 +299,9 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
   bool get _canRedo => _undone.isNotEmpty && !_grading;
 
   /// Steps back to the card graded last, putting its schedule back exactly as
-  /// it stood before the grade.
-  ///
-  /// The [StudyReviewLog] row that grade wrote stays: the log is append-only
-  /// and has no delete path through sync, so a redo re-writes the same row
-  /// rather than a second one, and only a grade taken back and then abandoned
-  /// leaves a review counted that the schedule no longer shows.
+  /// it stood before the grade — and taking back the [StudyReviewLog] row that
+  /// grade wrote, so the Hub's "reviewed today" and the schedule agree even for
+  /// a grade that is undone and then abandoned by leaving the session.
   Future<void> _undo() => _replay(_graded, _undone, forward: false);
 
   /// Steps forward again into a grade that was taken back, restoring the very
@@ -268,17 +325,29 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     }
 
     setState(() => _grading = true);
+    final repo = ref.read(studyRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
     final restored = restoreStudyCardSrs(
       live,
       forward ? step.after : step.before,
     );
-    await ref.read(studyRepositoryProvider).upsertCard(restored);
-    ref.read(remoteSyncServiceProvider).pushStudyCard(restored);
+    await repo.upsertCard(restored);
+    remoteSync.pushStudyCard(restored);
+    await _replayReviewLog(step.log, forward: forward);
     if (!mounted) return;
 
     setState(() {
       to.add(from.removeLast());
-      _queue = forward ? step.queueAfter : step.queueBefore;
+      final base = forward ? step.queueAfter : step.queueBefore;
+      // The restored copy is the newest revision there is. Putting the raw
+      // snapshot back instead lets the pre-invalidation provider list — which
+      // still holds the graded card, at a strictly greater version — win
+      // `refreshFromLive`'s comparison on the next build, so the card and the
+      // grading row's interval previews flash the state just undone before the
+      // refetch lands and flips them back.
+      _queue = [
+        for (final card in base) card.id == restored.id ? restored : card,
+      ];
       _showingBack = false;
       _grading = false;
     });
@@ -287,12 +356,44 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     _invalidateFor(restored);
   }
 
+  /// Takes [log] back on an undo and revives that same row on a redo.
+  ///
+  /// Never a second row: the redo re-writes the id the grade originally wrote,
+  /// at a version resolved against what is on disk now — a pull can have landed
+  /// a newer revision of it while the session sat on the undo.
+  Future<void> _replayReviewLog(
+    StudyReviewLog log, {
+    required bool forward,
+  }) async {
+    final repo = ref.read(studyRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    if (!forward) {
+      await repo.softDeleteReviewLog(log.id);
+      final tombstone = await repo.getReviewLog(log.id);
+      if (tombstone != null) remoteSync.pushStudyReviewLog(tombstone);
+      return;
+    }
+    final current = await repo.getReviewLog(log.id);
+    if (current != null && current.deletedAt == null) return;
+    final revived = log.restored(
+      version: restoreVersionFrom(
+        preDeleteVersion: log.version,
+        currentVersion: current?.version,
+      ),
+    );
+    await repo.logReview(revived);
+    remoteSync.pushStudyReviewLog(revived);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cardsAsync = ref.watch(studyAllCardsProvider);
     final cards = cardsAsync.valueOrNull;
     if (cards != null) _syncQueue(cards);
     final queue = _queue;
+    // Rebuilt whenever the media module changes, so an image that finishes
+    // downloading mid-session appears on the card it belongs to.
+    final images = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -370,10 +471,16 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
                                             setState(() => _showingBack = back),
                                         front: _SessionCardFace(
                                           text: queue.first.frontText,
+                                          images:
+                                              images[queue.first.id]?.front ??
+                                              const [],
                                           onTap: _handleFlip,
                                         ),
                                         back: _SessionCardFace(
                                           text: queue.first.backText,
+                                          images:
+                                              images[queue.first.id]?.back ??
+                                              const [],
                                           accent: true,
                                           onTap: _handleFlip,
                                         ),
@@ -406,11 +513,13 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
 class _SessionCardFace extends StatelessWidget {
   const _SessionCardFace({
     required this.text,
+    required this.images,
     required this.onTap,
     this.accent = false,
   });
 
   final String text;
+  final List<MediaAsset> images;
   final VoidCallback onTap;
   final bool accent;
 
@@ -430,17 +539,13 @@ class _SessionCardFace extends StatelessWidget {
         border: Border.all(color: vc.strongHairline),
         boxShadow: vc.surfaceShadow(),
       ),
-      child: Center(
-        child: VoyagerScrollView(
-          child: StudyRichText(
-            text,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              color: accent
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface,
-            ),
-          ),
+      child: StudyCardFace(
+        text: text,
+        images: images,
+        style: theme.textTheme.headlineMedium?.copyWith(
+          color: accent
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface,
         ),
       ),
     );

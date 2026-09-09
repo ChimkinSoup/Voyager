@@ -15,8 +15,9 @@ import 'package:voyager/features/leetcode/leetcode_track_modal.dart';
 
 /// Opens the LeetCode problem's detail view with a small "camera zoom"
 /// animation growing from [anchorRect] (the tapped card/row's on-screen
-/// rect) to fill the screen. Closing reverses the same animation, leaving
-/// the caller exactly where it was.
+/// rect) to a card inset from the window edge, over a darkened page.
+/// Escape, the close button, or a tap on the darkened margin reverses the
+/// same animation, leaving the caller exactly where it was.
 Future<void> openLeetCodeDetailView(
   BuildContext context,
   LeetCodeProblem problem,
@@ -52,6 +53,17 @@ class _LeetCodeDetailOverlay extends StatefulWidget {
 /// transform is what performs the reveal; past this point the card is opaque,
 /// so the middle of the animation is never a half-transparent screen.
 const double _kCardFadeInFraction = 0.3;
+
+/// Where a zoom-open overlay comes to rest: short of the window edge by
+/// enough that the page behind it stays visible as a darkened border — the
+/// same "there is something under this" cue the jobs track flow gives.
+/// Proportional so it reads as a margin on a large monitor without
+/// swallowing a small window.
+///
+/// Shared with the activity overlay, which performs the same zoom and has to
+/// come to rest in the same place.
+Rect leetCodeZoomRect(Rect screen) =>
+    screen.deflate((screen.shortestSide * 0.05).clamp(16.0, 48.0));
 
 class _LeetCodeDetailOverlayState extends State<_LeetCodeDetailOverlay>
     with SingleTickerProviderStateMixin {
@@ -90,7 +102,7 @@ class _LeetCodeDetailOverlayState extends State<_LeetCodeDetailOverlay>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final fullScreenRect = Offset.zero & size;
+    final targetRect = leetCodeZoomRect(Offset.zero & size);
     final reducedMotion = VoyagerMotion.reduced(context);
 
     return CallbackShortcuts(
@@ -111,9 +123,13 @@ class _LeetCodeDetailOverlayState extends State<_LeetCodeDetailOverlay>
               animation: _controller,
               builder: (context, child) {
                 final raw = _controller.value.clamp(0.0, 1.0);
+                // Tapping the darkened border closes, the way a barrier does.
+                // The card's own Material sits above this and absorbs its
+                // taps, so only the margin is dismissive.
                 final scrim = Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
+                  child: GestureDetector(
+                    onTap: _close,
+                    child: ColoredBox(
                       color: Colors.black.withValues(alpha: 0.5 * raw),
                     ),
                   ),
@@ -124,30 +140,36 @@ class _LeetCodeDetailOverlayState extends State<_LeetCodeDetailOverlay>
                   return Stack(
                     children: [
                       scrim,
-                      Positioned.fill(
+                      Positioned.fromRect(
+                        rect: targetRect,
                         child: Opacity(opacity: raw, child: child),
                       ),
                     ],
                   );
                 }
                 final t = VoyagerSpring.moveCurve.transform(raw);
-                final rect = Rect.lerp(widget.anchorRect, fullScreenRect, t)!;
-                final scaleX = rect.width / fullScreenRect.width;
-                final scaleY = rect.height / fullScreenRect.height;
+                final rect = Rect.lerp(widget.anchorRect, targetRect, t)!;
                 return Stack(
                   children: [
                     scrim,
-                    // The card is always laid out at full-screen size and
-                    // scaled via Transform (rather than resized via
+                    // The card is always laid out at its final size and scaled
+                    // via Transform (rather than resized via
                     // Positioned.fromRect) so its content never has to reflow
                     // into anchorRect's tiny starting dimensions, which caused
                     // RenderFlex overflows.
-                    Positioned.fill(
+                    Positioned.fromRect(
+                      rect: targetRect,
                       child: Transform(
                         alignment: Alignment.topLeft,
                         transform: Matrix4.identity()
-                          ..translate(rect.left, rect.top)
-                          ..scale(scaleX, scaleY),
+                          ..translate(
+                            rect.left - targetRect.left,
+                            rect.top - targetRect.top,
+                          )
+                          ..scale(
+                            rect.width / targetRect.width,
+                            rect.height / targetRect.height,
+                          ),
                         child: Opacity(
                           opacity: (t / _kCardFadeInFraction).clamp(0.0, 1.0),
                           child: child,

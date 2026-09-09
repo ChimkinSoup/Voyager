@@ -141,15 +141,27 @@ class _BreakdownRow extends StatelessWidget {
 ///
 /// Hover bubbles are laid out rather than positioned because the bubble sizes
 /// itself to its own text — a [Positioned] would need that size in advance.
+///
+/// [visibleTop] and [visibleBottom] name the band of the host stack the user
+/// can actually see, in the stack's own coordinates. They matter when the
+/// stack is taller than what it is being shown through: scrolled down, the
+/// space *above* the pointer is still there in the stack, so the bubble kept
+/// choosing it and was drawn behind the header the scroll area ends at. Left
+/// null they fall back to the stack's own edges, which is right for a host
+/// that is fully on screen.
 class LeetCodeActivityBubbleLayer extends StatelessWidget {
   const LeetCodeActivityBubbleLayer({
     super.key,
     required this.anchor,
     required this.child,
+    this.visibleTop,
+    this.visibleBottom,
   });
 
   final Offset anchor;
   final Widget child;
+  final double? visibleTop;
+  final double? visibleBottom;
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +170,11 @@ class LeetCodeActivityBubbleLayer extends StatelessWidget {
       // absorbing the hover would make it flicker itself away.
       child: IgnorePointer(
         child: CustomSingleChildLayout(
-          delegate: _BubbleLayout(anchor: anchor),
+          delegate: _BubbleLayout(
+            anchor: anchor,
+            visibleTop: visibleTop,
+            visibleBottom: visibleBottom,
+          ),
           child: child,
         ),
       ),
@@ -167,9 +183,15 @@ class LeetCodeActivityBubbleLayer extends StatelessWidget {
 }
 
 class _BubbleLayout extends SingleChildLayoutDelegate {
-  const _BubbleLayout({required this.anchor});
+  const _BubbleLayout({
+    required this.anchor,
+    this.visibleTop,
+    this.visibleBottom,
+  });
 
   final Offset anchor;
+  final double? visibleTop;
+  final double? visibleBottom;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
@@ -183,20 +205,24 @@ class _BubbleLayout extends SingleChildLayoutDelegate {
   Offset getPositionForChild(Size size, Size childSize) {
     final maxLeft = math.max(0.0, size.width - childSize.width);
     final left = (anchor.dx - childSize.width / 2).clamp(0.0, maxLeft);
+    final top0 = visibleTop ?? 0.0;
+    final bottom0 = visibleBottom ?? size.height;
     final above = anchor.dy - childSize.height - _kBubbleGap;
-    // Prefer above the pointer; if that hangs off the top, flip below. When
-    // the bubble is taller than the stack, pin to y=0 and let Clip.none
-    // carry the rest.
-    final top = above >= 0
+    // Prefer above the pointer; if that would leave the visible band, flip
+    // below. When the bubble is taller than the band, pin to its top and let
+    // Clip.none carry the rest.
+    final top = above >= top0
         ? above
         : math.min(
             anchor.dy + _kBubbleGap,
-            math.max(0.0, size.height - childSize.height),
+            math.max(top0, bottom0 - childSize.height),
           );
     return Offset(left, top);
   }
 
   @override
   bool shouldRelayout(_BubbleLayout oldDelegate) =>
-      oldDelegate.anchor != anchor;
+      oldDelegate.anchor != anchor ||
+      oldDelegate.visibleTop != visibleTop ||
+      oldDelegate.visibleBottom != visibleBottom;
 }

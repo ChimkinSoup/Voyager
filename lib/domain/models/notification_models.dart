@@ -1,6 +1,7 @@
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 
 /// How urgently a notification feed item should be surfaced. Drives both the
 /// nav-rail bell's dot color/animation and the feed's sort order.
@@ -20,6 +21,7 @@ class NotificationFeedItem {
     this.task,
     this.event,
     this.bill,
+    this.occurrenceDate,
   });
 
   final String id;
@@ -31,9 +33,24 @@ class NotificationFeedItem {
   final CalendarEvent? event;
   final Subscription? bill;
 
+  /// For something that happens more than once — an occurrence of a repeating
+  /// event, a month's instance of a bill — the local date-only day this row
+  /// stands for. Null when [id] already names a single dated thing.
+  ///
+  /// [event] and [bill] stay the *stored* row, times and all: the row's menu
+  /// writes through them, so handing it an occurrence-shifted copy would move
+  /// the series anchor onto today the first time someone recoloured it.
+  final DateTime? occurrenceDate;
+
   /// Key used by the dismissal table — tied to the current urgency tier so a
-  /// dismissal only suppresses this item until it escalates to a new tier.
-  String get dismissalKey => '$id|${urgency.name}';
+  /// dismissal only suppresses this item until it escalates to a new tier,
+  /// and to [occurrenceDate] so dismissing tonight's occurrence of a repeating
+  /// event does not bury every future one behind the same key.
+  String get dismissalKey {
+    final occurrence = occurrenceDate;
+    if (occurrence == null) return '$id|${urgency.name}';
+    return '$id@${_dayKey(occurrence)}|${urgency.name}';
+  }
 }
 
 /// A short freeform quick-capture reminder shown in the notification
@@ -99,6 +116,12 @@ class DismissedNotification {
   bool get isDismissed => deletedAt == null;
 }
 
+/// `yyyy-MM-dd` for a local date, the occurrence half of a [dismissalKey].
+String _dayKey(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
 /// Classifies a task's urgency, or null if it shouldn't appear in the feed.
 /// Overdue or due-today tasks are important; due-tomorrow tasks are
 /// semi-important; anything further out (or with no due date) isn't shown.
@@ -114,18 +137,39 @@ NotificationUrgency? evaluateTaskUrgency(TodoTask task, DateTime now) {
   return null;
 }
 
-/// Classifies a calendar event's urgency: important if it starts within the
-/// next hour, semi-important if within the next 24 hours, otherwise not
-/// shown. Events that have already ended are never shown.
-NotificationUrgency? evaluateEventUrgency(CalendarEvent event, DateTime now) {
+/// The occurrence of [event] the feed should judge: the one running now, or
+/// the next one due. Null once the event is deleted or has no occurrence left.
+///
+/// A repeating event is never judged on its own [CalendarEvent.start] — that
+/// is the anchor, which for any series that has been running a while sits in
+/// the past, and reading it directly is what used to keep every repeating
+/// event out of the feed entirely.
+({DateTime start, DateTime end})? notifiableEventOccurrence(
+  CalendarEvent event,
+  DateTime now,
+) {
   if (event.deletedAt != null) return null;
-  if (event.end.isBefore(now)) return null;
-  final untilStart = event.start.difference(now);
+  return nextCalendarOccurrence(event, now);
+}
+
+/// Classifies an occurrence starting at [start]: important if it starts within
+/// the next hour (or is already under way), semi-important if within the next
+/// 24 hours, otherwise not shown.
+NotificationUrgency? _urgencyForStart(DateTime start, DateTime now) {
+  final untilStart = start.difference(now);
   if (untilStart.isNegative || untilStart <= const Duration(hours: 1)) {
     return NotificationUrgency.important;
   }
   if (untilStart <= const Duration(hours: 24)) return NotificationUrgency.semi;
   return null;
+}
+
+/// Classifies a calendar event's urgency from its current-or-next occurrence.
+/// Occurrences that have already ended are never shown.
+NotificationUrgency? evaluateEventUrgency(CalendarEvent event, DateTime now) {
+  final occurrence = notifiableEventOccurrence(event, now);
+  if (occurrence == null) return null;
+  return _urgencyForStart(occurrence.start, now);
 }
 
 /// Classifies a subscription/bill's urgency: important if due today or
@@ -164,15 +208,21 @@ List<NotificationFeedItem> buildNotificationFeed({
   }
 
   for (final event in events) {
-    final urgency = evaluateEventUrgency(event, now);
+    final occurrence = notifiableEventOccurrence(event, now);
+    if (occurrence == null) continue;
+    final urgency = _urgencyForStart(occurrence.start, now);
     if (urgency == null) continue;
+    final start = occurrence.start;
     items.add(
       NotificationFeedItem(
         id: event.id,
         type: NotificationItemType.event,
         urgency: urgency,
-        dueAt: event.start,
+        dueAt: start,
         event: event,
+        occurrenceDate: event.recurrence.repeats
+            ? DateTime(start.year, start.month, start.day)
+            : null,
       ),
     );
   }
@@ -180,13 +230,17 @@ List<NotificationFeedItem> buildNotificationFeed({
   for (final bill in bills) {
     final urgency = evaluateBillUrgency(bill, now);
     if (urgency == null) continue;
+    final due = bill.nextDue(now);
     items.add(
       NotificationFeedItem(
         id: bill.id,
         type: NotificationItemType.bill,
         urgency: urgency,
-        dueAt: bill.nextDue(now),
+        dueAt: due,
         bill: bill,
+        // A subscription bills again every period, so its dismissal has to be
+        // scoped to the instalment the way a repeating event's is.
+        occurrenceDate: DateTime(due.year, due.month, due.day),
       ),
     );
   }

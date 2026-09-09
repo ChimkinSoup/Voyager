@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +12,7 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
+import 'package:voyager/features/leetcode/leetcode_scratch_host.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_history_controls.dart';
 import 'package:voyager/features/study/study_keyboard_shortcuts.dart';
@@ -58,7 +57,13 @@ class _CramStep {
 }
 
 class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, LeetCodeScratchHost {
+  @override
+  Set<String> get scratchProblemIds => widget.problemIds;
+
+  @override
+  LeetCodeProblem? get scratchCurrentProblem => _current;
+
   /// How far the card's *projected* resting place has to be off centre for
   /// the swipe to count as a decision rather than a nudge.
   static const _commitThreshold = 120.0;
@@ -139,6 +144,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
     for (final step in [..._decided, ..._undone]) {
       step.retainOnly(live);
     }
+    retainScratch(live);
   }
 
   LeetCodeProblem? get _current {
@@ -185,7 +191,8 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   /// instead of restarting from a standstill. Zero for the arrow keys and the
   /// pass/fail buttons, which carry no momentum of their own.
   void _decide(bool passed, {double velocity = 0}) {
-    if (_current == null || _exiting) return;
+    if (_current == null || _exiting || scratchHasSessionInput) return;
+    flushScratch();
     setState(() => _exiting = true);
     if (VoyagerMotion.reduced(context)) {
       // A card flying the full width of the window is exactly the kind of
@@ -289,6 +296,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    syncScratch();
     final problems = ref.watch(leetcodeProblemsProvider).valueOrNull;
     if (problems != null) _syncProblems(problems);
 
@@ -304,6 +312,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
                 showingBack: _showingBack,
                 onUndo: _canUndo ? _undo : null,
                 onRedo: _canRedo ? _redo : null,
+                onFocusScratch: scratchEnabled ? focusScratch : null,
                 child: _complete
                     ? _CramComplete(
                         onDone: () => Navigator.of(context).pop(),
@@ -341,95 +350,91 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
                               bucket2: _bucket2.length,
                             ),
                             Expanded(
-                              child: Center(
-                                // Same sizing as a review session's card: take the
-                                // whole free area, capped so a very large or very
-                                // tall window keeps card proportions.
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) => SizedBox(
-                                    key: _cardKey,
-                                    width: math.min(constraints.maxWidth, 760),
-                                    height: math.min(
-                                      constraints.maxHeight,
-                                      720,
-                                    ),
-                                    child: GestureDetector(
-                                      onHorizontalDragUpdate: (details) {
-                                        if (_exiting) return;
-                                        // Glued to the pointer. Going through the spring
-                                        // rather than a plain field means grabbing a card
-                                        // that is still springing back picks it up where
-                                        // it actually is, with no jump.
-                                        _cardX.jumpTo(
-                                          _cardX.value + details.delta.dx,
-                                        );
-                                      },
-                                      onHorizontalDragEnd: (details) {
-                                        if (_exiting) return;
-                                        final velocity =
-                                            details.velocity.pixelsPerSecond.dx;
-                                        // Decide on where the flick is *heading*, not
-                                        // where the finger happened to stop, so a short
-                                        // fast throw commits and a long slow drag that
-                                        // stalls at the edge does not.
-                                        final projected =
-                                            _cardX.value +
-                                            projectMomentum(velocity);
-                                        if (projected.abs() >
-                                            _commitThreshold) {
-                                          _decide(
-                                            projected > 0,
-                                            velocity: velocity,
-                                          );
-                                        } else {
-                                          _cardX.animateTo(
-                                            0,
-                                            velocity: velocity,
-                                            spring: _snapBackSpring,
-                                          );
-                                        }
-                                      },
-                                      child: AnimatedScale(
-                                        scale: _exiting ? 0.8 : 1.0,
-                                        duration: _exitDuration,
-                                        curve: VoyagerSpring.moveCurve,
-                                        child: AnimatedOpacity(
-                                          opacity: _exiting ? 0.0 : 1.0,
-                                          duration: _exitDuration,
-                                          child: AnimatedBuilder(
-                                            animation: _cardX.controller,
-                                            builder: (context, child) =>
-                                                Transform.translate(
-                                                  offset: Offset(
-                                                    _cardX.value,
-                                                    0,
-                                                  ),
-                                                  child: child,
-                                                ),
-                                            // The same menu a tile in the deck
-                                            // gives, so a problem is the same
-                                            // object here as it is there.
-                                            child: ContextMenuRegion(
-                                              itemsBuilder: () =>
-                                                  leetCodeProblemMenuItems(
-                                                    context: context,
-                                                    ref: ref,
-                                                    problem: _current!,
-                                                    onOpenDetail: () =>
-                                                        _openDetail(_current!),
-                                                    onResetProgress:
-                                                        _resetAndAdvance,
-                                                    onDelete: _deleteCurrent,
-                                                  ),
-                                              child: LeetCodeFlashcard(
-                                                key: ValueKey(_current!.id),
+                              // Same sizing as a review session's card: take
+                              // the whole free area, capped so a very large or
+                              // very tall window keeps card proportions — and
+                              // shared with the scratch pad when there is one.
+                              child: buildScratchArea(
+                                cardKey: _cardKey,
+                                card: GestureDetector(
+                                  onHorizontalDragUpdate: (details) {
+                                    // The pad having the caret means the
+                                    // user is typing, not sorting cards —
+                                    // and a card that moved under a
+                                    // half-written attempt would be a
+                                    // decision they never made.
+                                    if (_exiting || scratchHasSessionInput) {
+                                      return;
+                                    }
+                                    // Glued to the pointer. Going through the spring
+                                    // rather than a plain field means grabbing a card
+                                    // that is still springing back picks it up where
+                                    // it actually is, with no jump.
+                                    _cardX.jumpTo(
+                                      _cardX.value + details.delta.dx,
+                                    );
+                                  },
+                                  onHorizontalDragEnd: (details) {
+                                    if (_exiting || scratchHasSessionInput) {
+                                      return;
+                                    }
+                                    final velocity =
+                                        details.velocity.pixelsPerSecond.dx;
+                                    // Decide on where the flick is *heading*, not
+                                    // where the finger happened to stop, so a short
+                                    // fast throw commits and a long slow drag that
+                                    // stalls at the edge does not.
+                                    final projected =
+                                        _cardX.value +
+                                        projectMomentum(velocity);
+                                    if (projected.abs() > _commitThreshold) {
+                                      _decide(
+                                        projected > 0,
+                                        velocity: velocity,
+                                      );
+                                    } else {
+                                      _cardX.animateTo(
+                                        0,
+                                        velocity: velocity,
+                                        spring: _snapBackSpring,
+                                      );
+                                    }
+                                  },
+                                  child: AnimatedScale(
+                                    scale: _exiting ? 0.8 : 1.0,
+                                    duration: _exitDuration,
+                                    curve: VoyagerSpring.moveCurve,
+                                    child: AnimatedOpacity(
+                                      opacity: _exiting ? 0.0 : 1.0,
+                                      duration: _exitDuration,
+                                      child: AnimatedBuilder(
+                                        animation: _cardX.controller,
+                                        builder: (context, child) =>
+                                            Transform.translate(
+                                              offset: Offset(_cardX.value, 0),
+                                              child: child,
+                                            ),
+                                        // The same menu a tile in the deck
+                                        // gives, so a problem is the same
+                                        // object here as it is there.
+                                        child: ContextMenuRegion(
+                                          itemsBuilder: () =>
+                                              leetCodeProblemMenuItems(
+                                                context: context,
+                                                ref: ref,
                                                 problem: _current!,
-                                                controller: _flipController,
-                                                onFlipChanged: (back) =>
-                                                    setState(
-                                                      () => _showingBack = back,
-                                                    ),
+                                                onOpenDetail: () =>
+                                                    _openDetail(_current!),
+                                                onResetProgress:
+                                                    _resetAndAdvance,
+                                                onDelete: _deleteCurrent,
                                               ),
+                                          child: LeetCodeFlashcard(
+                                            key: ValueKey(_current!.id),
+                                            problem: _current!,
+                                            controller: _flipController,
+                                            onFlipChanged: (back) => setState(
+                                              () => _showingBack = back,
                                             ),
                                           ),
                                         ),

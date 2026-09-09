@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +14,7 @@ import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/effects/confetti.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
@@ -23,9 +25,10 @@ import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
-import 'package:voyager/core/widgets/rounded_dropdown.dart';
-import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
+import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
@@ -41,11 +44,13 @@ import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
+import 'package:voyager/features/todo/todo_list_search.dart';
+import 'package:voyager/features/todo/todo_list_search_bar.dart';
 import 'package:voyager/features/todo/todo_manage_sheet.dart';
-import 'package:voyager/features/todo/todo_settings_dialog.dart';
 
 const _todoEditPanelWidth = 420.0;
-const _todoEditPanelDuration = Duration(milliseconds: 270);
+// The reveal, at the same length the Jobs and Rankings panels open in.
+const _todoEditPanelDuration = Duration(milliseconds: 220);
 // How long a completion toggle's write is held so it doesn't fire during the
 // row's move + confetti. Toggles landing inside the window batch together.
 const _todoCompletionSaveDelay = Duration(milliseconds: 900);
@@ -71,6 +76,16 @@ typedef _RowSignature = ({
   String listsKey,
   int subtaskEpoch,
   ({int completed, int total})? subtaskStatsData,
+  // Adds or drops the metadata row's image icon, so a row cached before an
+  // image was attached isn't reused after it was.
+  bool hasImages,
+  // The list-search query the title is highlighted against, folded to one
+  // string, plus whether this row is the active match and the list badge it
+  // wears while filtering the all-tasks view. All three change what the row
+  // paints, so a row cached before the query changed can't be reused after.
+  String searchKeywordsKey,
+  bool isActiveMatch,
+  String? listBadgeName,
 });
 
 /// A [ScrollController] that can be told to hold whatever the view is
@@ -317,6 +332,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // Stores the last resolved result so FutureBuilders can use it as
   // initialData — preventing a blank frame on widget remount after reorder.
   final _subtaskResultsCache = <String, ({int completed, int total})>{};
+  // Task ids with at least one image attached, refreshed from
+  // mediaOwnersWithImagesProvider in build. Read by _rowFor for the metadata
+  // icon; empty until the first resolution, which just means the icon appears
+  // a frame late rather than the row waiting on it.
+  var _tasksWithImages = const <String>{};
   // A task that was just toggled. Its row — in the completed section for a
   // completion, at the top of the active list for an uncomplete — grows
   // itself in instead of appearing at full height (see [_toggleTask]). Live
@@ -355,11 +375,414 @@ class _TodoPageState extends ConsumerState<TodoPage>
   final _rowWidgetCache = <String, _TaskRow>{};
   final _rowSignatureCache = <String, _RowSignature>{};
 
+  // ---------------------------------------------------------------------
+  // Ephemeral list search (TODO_LIST_SEARCH_HLD.md).
+  //
+  // Page-local and never persisted: the filter is cleared and the bar closed
+  // whenever the view changes underneath it — another list, the all-tasks
+  // toggle, or leaving the page — so a filter is never live while the bar
+  // that explains it is gone.
+  // ---------------------------------------------------------------------
+  final _listSearchController = TextEditingController();
+  final _listSearchFocusNode = FocusNode();
+  final GlobalKey _activeMatchKey = GlobalKey();
+  Timer? _listSearchDebounce;
+  // Same delay as the journal Search page, for the same reason: a burst of
+  // keystrokes costs one filter pass over the list, not one per character.
+  static const _listSearchDebounceDelay = Duration(milliseconds: 150);
+  var _listSearchBarOpen = false;
+  // The debounced query actually being filtered on, as the tokens every match
+  // has to satisfy. The un-split query itself lives in the field's controller.
+  var _listSearchTokens = const <String>[];
+  // The matches in display order (active section, then completed), rebuilt
+  // every build from what is actually on screen. Enter / Shift+Enter walk
+  // this, and the panel follows the one they land on.
+  var _listSearchMatches = const <TodoTask>[];
+  var _listSearchActiveMatchIndex = 0;
+  // How long a walk stays "in progress" for the edit panel (see
+  // [_armPanelFollow]). Shorter than the query debounce above: this one is
+  // measured against key repeats, not typing.
+  static const _panelFollowWindow = Duration(milliseconds: 120);
+  Timer? _panelFollowTimer;
+  var _panelFollowPending = false;
+  // Subtask titles by parent id, so a query can match a task through one of
+  // its subtasks. Loaded in one query per list when the bar opens rather than
+  // per row: `listTasks` is top-level only, and the per-row subtask query
+  // behind `_subtaskStats` fetches counts for the active section alone.
+  var _subtaskTitlesByParent = const <String, List<String>>{};
+  // The `_subtaskCacheEpoch` the titles above were loaded at. Anything older
+  // is stale (see [_invalidateTodoListData]).
+  var _subtaskTitlesEpoch = -1;
+  // The view they were loaded for — a list id, or `*` for the all-tasks view.
+  String? _subtaskTitlesScope;
+  var _loadingSubtaskTitles = false;
+
+  /// Whether a filter is actually applied — the bar being open with an empty
+  /// query shows every task.
+  bool get _listSearchActive =>
+      _listSearchBarOpen && _listSearchTokens.isNotEmpty;
+
+  /// The id of the match Enter / Shift+Enter is currently sitting on, or null
+  /// when nothing is filtered.
+  String? get _activeListSearchMatchId {
+    if (!_listSearchActive) return null;
+    final index = _listSearchActiveMatchIndex;
+    if (index < 0 || index >= _listSearchMatches.length) return null;
+    return _listSearchMatches[index].id;
+  }
+
+  /// Ctrl+F / Cmd+F, from anywhere on the page.
+  ///
+  /// A [HardwareKeyboard] handler rather than a [Shortcuts] widget for the
+  /// same reason `ShellKeyboardShortcuts` uses one: shortcuts only fire for
+  /// the subtree holding primary focus, and this one has to work with the
+  /// composer focused, the edit panel's fields focused, or nothing focused at
+  /// all. It deliberately outranks find-in-field (TODO_LIST_SEARCH_HLD.md,
+  /// "Conflict note").
+  bool _handleListSearchShortcut(KeyEvent event) {
+    if (!mounted) return false;
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyF) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return false;
+    if (!_todoPageIsForeground()) return false;
+    _openListSearch();
+    return true;
+  }
+
+  /// Whether this page is the one the keyboard belongs to: its shell branch is
+  /// the visible one, and nothing (dialog, popover, sheet) is open over it.
+  ///
+  /// Every branch of the shell stays mounted, so without the first check a
+  /// Ctrl+F pressed on the Journal page would open the To-Do page's search bar
+  /// on a page nobody can see. [TickerMode.getValuesNotifier] rather than
+  /// [TickerMode.valuesOf] because this runs from a key callback, not a
+  /// build: the notifier lookup establishes no dependency.
+  bool _todoPageIsForeground() {
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return false;
+    return !(Navigator.maybeOf(context, rootNavigator: true)?.canPop() ??
+        false);
+  }
+
+  /// Hands `/search` in the composer over to the search bar, taking whatever
+  /// was typed after it as the query (TODO_LIST_SEARCH_HLD.md, "Composer
+  /// /search handoff").
+  ///
+  /// Nothing is submitted as a task: the composer is cleared and unfocused, so
+  /// everything typed from here lands in the search field instead.
+  void _handleComposerTextChanged() {
+    final query = todoSearchCommandQuery(_taskController.text);
+    if (query == null) return;
+    _taskController.clear();
+    _taskFocusNode.unfocus();
+    _openListSearch(initialQuery: query);
+  }
+
+  /// Esc closes, Enter walks to the next match, Shift+Enter to the previous.
+  KeyEventResult _handleListSearchKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      _closeListSearch();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      _stepListSearchMatch(HardwareKeyboard.instance.isShiftPressed ? -1 : 1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Opens the bar, or refocuses it when it is already up.
+  ///
+  /// [initialQuery] comes from the composer handoff and is applied without
+  /// waiting out the debounce — the user already finished typing it somewhere
+  /// else. A Ctrl+F onto an open bar selects the existing query instead, so
+  /// the next keystroke replaces it.
+  void _openListSearch({String? initialQuery}) {
+    var applied = false;
+    setState(() {
+      _listSearchBarOpen = true;
+      if (initialQuery != null) {
+        _listSearchController.text = initialQuery;
+        _listSearchController.selection = TextSelection.collapsed(
+          offset: initialQuery.length,
+        );
+        _applyListSearchQuery(initialQuery);
+        applied = true;
+      } else if (_listSearchController.text.isNotEmpty) {
+        _listSearchController.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _listSearchController.text.length,
+        );
+      }
+    });
+    _listSearchFocusNode.requestFocus();
+    // The composer handoff arrives with its query already typed, so the panel
+    // lands on the top match without waiting out a debounce that never runs.
+    if (applied) _revealActiveMatchInPanel();
+    unawaited(_ensureSubtaskTitles());
+  }
+
+  void _closeListSearch() {
+    if (!_listSearchBarOpen && _listSearchController.text.isEmpty) return;
+    setState(_resetListSearchState);
+  }
+
+  /// Clears every trace of the filter. Callers outside a build wrap this in
+  /// [setState]; [didChangeDependencies] calls it bare, since the build that
+  /// picks the change up is already about to run.
+  void _resetListSearchState() {
+    _listSearchDebounce?.cancel();
+    _listSearchDebounce = null;
+    _panelFollowTimer?.cancel();
+    _panelFollowTimer = null;
+    _panelFollowPending = false;
+    _listSearchBarOpen = false;
+    _listSearchTokens = const [];
+    _listSearchMatches = const [];
+    _listSearchActiveMatchIndex = 0;
+    if (_listSearchController.text.isNotEmpty) {
+      // Deferred: clearing notifies the field's listeners, and this can run
+      // from didChangeDependencies, where that is a build-phase setState.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _listSearchController.clear();
+      });
+    }
+    if (_listSearchFocusNode.hasFocus) _listSearchFocusNode.unfocus();
+  }
+
+  void _onListSearchChanged(String _) {
+    _listSearchDebounce?.cancel();
+    _listSearchDebounce = Timer(_listSearchDebounceDelay, () {
+      if (!mounted) return;
+      setState(() => _applyListSearchQuery(_listSearchController.text));
+      _scrollListSearchToTop();
+      _revealActiveMatchInPanel();
+    });
+  }
+
+  /// Applies a pending debounce early. Returns whether there was one, so Enter
+  /// pressed straight after typing lands on the first match rather than
+  /// stepping past it.
+  bool _flushListSearchDebounce() {
+    if (!(_listSearchDebounce?.isActive ?? false)) return false;
+    _listSearchDebounce!.cancel();
+    _listSearchDebounce = null;
+    setState(() => _applyListSearchQuery(_listSearchController.text));
+    _scrollListSearchToTop();
+    _revealActiveMatchInPanel();
+    return true;
+  }
+
+  /// Sets the filter itself. Must be called from inside a [setState].
+  void _applyListSearchQuery(String query) {
+    _listSearchTokens = todoSearchTokens(query);
+    _listSearchActiveMatchIndex = 0;
+  }
+
+  /// Scrolls to the first match, which — since non-matching rows are hidden
+  /// rather than dimmed — is the top of the list.
+  void _scrollListSearchToTop() {
+    if (!_listSearchActive || !_taskScrollController.hasClients) return;
+    final position = _taskScrollController.position;
+    if (position.pixels <= 0) return;
+    position.animateTo(
+      0,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _stepListSearchMatch(int delta) {
+    if (_flushListSearchDebounce()) return;
+    if (_listSearchMatches.isEmpty) return;
+    // Dart's % is non-negative for a positive modulus, so this wraps at both
+    // ends without a branch.
+    final index =
+        (_listSearchActiveMatchIndex + delta) % _listSearchMatches.length;
+    final task = _listSearchMatches[index];
+    // Leading edge: a step that arrives after the walk has gone quiet moves
+    // the panel with it, so a single Enter is as immediate as it ever was.
+    // The ones that arrive mid-walk only move the ring and the scroll, and
+    // [_armPanelFollow] lands the panel on wherever the walk stops.
+    final followNow = !(_panelFollowTimer?.isActive ?? false);
+    setState(() {
+      _listSearchActiveMatchIndex = index;
+      // Moved in this same build, rather than through
+      // [_revealActiveMatchInPanel]. That one defers a frame because it also
+      // runs off a query change, where the match list is still the previous
+      // build's — a step has no such problem, since the list it walks is
+      // exactly what the last build produced. Deferring cost the page a
+      // second full rebuild for every key repeat.
+      if (followNow && _editPanelTask?.id != task.id) {
+        _editPanelTask = task;
+        _selectedTaskId = task.id;
+      }
+    });
+    if (followNow) {
+      _panelController.duration = _panelAnimationDuration;
+      _panelController.forward();
+    }
+    _armPanelFollow(didFollow: followNow);
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToActiveMatch();
+    });
+  }
+
+  /// Holds the panel still while Enter is walking the matches quickly, and
+  /// hands it the match the walk ended on.
+  ///
+  /// Rebuilding the panel is around three quarters of what one step costs —
+  /// and, since it points at another task, it also runs a subtask query, a
+  /// Firestore flush for the task it is leaving and a fresh editing session
+  /// for the one it arrives at. At the keyboard's repeat rate that is what
+  /// dropped frames, and none of the panels in between are on screen long
+  /// enough to read.
+  void _armPanelFollow({required bool didFollow}) {
+    _panelFollowTimer?.cancel();
+    // A step the panel didn't take is one it still owes; after a leading-edge
+    // follow it owes nothing, and the timer below just marks the window.
+    if (!didFollow) _panelFollowPending = true;
+    _panelFollowTimer = Timer(_panelFollowWindow, () {
+      if (!_panelFollowPending) return;
+      _panelFollowPending = false;
+      if (!mounted || !_listSearchActive) return;
+      final index = _listSearchActiveMatchIndex;
+      if (index < 0 || index >= _listSearchMatches.length) return;
+      final task = _listSearchMatches[index];
+      if (_editPanelTask?.id == task.id) return;
+      _openEditPanel(task);
+    });
+  }
+
+  /// Puts the edit panel on the match Enter / Shift+Enter is sitting on,
+  /// opening it if it was closed — walking the results is how the user reads
+  /// them, so the panel goes where the walk goes.
+  ///
+  /// Deferred a frame because [_listSearchMatches] is rebuilt *during* build
+  /// from what the list actually renders: at the moment a query is applied or
+  /// Enter steps, it still holds what the previous build showed. The guards
+  /// re-check everything after that build, since the filter can have been
+  /// closed or emptied in between.
+  void _revealActiveMatchInPanel() {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_listSearchActive) return;
+      final index = _listSearchActiveMatchIndex;
+      if (index < 0 || index >= _listSearchMatches.length) return;
+      final task = _listSearchMatches[index];
+      // Already there: re-opening would restart the reveal animation and
+      // re-read the task's subtasks for nothing.
+      if (_editPanelTask?.id == task.id) return;
+      _openEditPanel(task);
+    });
+  }
+
+  /// A row opening its own panel while a filter is applied, which also moves
+  /// the Enter cursor onto it — otherwise the row wearing the active-match
+  /// ring and the row the panel is showing would be two different tasks, and
+  /// the next Enter would jump back to wherever the walk had reached.
+  void _openEditPanelFromRow(TodoTask task) {
+    if (_listSearchActive) {
+      final index = _listSearchMatches.indexWhere((m) => m.id == task.id);
+      if (index >= 0) _listSearchActiveMatchIndex = index;
+    }
+    _openEditPanel(task);
+  }
+
+  /// Brings the active match on screen, centred so the floating bar never
+  /// covers it.
+  ///
+  /// The row carries [_activeMatchKey] only while it *is* the active match, so
+  /// stepping to a match that is scrolled out of view has no context to aim
+  /// at. That case walks towards it instead: the match list is exactly what
+  /// the list renders, so the match's index is its fraction of the scroll
+  /// extent — jumping there materializes the row, and the next pass finds its
+  /// key mounted. Bounded like the journal page's equivalent walk, because an
+  /// estimate that never converges must not re-arm itself every frame.
+  void _scrollToActiveMatch({int attempt = 0}) {
+    if (!mounted || !_taskScrollController.hasClients) return;
+    final anchor = _activeMatchKey.currentContext;
+    if (anchor != null) {
+      Scrollable.ensureVisible(
+        anchor,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+    if (attempt >= 4 || _listSearchMatches.length < 2) return;
+    final position = _taskScrollController.position;
+    if (position.maxScrollExtent <= 0) return;
+    final fraction =
+        _listSearchActiveMatchIndex / (_listSearchMatches.length - 1);
+    position.jumpTo(position.maxScrollExtent * fraction);
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToActiveMatch(attempt: attempt + 1);
+    });
+  }
+
+  /// Loads the subtask titles the filter matches through, one query per list
+  /// in view, and only while the bar is open.
+  ///
+  /// Reuses [_subtaskCacheEpoch] — bumped whenever subtask data changes — as
+  /// the freshness check, alongside the scope the titles were loaded for, so
+  /// reopening the bar in another list doesn't match against the old one's.
+  Future<void> _ensureSubtaskTitles() async {
+    if (_loadingSubtaskTitles) return;
+    final scope = _showAllTasks ? '*' : (_selectedListId ?? '');
+    if (_subtaskTitlesEpoch == _subtaskCacheEpoch &&
+        _subtaskTitlesScope == scope) {
+      return;
+    }
+    final lists = ref.read(todoListsProvider).valueOrNull;
+    final listIds = _showAllTasks
+        ? [
+            for (final list in lists ?? const <TodoListModel>[])
+              if (list.includeInAllView) list.id,
+          ]
+        : [?_selectedListId];
+    if (listIds.isEmpty) return;
+    final epoch = _subtaskCacheEpoch;
+    final repo = ref.read(todoRepositoryProvider);
+    final titles = <String, List<String>>{};
+    _loadingSubtaskTitles = true;
+    try {
+      for (final listId in listIds) {
+        final tasks = await repo.listTasks(listId, topLevelOnly: false);
+        for (final task in tasks) {
+          final parentId = task.parentTaskId;
+          if (parentId == null) continue;
+          (titles[parentId] ??= <String>[]).add(task.title);
+        }
+      }
+    } finally {
+      _loadingSubtaskTitles = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _subtaskTitlesByParent = titles;
+      _subtaskTitlesEpoch = epoch;
+      _subtaskTitlesScope = scope;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _container = ProviderScope.containerOf(context, listen: false);
     _taskScrollController.addListener(_onTaskScrollActivity);
+    HardwareKeyboard.instance.addHandler(_handleListSearchShortcut);
+    // A controller listener, not the composer field's onChanged: `/search`
+    // has to be caught however the text got there, a paste included.
+    _taskController.addListener(_handleComposerTextChanged);
+    // Set once, here, because FocusNode.onKeyEvent is a single slot and the
+    // bar's field is inflated and torn down repeatedly as it opens and closes.
+    _listSearchFocusNode.onKeyEvent = _handleListSearchKey;
     // Deferred toggles must reach disk before the window closes.
     PendingFlushRegistry.instance.register(_flushPendingCompletionSaves);
     _panelController = AnimationController(
@@ -438,6 +861,13 @@ class _TodoPageState extends ConsumerState<TodoPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Every shell branch stays mounted, so leaving the page is a TickerMode
+    // flip rather than a dispose. A filter must never outlive the bar that
+    // explains it, so it goes with the page. Called bare: the build that
+    // reflects it is the one this callback is running ahead of.
+    if (!TickerMode.valuesOf(context).enabled && _listSearchBarOpen) {
+      _resetListSearchState();
+    }
     if (_configuredPanelMotion) return;
     _configuredPanelMotion = true;
     // The initState instance keeps its status listener on _panelController and
@@ -560,6 +990,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
     _scrollIdleTimer?.cancel();
     _coalescedRefreshTimer?.cancel();
     _taskScrollController.removeListener(_onTaskScrollActivity);
+    HardwareKeyboard.instance.removeHandler(_handleListSearchShortcut);
+    _taskController.removeListener(_handleComposerTextChanged);
+    _listSearchDebounce?.cancel();
+    _panelFollowTimer?.cancel();
+    _listSearchController.dispose();
+    _listSearchFocusNode.dispose();
     _hoveredTaskId.dispose();
     _panelAnimation.dispose();
     _panelController.dispose();
@@ -1479,23 +1915,53 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// Soft-deletes a task from the right-click menu after a confirmation dialog,
   /// matching the delete flow used by the edit panel and journal entries.
   Future<void> _deleteTaskFromRow(TodoTask task) async {
+    // Captured while this widget is certainly mounted: the toast that offers
+    // the undo outlives the row it deleted, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete task?',
       message: '"${task.title}" will be moved to trash.',
     );
     if (!confirmed || !mounted) return;
-    setState(() {
-      _optimisticActiveTaskOrder?.remove(task.id);
-      _taskOverrides.remove(task.id);
-      _completionOverrides.remove(task.id);
-      if (_editPanelTask?.id == task.id) {
-        _closeEditPanel();
-      }
-    });
-    await softDeleteTaskWithSubtasks(ref, task);
-    if (!mounted) return;
-    _invalidateTodoListData(listId: task.listId);
+    late final TodoTaskDeletion deletion;
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: deletedMessage(task.title, fallback: 'task'),
+      // The row leaves the list *after* the write, not before it. Dropping it
+      // optimistically first meant a failed delete took the row off screen
+      // while it was still alive on disk, with nothing said about it.
+      delete: () async {
+        deletion = await softDeleteTaskWithSubtasks(container, task);
+        if (!mounted) return;
+        setState(() {
+          _optimisticActiveTaskOrder?.remove(task.id);
+          _taskOverrides.remove(task.id);
+          _completionOverrides.remove(task.id);
+          if (_editPanelTask?.id == task.id) {
+            _closeEditPanel();
+          }
+        });
+        _invalidateTodoListData(listId: task.listId);
+      },
+      restore: () async {
+        // [restoreTaskWithSubtasks] invalidates the task providers itself, so
+        // what is left here is this page's own caches — and re-opening the
+        // panel, which is the point of the undo.
+        await restoreTaskWithSubtasks(container, deletion);
+        if (!mounted) return;
+        // The optimistic order is rebuilt from the live task list, so nothing
+        // has to be put back into it by hand — but it does have to be asked
+        // for again, which is what the invalidate does.
+        _invalidateTodoListData(listId: task.listId);
+        // Opened on the pre-delete snapshot rather than a re-read row:
+        // [_panelTaskFor] resolves the panel against the live list every
+        // build, so this only has to name the task, not carry it.
+        _openEditPanel(task);
+      },
+    );
   }
 
   Future<({int completed, int total})> _subtaskStats(String taskId) {
@@ -1544,12 +2010,22 @@ class _TodoPageState extends ConsumerState<TodoPage>
       _subtaskStatsCache.clear();
       _subtaskResultsCache.clear();
       _subtaskCacheEpoch++;
+      // The search bar's own subtask titles are keyed off the same epoch and
+      // reloaded on the next build that needs them (see [_ensureSubtaskTitles]).
+      if (_listSearchBarOpen) unawaited(_ensureSubtaskTitles());
     }
   }
 
   int? _listColorFor(String listId, List<TodoListModel> lists) {
     for (final list in lists) {
       if (list.id == listId) return list.colorValue;
+    }
+    return null;
+  }
+
+  String? _listNameFor(String listId, List<TodoListModel> lists) {
+    for (final list in lists) {
+      if (list.id == listId) return list.name;
     }
     return null;
   }
@@ -1688,6 +2164,18 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final animateIn = task.id == _enteringTaskId;
     final listsKey = _listsKeyFor(lists);
     final subtaskStatsData = _subtaskStatsData(task.id);
+    final hasImages = _tasksWithImages.contains(task.id);
+    // Read off page state rather than passed in, so the eight call sites that
+    // build rows don't each have to know about search.
+    final searchKeywords = _listSearchActive
+        ? _listSearchTokens
+        : const <String>[];
+    final isActiveMatch = task.id == _activeListSearchMatchId;
+    // Which list a match belongs to is invisible in the all-tasks view once
+    // most of its rows are filtered away, so a filtered row names it.
+    final listBadgeName = _listSearchActive && _showAllTasks
+        ? _listNameFor(task.listId, lists)
+        : null;
     final signature = (
       listId: task.listId,
       title: task.title,
@@ -1714,6 +2202,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
       // Including the resolved data here means a resolution invalidates the
       // cached widget, so the next build recaptures it.
       subtaskStatsData: subtaskStatsData,
+      hasImages: hasImages,
+      // Tokens can't contain whitespace (they were split on it), so joining
+      // on a space is a faithful key for them.
+      searchKeywordsKey: searchKeywords.join(' '),
+      isActiveMatch: isActiveMatch,
+      listBadgeName: listBadgeName,
     );
     if (!DevFlags.disableCache) {
       final cached = _rowWidgetCache[task.id];
@@ -1732,6 +2226,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
       lists: lists,
       subtaskStats: _subtaskStats(task.id),
       subtaskStatsData: subtaskStatsData,
+      hasImages: hasImages,
+      searchKeywords: searchKeywords,
+      isActiveMatch: isActiveMatch,
+      listBadgeName: listBadgeName,
       onToggle: (v) => _toggleTask(task, v),
       onHoverChanged: (h) => _setRowHovered(task.id, h),
       onStar: () => _toggleStar(task),
@@ -1743,7 +2241,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       onClearDueDate: () => _clearTaskDueDate(task),
       onMoveToList: (destId) => _moveTaskToList(task, destId),
       onDelete: () => _deleteTaskFromRow(task),
-      onEdit: () => _openEditPanel(task),
+      onEdit: () => _openEditPanelFromRow(task),
       onArmScrollStability: () {
         if (!_uncompleteGrowsAboveViewport(task)) return;
         _taskScrollController.armStableView(
@@ -1756,6 +2254,31 @@ class _TodoPageState extends ConsumerState<TodoPage>
       _rowSignatureCache[task.id] = signature;
     }
     return row;
+  }
+
+  /// A row plus, when it is the match Enter is sitting on, the anchor
+  /// [_scrollToActiveMatch] scrolls to.
+  ///
+  /// The anchor is wrapped in a [KeyedSubtree] carrying the row's own
+  /// [ValueKey] so the sliver delegate still sees the key its
+  /// `findChildIndexCallback` expects — the extra layer is invisible to it.
+  Widget _searchAnchoredRow(
+    TodoTask task, {
+    required bool isSelected,
+    required int? listColor,
+    required List<TodoListModel> lists,
+  }) {
+    final row = _rowFor(
+      task,
+      isSelected: isSelected,
+      listColor: listColor,
+      lists: lists,
+    );
+    if (task.id != _activeListSearchMatchId) return row;
+    return KeyedSubtree(
+      key: ValueKey(task.id),
+      child: KeyedSubtree(key: _activeMatchKey, child: row),
+    );
   }
 
   /// The "Add task" field and its button, cached on the one thing they
@@ -1808,6 +2331,157 @@ class _TodoPageState extends ConsumerState<TodoPage>
     return bar;
   }
 
+  /// The search bar, cached on the three things it actually shows.
+  ///
+  /// Same reasoning as [_composerBar]: it wraps a [TextField], so it is over a
+  /// hundred widgets that have nothing to say about which match Enter is
+  /// sitting on — and stepping through matches rebuilds this page on every
+  /// key repeat while the bar's own inputs sit still.
+  Widget _listSearchBar({
+    required Color accent,
+    required int matchCount,
+    required bool showMatchCount,
+  }) {
+    final cached = _listSearchBarCache;
+    if (cached != null &&
+        _listSearchBarColor == accent &&
+        _listSearchBarMatchCount == matchCount &&
+        _listSearchBarShowMatchCount == showMatchCount) {
+      return cached;
+    }
+    final bar = TodoListSearchBar(
+      controller: _listSearchController,
+      focusNode: _listSearchFocusNode,
+      accentColor: accent,
+      matchCount: matchCount,
+      showMatchCount: showMatchCount,
+      onChanged: _onListSearchChanged,
+      onClose: _closeListSearch,
+    );
+    _listSearchBarCache = bar;
+    _listSearchBarColor = accent;
+    _listSearchBarMatchCount = matchCount;
+    _listSearchBarShowMatchCount = showMatchCount;
+    return bar;
+  }
+
+  Widget? _listSearchBarCache;
+  Color? _listSearchBarColor;
+  int? _listSearchBarMatchCount;
+  bool? _listSearchBarShowMatchCount;
+
+  /// The edit panel, cached on the task it is showing.
+  ///
+  /// Same reasoning as [_composerBar], and it matters most while the list
+  /// search is open: the panel is the single most expensive subtree on this
+  /// page, and every step of an Enter walk rebuilds the page while the panel's
+  /// own contents sit still. Returning the identical instance lets
+  /// `Element.updateChild` skip it outright.
+  ///
+  /// Because the returned widget can outlive the build that made it, its
+  /// callbacks close over nothing build-local but [panelTask] and [lists],
+  /// which are what the cache is keyed on — the same rule the row cache
+  /// follows (see [_lastActiveAll]).
+  Widget _editPanel(TodoTask panelTask, List<TodoListModel> lists) {
+    final cached = _editPanelCache;
+    if (cached != null &&
+        identical(_editPanelCacheTask, panelTask) &&
+        identical(_editPanelCacheLists, lists)) {
+      return cached;
+    }
+    final panel = TodoEditPanel(
+      // Deliberately unkeyed: pointing the existing panel at another task
+      // (didUpdateWidget's hand-off) is far cheaper than building a new one,
+      // and Enter in the search bar does it at the keyboard's repeat rate.
+      task: panelTask,
+      listColor: _listColorFor(panelTask.listId, lists),
+      lists: lists,
+      onClose: _closeEditPanel,
+      onChanged: () {
+        _invalidateTodoListData();
+      },
+      onToggleCompleted: (completed) =>
+          unawaited(_toggleTask(panelTask, completed)),
+      onSortBatchApplied: (batch) {
+        unawaited(
+          _applyPersistedSortBatchToUi(
+            batch,
+            reason: 'persisted_sort_batch',
+            focusTask: panelTask,
+          ),
+        );
+      },
+      onTaskOptimistic: (task) {
+        final dueDateChanged =
+            task.dueDate != panelTask.dueDate ||
+            task.dueDateSetAt != panelTask.dueDateSetAt;
+        final movedList = task.listId != panelTask.listId;
+
+        if (movedList && !task.isSubtask) {
+          unawaited(_applyListMoveOptimistic(task: task, panelTask: panelTask));
+          return;
+        }
+
+        if (dueDateChanged && !task.isSubtask) {
+          // Scoped to the task's own list, the way every other mutation on
+          // this page does it. In the all-tasks view [_lastActiveAll] is
+          // every list's tasks merged — and sortOrder is per-list (see
+          // resolveGlobalTaskOrder, which ignores the field for exactly this
+          // reason). Reindexing across the merged set stamps other lists'
+          // rows with numbering they can never reconcile against disk.
+          final listActive = _activeInList(_lastActiveAll, panelTask.listId);
+          final batch = applyDueDateChange(
+            panelTask,
+            listActive,
+            dueDate: task.dueDate,
+            clearDueDate: task.dueDate == null && panelTask.dueDate != null,
+          );
+          final sortedTask = batch.tasks.firstWhere(
+            (updated) => updated.id == task.id,
+            orElse: () => task,
+          );
+          final merged = sortedTask.copyWith(
+            title: task.title,
+            notes: task.notes,
+            listId: task.listId,
+          );
+          setState(() {
+            _applySortBatchOptimistic(batch, listActive);
+            _taskOverrides[task.id] = merged;
+            _editPanelTask = merged;
+          });
+          return;
+        }
+
+        _taskOverrides[task.id] = task;
+        final affectsSort =
+            task.starred != panelTask.starred ||
+            task.sortOrder != panelTask.sortOrder ||
+            movedList;
+        if (affectsSort || movedList) {
+          setState(() {
+            _editPanelTask = task;
+            if (movedList) {
+              _selectedListId = task.listId;
+              _selectedTaskId = task.id;
+            }
+          });
+          if (movedList) {
+            _markListViewed(task.listId);
+          }
+        }
+      },
+    );
+    _editPanelCache = panel;
+    _editPanelCacheTask = panelTask;
+    _editPanelCacheLists = lists;
+    return panel;
+  }
+
+  Widget? _editPanelCache;
+  TodoTask? _editPanelCacheTask;
+  List<TodoListModel>? _editPanelCacheLists;
+
   Widget? _composerBarCache;
   Color? _composerBarColor;
   String? _composerBarHint;
@@ -1824,70 +2498,52 @@ class _TodoPageState extends ConsumerState<TodoPage>
     return stats?[listId] ?? (active: 0, completed: 0);
   }
 
-  Future<void> _createListFromDropdown() async {
-    final created = await createTodoList(context, ref);
-    if (!mounted || created == null) return;
-    await ref.read(todoListsProvider.future);
-    if (!mounted) return;
+  /// Points the page at [listId] and leaves the all-tasks view.
+  ///
+  /// Picking a specific list is an explicit request to view *that* list, so it
+  /// also clears the all-tasks flag — same contract the dropdown had.
+  void _selectListFromSwitcher(String listId) {
     setState(() {
-      _selectedListId = created.id;
+      _selectedListId = listId;
       _showAllTasks = false;
+      _optimisticActiveTaskOrder = null;
     });
     _closeEditPanel();
-    _markListViewed(created.id);
+    _closeListSearch();
+    _markListViewed(listId);
     unawaited(_persistShowAllTasks(false));
   }
 
-  Future<void> _handleListManage(
-    String listId,
-    VoyagerMenuCatalogEntry action,
-    List<TodoListModel> allLists,
-  ) async {
-    final list = allLists.firstWhere((l) => l.id == listId);
-    switch (action) {
-      case VoyagerMenuCatalogEntry.rename:
-        await renameTodoList(context, ref, list);
-      case VoyagerMenuCatalogEntry.changeColor:
-        await changeTodoListColor(context, ref, list, allLists);
-      case VoyagerMenuCatalogEntry.settings:
-        await showTodoListSettingsDialog(context, ref, list);
-      case VoyagerMenuCatalogEntry.delete:
-        // No count passed: deleteTodoList reads it from the repository. The
-        // only count available here comes from a FutureProvider this page just
-        // `read`s, which reports zero for every non-selected list while it is
-        // still unresolved — and a wrong zero used to skip the branch that
-        // rehomes or deletes the list's tasks.
-        final deleted = await deleteTodoList(
-          context,
-          ref,
-          list: list,
-          allLists: allLists,
-        );
-        if (deleted && mounted) {
-          final updatedLists =
-              ref.read(todoListsProvider).valueOrNull ?? allLists;
-          setState(() {
-            _selectedListId = updatedLists
-                .cast<TodoListModel?>()
-                .firstWhere(
-                  (l) => l!.id == legacyTodoListId,
-                  orElse: () =>
-                      updatedLists.isNotEmpty ? updatedLists.first : null,
-                )
-                ?.id;
-            _optimisticActiveTaskOrder = null;
-          });
-          // The all-tasks view is left as it was; only the list that new tasks
-          // land in has moved, so record it (matching the journal page).
-          final fallbackId = _selectedListId;
-          if (fallbackId != null) {
-            _markListViewed(fallbackId);
-          }
-          _closeEditPanel();
-        }
-      default:
-        break;
+  /// Turns the all-tasks view on.
+  ///
+  /// Only the view flag is written: [_selectedListId] deliberately stays on
+  /// the list that was open, and it is what new tasks created from this view
+  /// are filed under.
+  void _selectAllTasksFromSwitcher() {
+    if (_showAllTasks) return;
+    // The filter belongs to the view it was typed in, and this is a different
+    // one.
+    _closeListSearch();
+    setState(() => _showAllTasks = true);
+    unawaited(_persistShowAllTasks(true));
+  }
+
+  /// The gear beside the switcher: create, rename, recolour, configure and
+  /// delete lists, all in one dialog rather than a menu nested in the picker.
+  Future<void> _openListManageSheet() async {
+    final createdId = await showTodoListManageSheet(context, ref);
+    if (!mounted) return;
+    // A list may have been deleted out from under the open panel, and the
+    // list the page was pointed at may be gone too — _resolveListId picks the
+    // fallback on the next build, but the panel holds its own task.
+    _closeEditPanel();
+    if (createdId == null) {
+      setState(() => _optimisticActiveTaskOrder = null);
+      return;
     }
+    await ref.read(todoListsProvider.future);
+    if (!mounted) return;
+    _selectListFromSwitcher(createdId);
   }
 
   TodoListModel? _selectedList(List<TodoListModel> lists) {
@@ -1901,7 +2557,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Future<void> _applyListMoveOptimistic({
     required TodoTask task,
     required TodoTask panelTask,
-    required List<TodoTask> active,
   }) async {
     final repo = ref.read(todoRepositoryProvider);
     final destSiblings = await repo.listTasks(task.listId);
@@ -2079,6 +2734,13 @@ class _TodoPageState extends ConsumerState<TodoPage>
         settings?.todoCompletedSectionExpanded ??
         true;
     final listsAsync = ref.watch(todoListsProvider);
+    // Watched so attaching or removing an image in the edit panel adds or
+    // drops the row's image icon without anything else having to invalidate.
+    _tasksWithImages =
+        ref
+            .watch(mediaOwnersWithImagesProvider(FirestoreCollections.todoTasks))
+            .valueOrNull ??
+        const <String>{};
     ref.listen<AsyncValue<Map<String, ({int active, int completed})>>>(
       todoListStatsProvider,
       (previous, next) => _refreshOrDeferWhileScrolling(),
@@ -2089,6 +2751,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       if (next == null || next.type != RevealTargetType.task) return;
       final task = next.task!;
       ref.read(revealRequestProvider.notifier).state = null;
+      _closeListSearch();
       setState(() => _selectedListId = task.listId);
       // Recorded, not just set: this moves the list new tasks are filed under
       // while the all-tasks view stays on, and the persisted id has to agree
@@ -2104,7 +2767,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
         if (lists.isEmpty) {
           return Center(
             child: GlassButton(
-              onPressed: () => showTodoListManageSheet(context, ref),
+              onPressed: () => unawaited(_openListManageSheet()),
               label: 'Create your first list',
             ),
           );
@@ -2239,11 +2902,65 @@ class _TodoPageState extends ConsumerState<TodoPage>
             // _TaskRowState._handleToggle), so there's no leftover row to
             // keep rendering here — completed and active both just reflect
             // the current data.
-            final completedForDisplay = completed;
+            // The ephemeral search filter, applied after the page's own
+            // sort so display order is untouched
+            // (TODO_LIST_SEARCH_HLD.md). Deliberately downstream of `active`
+            // and `_lastActiveAll` above: row actions read their siblings
+            // from those to compute sort orders, and a filtered sibling set
+            // would write orders that ignore every hidden task.
+            final searching = _listSearchActive;
+            final activeForDisplay = searching
+                ? filterTodoTasks(
+                    active,
+                    _listSearchTokens,
+                    subtaskTitles: _subtaskTitlesByParent,
+                  )
+                : active;
+            // Completed tasks the page isn't showing aren't searched either
+            // (HLD: "Respect hideCompletedTasks"), so a query that only hits
+            // one of them reports no matches rather than a row nobody can see.
+            final completedForDisplay = effectiveHideCompleted
+                ? const <TodoTask>[]
+                : searching
+                ? filterTodoTasks(
+                    completed,
+                    _listSearchTokens,
+                    subtaskTitles: _subtaskTitlesByParent,
+                  )
+                : completed;
+            // Match order is display order: the active section, then the
+            // completed one. Assigned from build (like `_lastActiveAll`)
+            // because it is derived from exactly what this build renders — a
+            // collapsed completed section builds no rows, so Enter has
+            // nothing to walk to there.
+            _listSearchMatches = searching
+                ? [
+                    ...activeForDisplay,
+                    if (completedExpanded) ...completedForDisplay,
+                  ]
+                : const [];
+            if (_listSearchActiveMatchIndex >= _listSearchMatches.length) {
+              _listSearchActiveMatchIndex = 0;
+            }
+            // A filter that matches nothing leaves the panel nothing to
+            // stand on, so it closes the same way an explicit close does.
+            // While there *are* matches the panel moves to the active one
+            // rather than closing (see [_revealActiveMatchInPanel]), even when
+            // the task it was showing has dropped out of the results.
+            // Deferred a frame: this is a build.
+            if (searching &&
+                _selectedTaskId != null &&
+                _listSearchMatches.isEmpty) {
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                if (!mounted || !_listSearchActive) return;
+                if (_listSearchMatches.isNotEmpty) return;
+                _closeEditPanel();
+              });
+            }
             // Drop cached row widgets for tasks no longer displayed, so
             // deleted/moved-away tasks don't leak entries indefinitely.
             final liveRowIds = {
-              for (final t in active) t.id,
+              for (final t in activeForDisplay) t.id,
               for (final t in completedForDisplay) t.id,
             };
             _rowWidgetCache.removeWhere((id, _) => !liveRowIds.contains(id));
@@ -2255,7 +2972,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
             // one part of reconciling a completion that got worse the longer
             // the list got.
             final activeIndexById = {
-              for (var i = 0; i < active.length; i++) active[i].id: i,
+              for (var i = 0; i < activeForDisplay.length; i++)
+                activeForDisplay[i].id: i,
             };
             final reorderableIndexById = identical(reorderableActive, active)
                 ? activeIndexById
@@ -2267,13 +2985,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
               for (var i = 0; i < completedForDisplay.length; i++)
                 completedForDisplay[i].id: i,
             };
-            final selectedTask = _selectedTaskId == null
-                ? null
-                : sorted.cast<TodoTask?>().firstWhere(
-                    (t) => t!.id == _selectedTaskId,
-                    orElse: () => null,
-                  );
-
             final panelTask = _panelTaskFor(sorted);
             if (prepStart != null) {
               final elapsed = DateTime.now()
@@ -2331,446 +3042,416 @@ class _TodoPageState extends ConsumerState<TodoPage>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: RoundedDropdown<String?>(
-                                      // Null while "All tasks" is on: no
-                                      // single list is being viewed, so no row
-                                      // in the menu should wear the selection
-                                      // border.
-                                      value: _showAllTasks ? null : listId,
-                                      displayLabel: _showAllTasks
-                                          ? 'All tasks'
-                                          : null,
-                                      labelColor: taskBarColor,
-                                      closedTrailing: _showAllTasks
-                                          ? null
-                                          : '${active.length} | ${completed.length}',
-                                      onAddList: () =>
-                                          unawaited(_createListFromDropdown()),
-                                      manageMenuEntriesFor: (listId) =>
-                                          listId == legacyTodoListId
-                                          ? defaultConfigurableManageMenuEntries
-                                          : configurableManageMenuEntries,
-                                      onManage: (listId, action) async {
-                                        if (listId == null) return;
-                                        await _handleListManage(
-                                          listId,
-                                          action,
-                                          lists,
-                                        );
-                                      },
-                                      items: lists.map((l) {
-                                        final stat = _statsForList(
-                                          l.id,
-                                          stats,
-                                          activeCount: active.length,
-                                          completedCount: completed.length,
-                                        );
-                                        return RoundedDropdownItem<String?>(
-                                          value: l.id,
-                                          label: l.name,
-                                          labelColor: Color(
-                                            l.colorValue ??
-                                                Theme.of(context)
-                                                    .colorScheme
-                                                    .primary
-                                                    .toARGB32(),
-                                          ),
-                                          trailing:
-                                              '${stat.active} | ${stat.completed}',
-                                        );
-                                      }).toList(),
-                                      onChanged: (v) {
-                                        if (v == null) return;
-                                        setState(() {
-                                          _selectedListId = v;
-                                          // Picking a specific list is an
-                                          // explicit request to view *that*
-                                          // list, so it also leaves the
-                                          // all-tasks view.
-                                          _showAllTasks = false;
-                                          _optimisticActiveTaskOrder = null;
-                                        });
-                                        _closeEditPanel();
-                                        _markListViewed(v);
-                                        unawaited(_persistShowAllTasks(false));
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  IconButton(
-                                    tooltip: _showAllTasks
-                                        ? 'Show selected list only'
-                                        : 'Show all tasks',
-                                    onPressed: () {
-                                      if (_showAllTasks) {
-                                        final listId = selectedTask?.listId;
-                                        setState(() {
-                                          if (listId != null &&
-                                              lists.any(
-                                                (l) => l.id == listId,
-                                              )) {
-                                            _selectedListId = listId;
-                                          }
-                                          _showAllTasks = false;
-                                        });
-                                        if (listId != null) {
-                                          _markListViewed(listId);
-                                        }
-                                        unawaited(
-                                          _persistShowAllTasks(false),
-                                        );
-                                      } else {
-                                        setState(() => _showAllTasks = true);
-                                        // Only the view flag is written here:
-                                        // _selectedListId deliberately stays
-                                        // on the list that was open, and it is
-                                        // what new tasks created from this
-                                        // view are filed under.
-                                        unawaited(_persistShowAllTasks(true));
-                                      }
-                                    },
-                                    icon: Icon(
-                                      PhosphorIconsRegular.listMagnifyingGlass,
-                                      color: _showAllTasks
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.primary
-                                          : null,
-                                    ),
-                                  ),
-                                ],
+                              _TodoScopeHeader(
+                                lists: lists,
+                                stats: stats,
+                                activeCount: active.length,
+                                completedCount: completed.length,
+                                selectedListId: listId,
+                                showAllTasks: _showAllTasks,
+                                accent: taskBarColor,
+                                statsFor: _statsForList,
+                                onSelectList: _selectListFromSwitcher,
+                                onSelectAllTasks: _selectAllTasksFromSwitcher,
+                                onManage: () =>
+                                    unawaited(_openListManageSheet()),
                               ),
                               const SizedBox(height: 8),
                               Expanded(
-                                child: KeepAliveCustomScrollView(
-                                  storageKey: ShellPageStorageKeys.todoTaskList,
-                                  controller: _taskScrollController,
-                                  // Was 10000.0, then 2000.0 — every mounted
-                                  // row is laid out again on any change to the
-                                  // list's constraints, so this number is a
-                                  // direct multiplier on both the full-page
-                                  // rebuild the deferred completion write
-                                  // triggers ~900ms after each toggle (see
-                                  // _flushPendingCompletionSaves) and, now,
-                                  // every frame of the edit panel's reveal,
-                                  // which animates the list's width. 600 is
-                                  // roughly one extra screen of warm rows each
-                                  // way: still enough that a normal scroll
-                                  // doesn't rebuild rows under the user, but
-                                  // ~3x cheaper per relayout than 2000.
-                                  cacheExtent: 600.0,
-                                  slivers: [
-                                    if (active.isNotEmpty)
-                                      // Deliberately a plain SliverList: "All
-                                      // tasks" is not reorderable. Its order is
-                                      // derived from the tasks themselves (see
-                                      // resolveGlobalTaskOrder), so there is no
-                                      // manual order for a drag to write to —
-                                      // one would either be discarded on the
-                                      // next rebuild or have to invent a
-                                      // cross-list ordering key that every
-                                      // per-list drag then had to keep in sync.
-                                      // "Send to bottom" is dropped from the
-                                      // row context menu here for the same
-                                      // reason (see _rowFor).
-                                      if (_showAllTasks)
-                                        SliverList(
-                                          // A list delegate here (instead of a
-                                          // builder) would construct a
-                                          // _TaskRow for every active task on
-                                          // every rebuild regardless of what's
-                                          // on screen — the deferred rebuild a
-                                          // completion write triggers (see
-                                          // _flushPendingCompletionSaves) then
-                                          // pays for the entire dataset instead
-                                          // of just the visible rows.
-                                          delegate: SliverChildBuilderDelegate(
-                                            (context, index) {
-                                              final task = active[index];
-                                              return _rowFor(
-                                                task,
-                                                isSelected:
-                                                    task.id == _selectedTaskId,
-                                                listColor: _listColorFor(
-                                                  task.listId,
-                                                  lists,
-                                                ),
-                                                lists: lists,
-                                              );
-                                            },
-                                            childCount: active.length,
-                                            // Without this, a completion
-                                            // that removes a task from the
-                                            // middle of this list shifts
-                                            // every task below it down one
-                                            // index — and since this
-                                            // delegate has no way to match a
-                                            // shifted key back to its old
-                                            // Element, the framework treats
-                                            // every shifted slot as a brand
-                                            // new child (destroy + recreate,
-                                            // forcing a real build() on each
-                                            // one) even though `_rowFor`
-                                            // returns the exact same cached
-                                            // widget instance for it. This
-                                            // callback lets the framework
-                                            // find and reuse the existing
-                                            // Element by key instead.
-                                            findChildIndexCallback: (key) =>
-                                                activeIndexById[(key
-                                                        as ValueKey<String>)
-                                                    .value],
+                                // The search bar floats over the top of the
+                                // list rather than sitting in the page's
+                                // chrome, so opening it costs the list no
+                                // height (TODO_LIST_SEARCH_HLD.md,
+                                // "Placement").
+                                child: Stack(
+                                  children: [
+                                    KeepAliveCustomScrollView(
+                                      storageKey: ShellPageStorageKeys.todoTaskList,
+                                      controller: _taskScrollController,
+                                      // Was 10000.0, then 2000.0 — every mounted
+                                      // row is laid out again on any change to the
+                                      // list's constraints, so this number is a
+                                      // direct multiplier on both the full-page
+                                      // rebuild the deferred completion write
+                                      // triggers ~900ms after each toggle (see
+                                      // _flushPendingCompletionSaves) and, now,
+                                      // every frame of the edit panel's reveal,
+                                      // which animates the list's width. 600 is
+                                      // roughly one extra screen of warm rows each
+                                      // way: still enough that a normal scroll
+                                      // doesn't rebuild rows under the user, but
+                                      // ~3x cheaper per relayout than 2000.
+                                      cacheExtent: 600.0,
+                                      slivers: [
+                                        // Reserved only while a filter is
+                                        // actually applied, so the bar merely
+                                        // appearing never shifts the list — but
+                                        // the first match, which the filter
+                                        // scrolls to, is never left under the
+                                        // floating bar either.
+                                        if (searching)
+                                          const SliverToBoxAdapter(
+                                            child: SizedBox(
+                                              height: todoListSearchBarHeight + 8,
+                                            ),
                                           ),
-                                        )
-                                      else
-                                        SliverReorderableList(
-                                          key: _taskListKey,
-                                          proxyDecorator:
-                                              (child, index, animation) {
-                                                return ClampToTargetBounds(
-                                                  targetKey: _taskListKey,
-                                                  child: Material(
-                                                    type: MaterialType
-                                                        .transparency,
-                                                    child: child,
+                                        if (activeForDisplay.isNotEmpty)
+                                          // Deliberately a plain SliverList: "All
+                                          // tasks" is not reorderable. Its order is
+                                          // derived from the tasks themselves (see
+                                          // resolveGlobalTaskOrder), so there is no
+                                          // manual order for a drag to write to —
+                                          // one would either be discarded on the
+                                          // next rebuild or have to invent a
+                                          // cross-list ordering key that every
+                                          // per-list drag then had to keep in sync.
+                                          // "Send to bottom" is dropped from the
+                                          // row context menu here for the same
+                                          // reason (see _rowFor).
+                                          // Filtering takes this branch too:
+                                          // there is no manual order to drag
+                                          // rows into while most of them are
+                                          // hidden, so reorder is off (HLD
+                                          // decision 9) and a plain list is what
+                                          // is left.
+                                          if (_showAllTasks || searching)
+                                            SliverList(
+                                              // A list delegate here (instead of a
+                                              // builder) would construct a
+                                              // _TaskRow for every active task on
+                                              // every rebuild regardless of what's
+                                              // on screen — the deferred rebuild a
+                                              // completion write triggers (see
+                                              // _flushPendingCompletionSaves) then
+                                              // pays for the entire dataset instead
+                                              // of just the visible rows.
+                                              delegate: SliverChildBuilderDelegate(
+                                                (context, index) {
+                                                  final task =
+                                                      activeForDisplay[index];
+                                                  return _searchAnchoredRow(
+                                                    task,
+                                                    isSelected:
+                                                        task.id == _selectedTaskId,
+                                                    listColor: _listColorFor(
+                                                      task.listId,
+                                                      lists,
+                                                    ),
+                                                    lists: lists,
+                                                  );
+                                                },
+                                                childCount: activeForDisplay.length,
+                                                // Without this, a completion
+                                                // that removes a task from the
+                                                // middle of this list shifts
+                                                // every task below it down one
+                                                // index — and since this
+                                                // delegate has no way to match a
+                                                // shifted key back to its old
+                                                // Element, the framework treats
+                                                // every shifted slot as a brand
+                                                // new child (destroy + recreate,
+                                                // forcing a real build() on each
+                                                // one) even though `_rowFor`
+                                                // returns the exact same cached
+                                                // widget instance for it. This
+                                                // callback lets the framework
+                                                // find and reuse the existing
+                                                // Element by key instead.
+                                                findChildIndexCallback: (key) =>
+                                                    activeIndexById[(key
+                                                            as ValueKey<String>)
+                                                        .value],
+                                              ),
+                                            )
+                                          else
+                                            SliverReorderableList(
+                                              key: _taskListKey,
+                                              proxyDecorator:
+                                                  (child, index, animation) {
+                                                    return ClampToTargetBounds(
+                                                      targetKey: _taskListKey,
+                                                      child: Material(
+                                                        type: MaterialType
+                                                            .transparency,
+                                                        child: child,
+                                                      ),
+                                                    );
+                                                  },
+                                              onReorderItem: (oldIndex, newIndex) {
+                                                _reorderActiveTasks(
+                                                  active,
+                                                  oldIndex,
+                                                  newIndex,
+                                                );
+                                              },
+                                              itemCount: reorderableActive.length,
+                                              itemBuilder: (context, i) {
+                                                final task = reorderableActive[i];
+                                                return ReorderableDragStartListener(
+                                                  key: ValueKey(task.id),
+                                                  index: i,
+                                                  child: _rowFor(
+                                                    task,
+                                                    isSelected:
+                                                        task.id == _selectedTaskId,
+                                                    listColor:
+                                                        currentList?.colorValue,
+                                                    lists: lists,
+                                                    forceCollapsed:
+                                                        _lingeringActiveIds
+                                                            .contains(task.id),
                                                   ),
                                                 );
                                               },
-                                          onReorderItem: (oldIndex, newIndex) {
-                                            _reorderActiveTasks(
-                                              active,
-                                              oldIndex,
-                                              newIndex,
-                                            );
-                                          },
-                                          itemCount: reorderableActive.length,
-                                          itemBuilder: (context, i) {
-                                            final task = reorderableActive[i];
-                                            return ReorderableDragStartListener(
-                                              key: ValueKey(task.id),
-                                              index: i,
-                                              child: _rowFor(
-                                                task,
-                                                isSelected:
-                                                    task.id == _selectedTaskId,
-                                                listColor:
-                                                    currentList?.colorValue,
-                                                lists: lists,
-                                                forceCollapsed:
-                                                    _lingeringActiveIds
-                                                        .contains(task.id),
-                                              ),
-                                            );
-                                          },
-                                          // KNOWN LIMITATION — unlike the plain
-                                          // SliverList's findChildIndexCallback
-                                          // above, this one CANNOT stop
-                                          // SliverReorderableList from
-                                          // destroying and recreating a row's
-                                          // Element (and therefore its
-                                          // _TaskRowState — fresh
-                                          // AnimationControllers, fresh
-                                          // FutureBuilder subscriptions, etc.)
-                                          // whenever that row's index shifts —
-                                          // which completing or uncompleting
-                                          // any task but the last one in this
-                                          // list does, for every row below the
-                                          // shift point, all in the same
-                                          // frame.
-                                          //
-                                          // Root cause (see
-                                          // package:flutter's
-                                          // src/widgets/reorderable_list.dart,
-                                          // `_SliverReorderableListState._itemBuilder`):
-                                          // every item is internally rewrapped
-                                          // as
-                                          // `_ReorderableItemGlobalKey(child.key!, index, this)`,
-                                          // whose `==`/`hashCode` include
-                                          // `index`. So the *effective* key
-                                          // Flutter sees for a row changes
-                                          // value the moment its index moves,
-                                          // even though the ValueKey(task.id)
-                                          // we gave ReorderableDragStartListener
-                                          // below didn't change. Element reuse
-                                          // (`Widget.canUpdate`) requires key
-                                          // equality, so a changed index always
-                                          // fails that check — old Element
-                                          // destroyed, brand new one built at
-                                          // the new index. findChildIndexCallback
-                                          // only tells the delegate which old
-                                          // slot a key used to occupy; it has
-                                          // no way to override the key-equality
-                                          // check that actually gates whether
-                                          // the framework can reuse that slot's
-                                          // Element, so it's structurally
-                                          // unable to prevent this — kept here
-                                          // anyway because it's harmless and
-                                          // this callback still unwraps
-                                          // correctly (see below).
-                                          //
-                                          // Debugging hook: `_TaskRowState`
-                                          // logs `[jank] _TaskRow builds this
-                                          // frame: N` and `[jank] _TaskRow
-                                          // initState (fresh State) task=...`
-                                          // under DevFlags.verboseSync — a
-                                          // spike in N matching most of the
-                                          // active list's size, right when a
-                                          // completion/uncompletion commits, is
-                                          // this. If it's ever a measurable
-                                          // bottleneck (vs. today, where it's
-                                          // absorbed within one frame budget on
-                                          // typical list sizes), the real fix
-                                          // is dropping this widget's built-in
-                                          // drag-reorder for a hand-rolled one
-                                          // over a plain SliverList — proven
-                                          // elsewhere in this file (the
-                                          // "show all tasks" list above, and
-                                          // the completed list below) to
-                                          // reconcile shifted ValueKeys
-                                          // correctly via
-                                          // findChildIndexCallback, since
-                                          // neither wraps keys with the index
-                                          // baked in.
-                                          //
-                                          // Separately: SliverReorderableList
-                                          // doesn't hand this callback the
-                                          // ValueKey we gave
-                                          // ReorderableDragStartListener
-                                          // directly — it hands us the
-                                          // GlobalObjectKey wrapper described
-                                          // above, so the key this callback
-                                          // receives has to be unwrapped one
-                                          // layer first.
-                                          findChildIndexCallback: (key) {
-                                            final wrapped =
-                                                key as GlobalObjectKey;
-                                            final id =
-                                                (wrapped.value
-                                                        as ValueKey<String>)
-                                                    .value;
-                                            return reorderableIndexById[id];
-                                          },
-                                        ),
-                                    if (!effectiveHideCompleted)
-                                      SliverToBoxAdapter(
-                                        // Animated so the header + divider
-                                        // collapsing away (last completed
-                                        // task removed) or appearing (first
-                                        // one added) doesn't snap in a single
-                                        // frame.
-                                        child: AnimatedSize(
-                                          key: _completedSectionKey,
-                                          duration: _TaskRowState._exitDuration,
-                                          curve: Curves.easeInCubic,
-                                          alignment: Alignment.topCenter,
-                                          child: completedForDisplay.isEmpty
-                                              ? const SizedBox(
-                                                  width: double.infinity,
-                                                )
-                                              : Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment
-                                                          .stretch,
-                                                  children: [
-                                                    const Divider(height: 32),
-                                                    InkWell(
-                                                      onTap: () {
-                                                        final next =
-                                                            !completedExpanded;
-                                                        setState(
-                                                          () =>
-                                                              _completedExpandedOverride =
-                                                                  next,
-                                                        );
-                                                        unawaited(
-                                                          _persistCompletedExpanded(
-                                                            next,
-                                                          ),
-                                                        );
-                                                      },
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            14,
-                                                          ),
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets.fromLTRB(
-                                                              12,
-                                                              8,
-                                                              8,
-                                                              8,
-                                                            ),
-                                                        child: Row(
-                                                          children: [
-                                                            Expanded(
-                                                              child: Text(
-                                                                'Completed (${completed.length})',
-                                                                style: Theme.of(
-                                                                  context,
-                                                                ).textTheme.titleSmall,
+                                              // KNOWN LIMITATION — unlike the plain
+                                              // SliverList's findChildIndexCallback
+                                              // above, this one CANNOT stop
+                                              // SliverReorderableList from
+                                              // destroying and recreating a row's
+                                              // Element (and therefore its
+                                              // _TaskRowState — fresh
+                                              // AnimationControllers, fresh
+                                              // FutureBuilder subscriptions, etc.)
+                                              // whenever that row's index shifts —
+                                              // which completing or uncompleting
+                                              // any task but the last one in this
+                                              // list does, for every row below the
+                                              // shift point, all in the same
+                                              // frame.
+                                              //
+                                              // Root cause (see
+                                              // package:flutter's
+                                              // src/widgets/reorderable_list.dart,
+                                              // `_SliverReorderableListState._itemBuilder`):
+                                              // every item is internally rewrapped
+                                              // as
+                                              // `_ReorderableItemGlobalKey(child.key!, index, this)`,
+                                              // whose `==`/`hashCode` include
+                                              // `index`. So the *effective* key
+                                              // Flutter sees for a row changes
+                                              // value the moment its index moves,
+                                              // even though the ValueKey(task.id)
+                                              // we gave ReorderableDragStartListener
+                                              // below didn't change. Element reuse
+                                              // (`Widget.canUpdate`) requires key
+                                              // equality, so a changed index always
+                                              // fails that check — old Element
+                                              // destroyed, brand new one built at
+                                              // the new index. findChildIndexCallback
+                                              // only tells the delegate which old
+                                              // slot a key used to occupy; it has
+                                              // no way to override the key-equality
+                                              // check that actually gates whether
+                                              // the framework can reuse that slot's
+                                              // Element, so it's structurally
+                                              // unable to prevent this — kept here
+                                              // anyway because it's harmless and
+                                              // this callback still unwraps
+                                              // correctly (see below).
+                                              //
+                                              // Debugging hook: `_TaskRowState`
+                                              // logs `[jank] _TaskRow builds this
+                                              // frame: N` and `[jank] _TaskRow
+                                              // initState (fresh State) task=...`
+                                              // under DevFlags.verboseSync — a
+                                              // spike in N matching most of the
+                                              // active list's size, right when a
+                                              // completion/uncompletion commits, is
+                                              // this. If it's ever a measurable
+                                              // bottleneck (vs. today, where it's
+                                              // absorbed within one frame budget on
+                                              // typical list sizes), the real fix
+                                              // is dropping this widget's built-in
+                                              // drag-reorder for a hand-rolled one
+                                              // over a plain SliverList — proven
+                                              // elsewhere in this file (the
+                                              // "show all tasks" list above, and
+                                              // the completed list below) to
+                                              // reconcile shifted ValueKeys
+                                              // correctly via
+                                              // findChildIndexCallback, since
+                                              // neither wraps keys with the index
+                                              // baked in.
+                                              //
+                                              // Separately: SliverReorderableList
+                                              // doesn't hand this callback the
+                                              // ValueKey we gave
+                                              // ReorderableDragStartListener
+                                              // directly — it hands us the
+                                              // GlobalObjectKey wrapper described
+                                              // above, so the key this callback
+                                              // receives has to be unwrapped one
+                                              // layer first.
+                                              findChildIndexCallback: (key) {
+                                                final wrapped =
+                                                    key as GlobalObjectKey;
+                                                final id =
+                                                    (wrapped.value
+                                                            as ValueKey<String>)
+                                                        .value;
+                                                return reorderableIndexById[id];
+                                              },
+                                            ),
+                                        if (!effectiveHideCompleted)
+                                          SliverToBoxAdapter(
+                                            // Animated so the header + divider
+                                            // collapsing away (last completed
+                                            // task removed) or appearing (first
+                                            // one added) doesn't snap in a single
+                                            // frame.
+                                            child: AnimatedSize(
+                                              key: _completedSectionKey,
+                                              duration: _TaskRowState._exitDuration,
+                                              curve: Curves.easeInCubic,
+                                              alignment: Alignment.topCenter,
+                                              child: completedForDisplay.isEmpty
+                                                  ? const SizedBox(
+                                                      width: double.infinity,
+                                                    )
+                                                  : Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .stretch,
+                                                      children: [
+                                                        const Divider(height: 32),
+                                                        InkWell(
+                                                          onTap: () {
+                                                            final next =
+                                                                !completedExpanded;
+                                                            setState(
+                                                              () =>
+                                                                  _completedExpandedOverride =
+                                                                      next,
+                                                            );
+                                                            unawaited(
+                                                              _persistCompletedExpanded(
+                                                                next,
                                                               ),
+                                                            );
+                                                          },
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                14,
+                                                              ),
+                                                          child: Padding(
+                                                            padding:
+                                                                const EdgeInsets.fromLTRB(
+                                                                  12,
+                                                                  8,
+                                                                  8,
+                                                                  8,
+                                                                ),
+                                                            child: Row(
+                                                              children: [
+                                                                Expanded(
+                                                                  child: Text(
+                                                                    'Completed (${completedForDisplay.length})',
+                                                                    style: Theme.of(
+                                                                      context,
+                                                                    ).textTheme.titleSmall,
+                                                                  ),
+                                                                ),
+                                                                Icon(
+                                                                  completedExpanded
+                                                                      ? PhosphorIconsRegular
+                                                                            .caretUp
+                                                                      : PhosphorIconsRegular
+                                                                            .caretDown,
+                                                                ),
+                                                              ],
                                                             ),
-                                                            Icon(
-                                                              completedExpanded
-                                                                  ? PhosphorIconsRegular
-                                                                        .caretUp
-                                                                  : PhosphorIconsRegular
-                                                                        .caretDown,
-                                                            ),
-                                                          ],
+                                                          ),
                                                         ),
-                                                      ),
+                                                      ],
                                                     ),
-                                                  ],
-                                                ),
-                                        ),
-                                      ),
-                                    if (!effectiveHideCompleted &&
-                                        completedForDisplay.isNotEmpty &&
-                                        completedExpanded)
-                                      SliverList(
-                                        // Same lazy-builder rationale as the
-                                        // "all tasks" active section above —
-                                        // this section can hold every
-                                        // completed task ever created, and a
-                                        // list delegate would eagerly build a
-                                        // _TaskRow for all of them on every
-                                        // rebuild.
-                                        delegate: SliverChildBuilderDelegate(
-                                          (context, index) {
-                                            final task =
-                                                completedForDisplay[index];
-                                            return _rowFor(
-                                              task,
-                                              isSelected:
-                                                  task.id == _selectedTaskId,
-                                              listColor: _listColorFor(
-                                                task.listId,
-                                                lists,
+                                            ),
+                                          ),
+                                        if (!effectiveHideCompleted &&
+                                            completedForDisplay.isNotEmpty &&
+                                            completedExpanded)
+                                          SliverList(
+                                            // Same lazy-builder rationale as the
+                                            // "all tasks" active section above —
+                                            // this section can hold every
+                                            // completed task ever created, and a
+                                            // list delegate would eagerly build a
+                                            // _TaskRow for all of them on every
+                                            // rebuild.
+                                            delegate: SliverChildBuilderDelegate(
+                                              (context, index) {
+                                                final task =
+                                                    completedForDisplay[index];
+                                                return _searchAnchoredRow(
+                                                  task,
+                                                  isSelected:
+                                                      task.id == _selectedTaskId,
+                                                  listColor: _listColorFor(
+                                                    task.listId,
+                                                    lists,
+                                                  ),
+                                                  lists: lists,
+                                                );
+                                              },
+                                              childCount:
+                                                  completedForDisplay.length,
+                                              // See the matching comment on the
+                                              // active-list delegate above — an
+                                              // uncompletion (or a newly-completed
+                                              // task entering here) shifts every
+                                              // row below it to a new index, and
+                                              // without this callback the
+                                              // framework can't match a shifted
+                                              // key back to its old Element, so it
+                                              // destroys and recreates every one
+                                              // of them instead of reusing
+                                              // `_rowFor`'s cached widget.
+                                              findChildIndexCallback: (key) =>
+                                                  completedIndexById[(key
+                                                          as ValueKey<String>)
+                                                      .value],
+                                            ),
+                                          ),
+                                        if (searching &&
+                                            activeForDisplay.isEmpty &&
+                                            completedForDisplay.isEmpty)
+                                          SliverFillRemaining(
+                                            hasScrollBody: false,
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 24,
                                               ),
-                                              lists: lists,
-                                            );
-                                          },
-                                          childCount:
-                                              completedForDisplay.length,
-                                          // See the matching comment on the
-                                          // active-list delegate above — an
-                                          // uncompletion (or a newly-completed
-                                          // task entering here) shifts every
-                                          // row below it to a new index, and
-                                          // without this callback the
-                                          // framework can't match a shifted
-                                          // key back to its old Element, so it
-                                          // destroys and recreates every one
-                                          // of them instead of reusing
-                                          // `_rowFor`'s cached widget.
-                                          findChildIndexCallback: (key) =>
-                                              completedIndexById[(key
-                                                      as ValueKey<String>)
-                                                  .value],
+                                              child: Align(
+                                                alignment: Alignment.topCenter,
+                                                child: Text(
+                                                  'No tasks match',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyMedium
+                                                      ?.copyWith(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurface
+                                                            .withValues(
+                                                              alpha: 0.6,
+                                                            ),
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    if (_listSearchBarOpen)
+                                      Positioned(
+                                        left: 0,
+                                        right: 0,
+                                        top: 0,
+                                        child: _listSearchBar(
+                                          accent: taskBarColor,
+                                          matchCount:
+                                              _listSearchMatches.length,
+                                          showMatchCount: searching,
                                         ),
                                       ),
                                   ],
@@ -2814,124 +3495,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                               width: _todoEditPanelWidth,
                               child: panelTask == null
                                   ? const SizedBox.shrink()
-                                  : TodoEditPanel(
-                                      key: ValueKey(panelTask.id),
-                                      task: panelTask,
-                                      listColor: _listColorFor(
-                                        panelTask.listId,
-                                        lists,
-                                      ),
-                                      lists: lists,
-                                      onClose: _closeEditPanel,
-                                      onChanged: () {
-                                        _invalidateTodoListData();
-                                      },
-                                      onDeleted: () {
-                                        _invalidateTodoListData(
-                                          listId: panelTask.listId,
-                                        );
-                                        _closeEditPanel();
-                                      },
-                                      onToggleStar: () =>
-                                          _toggleStar(panelTask),
-                                      onSortBatchApplied: (batch) {
-                                        unawaited(
-                                          _applyPersistedSortBatchToUi(
-                                            batch,
-                                            reason: 'persisted_sort_batch',
-                                            focusTask: panelTask,
-                                          ),
-                                        );
-                                      },
-                                      onTaskOptimistic: (task) {
-                                        final active = sorted
-                                            .where((t) => !t.completed)
-                                            .toList();
-                                        final dueDateChanged =
-                                            task.dueDate != panelTask.dueDate ||
-                                            task.dueDateSetAt !=
-                                                panelTask.dueDateSetAt;
-                                        final movedList =
-                                            task.listId != panelTask.listId;
-
-                                        if (movedList && !task.isSubtask) {
-                                          unawaited(
-                                            _applyListMoveOptimistic(
-                                              task: task,
-                                              panelTask: panelTask,
-                                              active: active,
-                                            ),
-                                          );
-                                          return;
-                                        }
-
-                                        if (dueDateChanged && !task.isSubtask) {
-                                          // Scoped to the task's own list, the
-                                          // way every other mutation on this
-                                          // page does it. `active` is derived
-                                          // from `sorted`, which in the
-                                          // all-tasks view is every list's
-                                          // tasks merged — and sortOrder is
-                                          // per-list (see resolveGlobalTaskOrder,
-                                          // which ignores the field for exactly
-                                          // this reason). Reindexing across the
-                                          // merged set stamps other lists' rows
-                                          // with numbering they can never
-                                          // reconcile against disk.
-                                          final listActive = _activeInList(
-                                            _lastActiveAll,
-                                            panelTask.listId,
-                                          );
-                                          final batch = applyDueDateChange(
-                                            panelTask,
-                                            listActive,
-                                            dueDate: task.dueDate,
-                                            clearDueDate:
-                                                task.dueDate == null &&
-                                                panelTask.dueDate != null,
-                                          );
-                                          final sortedTask = batch.tasks
-                                              .firstWhere(
-                                                (updated) =>
-                                                    updated.id == task.id,
-                                                orElse: () => task,
-                                              );
-                                          final merged = sortedTask.copyWith(
-                                            title: task.title,
-                                            notes: task.notes,
-                                            listId: task.listId,
-                                          );
-                                          setState(() {
-                                            _applySortBatchOptimistic(
-                                              batch,
-                                              listActive,
-                                            );
-                                            _taskOverrides[task.id] = merged;
-                                            _editPanelTask = merged;
-                                          });
-                                          return;
-                                        }
-
-                                        _taskOverrides[task.id] = task;
-                                        final affectsSort =
-                                            task.starred != panelTask.starred ||
-                                            task.sortOrder !=
-                                                panelTask.sortOrder ||
-                                            movedList;
-                                        if (affectsSort || movedList) {
-                                          setState(() {
-                                            _editPanelTask = task;
-                                            if (movedList) {
-                                              _selectedListId = task.listId;
-                                              _selectedTaskId = task.id;
-                                            }
-                                          });
-                                          if (movedList) {
-                                            _markListViewed(task.listId);
-                                          }
-                                        }
-                                      },
-                                    ),
+                                  : _editPanel(panelTask, lists),
                             ),
                           ),
                         ),
@@ -2948,6 +3512,118 @@ class _TodoPageState extends ConsumerState<TodoPage>
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('$e')),
+    );
+  }
+}
+
+/// The list column's title: which list is open, how much of it is left, and
+/// the way into Manage.
+///
+/// The all-tasks view used to be a second control beside the picker — an icon
+/// for the same scope decision the dropdown was already making. It is the
+/// first row of the popover now, so there is one place to answer "what am I
+/// looking at?" and one gear beside it for everything else.
+class _TodoScopeHeader extends StatelessWidget {
+  const _TodoScopeHeader({
+    required this.lists,
+    required this.stats,
+    required this.activeCount,
+    required this.completedCount,
+    required this.selectedListId,
+    required this.showAllTasks,
+    required this.accent,
+    required this.statsFor,
+    required this.onSelectList,
+    required this.onSelectAllTasks,
+    required this.onManage,
+  });
+
+  final List<TodoListModel> lists;
+  final Map<String, ({int active, int completed})>? stats;
+  final int activeCount;
+  final int completedCount;
+  final String selectedListId;
+  final bool showAllTasks;
+  final Color accent;
+  final ({int active, int completed}) Function(
+    String listId,
+    Map<String, ({int active, int completed})>? stats, {
+    required int activeCount,
+    required int completedCount,
+  })
+  statsFor;
+  final ValueChanged<String> onSelectList;
+  final VoidCallback onSelectAllTasks;
+  final VoidCallback onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    var allActive = 0;
+    var allCompleted = 0;
+    final items = <ScopeSwitcherItem<String?>>[];
+    for (final list in lists) {
+      final stat = statsFor(
+        list.id,
+        stats,
+        activeCount: activeCount,
+        completedCount: completedCount,
+      );
+      // The all-tasks view drops lists opted out of it (see excludedListIds),
+      // so its count is summed over the same lists that reach the screen.
+      if (list.includeInAllView) {
+        allActive += stat.active;
+        allCompleted += stat.completed;
+      }
+      items.add(
+        ScopeSwitcherItem<String?>(
+          value: list.id,
+          label: list.name,
+          count: '${stat.active} | ${stat.completed}',
+          color: Color(list.colorValue ?? primary.toARGB32()),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        // The switcher takes the whole leftover width so the gear stays
+        // pinned to the row's right edge; the name itself still sits
+        // left at its natural width, whichever scope is selected.
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ScopeSwitcher<String?>(
+              // Null while "All tasks" is on: no single list is being viewed.
+              selectedValue: showAllTasks ? null : selectedListId,
+              accent: accent,
+              onSelected: (value) {
+                if (value == null) {
+                  onSelectAllTasks();
+                } else {
+                  onSelectList(value);
+                }
+              },
+              items: [
+                ScopeSwitcherItem<String?>(
+                  value: null,
+                  label: 'All tasks',
+                  count: '$allActive | $allCompleted',
+                ),
+                ...items,
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'Manage lists',
+          iconSize: 18,
+          visualDensity: VisualDensity.compact,
+          onPressed: onManage,
+          icon: const Icon(PhosphorIconsRegular.gear),
+        ),
+      ],
     );
   }
 }
@@ -2970,10 +3646,14 @@ class _TaskRow extends StatefulWidget {
     required this.onArmScrollStability,
     required this.lists,
     required this.subtaskStats,
+    required this.hasImages,
     this.subtaskStatsData,
     this.listColor,
     this.animateIn = false,
     this.forceCollapsed = false,
+    this.searchKeywords = const [],
+    this.isActiveMatch = false,
+    this.listBadgeName,
   });
 
   final TodoTask task;
@@ -3031,6 +3711,11 @@ class _TaskRow extends StatefulWidget {
   /// Last known resolved value for [subtaskStats]. Passed as [FutureBuilder.initialData]
   /// so remounted rows never show a blank frame while awaiting the future.
   final ({int completed, int total})? subtaskStatsData;
+
+  /// Whether this task has at least one image attached, for the metadata
+  /// icon. Resolved once for the whole page — see
+  /// [mediaOwnersWithImagesProvider] — rather than queried per row.
+  final bool hasImages;
   final int? listColor;
 
   /// True when this row is the far half of a toggle the user just made — it is
@@ -3048,6 +3733,21 @@ class _TaskRow extends StatefulWidget {
   /// spring it back open since, as far as it can tell, it's a normal row
   /// that happens to still be here.
   final bool forceCollapsed;
+
+  /// The list-search tokens to emphasise in the title, empty when no filter is
+  /// applied. A token that only matched the notes or a subtask simply isn't
+  /// found in the title, so nothing is highlighted for it — the row is here on
+  /// its own merits, and inventing a title highlight would misreport why.
+  final List<String> searchKeywords;
+
+  /// True for the one match Enter / Shift+Enter is currently sitting on. Wears
+  /// a wash and a ring of its own so it reads apart from the row the edit panel
+  /// is open on, which is outlined but not filled.
+  final bool isActiveMatch;
+
+  /// The list this task belongs to, shown on the row while the all-tasks view
+  /// is filtered. Null everywhere else.
+  final String? listBadgeName;
 
   @override
   State<_TaskRow> createState() => _TaskRowState();
@@ -3557,6 +4257,8 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
                 taskId: widget.task.id,
                 hoveredTaskId: widget.hoveredTaskId,
                 selected: widget.isSelected,
+                isActiveMatch: widget.isActiveMatch,
+                accentColor: listColor ?? Theme.of(context).colorScheme.primary,
                 child: InkWell(
                   onTap: widget.onEdit,
                   borderRadius: BorderRadius.circular(14),
@@ -3603,8 +4305,19 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
                                               ? TextDecoration.lineThrough
                                               : null,
                                         ),
-                                    child: Text(
+                                    // Style comes from the
+                                    // AnimatedDefaultTextStyle above, so the
+                                    // strike-through and fade a completion
+                                    // animates still apply to every span.
+                                    child: keywordHighlightedText(
                                       widget.task.title,
+                                      keywords: widget.searchKeywords,
+                                      highlightColor:
+                                          (listColor ??
+                                                  Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary)
+                                              .withValues(alpha: 0.28),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -3634,7 +4347,25 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
 
                                   // Stable metadata: never depends on the Future.
                                   final stableWidgets = <Widget>[];
+                                  final listBadgeName = widget.listBadgeName;
+                                  if (listBadgeName != null) {
+                                    stableWidgets.add(
+                                      Text(
+                                        shortDestinationName(listBadgeName),
+                                        style: TextStyle(
+                                          color:
+                                              listColor ??
+                                              Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                        ),
+                                      ),
+                                    );
+                                  }
                                   if (dueLabel != null) {
+                                    if (stableWidgets.isNotEmpty) {
+                                      stableWidgets.add(const Text(' · '));
+                                    }
                                     stableWidgets.add(
                                       Text(
                                         dueLabel,
@@ -3660,9 +4391,14 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
                                     );
                                   }
 
-                                  // Subtask count: depends on the Future; never hides
-                                  // stable widgets when it's loading.
-                                  final subtaskWidget = FutureBuilder(
+                                  // The whole metadata line is built from
+                                  // the subtask Future, because two of the
+                                  // three separators depend on whether the
+                                  // count rendered. The builder still runs on
+                                  // the first frame, so a pending Future
+                                  // never hides the stable widgets — it just
+                                  // leaves the count out until it resolves.
+                                  return FutureBuilder(
                                     future: widget.subtaskStats,
                                     initialData: widget.subtaskStatsData,
                                     builder: (context, snapshot) {
@@ -3672,71 +4408,48 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
                                       final stats = snapshot.hasData
                                           ? snapshot.data
                                           : _cachedStats;
-                                      if (stats == null || stats.total == 0) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      final needsSep = stableWidgets.isNotEmpty;
-                                      return Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (needsSep) const Text(' · '),
+                                      final hasSubtasks =
+                                          stats != null && stats.total > 0;
+
+                                      // Ordered time · notes · subtasks ·
+                                      // images.
+                                      final parts = <Widget>[
+                                        ...stableWidgets,
+                                        if (hasSubtasks) ...[
+                                          if (stableWidgets.isNotEmpty)
+                                            const Text(' · '),
                                           Text(
                                             '${stats.completed} | ${stats.total}',
                                           ),
                                         ],
+                                        if (widget.hasImages) ...[
+                                          if (stableWidgets.isNotEmpty ||
+                                              hasSubtasks)
+                                            const Text(' · '),
+                                          Icon(
+                                            PhosphorIconsRegular.image,
+                                            size: 10,
+                                            color: metadataColor,
+                                          ),
+                                        ],
+                                      ];
+                                      if (parts.isEmpty) {
+                                        return const SizedBox.shrink();
+                                      }
+
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: DefaultTextStyle(
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: textStyle,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: parts,
+                                          ),
+                                        ),
                                       );
                                     },
-                                  );
-
-                                  final hasStable = stableWidgets.isNotEmpty;
-                                  // Always show the row if there's any stable content.
-                                  // Subtask badge sits alongside it.
-                                  if (!hasStable) {
-                                    // Only subtask badge; still need to show it.
-                                    return FutureBuilder(
-                                      future: widget.subtaskStats,
-                                      initialData: widget.subtaskStatsData,
-                                      builder: (context, snapshot) {
-                                        if (snapshot.hasData) {
-                                          _cachedStats = snapshot.data;
-                                        }
-                                        final stats = snapshot.hasData
-                                            ? snapshot.data
-                                            : _cachedStats;
-                                        if (stats == null || stats.total == 0) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 2,
-                                          ),
-                                          child: DefaultTextStyle(
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: textStyle,
-                                            child: Text(
-                                              '${stats.completed} | ${stats.total}',
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  }
-
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: DefaultTextStyle(
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: textStyle,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          ...stableWidgets,
-                                          subtaskWidget,
-                                        ],
-                                      ),
-                                    ),
                                   );
                                 },
                               ),
@@ -3775,12 +4488,21 @@ class _RowHoverSurface extends StatefulWidget {
     required this.taskId,
     required this.hoveredTaskId,
     required this.selected,
+    required this.isActiveMatch,
+    required this.accentColor,
     required this.child,
   });
 
   final String taskId;
   final ValueListenable<String?> hoveredTaskId;
   final bool selected;
+
+  /// The list-search match Enter is sitting on (see [_TaskRow.isActiveMatch]).
+  final bool isActiveMatch;
+
+  /// The task's list colour, which outlines the row the edit panel is open
+  /// on. Only read when [selected].
+  final Color accentColor;
   final Widget child;
 
   @override
@@ -3827,15 +4549,44 @@ class _RowHoverSurfaceState extends State<_RowHoverSurface> {
 
   @override
   Widget build(BuildContext context) {
+    final base = VoyagerListItemSurface.decoration(
+      context,
+      selected: widget.selected,
+      hovered: _hovered,
+      borderRadius: 14,
+    );
+    // The row the panel is open on is outlined in its list's colour rather
+    // than the neutral focus one, so the link between the two is the same
+    // accent the rest of the row already carries.
+    var decoration = widget.selected
+        ? base.copyWith(
+            border: Border.all(
+              color: widget.accentColor.withValues(alpha: 0.7),
+            ),
+          )
+        : base;
+    // The active search match is *filled* with the accent as well as ringed
+    // by it — the outline alone is what "open in the panel" already means,
+    // and the two can be true of the same row at once. Width stays at one
+    // pixel: a BoxDecoration's border insets its child, so a thicker ring
+    // would nudge every row's contents as the match moved.
+    if (widget.isActiveMatch) {
+      decoration = decoration.copyWith(
+        color: Color.alphaBlend(
+          widget.accentColor.withValues(alpha: 0.14),
+          decoration.color ?? Colors.transparent,
+        ),
+        border: Border.all(
+          color: widget.accentColor.withValues(
+            alpha: widget.selected ? 0.7 : 0.55,
+          ),
+        ),
+      );
+    }
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       curve: Curves.easeOut,
-      decoration: VoyagerListItemSurface.decoration(
-        context,
-        selected: widget.selected,
-        hovered: _hovered,
-        borderRadius: 14,
-      ),
+      decoration: decoration,
       child: widget.child,
     );
   }

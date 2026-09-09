@@ -13,6 +13,8 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
+import 'package:voyager/features/jobs/jobs_stage_colors.dart';
+import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
 
 /// One popup for everything the Jobs page configures: pipeline stages,
 /// company category colours, and archive seasons.
@@ -128,71 +130,101 @@ class _StagesTab extends ConsumerWidget {
       usageByStatus[application.status] =
           (usageByStatus[application.status] ?? 0) + 1;
     }
+    final stageColors = JobStageColors(
+      stages: stages,
+      fallback: theme.colorScheme.primary,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
           'Drag to reorder. Order is display order only — an application can '
-          'move to any stage at any time.',
+          'move to any stage at any time. Tap a swatch to set the colour its '
+          'capsules are drawn in.',
           style: theme.textTheme.labelSmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: ReorderableListView.builder(
-            buildDefaultDragHandles: false,
-            itemCount: stages.length,
-            // onReorderItem, not onReorder: it already adjusts newIndex for
-            // the item removed at oldIndex, so no off-by-one correction here.
-            onReorderItem: (oldIndex, newIndex) {
-              final ids = [for (final stage in stages) stage.id];
-              ids.insert(newIndex, ids.removeAt(oldIndex));
-              actions.reorderStages(ids);
-            },
-            itemBuilder: (context, index) {
-              final stage = stages[index];
-              final inUse = usageByStatus[stage.name] ?? 0;
-              return ListTile(
-                key: ValueKey(stage.id),
-                dense: true,
-                leading: ReorderableDragStartListener(
-                  index: index,
-                  child: const Icon(
-                    PhosphorIconsRegular.dotsSixVertical,
-                    size: 16,
-                  ),
-                ),
-                title: Text(stage.name, style: theme.textTheme.bodySmall),
-                subtitle: Text(
-                  inUse == 1 ? '1 application' : '$inUse applications',
-                  style: theme.textTheme.labelSmall,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Rename',
-                      iconSize: 15,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => _rename(context, stage),
-                      icon: const Icon(PhosphorIconsRegular.pencilSimple),
-                    ),
-                    IconButton(
-                      tooltip: 'Delete',
-                      iconSize: 15,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => _delete(context, stage, inUse),
-                      icon: Icon(
-                        PhosphorIconsRegular.trash,
-                        color: theme.colorScheme.error,
+          // One dialog route holds this list and the sheet's other scroll
+          // views, so a remounted one would otherwise adopt this list's saved
+          // offset — see [ScrollOffsetIsolate].
+          child: ScrollOffsetIsolate(
+            child: ReorderableListView.builder(
+              buildDefaultDragHandles: false,
+              itemCount: stages.length,
+              // onReorderItem, not onReorder: it already adjusts newIndex for
+              // the item removed at oldIndex, so no off-by-one correction here.
+              onReorderItem: (oldIndex, newIndex) {
+                final ids = [for (final stage in stages) stage.id];
+                ids.insert(newIndex, ids.removeAt(oldIndex));
+                actions.reorderStages(ids);
+              },
+              itemBuilder: (context, index) {
+                final stage = stages[index];
+                final inUse = usageByStatus[stage.name] ?? 0;
+                return ListTile(
+                  key: ValueKey(stage.id),
+                  dense: true,
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ReorderableDragStartListener(
+                        index: index,
+                        child: const Icon(
+                          PhosphorIconsRegular.dotsSixVertical,
+                          size: 16,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                      const SizedBox(width: 8),
+                      _StageSwatch(
+                        color: stageColors.forStage(stage),
+                        explicit: stageColors.isExplicit(stage),
+                        onTap: () => _recolor(context, ref, stage),
+                      ),
+                    ],
+                  ),
+                  title: Text(stage.name, style: theme.textTheme.bodySmall),
+                  subtitle: Text(
+                    inUse == 1 ? '1 application' : '$inUse applications',
+                    style: theme.textTheme.labelSmall,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: stage.colorValue == null
+                            ? 'Set colour'
+                            : 'Change colour',
+                        iconSize: 15,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _recolor(context, ref, stage),
+                        icon: const Icon(PhosphorIconsRegular.palette),
+                      ),
+                      IconButton(
+                        tooltip: 'Rename',
+                        iconSize: 15,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _rename(context, stage),
+                        icon: const Icon(PhosphorIconsRegular.pencilSimple),
+                      ),
+                      IconButton(
+                        tooltip: 'Delete',
+                        iconSize: 15,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _delete(context, stage, inUse),
+                        icon: Icon(
+                          PhosphorIconsRegular.trash,
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
         Align(
@@ -224,6 +256,24 @@ class _StagesTab extends ConsumerWidget {
     await actions.renameStage(stage, name);
   }
 
+  /// Colours the stage from the app palette. Unlike categories, other stages'
+  /// colours are not passed as `usedColors`: two stages sharing a colour is
+  /// the user's business, and the derived colours the uncoloured ones are
+  /// showing are not choices anyone made.
+  Future<void> _recolor(
+    BuildContext context,
+    WidgetRef ref,
+    JobStage stage,
+  ) async {
+    final color = await pickPaletteColorWithRef(
+      ref,
+      context,
+      current: stage.colorValue,
+    );
+    if (color == null) return;
+    await actions.setStageColor(stage, color);
+  }
+
   Future<void> _delete(BuildContext context, JobStage stage, int inUse) async {
     final confirmed = await showConfirmDialog(
       context,
@@ -236,6 +286,41 @@ class _StagesTab extends ConsumerWidget {
     );
     if (!confirmed) return;
     await actions.deleteStage(stage);
+  }
+}
+
+/// The colour a stage's capsules are drawn in. A stage still on its
+/// position-derived colour is drawn as an outline rather than a filled dot, so
+/// "never chosen" reads differently from "chosen, and happens to be this".
+class _StageSwatch extends StatelessWidget {
+  const _StageSwatch({
+    required this.color,
+    required this.explicit,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool explicit;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: explicit ? 'Change colour' : 'Set colour',
+      waitDuration: const Duration(milliseconds: 500),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: explicit ? color : color.withValues(alpha: 0.18),
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: explicit ? 0 : 1.4),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -300,37 +385,39 @@ class _CategoriesTabState extends ConsumerState<_CategoriesTab> {
                     ),
                   ),
                 )
-              : VoyagerScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final category in categories)
-                        _CategoryTile(
-                          category: category,
-                          companyCount: countByCategory[category.id] ?? 0,
-                          expanded: _expandedCategoryId == category.id,
-                          companies: companies,
-                          filterController: _companyFilterController,
-                          onToggleExpanded: () => setState(() {
-                            _expandedCategoryId =
-                                _expandedCategoryId == category.id
-                                ? null
-                                : category.id;
-                            _companyFilterController.clear();
-                          }),
-                          onRename: () => _rename(category),
-                          onRecolor: () => _recolor(category, categories),
-                          onDelete: () => _delete(category),
-                          onToggleCompany: (company) {
-                            widget.actions.setCompanyCategory(
-                              company,
-                              company.categoryId == category.id
+              : ScrollOffsetIsolate(
+                  child: VoyagerScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final category in categories)
+                          _CategoryTile(
+                            category: category,
+                            companyCount: countByCategory[category.id] ?? 0,
+                            expanded: _expandedCategoryId == category.id,
+                            companies: companies,
+                            filterController: _companyFilterController,
+                            onToggleExpanded: () => setState(() {
+                              _expandedCategoryId =
+                                  _expandedCategoryId == category.id
                                   ? null
-                                  : category.id,
-                            );
-                          },
-                        ),
-                    ],
+                                  : category.id;
+                              _companyFilterController.clear();
+                            }),
+                            onRename: () => _rename(category),
+                            onRecolor: () => _recolor(category, categories),
+                            onDelete: () => _delete(category),
+                            onToggleCompany: (company) {
+                              widget.actions.setCompanyCategory(
+                                company,
+                                company.categoryId == category.id
+                                    ? null
+                                    : category.id,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
                   ),
                 ),
         ),
@@ -568,17 +655,22 @@ class _CompanyAssignmentState extends State<_CompanyAssignment> {
         else
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 180),
-            child: VoyagerScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final company in matches)
-                    _CompanyRow(
-                      company: company,
-                      category: widget.category,
-                      onTap: () => widget.onToggleCompany(company),
-                    ),
-                ],
+            // Mounted when a category is expanded, into a route whose one
+            // page-storage slot every other list here also writes — see
+            // [ScrollOffsetIsolate].
+            child: ScrollOffsetIsolate(
+              child: VoyagerScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final company in matches)
+                      _CompanyRow(
+                        company: company,
+                        category: widget.category,
+                        onTap: () => widget.onToggleCompany(company),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -664,19 +756,24 @@ class _SeasonsTab extends ConsumerWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // An application filed under several cycles counts once in each of them,
+    // so the totals here add up to more than the table's row count — each one
+    // answers "how much is in this season", which is what the row is asking.
     final countBySeason = <String, int>{};
     for (final application in applications) {
-      if (application.seasonId == null) continue;
-      countBySeason[application.seasonId!] =
-          (countBySeason[application.seasonId!] ?? 0) + 1;
+      for (final seasonId in application.seasonIds) {
+        countBySeason[seasonId] = (countBySeason[seasonId] ?? 0) + 1;
+      }
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Archiving an application files it under a season and hides it from '
-          'the default list. It still counts towards the lifetime total.',
+          'Drag to reorder. A season is picked while tracking an application, '
+          'and this order is the order the picker offers. Archive one when the '
+          'cycle ends: everything in it leaves the default list at once, and '
+          'the season stops being offered for anything new.',
           style: theme.textTheme.labelSmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -692,57 +789,103 @@ class _SeasonsTab extends ConsumerWidget {
                     ),
                   ),
                 )
-              : VoyagerScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final season in seasons)
-                        ListTile(
-                          dense: true,
-                          leading: const Icon(
-                            PhosphorIconsRegular.archive,
+              : ScrollOffsetIsolate(
+                  child: ReorderableListView.builder(
+                    buildDefaultDragHandles: false,
+                    itemCount: seasons.length,
+                    // onReorderItem, not onReorder: it already adjusts newIndex
+                    // for the item removed at oldIndex, so no off-by-one
+                    // correction here.
+                    onReorderItem: (oldIndex, newIndex) {
+                      final ids = [for (final season in seasons) season.id];
+                      ids.insert(newIndex, ids.removeAt(oldIndex));
+                      actions.reorderSeasons(ids);
+                    },
+                    itemBuilder: (context, index) {
+                      final season = seasons[index];
+                      final count = countBySeason[season.id] ?? 0;
+                      return ListTile(
+                        key: ValueKey(season.id),
+                        dense: true,
+                        leading: ReorderableDragStartListener(
+                          index: index,
+                          child: const Icon(
+                            PhosphorIconsRegular.dotsSixVertical,
                             size: 16,
                           ),
-                          title: Text(
-                            season.name,
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          subtitle: Text(switch (countBySeason[season.id] ??
-                              0) {
-                            0 => 'empty',
-                            1 => '1 application',
-                            final count => '$count applications',
-                          }, style: theme.textTheme.labelSmall),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                tooltip: 'Rename',
-                                iconSize: 15,
-                                visualDensity: VisualDensity.compact,
-                                onPressed: () => _rename(context, season),
-                                icon: const Icon(
-                                  PhosphorIconsRegular.pencilSimple,
-                                ),
+                        ),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                season.name,
+                                style: theme.textTheme.bodySmall,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              IconButton(
-                                tooltip: 'Delete',
-                                iconSize: 15,
-                                visualDensity: VisualDensity.compact,
-                                onPressed: () => _delete(
-                                  context,
-                                  season,
-                                  countBySeason[season.id] ?? 0,
-                                ),
-                                icon: Icon(
-                                  PhosphorIconsRegular.trash,
-                                  color: theme.colorScheme.error,
-                                ),
+                            ),
+                            if (season.isArchived) ...[
+                              const SizedBox(width: 6),
+                              Icon(
+                                PhosphorIconsRegular.archive,
+                                size: 12,
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ],
-                          ),
+                          ],
                         ),
-                    ],
+                        subtitle: Text(
+                          [
+                            switch (count) {
+                              0 => 'empty',
+                              1 => '1 application',
+                              final n => '$n applications',
+                            },
+                            if (season.isArchived) 'archived',
+                          ].join(' — '),
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: season.isArchived
+                                  ? 'Unarchive'
+                                  : 'Archive season',
+                              iconSize: 15,
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => actions.setSeasonArchived(
+                                season,
+                                !season.isArchived,
+                              ),
+                              icon: Icon(
+                                season.isArchived
+                                    ? PhosphorIconsRegular.arrowCounterClockwise
+                                    : PhosphorIconsRegular.archive,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Rename',
+                              iconSize: 15,
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _rename(context, season),
+                              icon: const Icon(
+                                PhosphorIconsRegular.pencilSimple,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Delete',
+                              iconSize: 15,
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _delete(context, season, count),
+                              icon: Icon(
+                                PhosphorIconsRegular.trash,
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
         ),
@@ -789,8 +932,8 @@ class _SeasonsTab extends ConsumerWidget {
       title: 'Delete "${season.name}"?',
       message: count == 0
           ? 'This season is empty.'
-          : '$count application${count == 1 ? '' : 's'} will be un-archived '
-                'and return to the active list. Nothing is deleted.',
+          : '$count application${count == 1 ? '' : 's'} will be filed under no '
+                'season and return to the active list. Nothing is deleted.',
     );
     if (!confirmed) return;
     await actions.deleteSeason(season);

@@ -5,12 +5,15 @@
 /// (motions, text objects, operator ranges) unit-testable without pumping a
 /// widget tree, and keeps the per-keystroke cost obvious: every function below
 /// scans outward from the caret and stops as soon as it has an answer, so cost
-/// scales with the distance moved, not with document length. The two
-/// exceptions are documented where they occur ([vimSearchMatches], which must
-/// scan the whole document, and [vimLineIndexOf]).
+/// scales with the distance moved, not with document length. The exceptions
+/// are documented where they occur ([vimSearchMatches], which must scan the
+/// whole document and [vimLineIndexOf], which every clamped
+/// caret runs through but which bails on a single `contains` in a document
+/// with no inline images — which is every field but the journal body).
 library;
 
 import 'dart:math' as math;
+
 
 /// How Vim classifies a character for `w`/`b`/`e` and the `iw` text object.
 ///
@@ -196,16 +199,26 @@ int vimOffsetOfLine(String text, int line) {
 int vimColumnOf(String text, int offset) =>
     offset.clamp(0, text.length) - vimLineStart(text, offset);
 
+/// End of the object one `x` takes at [offset]. Never crosses the line break.
+int vimObjectEndForward(String text, int offset) {
+  return math.min(vimLineEnd(text, offset), offset + 1);
+}
+
+/// The `X` counterpart of [vimObjectEndForward]: start of the object that
+/// ends at [offset].
+int vimObjectStartBackward(String text, int offset) {
+  return math.max(vimLineStart(text, offset), offset - 1);
+}
+
 /// Clamps [offset] so the caret rests *on* a character rather than past the
 /// end of the line, which is what Normal mode requires (Insert mode may sit at
 /// the line end, so it uses [clampToLineEnd] = false).
 int vimClampCaret(String text, int offset, {bool allowLineEnd = false}) {
-  var o = offset.clamp(0, text.length);
+  final o = offset.clamp(0, text.length);
   if (allowLineEnd) return o;
   final start = vimLineStart(text, o);
   final end = vimLineEnd(text, o);
-  if (o >= end) o = math.max(start, end - 1);
-  return o;
+  return o >= end ? math.max(start, end - 1) : o;
 }
 
 /// Insert offset for Vim's `a` (append after the caret).

@@ -9,6 +9,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_calendar.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_chart.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
+import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 
 /// Height of the dashboard card, matched to the tallest progress ring beside
 /// it so the two read as one band rather than two stacked things.
@@ -128,9 +129,11 @@ class _LeetCodeActivityCardState extends ConsumerState<LeetCodeActivityCard> {
   }
 }
 
-/// Grows the activity view out of [anchorRect] to fill the screen, the same
-/// camera zoom [openLeetCodeDetailView] uses for a problem — tapping a thing
-/// expands that thing, everywhere on this page.
+/// Grows the activity view out of [anchorRect] to a card inset from the
+/// window edge over a darkened page, the same camera zoom
+/// [openLeetCodeDetailView] uses for a problem — tapping a thing expands that
+/// thing, everywhere on this page. Escape, the close button, or a tap on the
+/// darkened margin reverses it.
 Future<void> openLeetCodeActivityView(BuildContext context, Rect anchorRect) {
   return Navigator.of(context, rootNavigator: true).push(
     PageRouteBuilder<void>(
@@ -188,7 +191,9 @@ class _LeetCodeActivityOverlayState extends State<_LeetCodeActivityOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final fullScreenRect = Offset.zero & MediaQuery.sizeOf(context);
+    final targetRect = leetCodeZoomRect(
+      Offset.zero & MediaQuery.sizeOf(context),
+    );
     final reducedMotion = VoyagerMotion.reduced(context);
 
     return CallbackShortcuts(
@@ -208,8 +213,12 @@ class _LeetCodeActivityOverlayState extends State<_LeetCodeActivityOverlay>
               animation: _controller,
               builder: (context, child) {
                 final raw = _controller.value.clamp(0.0, 1.0);
+                // Tapping the darkened border closes, the way a barrier does.
+                // The card's own Material sits above this and absorbs its
+                // taps, so only the margin is dismissive.
                 final scrim = Positioned.fill(
-                  child: IgnorePointer(
+                  child: GestureDetector(
+                    onTap: _close,
                     child: ColoredBox(
                       color: Colors.black.withValues(alpha: 0.5 * raw),
                     ),
@@ -219,28 +228,34 @@ class _LeetCodeActivityOverlayState extends State<_LeetCodeActivityOverlay>
                   return Stack(
                     children: [
                       scrim,
-                      Positioned.fill(
+                      Positioned.fromRect(
+                        rect: targetRect,
                         child: Opacity(opacity: raw, child: child),
                       ),
                     ],
                   );
                 }
                 final t = VoyagerSpring.moveCurve.transform(raw);
-                final rect = Rect.lerp(widget.anchorRect, fullScreenRect, t)!;
+                final rect = Rect.lerp(widget.anchorRect, targetRect, t)!;
                 return Stack(
                   children: [
                     scrim,
-                    // Laid out full-screen and scaled by transform rather than
-                    // resized: reflowing a chart and a year of month tiles into
-                    // the card's starting width overflows on the first frames.
-                    Positioned.fill(
+                    // Laid out at its final size and scaled by transform rather
+                    // than resized: reflowing a chart and a year of month tiles
+                    // into the card's starting width overflows on the first
+                    // frames.
+                    Positioned.fromRect(
+                      rect: targetRect,
                       child: Transform(
                         alignment: Alignment.topLeft,
                         transform: Matrix4.identity()
-                          ..translate(rect.left, rect.top)
+                          ..translate(
+                            rect.left - targetRect.left,
+                            rect.top - targetRect.top,
+                          )
                           ..scale(
-                            rect.width / fullScreenRect.width,
-                            rect.height / fullScreenRect.height,
+                            rect.width / targetRect.width,
+                            rect.height / targetRect.height,
                           ),
                         child: Opacity(
                           opacity: (t / _kCardFadeInFraction).clamp(0.0, 1.0),

@@ -3,12 +3,18 @@
 // one journal can claim the page's opening view.
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/mood_gradient_slider.dart';
+import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 
 import 'support/journal_page_harness.dart';
+
+/// The editor's body box — the last tag-highlighted field on the page, the
+/// title field being the other one.
+Finder bodyField() => find.byType(TagHighlightedTextField).last;
 
 /// Matches an entry's title only where the entry *list* renders it.
 ///
@@ -58,6 +64,34 @@ void main() {
     );
     final withoutMood = tester.getTopRight(find.byTooltip('Delete entry')).dx;
     await disposeJournalPage(tester);
+
+    expect(withoutMood, withMood);
+  });
+
+  // The vertical twin of the test above. The mood slider is 48 tall and
+  // ignores visual density; every other control in that row is an icon button
+  // that does not, so on desktop they shrink to 40 and hiding the slider used
+  // to take 8px out of the row — sliding the body box, and everything the user
+  // was reading in it, up the page.
+  testWidgets('hiding the mood bar does not lift the body box', (tester) async {
+    // Desktop density is the whole point: under the test default (android)
+    // every control in the row is already 48 and the bug cannot happen.
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+
+    await pumpJournalPage(tester);
+    final withMood = tester.getRect(bodyField()).top;
+    await disposeJournalPage(tester);
+
+    await pumpJournalPage(
+      tester,
+      configureJournal: (journal) => journal.copyWith(showMood: false),
+    );
+    final withoutMood = tester.getRect(bodyField()).top;
+    await disposeJournalPage(tester);
+
+    // Cleared inside the body, not from a tearDown: the framework checks the
+    // debug variables before those run.
+    debugDefaultTargetPlatformOverride = null;
 
     expect(withoutMood, withMood);
   });

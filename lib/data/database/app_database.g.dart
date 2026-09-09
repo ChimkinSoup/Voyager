@@ -7306,6 +7306,20 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _autocorrectEnabledMeta =
+      const VerificationMeta('autocorrectEnabled');
+  @override
+  late final GeneratedColumn<bool> autocorrectEnabled = GeneratedColumn<bool>(
+    'autocorrect_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("autocorrect_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _capsLockIndicatorEnabledMeta =
       const VerificationMeta('capsLockIndicatorEnabled');
   @override
@@ -7318,6 +7332,51 @@ class $SettingsTableTable extends SettingsTable
         requiredDuringInsert: false,
         defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("caps_lock_indicator_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  static const VerificationMeta _mediaRemoteUploadsEnabledMeta =
+      const VerificationMeta('mediaRemoteUploadsEnabled');
+  @override
+  late final GeneratedColumn<bool> mediaRemoteUploadsEnabled =
+      GeneratedColumn<bool>(
+        'media_remote_uploads_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("media_remote_uploads_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  static const VerificationMeta _mediaRemoteDownloadsEnabledMeta =
+      const VerificationMeta('mediaRemoteDownloadsEnabled');
+  @override
+  late final GeneratedColumn<bool> mediaRemoteDownloadsEnabled =
+      GeneratedColumn<bool>(
+        'media_remote_downloads_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("media_remote_downloads_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  static const VerificationMeta _mediaBackgroundPrefetchEnabledMeta =
+      const VerificationMeta('mediaBackgroundPrefetchEnabled');
+  @override
+  late final GeneratedColumn<bool> mediaBackgroundPrefetchEnabled =
+      GeneratedColumn<bool>(
+        'media_background_prefetch_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("media_background_prefetch_enabled" IN (0, 1))',
         ),
         defaultValue: const Constant(true),
       );
@@ -7377,6 +7436,17 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _lastViewedCalendarIdMeta =
+      const VerificationMeta('lastViewedCalendarId');
+  @override
+  late final GeneratedColumn<String> lastViewedCalendarId =
+      GeneratedColumn<String>(
+        'last_viewed_calendar_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _defaultJournalIdMeta = const VerificationMeta(
     'defaultJournalId',
   );
@@ -7430,6 +7500,21 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _calendarShowAllCalendarsMeta =
+      const VerificationMeta('calendarShowAllCalendars');
+  @override
+  late final GeneratedColumn<bool> calendarShowAllCalendars =
+      GeneratedColumn<bool>(
+        'calendar_show_all_calendars',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("calendar_show_all_calendars" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _weatherLocationLabelMeta =
       const VerificationMeta('weatherLocationLabel');
   @override
@@ -8267,6 +8352,50 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _rankingsCollapsedQueueCategoriesJsonMeta =
+      const VerificationMeta('rankingsCollapsedQueueCategoriesJson');
+  @override
+  late final GeneratedColumn<String> rankingsCollapsedQueueCategoriesJson =
+      GeneratedColumn<String>(
+        'rankings_collapsed_queue_categories_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _jobProfileLinkedInUrlMeta =
+      const VerificationMeta('jobProfileLinkedInUrl');
+  @override
+  late final GeneratedColumn<String> jobProfileLinkedInUrl =
+      GeneratedColumn<String>(
+        'job_profile_linked_in_url',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _jobProfileGitHubUrlMeta =
+      const VerificationMeta('jobProfileGitHubUrl');
+  @override
+  late final GeneratedColumn<String> jobProfileGitHubUrl =
+      GeneratedColumn<String>(
+        'job_profile_git_hub_url',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _jobProfilePortfolioUrlMeta =
+      const VerificationMeta('jobProfilePortfolioUrl');
+  @override
+  late final GeneratedColumn<String> jobProfilePortfolioUrl =
+      GeneratedColumn<String>(
+        'job_profile_portfolio_url',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _dreamSplitWidthMeta = const VerificationMeta(
     'dreamSplitWidth',
   );
@@ -8437,6 +8566,21 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _leetCodeEnableScratchCodeMeta =
+      const VerificationMeta('leetCodeEnableScratchCode');
+  @override
+  late final GeneratedColumn<bool> leetCodeEnableScratchCode =
+      GeneratedColumn<bool>(
+        'leet_code_enable_scratch_code',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("leet_code_enable_scratch_code" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _srsFailKeyMeta = const VerificationMeta(
     'srsFailKey',
   );
@@ -8602,16 +8746,22 @@ class $SettingsTableTable extends SettingsTable
     hideCompletedTasks,
     vimModeEnabled,
     snippetsEnabled,
+    autocorrectEnabled,
     capsLockIndicatorEnabled,
+    mediaRemoteUploadsEnabled,
+    mediaRemoteDownloadsEnabled,
+    mediaBackgroundPrefetchEnabled,
     snippetExpandKey,
     snippetsJson,
     deviceId,
     lastViewedJournalId,
     lastViewedTodoListId,
+    lastViewedCalendarId,
     defaultJournalId,
     defaultTodoListId,
     journalShowAllEntries,
     todoShowAllTasks,
+    calendarShowAllCalendars,
     weatherLocationLabel,
     weatherLat,
     weatherLon,
@@ -8679,6 +8829,10 @@ class $SettingsTableTable extends SettingsTable
     showAnnualizedSubscriptionCost,
     jobsHiddenColumnsJson,
     jobsIncludeArchived,
+    rankingsCollapsedQueueCategoriesJson,
+    jobProfileLinkedInUrl,
+    jobProfileGitHubUrl,
+    jobProfilePortfolioUrl,
     dreamSplitWidth,
     showDreamStatistics,
     dreamNotesPinned,
@@ -8691,6 +8845,7 @@ class $SettingsTableTable extends SettingsTable
     leetCodeHideExamples,
     leetCodeHideComplexity,
     leetCodeHideCode,
+    leetCodeEnableScratchCode,
     srsFailKey,
     srsHardKey,
     srsGoodKey,
@@ -8916,12 +9071,48 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('autocorrect_enabled')) {
+      context.handle(
+        _autocorrectEnabledMeta,
+        autocorrectEnabled.isAcceptableOrUnknown(
+          data['autocorrect_enabled']!,
+          _autocorrectEnabledMeta,
+        ),
+      );
+    }
     if (data.containsKey('caps_lock_indicator_enabled')) {
       context.handle(
         _capsLockIndicatorEnabledMeta,
         capsLockIndicatorEnabled.isAcceptableOrUnknown(
           data['caps_lock_indicator_enabled']!,
           _capsLockIndicatorEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('media_remote_uploads_enabled')) {
+      context.handle(
+        _mediaRemoteUploadsEnabledMeta,
+        mediaRemoteUploadsEnabled.isAcceptableOrUnknown(
+          data['media_remote_uploads_enabled']!,
+          _mediaRemoteUploadsEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('media_remote_downloads_enabled')) {
+      context.handle(
+        _mediaRemoteDownloadsEnabledMeta,
+        mediaRemoteDownloadsEnabled.isAcceptableOrUnknown(
+          data['media_remote_downloads_enabled']!,
+          _mediaRemoteDownloadsEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('media_background_prefetch_enabled')) {
+      context.handle(
+        _mediaBackgroundPrefetchEnabledMeta,
+        mediaBackgroundPrefetchEnabled.isAcceptableOrUnknown(
+          data['media_background_prefetch_enabled']!,
+          _mediaBackgroundPrefetchEnabledMeta,
         ),
       );
     }
@@ -8967,6 +9158,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('last_viewed_calendar_id')) {
+      context.handle(
+        _lastViewedCalendarIdMeta,
+        lastViewedCalendarId.isAcceptableOrUnknown(
+          data['last_viewed_calendar_id']!,
+          _lastViewedCalendarIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('default_journal_id')) {
       context.handle(
         _defaultJournalIdMeta,
@@ -9000,6 +9200,15 @@ class $SettingsTableTable extends SettingsTable
         todoShowAllTasks.isAcceptableOrUnknown(
           data['todo_show_all_tasks']!,
           _todoShowAllTasksMeta,
+        ),
+      );
+    }
+    if (data.containsKey('calendar_show_all_calendars')) {
+      context.handle(
+        _calendarShowAllCalendarsMeta,
+        calendarShowAllCalendars.isAcceptableOrUnknown(
+          data['calendar_show_all_calendars']!,
+          _calendarShowAllCalendarsMeta,
         ),
       );
     }
@@ -9600,6 +9809,42 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('rankings_collapsed_queue_categories_json')) {
+      context.handle(
+        _rankingsCollapsedQueueCategoriesJsonMeta,
+        rankingsCollapsedQueueCategoriesJson.isAcceptableOrUnknown(
+          data['rankings_collapsed_queue_categories_json']!,
+          _rankingsCollapsedQueueCategoriesJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('job_profile_linked_in_url')) {
+      context.handle(
+        _jobProfileLinkedInUrlMeta,
+        jobProfileLinkedInUrl.isAcceptableOrUnknown(
+          data['job_profile_linked_in_url']!,
+          _jobProfileLinkedInUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('job_profile_git_hub_url')) {
+      context.handle(
+        _jobProfileGitHubUrlMeta,
+        jobProfileGitHubUrl.isAcceptableOrUnknown(
+          data['job_profile_git_hub_url']!,
+          _jobProfileGitHubUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('job_profile_portfolio_url')) {
+      context.handle(
+        _jobProfilePortfolioUrlMeta,
+        jobProfilePortfolioUrl.isAcceptableOrUnknown(
+          data['job_profile_portfolio_url']!,
+          _jobProfilePortfolioUrlMeta,
+        ),
+      );
+    }
     if (data.containsKey('dream_split_width')) {
       context.handle(
         _dreamSplitWidthMeta,
@@ -9705,6 +9950,15 @@ class $SettingsTableTable extends SettingsTable
         leetCodeHideCode.isAcceptableOrUnknown(
           data['leet_code_hide_code']!,
           _leetCodeHideCodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_enable_scratch_code')) {
+      context.handle(
+        _leetCodeEnableScratchCodeMeta,
+        leetCodeEnableScratchCode.isAcceptableOrUnknown(
+          data['leet_code_enable_scratch_code']!,
+          _leetCodeEnableScratchCodeMeta,
         ),
       );
     }
@@ -9910,9 +10164,25 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}snippets_enabled'],
       )!,
+      autocorrectEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}autocorrect_enabled'],
+      )!,
       capsLockIndicatorEnabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}caps_lock_indicator_enabled'],
+      )!,
+      mediaRemoteUploadsEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}media_remote_uploads_enabled'],
+      )!,
+      mediaRemoteDownloadsEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}media_remote_downloads_enabled'],
+      )!,
+      mediaBackgroundPrefetchEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}media_background_prefetch_enabled'],
       )!,
       snippetExpandKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -9934,6 +10204,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}last_viewed_todo_list_id'],
       ),
+      lastViewedCalendarId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_viewed_calendar_id'],
+      ),
       defaultJournalId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}default_journal_id'],
@@ -9949,6 +10223,10 @@ class $SettingsTableTable extends SettingsTable
       todoShowAllTasks: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}todo_show_all_tasks'],
+      )!,
+      calendarShowAllCalendars: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}calendar_show_all_calendars'],
       )!,
       weatherLocationLabel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -10218,6 +10496,22 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}jobs_include_archived'],
       )!,
+      rankingsCollapsedQueueCategoriesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rankings_collapsed_queue_categories_json'],
+      ),
+      jobProfileLinkedInUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}job_profile_linked_in_url'],
+      ),
+      jobProfileGitHubUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}job_profile_git_hub_url'],
+      ),
+      jobProfilePortfolioUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}job_profile_portfolio_url'],
+      ),
       dreamSplitWidth: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}dream_split_width'],
@@ -10265,6 +10559,10 @@ class $SettingsTableTable extends SettingsTable
       leetCodeHideCode: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}leet_code_hide_code'],
+      )!,
+      leetCodeEnableScratchCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}leet_code_enable_scratch_code'],
       )!,
       srsFailKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -10346,7 +10644,30 @@ class SettingsTableData extends DataClass
   final bool hideCompletedTasks;
   final bool vimModeEnabled;
   final bool snippetsEnabled;
+
+  /// Whether prose fields fix obvious typos on a boundary key. See
+  /// AUTOCORRECT.md §10 — on by default, like snippets.
+  final bool autocorrectEnabled;
   final bool capsLockIndicatorEnabled;
+
+  /// Whether attached images may be uploaded to Firebase Storage at all.
+  ///
+  /// Off means images stay on the device that made them forever: other
+  /// devices still learn that an image exists (the asset row and its
+  /// references sync as ordinary documents) but can never obtain the bytes.
+  final bool mediaRemoteUploadsEnabled;
+
+  /// Whether image bytes may be downloaded at all — both the background
+  /// prefetch and an on-demand fetch when something is on screen. Off shows
+  /// the "Download disabled" empty state instead of a spinner that can never
+  /// resolve.
+  final bool mediaRemoteDownloadsEnabled;
+
+  /// Whether to proactively pull every synced image after a document sync,
+  /// rather than waiting for one to be looked at. Meaningless while
+  /// [mediaRemoteDownloadsEnabled] is off, which is why it is gated on it
+  /// rather than merged with it.
+  final bool mediaBackgroundPrefetchEnabled;
 
   /// [SnippetExpandKey] name — 'tab' or 'space'.
   final String snippetExpandKey;
@@ -10359,6 +10680,11 @@ class SettingsTableData extends DataClass
   final String? lastViewedJournalId;
   final String? lastViewedTodoListId;
 
+  /// The calendar the calendar page reopens into. Its all-view twin is
+  /// [calendarShowAllCalendars], split apart for the same reason the journal
+  /// and todo pair is (see below).
+  final String? lastViewedCalendarId;
+
   /// The journal the journal page always opens into, overriding
   /// [lastViewedJournalId] and [journalShowAllEntries]. Null means "restore
   /// whatever was last open", which is the behaviour this column replaced.
@@ -10370,6 +10696,7 @@ class SettingsTableData extends DataClass
   final String? defaultTodoListId;
   final bool journalShowAllEntries;
   final bool todoShowAllTasks;
+  final bool calendarShowAllCalendars;
   final String? weatherLocationLabel;
   final double? weatherLat;
   final double? weatherLon;
@@ -10443,6 +10770,17 @@ class SettingsTableData extends DataClass
 
   /// Whether the Jobs page starts with archived applications shown (§3.1).
   final bool jobsIncludeArchived;
+
+  /// Rankings categories whose Queue section the user has collapsed, as a JSON
+  /// list of category ids. The collapsed set rather than the expanded one, so
+  /// a category that appears from another device opens expanded.
+  final String? rankingsCollapsedQueueCategoriesJson;
+
+  /// Profile links the Jobs header copies to the clipboard (§3.4). Null means
+  /// the slot is unset and its button is not rendered.
+  final String? jobProfileLinkedInUrl;
+  final String? jobProfileGitHubUrl;
+  final String? jobProfilePortfolioUrl;
   final double? dreamSplitWidth;
   final bool showDreamStatistics;
   final bool dreamNotesPinned;
@@ -10458,6 +10796,9 @@ class SettingsTableData extends DataClass
   final bool leetCodeHideExamples;
   final bool leetCodeHideComplexity;
   final bool leetCodeHideCode;
+
+  /// [AppSettings.leetCodeEnableScratchCode].
+  final bool leetCodeEnableScratchCode;
   final String srsFailKey;
   final String srsHardKey;
   final String srsGoodKey;
@@ -10512,16 +10853,22 @@ class SettingsTableData extends DataClass
     required this.hideCompletedTasks,
     required this.vimModeEnabled,
     required this.snippetsEnabled,
+    required this.autocorrectEnabled,
     required this.capsLockIndicatorEnabled,
+    required this.mediaRemoteUploadsEnabled,
+    required this.mediaRemoteDownloadsEnabled,
+    required this.mediaBackgroundPrefetchEnabled,
     required this.snippetExpandKey,
     this.snippetsJson,
     this.deviceId,
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
+    this.lastViewedCalendarId,
     this.defaultJournalId,
     this.defaultTodoListId,
     required this.journalShowAllEntries,
     required this.todoShowAllTasks,
+    required this.calendarShowAllCalendars,
     this.weatherLocationLabel,
     this.weatherLat,
     this.weatherLon,
@@ -10589,6 +10936,10 @@ class SettingsTableData extends DataClass
     required this.showAnnualizedSubscriptionCost,
     this.jobsHiddenColumnsJson,
     required this.jobsIncludeArchived,
+    this.rankingsCollapsedQueueCategoriesJson,
+    this.jobProfileLinkedInUrl,
+    this.jobProfileGitHubUrl,
+    this.jobProfilePortfolioUrl,
     this.dreamSplitWidth,
     required this.showDreamStatistics,
     required this.dreamNotesPinned,
@@ -10601,6 +10952,7 @@ class SettingsTableData extends DataClass
     required this.leetCodeHideExamples,
     required this.leetCodeHideComplexity,
     required this.leetCodeHideCode,
+    required this.leetCodeEnableScratchCode,
     required this.srsFailKey,
     required this.srsHardKey,
     required this.srsGoodKey,
@@ -10655,8 +11007,18 @@ class SettingsTableData extends DataClass
     map['hide_completed_tasks'] = Variable<bool>(hideCompletedTasks);
     map['vim_mode_enabled'] = Variable<bool>(vimModeEnabled);
     map['snippets_enabled'] = Variable<bool>(snippetsEnabled);
+    map['autocorrect_enabled'] = Variable<bool>(autocorrectEnabled);
     map['caps_lock_indicator_enabled'] = Variable<bool>(
       capsLockIndicatorEnabled,
+    );
+    map['media_remote_uploads_enabled'] = Variable<bool>(
+      mediaRemoteUploadsEnabled,
+    );
+    map['media_remote_downloads_enabled'] = Variable<bool>(
+      mediaRemoteDownloadsEnabled,
+    );
+    map['media_background_prefetch_enabled'] = Variable<bool>(
+      mediaBackgroundPrefetchEnabled,
     );
     map['snippet_expand_key'] = Variable<String>(snippetExpandKey);
     if (!nullToAbsent || snippetsJson != null) {
@@ -10671,6 +11033,9 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || lastViewedTodoListId != null) {
       map['last_viewed_todo_list_id'] = Variable<String>(lastViewedTodoListId);
     }
+    if (!nullToAbsent || lastViewedCalendarId != null) {
+      map['last_viewed_calendar_id'] = Variable<String>(lastViewedCalendarId);
+    }
     if (!nullToAbsent || defaultJournalId != null) {
       map['default_journal_id'] = Variable<String>(defaultJournalId);
     }
@@ -10679,6 +11044,9 @@ class SettingsTableData extends DataClass
     }
     map['journal_show_all_entries'] = Variable<bool>(journalShowAllEntries);
     map['todo_show_all_tasks'] = Variable<bool>(todoShowAllTasks);
+    map['calendar_show_all_calendars'] = Variable<bool>(
+      calendarShowAllCalendars,
+    );
     if (!nullToAbsent || weatherLocationLabel != null) {
       map['weather_location_label'] = Variable<String>(weatherLocationLabel);
     }
@@ -10846,6 +11214,24 @@ class SettingsTableData extends DataClass
       map['jobs_hidden_columns_json'] = Variable<String>(jobsHiddenColumnsJson);
     }
     map['jobs_include_archived'] = Variable<bool>(jobsIncludeArchived);
+    if (!nullToAbsent || rankingsCollapsedQueueCategoriesJson != null) {
+      map['rankings_collapsed_queue_categories_json'] = Variable<String>(
+        rankingsCollapsedQueueCategoriesJson,
+      );
+    }
+    if (!nullToAbsent || jobProfileLinkedInUrl != null) {
+      map['job_profile_linked_in_url'] = Variable<String>(
+        jobProfileLinkedInUrl,
+      );
+    }
+    if (!nullToAbsent || jobProfileGitHubUrl != null) {
+      map['job_profile_git_hub_url'] = Variable<String>(jobProfileGitHubUrl);
+    }
+    if (!nullToAbsent || jobProfilePortfolioUrl != null) {
+      map['job_profile_portfolio_url'] = Variable<String>(
+        jobProfilePortfolioUrl,
+      );
+    }
     if (!nullToAbsent || dreamSplitWidth != null) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth);
     }
@@ -10864,6 +11250,9 @@ class SettingsTableData extends DataClass
     map['leet_code_hide_examples'] = Variable<bool>(leetCodeHideExamples);
     map['leet_code_hide_complexity'] = Variable<bool>(leetCodeHideComplexity);
     map['leet_code_hide_code'] = Variable<bool>(leetCodeHideCode);
+    map['leet_code_enable_scratch_code'] = Variable<bool>(
+      leetCodeEnableScratchCode,
+    );
     map['srs_fail_key'] = Variable<String>(srsFailKey);
     map['srs_hard_key'] = Variable<String>(srsHardKey);
     map['srs_good_key'] = Variable<String>(srsGoodKey);
@@ -10913,7 +11302,11 @@ class SettingsTableData extends DataClass
       hideCompletedTasks: Value(hideCompletedTasks),
       vimModeEnabled: Value(vimModeEnabled),
       snippetsEnabled: Value(snippetsEnabled),
+      autocorrectEnabled: Value(autocorrectEnabled),
       capsLockIndicatorEnabled: Value(capsLockIndicatorEnabled),
+      mediaRemoteUploadsEnabled: Value(mediaRemoteUploadsEnabled),
+      mediaRemoteDownloadsEnabled: Value(mediaRemoteDownloadsEnabled),
+      mediaBackgroundPrefetchEnabled: Value(mediaBackgroundPrefetchEnabled),
       snippetExpandKey: Value(snippetExpandKey),
       snippetsJson: snippetsJson == null && nullToAbsent
           ? const Value.absent()
@@ -10927,6 +11320,9 @@ class SettingsTableData extends DataClass
       lastViewedTodoListId: lastViewedTodoListId == null && nullToAbsent
           ? const Value.absent()
           : Value(lastViewedTodoListId),
+      lastViewedCalendarId: lastViewedCalendarId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastViewedCalendarId),
       defaultJournalId: defaultJournalId == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultJournalId),
@@ -10935,6 +11331,7 @@ class SettingsTableData extends DataClass
           : Value(defaultTodoListId),
       journalShowAllEntries: Value(journalShowAllEntries),
       todoShowAllTasks: Value(todoShowAllTasks),
+      calendarShowAllCalendars: Value(calendarShowAllCalendars),
       weatherLocationLabel: weatherLocationLabel == null && nullToAbsent
           ? const Value.absent()
           : Value(weatherLocationLabel),
@@ -11040,6 +11437,19 @@ class SettingsTableData extends DataClass
           ? const Value.absent()
           : Value(jobsHiddenColumnsJson),
       jobsIncludeArchived: Value(jobsIncludeArchived),
+      rankingsCollapsedQueueCategoriesJson:
+          rankingsCollapsedQueueCategoriesJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rankingsCollapsedQueueCategoriesJson),
+      jobProfileLinkedInUrl: jobProfileLinkedInUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jobProfileLinkedInUrl),
+      jobProfileGitHubUrl: jobProfileGitHubUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jobProfileGitHubUrl),
+      jobProfilePortfolioUrl: jobProfilePortfolioUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jobProfilePortfolioUrl),
       dreamSplitWidth: dreamSplitWidth == null && nullToAbsent
           ? const Value.absent()
           : Value(dreamSplitWidth),
@@ -11056,6 +11466,7 @@ class SettingsTableData extends DataClass
       leetCodeHideExamples: Value(leetCodeHideExamples),
       leetCodeHideComplexity: Value(leetCodeHideComplexity),
       leetCodeHideCode: Value(leetCodeHideCode),
+      leetCodeEnableScratchCode: Value(leetCodeEnableScratchCode),
       srsFailKey: Value(srsFailKey),
       srsHardKey: Value(srsHardKey),
       srsGoodKey: Value(srsGoodKey),
@@ -11119,8 +11530,18 @@ class SettingsTableData extends DataClass
       hideCompletedTasks: serializer.fromJson<bool>(json['hideCompletedTasks']),
       vimModeEnabled: serializer.fromJson<bool>(json['vimModeEnabled']),
       snippetsEnabled: serializer.fromJson<bool>(json['snippetsEnabled']),
+      autocorrectEnabled: serializer.fromJson<bool>(json['autocorrectEnabled']),
       capsLockIndicatorEnabled: serializer.fromJson<bool>(
         json['capsLockIndicatorEnabled'],
+      ),
+      mediaRemoteUploadsEnabled: serializer.fromJson<bool>(
+        json['mediaRemoteUploadsEnabled'],
+      ),
+      mediaRemoteDownloadsEnabled: serializer.fromJson<bool>(
+        json['mediaRemoteDownloadsEnabled'],
+      ),
+      mediaBackgroundPrefetchEnabled: serializer.fromJson<bool>(
+        json['mediaBackgroundPrefetchEnabled'],
       ),
       snippetExpandKey: serializer.fromJson<String>(json['snippetExpandKey']),
       snippetsJson: serializer.fromJson<String?>(json['snippetsJson']),
@@ -11131,6 +11552,9 @@ class SettingsTableData extends DataClass
       lastViewedTodoListId: serializer.fromJson<String?>(
         json['lastViewedTodoListId'],
       ),
+      lastViewedCalendarId: serializer.fromJson<String?>(
+        json['lastViewedCalendarId'],
+      ),
       defaultJournalId: serializer.fromJson<String?>(json['defaultJournalId']),
       defaultTodoListId: serializer.fromJson<String?>(
         json['defaultTodoListId'],
@@ -11139,6 +11563,9 @@ class SettingsTableData extends DataClass
         json['journalShowAllEntries'],
       ),
       todoShowAllTasks: serializer.fromJson<bool>(json['todoShowAllTasks']),
+      calendarShowAllCalendars: serializer.fromJson<bool>(
+        json['calendarShowAllCalendars'],
+      ),
       weatherLocationLabel: serializer.fromJson<String?>(
         json['weatherLocationLabel'],
       ),
@@ -11312,6 +11739,18 @@ class SettingsTableData extends DataClass
       jobsIncludeArchived: serializer.fromJson<bool>(
         json['jobsIncludeArchived'],
       ),
+      rankingsCollapsedQueueCategoriesJson: serializer.fromJson<String?>(
+        json['rankingsCollapsedQueueCategoriesJson'],
+      ),
+      jobProfileLinkedInUrl: serializer.fromJson<String?>(
+        json['jobProfileLinkedInUrl'],
+      ),
+      jobProfileGitHubUrl: serializer.fromJson<String?>(
+        json['jobProfileGitHubUrl'],
+      ),
+      jobProfilePortfolioUrl: serializer.fromJson<String?>(
+        json['jobProfilePortfolioUrl'],
+      ),
       dreamSplitWidth: serializer.fromJson<double?>(json['dreamSplitWidth']),
       showDreamStatistics: serializer.fromJson<bool>(
         json['showDreamStatistics'],
@@ -11336,6 +11775,9 @@ class SettingsTableData extends DataClass
         json['leetCodeHideComplexity'],
       ),
       leetCodeHideCode: serializer.fromJson<bool>(json['leetCodeHideCode']),
+      leetCodeEnableScratchCode: serializer.fromJson<bool>(
+        json['leetCodeEnableScratchCode'],
+      ),
       srsFailKey: serializer.fromJson<String>(json['srsFailKey']),
       srsHardKey: serializer.fromJson<String>(json['srsHardKey']),
       srsGoodKey: serializer.fromJson<String>(json['srsGoodKey']),
@@ -11394,18 +11836,32 @@ class SettingsTableData extends DataClass
       'hideCompletedTasks': serializer.toJson<bool>(hideCompletedTasks),
       'vimModeEnabled': serializer.toJson<bool>(vimModeEnabled),
       'snippetsEnabled': serializer.toJson<bool>(snippetsEnabled),
+      'autocorrectEnabled': serializer.toJson<bool>(autocorrectEnabled),
       'capsLockIndicatorEnabled': serializer.toJson<bool>(
         capsLockIndicatorEnabled,
+      ),
+      'mediaRemoteUploadsEnabled': serializer.toJson<bool>(
+        mediaRemoteUploadsEnabled,
+      ),
+      'mediaRemoteDownloadsEnabled': serializer.toJson<bool>(
+        mediaRemoteDownloadsEnabled,
+      ),
+      'mediaBackgroundPrefetchEnabled': serializer.toJson<bool>(
+        mediaBackgroundPrefetchEnabled,
       ),
       'snippetExpandKey': serializer.toJson<String>(snippetExpandKey),
       'snippetsJson': serializer.toJson<String?>(snippetsJson),
       'deviceId': serializer.toJson<String?>(deviceId),
       'lastViewedJournalId': serializer.toJson<String?>(lastViewedJournalId),
       'lastViewedTodoListId': serializer.toJson<String?>(lastViewedTodoListId),
+      'lastViewedCalendarId': serializer.toJson<String?>(lastViewedCalendarId),
       'defaultJournalId': serializer.toJson<String?>(defaultJournalId),
       'defaultTodoListId': serializer.toJson<String?>(defaultTodoListId),
       'journalShowAllEntries': serializer.toJson<bool>(journalShowAllEntries),
       'todoShowAllTasks': serializer.toJson<bool>(todoShowAllTasks),
+      'calendarShowAllCalendars': serializer.toJson<bool>(
+        calendarShowAllCalendars,
+      ),
       'weatherLocationLabel': serializer.toJson<String?>(weatherLocationLabel),
       'weatherLat': serializer.toJson<double?>(weatherLat),
       'weatherLon': serializer.toJson<double?>(weatherLon),
@@ -11541,6 +11997,16 @@ class SettingsTableData extends DataClass
         jobsHiddenColumnsJson,
       ),
       'jobsIncludeArchived': serializer.toJson<bool>(jobsIncludeArchived),
+      'rankingsCollapsedQueueCategoriesJson': serializer.toJson<String?>(
+        rankingsCollapsedQueueCategoriesJson,
+      ),
+      'jobProfileLinkedInUrl': serializer.toJson<String?>(
+        jobProfileLinkedInUrl,
+      ),
+      'jobProfileGitHubUrl': serializer.toJson<String?>(jobProfileGitHubUrl),
+      'jobProfilePortfolioUrl': serializer.toJson<String?>(
+        jobProfilePortfolioUrl,
+      ),
       'dreamSplitWidth': serializer.toJson<double?>(dreamSplitWidth),
       'showDreamStatistics': serializer.toJson<bool>(showDreamStatistics),
       'dreamNotesPinned': serializer.toJson<bool>(dreamNotesPinned),
@@ -11557,6 +12023,9 @@ class SettingsTableData extends DataClass
       'leetCodeHideExamples': serializer.toJson<bool>(leetCodeHideExamples),
       'leetCodeHideComplexity': serializer.toJson<bool>(leetCodeHideComplexity),
       'leetCodeHideCode': serializer.toJson<bool>(leetCodeHideCode),
+      'leetCodeEnableScratchCode': serializer.toJson<bool>(
+        leetCodeEnableScratchCode,
+      ),
       'srsFailKey': serializer.toJson<String>(srsFailKey),
       'srsHardKey': serializer.toJson<String>(srsHardKey),
       'srsGoodKey': serializer.toJson<String>(srsGoodKey),
@@ -11599,16 +12068,22 @@ class SettingsTableData extends DataClass
     bool? hideCompletedTasks,
     bool? vimModeEnabled,
     bool? snippetsEnabled,
+    bool? autocorrectEnabled,
     bool? capsLockIndicatorEnabled,
+    bool? mediaRemoteUploadsEnabled,
+    bool? mediaRemoteDownloadsEnabled,
+    bool? mediaBackgroundPrefetchEnabled,
     String? snippetExpandKey,
     Value<String?> snippetsJson = const Value.absent(),
     Value<String?> deviceId = const Value.absent(),
     Value<String?> lastViewedJournalId = const Value.absent(),
     Value<String?> lastViewedTodoListId = const Value.absent(),
+    Value<String?> lastViewedCalendarId = const Value.absent(),
     Value<String?> defaultJournalId = const Value.absent(),
     Value<String?> defaultTodoListId = const Value.absent(),
     bool? journalShowAllEntries,
     bool? todoShowAllTasks,
+    bool? calendarShowAllCalendars,
     Value<String?> weatherLocationLabel = const Value.absent(),
     Value<double?> weatherLat = const Value.absent(),
     Value<double?> weatherLon = const Value.absent(),
@@ -11676,6 +12151,10 @@ class SettingsTableData extends DataClass
     bool? showAnnualizedSubscriptionCost,
     Value<String?> jobsHiddenColumnsJson = const Value.absent(),
     bool? jobsIncludeArchived,
+    Value<String?> rankingsCollapsedQueueCategoriesJson = const Value.absent(),
+    Value<String?> jobProfileLinkedInUrl = const Value.absent(),
+    Value<String?> jobProfileGitHubUrl = const Value.absent(),
+    Value<String?> jobProfilePortfolioUrl = const Value.absent(),
     Value<double?> dreamSplitWidth = const Value.absent(),
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
@@ -11688,6 +12167,7 @@ class SettingsTableData extends DataClass
     bool? leetCodeHideExamples,
     bool? leetCodeHideComplexity,
     bool? leetCodeHideCode,
+    bool? leetCodeEnableScratchCode,
     String? srsFailKey,
     String? srsHardKey,
     String? srsGoodKey,
@@ -11732,8 +12212,15 @@ class SettingsTableData extends DataClass
     hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
     vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
     snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+    autocorrectEnabled: autocorrectEnabled ?? this.autocorrectEnabled,
     capsLockIndicatorEnabled:
         capsLockIndicatorEnabled ?? this.capsLockIndicatorEnabled,
+    mediaRemoteUploadsEnabled:
+        mediaRemoteUploadsEnabled ?? this.mediaRemoteUploadsEnabled,
+    mediaRemoteDownloadsEnabled:
+        mediaRemoteDownloadsEnabled ?? this.mediaRemoteDownloadsEnabled,
+    mediaBackgroundPrefetchEnabled:
+        mediaBackgroundPrefetchEnabled ?? this.mediaBackgroundPrefetchEnabled,
     snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
     snippetsJson: snippetsJson.present ? snippetsJson.value : this.snippetsJson,
     deviceId: deviceId.present ? deviceId.value : this.deviceId,
@@ -11743,6 +12230,9 @@ class SettingsTableData extends DataClass
     lastViewedTodoListId: lastViewedTodoListId.present
         ? lastViewedTodoListId.value
         : this.lastViewedTodoListId,
+    lastViewedCalendarId: lastViewedCalendarId.present
+        ? lastViewedCalendarId.value
+        : this.lastViewedCalendarId,
     defaultJournalId: defaultJournalId.present
         ? defaultJournalId.value
         : this.defaultJournalId,
@@ -11751,6 +12241,8 @@ class SettingsTableData extends DataClass
         : this.defaultTodoListId,
     journalShowAllEntries: journalShowAllEntries ?? this.journalShowAllEntries,
     todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
+    calendarShowAllCalendars:
+        calendarShowAllCalendars ?? this.calendarShowAllCalendars,
     weatherLocationLabel: weatherLocationLabel.present
         ? weatherLocationLabel.value
         : this.weatherLocationLabel,
@@ -11879,6 +12371,19 @@ class SettingsTableData extends DataClass
         ? jobsHiddenColumnsJson.value
         : this.jobsHiddenColumnsJson,
     jobsIncludeArchived: jobsIncludeArchived ?? this.jobsIncludeArchived,
+    rankingsCollapsedQueueCategoriesJson:
+        rankingsCollapsedQueueCategoriesJson.present
+        ? rankingsCollapsedQueueCategoriesJson.value
+        : this.rankingsCollapsedQueueCategoriesJson,
+    jobProfileLinkedInUrl: jobProfileLinkedInUrl.present
+        ? jobProfileLinkedInUrl.value
+        : this.jobProfileLinkedInUrl,
+    jobProfileGitHubUrl: jobProfileGitHubUrl.present
+        ? jobProfileGitHubUrl.value
+        : this.jobProfileGitHubUrl,
+    jobProfilePortfolioUrl: jobProfilePortfolioUrl.present
+        ? jobProfilePortfolioUrl.value
+        : this.jobProfilePortfolioUrl,
     dreamSplitWidth: dreamSplitWidth.present
         ? dreamSplitWidth.value
         : this.dreamSplitWidth,
@@ -11899,6 +12404,8 @@ class SettingsTableData extends DataClass
     leetCodeHideComplexity:
         leetCodeHideComplexity ?? this.leetCodeHideComplexity,
     leetCodeHideCode: leetCodeHideCode ?? this.leetCodeHideCode,
+    leetCodeEnableScratchCode:
+        leetCodeEnableScratchCode ?? this.leetCodeEnableScratchCode,
     srsFailKey: srsFailKey ?? this.srsFailKey,
     srsHardKey: srsHardKey ?? this.srsHardKey,
     srsGoodKey: srsGoodKey ?? this.srsGoodKey,
@@ -11982,9 +12489,22 @@ class SettingsTableData extends DataClass
       snippetsEnabled: data.snippetsEnabled.present
           ? data.snippetsEnabled.value
           : this.snippetsEnabled,
+      autocorrectEnabled: data.autocorrectEnabled.present
+          ? data.autocorrectEnabled.value
+          : this.autocorrectEnabled,
       capsLockIndicatorEnabled: data.capsLockIndicatorEnabled.present
           ? data.capsLockIndicatorEnabled.value
           : this.capsLockIndicatorEnabled,
+      mediaRemoteUploadsEnabled: data.mediaRemoteUploadsEnabled.present
+          ? data.mediaRemoteUploadsEnabled.value
+          : this.mediaRemoteUploadsEnabled,
+      mediaRemoteDownloadsEnabled: data.mediaRemoteDownloadsEnabled.present
+          ? data.mediaRemoteDownloadsEnabled.value
+          : this.mediaRemoteDownloadsEnabled,
+      mediaBackgroundPrefetchEnabled:
+          data.mediaBackgroundPrefetchEnabled.present
+          ? data.mediaBackgroundPrefetchEnabled.value
+          : this.mediaBackgroundPrefetchEnabled,
       snippetExpandKey: data.snippetExpandKey.present
           ? data.snippetExpandKey.value
           : this.snippetExpandKey,
@@ -11998,6 +12518,9 @@ class SettingsTableData extends DataClass
       lastViewedTodoListId: data.lastViewedTodoListId.present
           ? data.lastViewedTodoListId.value
           : this.lastViewedTodoListId,
+      lastViewedCalendarId: data.lastViewedCalendarId.present
+          ? data.lastViewedCalendarId.value
+          : this.lastViewedCalendarId,
       defaultJournalId: data.defaultJournalId.present
           ? data.defaultJournalId.value
           : this.defaultJournalId,
@@ -12010,6 +12533,9 @@ class SettingsTableData extends DataClass
       todoShowAllTasks: data.todoShowAllTasks.present
           ? data.todoShowAllTasks.value
           : this.todoShowAllTasks,
+      calendarShowAllCalendars: data.calendarShowAllCalendars.present
+          ? data.calendarShowAllCalendars.value
+          : this.calendarShowAllCalendars,
       weatherLocationLabel: data.weatherLocationLabel.present
           ? data.weatherLocationLabel.value
           : this.weatherLocationLabel,
@@ -12217,6 +12743,19 @@ class SettingsTableData extends DataClass
       jobsIncludeArchived: data.jobsIncludeArchived.present
           ? data.jobsIncludeArchived.value
           : this.jobsIncludeArchived,
+      rankingsCollapsedQueueCategoriesJson:
+          data.rankingsCollapsedQueueCategoriesJson.present
+          ? data.rankingsCollapsedQueueCategoriesJson.value
+          : this.rankingsCollapsedQueueCategoriesJson,
+      jobProfileLinkedInUrl: data.jobProfileLinkedInUrl.present
+          ? data.jobProfileLinkedInUrl.value
+          : this.jobProfileLinkedInUrl,
+      jobProfileGitHubUrl: data.jobProfileGitHubUrl.present
+          ? data.jobProfileGitHubUrl.value
+          : this.jobProfileGitHubUrl,
+      jobProfilePortfolioUrl: data.jobProfilePortfolioUrl.present
+          ? data.jobProfilePortfolioUrl.value
+          : this.jobProfilePortfolioUrl,
       dreamSplitWidth: data.dreamSplitWidth.present
           ? data.dreamSplitWidth.value
           : this.dreamSplitWidth,
@@ -12253,6 +12792,9 @@ class SettingsTableData extends DataClass
       leetCodeHideCode: data.leetCodeHideCode.present
           ? data.leetCodeHideCode.value
           : this.leetCodeHideCode,
+      leetCodeEnableScratchCode: data.leetCodeEnableScratchCode.present
+          ? data.leetCodeEnableScratchCode.value
+          : this.leetCodeEnableScratchCode,
       srsFailKey: data.srsFailKey.present
           ? data.srsFailKey.value
           : this.srsFailKey,
@@ -12317,16 +12859,24 @@ class SettingsTableData extends DataClass
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
           ..write('snippetsEnabled: $snippetsEnabled, ')
+          ..write('autocorrectEnabled: $autocorrectEnabled, ')
           ..write('capsLockIndicatorEnabled: $capsLockIndicatorEnabled, ')
+          ..write('mediaRemoteUploadsEnabled: $mediaRemoteUploadsEnabled, ')
+          ..write('mediaRemoteDownloadsEnabled: $mediaRemoteDownloadsEnabled, ')
+          ..write(
+            'mediaBackgroundPrefetchEnabled: $mediaBackgroundPrefetchEnabled, ',
+          )
           ..write('snippetExpandKey: $snippetExpandKey, ')
           ..write('snippetsJson: $snippetsJson, ')
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
+          ..write('lastViewedCalendarId: $lastViewedCalendarId, ')
           ..write('defaultJournalId: $defaultJournalId, ')
           ..write('defaultTodoListId: $defaultTodoListId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
           ..write('todoShowAllTasks: $todoShowAllTasks, ')
+          ..write('calendarShowAllCalendars: $calendarShowAllCalendars, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
           ..write('weatherLat: $weatherLat, ')
           ..write('weatherLon: $weatherLon, ')
@@ -12416,6 +12966,12 @@ class SettingsTableData extends DataClass
           )
           ..write('jobsHiddenColumnsJson: $jobsHiddenColumnsJson, ')
           ..write('jobsIncludeArchived: $jobsIncludeArchived, ')
+          ..write(
+            'rankingsCollapsedQueueCategoriesJson: $rankingsCollapsedQueueCategoriesJson, ',
+          )
+          ..write('jobProfileLinkedInUrl: $jobProfileLinkedInUrl, ')
+          ..write('jobProfileGitHubUrl: $jobProfileGitHubUrl, ')
+          ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
@@ -12428,6 +12984,7 @@ class SettingsTableData extends DataClass
           ..write('leetCodeHideExamples: $leetCodeHideExamples, ')
           ..write('leetCodeHideComplexity: $leetCodeHideComplexity, ')
           ..write('leetCodeHideCode: $leetCodeHideCode, ')
+          ..write('leetCodeEnableScratchCode: $leetCodeEnableScratchCode, ')
           ..write('srsFailKey: $srsFailKey, ')
           ..write('srsHardKey: $srsHardKey, ')
           ..write('srsGoodKey: $srsGoodKey, ')
@@ -12470,16 +13027,22 @@ class SettingsTableData extends DataClass
     hideCompletedTasks,
     vimModeEnabled,
     snippetsEnabled,
+    autocorrectEnabled,
     capsLockIndicatorEnabled,
+    mediaRemoteUploadsEnabled,
+    mediaRemoteDownloadsEnabled,
+    mediaBackgroundPrefetchEnabled,
     snippetExpandKey,
     snippetsJson,
     deviceId,
     lastViewedJournalId,
     lastViewedTodoListId,
+    lastViewedCalendarId,
     defaultJournalId,
     defaultTodoListId,
     journalShowAllEntries,
     todoShowAllTasks,
+    calendarShowAllCalendars,
     weatherLocationLabel,
     weatherLat,
     weatherLon,
@@ -12547,6 +13110,10 @@ class SettingsTableData extends DataClass
     showAnnualizedSubscriptionCost,
     jobsHiddenColumnsJson,
     jobsIncludeArchived,
+    rankingsCollapsedQueueCategoriesJson,
+    jobProfileLinkedInUrl,
+    jobProfileGitHubUrl,
+    jobProfilePortfolioUrl,
     dreamSplitWidth,
     showDreamStatistics,
     dreamNotesPinned,
@@ -12559,6 +13126,7 @@ class SettingsTableData extends DataClass
     leetCodeHideExamples,
     leetCodeHideComplexity,
     leetCodeHideCode,
+    leetCodeEnableScratchCode,
     srsFailKey,
     srsHardKey,
     srsGoodKey,
@@ -12601,16 +13169,24 @@ class SettingsTableData extends DataClass
           other.hideCompletedTasks == this.hideCompletedTasks &&
           other.vimModeEnabled == this.vimModeEnabled &&
           other.snippetsEnabled == this.snippetsEnabled &&
+          other.autocorrectEnabled == this.autocorrectEnabled &&
           other.capsLockIndicatorEnabled == this.capsLockIndicatorEnabled &&
+          other.mediaRemoteUploadsEnabled == this.mediaRemoteUploadsEnabled &&
+          other.mediaRemoteDownloadsEnabled ==
+              this.mediaRemoteDownloadsEnabled &&
+          other.mediaBackgroundPrefetchEnabled ==
+              this.mediaBackgroundPrefetchEnabled &&
           other.snippetExpandKey == this.snippetExpandKey &&
           other.snippetsJson == this.snippetsJson &&
           other.deviceId == this.deviceId &&
           other.lastViewedJournalId == this.lastViewedJournalId &&
           other.lastViewedTodoListId == this.lastViewedTodoListId &&
+          other.lastViewedCalendarId == this.lastViewedCalendarId &&
           other.defaultJournalId == this.defaultJournalId &&
           other.defaultTodoListId == this.defaultTodoListId &&
           other.journalShowAllEntries == this.journalShowAllEntries &&
           other.todoShowAllTasks == this.todoShowAllTasks &&
+          other.calendarShowAllCalendars == this.calendarShowAllCalendars &&
           other.weatherLocationLabel == this.weatherLocationLabel &&
           other.weatherLat == this.weatherLat &&
           other.weatherLon == this.weatherLon &&
@@ -12696,6 +13272,11 @@ class SettingsTableData extends DataClass
               this.showAnnualizedSubscriptionCost &&
           other.jobsHiddenColumnsJson == this.jobsHiddenColumnsJson &&
           other.jobsIncludeArchived == this.jobsIncludeArchived &&
+          other.rankingsCollapsedQueueCategoriesJson ==
+              this.rankingsCollapsedQueueCategoriesJson &&
+          other.jobProfileLinkedInUrl == this.jobProfileLinkedInUrl &&
+          other.jobProfileGitHubUrl == this.jobProfileGitHubUrl &&
+          other.jobProfilePortfolioUrl == this.jobProfilePortfolioUrl &&
           other.dreamSplitWidth == this.dreamSplitWidth &&
           other.showDreamStatistics == this.showDreamStatistics &&
           other.dreamNotesPinned == this.dreamNotesPinned &&
@@ -12708,6 +13289,7 @@ class SettingsTableData extends DataClass
           other.leetCodeHideExamples == this.leetCodeHideExamples &&
           other.leetCodeHideComplexity == this.leetCodeHideComplexity &&
           other.leetCodeHideCode == this.leetCodeHideCode &&
+          other.leetCodeEnableScratchCode == this.leetCodeEnableScratchCode &&
           other.srsFailKey == this.srsFailKey &&
           other.srsHardKey == this.srsHardKey &&
           other.srsGoodKey == this.srsGoodKey &&
@@ -12747,16 +13329,22 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> hideCompletedTasks;
   final Value<bool> vimModeEnabled;
   final Value<bool> snippetsEnabled;
+  final Value<bool> autocorrectEnabled;
   final Value<bool> capsLockIndicatorEnabled;
+  final Value<bool> mediaRemoteUploadsEnabled;
+  final Value<bool> mediaRemoteDownloadsEnabled;
+  final Value<bool> mediaBackgroundPrefetchEnabled;
   final Value<String> snippetExpandKey;
   final Value<String?> snippetsJson;
   final Value<String?> deviceId;
   final Value<String?> lastViewedJournalId;
   final Value<String?> lastViewedTodoListId;
+  final Value<String?> lastViewedCalendarId;
   final Value<String?> defaultJournalId;
   final Value<String?> defaultTodoListId;
   final Value<bool> journalShowAllEntries;
   final Value<bool> todoShowAllTasks;
+  final Value<bool> calendarShowAllCalendars;
   final Value<String?> weatherLocationLabel;
   final Value<double?> weatherLat;
   final Value<double?> weatherLon;
@@ -12824,6 +13412,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> showAnnualizedSubscriptionCost;
   final Value<String?> jobsHiddenColumnsJson;
   final Value<bool> jobsIncludeArchived;
+  final Value<String?> rankingsCollapsedQueueCategoriesJson;
+  final Value<String?> jobProfileLinkedInUrl;
+  final Value<String?> jobProfileGitHubUrl;
+  final Value<String?> jobProfilePortfolioUrl;
   final Value<double?> dreamSplitWidth;
   final Value<bool> showDreamStatistics;
   final Value<bool> dreamNotesPinned;
@@ -12836,6 +13428,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> leetCodeHideExamples;
   final Value<bool> leetCodeHideComplexity;
   final Value<bool> leetCodeHideCode;
+  final Value<bool> leetCodeEnableScratchCode;
   final Value<String> srsFailKey;
   final Value<String> srsHardKey;
   final Value<String> srsGoodKey;
@@ -12873,16 +13466,22 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.hideCompletedTasks = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
     this.snippetsEnabled = const Value.absent(),
+    this.autocorrectEnabled = const Value.absent(),
     this.capsLockIndicatorEnabled = const Value.absent(),
+    this.mediaRemoteUploadsEnabled = const Value.absent(),
+    this.mediaRemoteDownloadsEnabled = const Value.absent(),
+    this.mediaBackgroundPrefetchEnabled = const Value.absent(),
     this.snippetExpandKey = const Value.absent(),
     this.snippetsJson = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
+    this.lastViewedCalendarId = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
     this.defaultTodoListId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
     this.todoShowAllTasks = const Value.absent(),
+    this.calendarShowAllCalendars = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
     this.weatherLat = const Value.absent(),
     this.weatherLon = const Value.absent(),
@@ -12950,6 +13549,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showAnnualizedSubscriptionCost = const Value.absent(),
     this.jobsHiddenColumnsJson = const Value.absent(),
     this.jobsIncludeArchived = const Value.absent(),
+    this.rankingsCollapsedQueueCategoriesJson = const Value.absent(),
+    this.jobProfileLinkedInUrl = const Value.absent(),
+    this.jobProfileGitHubUrl = const Value.absent(),
+    this.jobProfilePortfolioUrl = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
@@ -12962,6 +13565,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.leetCodeHideExamples = const Value.absent(),
     this.leetCodeHideComplexity = const Value.absent(),
     this.leetCodeHideCode = const Value.absent(),
+    this.leetCodeEnableScratchCode = const Value.absent(),
     this.srsFailKey = const Value.absent(),
     this.srsHardKey = const Value.absent(),
     this.srsGoodKey = const Value.absent(),
@@ -13000,16 +13604,22 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.hideCompletedTasks = const Value.absent(),
     this.vimModeEnabled = const Value.absent(),
     this.snippetsEnabled = const Value.absent(),
+    this.autocorrectEnabled = const Value.absent(),
     this.capsLockIndicatorEnabled = const Value.absent(),
+    this.mediaRemoteUploadsEnabled = const Value.absent(),
+    this.mediaRemoteDownloadsEnabled = const Value.absent(),
+    this.mediaBackgroundPrefetchEnabled = const Value.absent(),
     this.snippetExpandKey = const Value.absent(),
     this.snippetsJson = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
+    this.lastViewedCalendarId = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
     this.defaultTodoListId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
     this.todoShowAllTasks = const Value.absent(),
+    this.calendarShowAllCalendars = const Value.absent(),
     this.weatherLocationLabel = const Value.absent(),
     this.weatherLat = const Value.absent(),
     this.weatherLon = const Value.absent(),
@@ -13077,6 +13687,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showAnnualizedSubscriptionCost = const Value.absent(),
     this.jobsHiddenColumnsJson = const Value.absent(),
     this.jobsIncludeArchived = const Value.absent(),
+    this.rankingsCollapsedQueueCategoriesJson = const Value.absent(),
+    this.jobProfileLinkedInUrl = const Value.absent(),
+    this.jobProfileGitHubUrl = const Value.absent(),
+    this.jobProfilePortfolioUrl = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
@@ -13089,6 +13703,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.leetCodeHideExamples = const Value.absent(),
     this.leetCodeHideComplexity = const Value.absent(),
     this.leetCodeHideCode = const Value.absent(),
+    this.leetCodeEnableScratchCode = const Value.absent(),
     this.srsFailKey = const Value.absent(),
     this.srsHardKey = const Value.absent(),
     this.srsGoodKey = const Value.absent(),
@@ -13127,16 +13742,22 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? hideCompletedTasks,
     Expression<bool>? vimModeEnabled,
     Expression<bool>? snippetsEnabled,
+    Expression<bool>? autocorrectEnabled,
     Expression<bool>? capsLockIndicatorEnabled,
+    Expression<bool>? mediaRemoteUploadsEnabled,
+    Expression<bool>? mediaRemoteDownloadsEnabled,
+    Expression<bool>? mediaBackgroundPrefetchEnabled,
     Expression<String>? snippetExpandKey,
     Expression<String>? snippetsJson,
     Expression<String>? deviceId,
     Expression<String>? lastViewedJournalId,
     Expression<String>? lastViewedTodoListId,
+    Expression<String>? lastViewedCalendarId,
     Expression<String>? defaultJournalId,
     Expression<String>? defaultTodoListId,
     Expression<bool>? journalShowAllEntries,
     Expression<bool>? todoShowAllTasks,
+    Expression<bool>? calendarShowAllCalendars,
     Expression<String>? weatherLocationLabel,
     Expression<double>? weatherLat,
     Expression<double>? weatherLon,
@@ -13204,6 +13825,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? showAnnualizedSubscriptionCost,
     Expression<String>? jobsHiddenColumnsJson,
     Expression<bool>? jobsIncludeArchived,
+    Expression<String>? rankingsCollapsedQueueCategoriesJson,
+    Expression<String>? jobProfileLinkedInUrl,
+    Expression<String>? jobProfileGitHubUrl,
+    Expression<String>? jobProfilePortfolioUrl,
     Expression<double>? dreamSplitWidth,
     Expression<bool>? showDreamStatistics,
     Expression<bool>? dreamNotesPinned,
@@ -13216,6 +13841,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? leetCodeHideExamples,
     Expression<bool>? leetCodeHideComplexity,
     Expression<bool>? leetCodeHideCode,
+    Expression<bool>? leetCodeEnableScratchCode,
     Expression<String>? srsFailKey,
     Expression<String>? srsHardKey,
     Expression<String>? srsGoodKey,
@@ -13264,8 +13890,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'hide_completed_tasks': hideCompletedTasks,
       if (vimModeEnabled != null) 'vim_mode_enabled': vimModeEnabled,
       if (snippetsEnabled != null) 'snippets_enabled': snippetsEnabled,
+      if (autocorrectEnabled != null) 'autocorrect_enabled': autocorrectEnabled,
       if (capsLockIndicatorEnabled != null)
         'caps_lock_indicator_enabled': capsLockIndicatorEnabled,
+      if (mediaRemoteUploadsEnabled != null)
+        'media_remote_uploads_enabled': mediaRemoteUploadsEnabled,
+      if (mediaRemoteDownloadsEnabled != null)
+        'media_remote_downloads_enabled': mediaRemoteDownloadsEnabled,
+      if (mediaBackgroundPrefetchEnabled != null)
+        'media_background_prefetch_enabled': mediaBackgroundPrefetchEnabled,
       if (snippetExpandKey != null) 'snippet_expand_key': snippetExpandKey,
       if (snippetsJson != null) 'snippets_json': snippetsJson,
       if (deviceId != null) 'device_id': deviceId,
@@ -13273,11 +13906,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'last_viewed_journal_id': lastViewedJournalId,
       if (lastViewedTodoListId != null)
         'last_viewed_todo_list_id': lastViewedTodoListId,
+      if (lastViewedCalendarId != null)
+        'last_viewed_calendar_id': lastViewedCalendarId,
       if (defaultJournalId != null) 'default_journal_id': defaultJournalId,
       if (defaultTodoListId != null) 'default_todo_list_id': defaultTodoListId,
       if (journalShowAllEntries != null)
         'journal_show_all_entries': journalShowAllEntries,
       if (todoShowAllTasks != null) 'todo_show_all_tasks': todoShowAllTasks,
+      if (calendarShowAllCalendars != null)
+        'calendar_show_all_calendars': calendarShowAllCalendars,
       if (weatherLocationLabel != null)
         'weather_location_label': weatherLocationLabel,
       if (weatherLat != null) 'weather_lat': weatherLat,
@@ -13402,6 +14039,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'jobs_hidden_columns_json': jobsHiddenColumnsJson,
       if (jobsIncludeArchived != null)
         'jobs_include_archived': jobsIncludeArchived,
+      if (rankingsCollapsedQueueCategoriesJson != null)
+        'rankings_collapsed_queue_categories_json':
+            rankingsCollapsedQueueCategoriesJson,
+      if (jobProfileLinkedInUrl != null)
+        'job_profile_linked_in_url': jobProfileLinkedInUrl,
+      if (jobProfileGitHubUrl != null)
+        'job_profile_git_hub_url': jobProfileGitHubUrl,
+      if (jobProfilePortfolioUrl != null)
+        'job_profile_portfolio_url': jobProfilePortfolioUrl,
       if (dreamSplitWidth != null) 'dream_split_width': dreamSplitWidth,
       if (showDreamStatistics != null)
         'show_dream_statistics': showDreamStatistics,
@@ -13420,6 +14066,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (leetCodeHideComplexity != null)
         'leet_code_hide_complexity': leetCodeHideComplexity,
       if (leetCodeHideCode != null) 'leet_code_hide_code': leetCodeHideCode,
+      if (leetCodeEnableScratchCode != null)
+        'leet_code_enable_scratch_code': leetCodeEnableScratchCode,
       if (srsFailKey != null) 'srs_fail_key': srsFailKey,
       if (srsHardKey != null) 'srs_hard_key': srsHardKey,
       if (srsGoodKey != null) 'srs_good_key': srsGoodKey,
@@ -13465,16 +14113,22 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? hideCompletedTasks,
     Value<bool>? vimModeEnabled,
     Value<bool>? snippetsEnabled,
+    Value<bool>? autocorrectEnabled,
     Value<bool>? capsLockIndicatorEnabled,
+    Value<bool>? mediaRemoteUploadsEnabled,
+    Value<bool>? mediaRemoteDownloadsEnabled,
+    Value<bool>? mediaBackgroundPrefetchEnabled,
     Value<String>? snippetExpandKey,
     Value<String?>? snippetsJson,
     Value<String?>? deviceId,
     Value<String?>? lastViewedJournalId,
     Value<String?>? lastViewedTodoListId,
+    Value<String?>? lastViewedCalendarId,
     Value<String?>? defaultJournalId,
     Value<String?>? defaultTodoListId,
     Value<bool>? journalShowAllEntries,
     Value<bool>? todoShowAllTasks,
+    Value<bool>? calendarShowAllCalendars,
     Value<String?>? weatherLocationLabel,
     Value<double?>? weatherLat,
     Value<double?>? weatherLon,
@@ -13542,6 +14196,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? showAnnualizedSubscriptionCost,
     Value<String?>? jobsHiddenColumnsJson,
     Value<bool>? jobsIncludeArchived,
+    Value<String?>? rankingsCollapsedQueueCategoriesJson,
+    Value<String?>? jobProfileLinkedInUrl,
+    Value<String?>? jobProfileGitHubUrl,
+    Value<String?>? jobProfilePortfolioUrl,
     Value<double?>? dreamSplitWidth,
     Value<bool>? showDreamStatistics,
     Value<bool>? dreamNotesPinned,
@@ -13554,6 +14212,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? leetCodeHideExamples,
     Value<bool>? leetCodeHideComplexity,
     Value<bool>? leetCodeHideCode,
+    Value<bool>? leetCodeEnableScratchCode,
     Value<String>? srsFailKey,
     Value<String>? srsHardKey,
     Value<String>? srsGoodKey,
@@ -13597,18 +14256,28 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
       snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+      autocorrectEnabled: autocorrectEnabled ?? this.autocorrectEnabled,
       capsLockIndicatorEnabled:
           capsLockIndicatorEnabled ?? this.capsLockIndicatorEnabled,
+      mediaRemoteUploadsEnabled:
+          mediaRemoteUploadsEnabled ?? this.mediaRemoteUploadsEnabled,
+      mediaRemoteDownloadsEnabled:
+          mediaRemoteDownloadsEnabled ?? this.mediaRemoteDownloadsEnabled,
+      mediaBackgroundPrefetchEnabled:
+          mediaBackgroundPrefetchEnabled ?? this.mediaBackgroundPrefetchEnabled,
       snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
       snippetsJson: snippetsJson ?? this.snippetsJson,
       deviceId: deviceId ?? this.deviceId,
       lastViewedJournalId: lastViewedJournalId ?? this.lastViewedJournalId,
       lastViewedTodoListId: lastViewedTodoListId ?? this.lastViewedTodoListId,
+      lastViewedCalendarId: lastViewedCalendarId ?? this.lastViewedCalendarId,
       defaultJournalId: defaultJournalId ?? this.defaultJournalId,
       defaultTodoListId: defaultTodoListId ?? this.defaultTodoListId,
       journalShowAllEntries:
           journalShowAllEntries ?? this.journalShowAllEntries,
       todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
+      calendarShowAllCalendars:
+          calendarShowAllCalendars ?? this.calendarShowAllCalendars,
       weatherLocationLabel: weatherLocationLabel ?? this.weatherLocationLabel,
       weatherLat: weatherLat ?? this.weatherLat,
       weatherLon: weatherLon ?? this.weatherLon,
@@ -13718,6 +14387,14 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       jobsHiddenColumnsJson:
           jobsHiddenColumnsJson ?? this.jobsHiddenColumnsJson,
       jobsIncludeArchived: jobsIncludeArchived ?? this.jobsIncludeArchived,
+      rankingsCollapsedQueueCategoriesJson:
+          rankingsCollapsedQueueCategoriesJson ??
+          this.rankingsCollapsedQueueCategoriesJson,
+      jobProfileLinkedInUrl:
+          jobProfileLinkedInUrl ?? this.jobProfileLinkedInUrl,
+      jobProfileGitHubUrl: jobProfileGitHubUrl ?? this.jobProfileGitHubUrl,
+      jobProfilePortfolioUrl:
+          jobProfilePortfolioUrl ?? this.jobProfilePortfolioUrl,
       dreamSplitWidth: dreamSplitWidth ?? this.dreamSplitWidth,
       showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
       dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
@@ -13734,6 +14411,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       leetCodeHideComplexity:
           leetCodeHideComplexity ?? this.leetCodeHideComplexity,
       leetCodeHideCode: leetCodeHideCode ?? this.leetCodeHideCode,
+      leetCodeEnableScratchCode:
+          leetCodeEnableScratchCode ?? this.leetCodeEnableScratchCode,
       srsFailKey: srsFailKey ?? this.srsFailKey,
       srsHardKey: srsHardKey ?? this.srsHardKey,
       srsGoodKey: srsGoodKey ?? this.srsGoodKey,
@@ -13843,9 +14522,27 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (snippetsEnabled.present) {
       map['snippets_enabled'] = Variable<bool>(snippetsEnabled.value);
     }
+    if (autocorrectEnabled.present) {
+      map['autocorrect_enabled'] = Variable<bool>(autocorrectEnabled.value);
+    }
     if (capsLockIndicatorEnabled.present) {
       map['caps_lock_indicator_enabled'] = Variable<bool>(
         capsLockIndicatorEnabled.value,
+      );
+    }
+    if (mediaRemoteUploadsEnabled.present) {
+      map['media_remote_uploads_enabled'] = Variable<bool>(
+        mediaRemoteUploadsEnabled.value,
+      );
+    }
+    if (mediaRemoteDownloadsEnabled.present) {
+      map['media_remote_downloads_enabled'] = Variable<bool>(
+        mediaRemoteDownloadsEnabled.value,
+      );
+    }
+    if (mediaBackgroundPrefetchEnabled.present) {
+      map['media_background_prefetch_enabled'] = Variable<bool>(
+        mediaBackgroundPrefetchEnabled.value,
       );
     }
     if (snippetExpandKey.present) {
@@ -13867,6 +14564,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         lastViewedTodoListId.value,
       );
     }
+    if (lastViewedCalendarId.present) {
+      map['last_viewed_calendar_id'] = Variable<String>(
+        lastViewedCalendarId.value,
+      );
+    }
     if (defaultJournalId.present) {
       map['default_journal_id'] = Variable<String>(defaultJournalId.value);
     }
@@ -13880,6 +14582,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (todoShowAllTasks.present) {
       map['todo_show_all_tasks'] = Variable<bool>(todoShowAllTasks.value);
+    }
+    if (calendarShowAllCalendars.present) {
+      map['calendar_show_all_calendars'] = Variable<bool>(
+        calendarShowAllCalendars.value,
+      );
     }
     if (weatherLocationLabel.present) {
       map['weather_location_label'] = Variable<String>(
@@ -14174,6 +14881,26 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (jobsIncludeArchived.present) {
       map['jobs_include_archived'] = Variable<bool>(jobsIncludeArchived.value);
     }
+    if (rankingsCollapsedQueueCategoriesJson.present) {
+      map['rankings_collapsed_queue_categories_json'] = Variable<String>(
+        rankingsCollapsedQueueCategoriesJson.value,
+      );
+    }
+    if (jobProfileLinkedInUrl.present) {
+      map['job_profile_linked_in_url'] = Variable<String>(
+        jobProfileLinkedInUrl.value,
+      );
+    }
+    if (jobProfileGitHubUrl.present) {
+      map['job_profile_git_hub_url'] = Variable<String>(
+        jobProfileGitHubUrl.value,
+      );
+    }
+    if (jobProfilePortfolioUrl.present) {
+      map['job_profile_portfolio_url'] = Variable<String>(
+        jobProfilePortfolioUrl.value,
+      );
+    }
     if (dreamSplitWidth.present) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth.value);
     }
@@ -14219,6 +14946,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (leetCodeHideCode.present) {
       map['leet_code_hide_code'] = Variable<bool>(leetCodeHideCode.value);
+    }
+    if (leetCodeEnableScratchCode.present) {
+      map['leet_code_enable_scratch_code'] = Variable<bool>(
+        leetCodeEnableScratchCode.value,
+      );
     }
     if (srsFailKey.present) {
       map['srs_fail_key'] = Variable<String>(srsFailKey.value);
@@ -14292,16 +15024,24 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('hideCompletedTasks: $hideCompletedTasks, ')
           ..write('vimModeEnabled: $vimModeEnabled, ')
           ..write('snippetsEnabled: $snippetsEnabled, ')
+          ..write('autocorrectEnabled: $autocorrectEnabled, ')
           ..write('capsLockIndicatorEnabled: $capsLockIndicatorEnabled, ')
+          ..write('mediaRemoteUploadsEnabled: $mediaRemoteUploadsEnabled, ')
+          ..write('mediaRemoteDownloadsEnabled: $mediaRemoteDownloadsEnabled, ')
+          ..write(
+            'mediaBackgroundPrefetchEnabled: $mediaBackgroundPrefetchEnabled, ',
+          )
           ..write('snippetExpandKey: $snippetExpandKey, ')
           ..write('snippetsJson: $snippetsJson, ')
           ..write('deviceId: $deviceId, ')
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
+          ..write('lastViewedCalendarId: $lastViewedCalendarId, ')
           ..write('defaultJournalId: $defaultJournalId, ')
           ..write('defaultTodoListId: $defaultTodoListId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
           ..write('todoShowAllTasks: $todoShowAllTasks, ')
+          ..write('calendarShowAllCalendars: $calendarShowAllCalendars, ')
           ..write('weatherLocationLabel: $weatherLocationLabel, ')
           ..write('weatherLat: $weatherLat, ')
           ..write('weatherLon: $weatherLon, ')
@@ -14391,6 +15131,12 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           )
           ..write('jobsHiddenColumnsJson: $jobsHiddenColumnsJson, ')
           ..write('jobsIncludeArchived: $jobsIncludeArchived, ')
+          ..write(
+            'rankingsCollapsedQueueCategoriesJson: $rankingsCollapsedQueueCategoriesJson, ',
+          )
+          ..write('jobProfileLinkedInUrl: $jobProfileLinkedInUrl, ')
+          ..write('jobProfileGitHubUrl: $jobProfileGitHubUrl, ')
+          ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
@@ -14403,6 +15149,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('leetCodeHideExamples: $leetCodeHideExamples, ')
           ..write('leetCodeHideComplexity: $leetCodeHideComplexity, ')
           ..write('leetCodeHideCode: $leetCodeHideCode, ')
+          ..write('leetCodeEnableScratchCode: $leetCodeEnableScratchCode, ')
           ..write('srsFailKey: $srsFailKey, ')
           ..write('srsHardKey: $srsHardKey, ')
           ..write('srsGoodKey: $srsGoodKey, ')
@@ -21443,6 +22190,428 @@ class CustomWordsTableCompanion extends UpdateCompanion<CustomWordsTableData> {
   }
 }
 
+class $FlaggedWordsTableTable extends FlaggedWordsTable
+    with TableInfo<$FlaggedWordsTableTable, FlaggedWordsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FlaggedWordsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _wordMeta = const VerificationMeta('word');
+  @override
+  late final GeneratedColumn<String> word = GeneratedColumn<String>(
+    'word',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _replacementMeta = const VerificationMeta(
+    'replacement',
+  );
+  @override
+  late final GeneratedColumn<String> replacement = GeneratedColumn<String>(
+    'replacement',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    word,
+    replacement,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'flagged_words_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FlaggedWordsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('word')) {
+      context.handle(
+        _wordMeta,
+        word.isAcceptableOrUnknown(data['word']!, _wordMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_wordMeta);
+    }
+    if (data.containsKey('replacement')) {
+      context.handle(
+        _replacementMeta,
+        replacement.isAcceptableOrUnknown(
+          data['replacement']!,
+          _replacementMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {word};
+  @override
+  FlaggedWordsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FlaggedWordsTableData(
+      word: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}word'],
+      )!,
+      replacement: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}replacement'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $FlaggedWordsTableTable createAlias(String alias) {
+    return $FlaggedWordsTableTable(attachedDatabase, alias);
+  }
+}
+
+class FlaggedWordsTableData extends DataClass
+    implements Insertable<FlaggedWordsTableData> {
+  final String word;
+
+  /// The word finishing this token rewrites to, or null for a flag with no
+  /// replacement. Clearing it keeps the flag.
+  final String? replacement;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+
+  /// Set when the flag is lifted, so a bundled word becoming allowed again
+  /// reaches other devices instead of being re-flagged on their next pull.
+  final DateTime? deletedAt;
+  const FlaggedWordsTableData({
+    required this.word,
+    this.replacement,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['word'] = Variable<String>(word);
+    if (!nullToAbsent || replacement != null) {
+      map['replacement'] = Variable<String>(replacement);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  FlaggedWordsTableCompanion toCompanion(bool nullToAbsent) {
+    return FlaggedWordsTableCompanion(
+      word: Value(word),
+      replacement: replacement == null && nullToAbsent
+          ? const Value.absent()
+          : Value(replacement),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory FlaggedWordsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FlaggedWordsTableData(
+      word: serializer.fromJson<String>(json['word']),
+      replacement: serializer.fromJson<String?>(json['replacement']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'word': serializer.toJson<String>(word),
+      'replacement': serializer.toJson<String?>(replacement),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  FlaggedWordsTableData copyWith({
+    String? word,
+    Value<String?> replacement = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => FlaggedWordsTableData(
+    word: word ?? this.word,
+    replacement: replacement.present ? replacement.value : this.replacement,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  FlaggedWordsTableData copyWithCompanion(FlaggedWordsTableCompanion data) {
+    return FlaggedWordsTableData(
+      word: data.word.present ? data.word.value : this.word,
+      replacement: data.replacement.present
+          ? data.replacement.value
+          : this.replacement,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FlaggedWordsTableData(')
+          ..write('word: $word, ')
+          ..write('replacement: $replacement, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(word, replacement, createdAt, updatedAt, version, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FlaggedWordsTableData &&
+          other.word == this.word &&
+          other.replacement == this.replacement &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class FlaggedWordsTableCompanion
+    extends UpdateCompanion<FlaggedWordsTableData> {
+  final Value<String> word;
+  final Value<String?> replacement;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const FlaggedWordsTableCompanion({
+    this.word = const Value.absent(),
+    this.replacement = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FlaggedWordsTableCompanion.insert({
+    required String word,
+    this.replacement = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : word = Value(word);
+  static Insertable<FlaggedWordsTableData> custom({
+    Expression<String>? word,
+    Expression<String>? replacement,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (word != null) 'word': word,
+      if (replacement != null) 'replacement': replacement,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FlaggedWordsTableCompanion copyWith({
+    Value<String>? word,
+    Value<String?>? replacement,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return FlaggedWordsTableCompanion(
+      word: word ?? this.word,
+      replacement: replacement ?? this.replacement,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (word.present) {
+      map['word'] = Variable<String>(word.value);
+    }
+    if (replacement.present) {
+      map['replacement'] = Variable<String>(replacement.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FlaggedWordsTableCompanion(')
+          ..write('word: $word, ')
+          ..write('replacement: $replacement, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $CustomQuotesTableTable extends CustomQuotesTable
     with TableInfo<$CustomQuotesTableTable, CustomQuotesTableData> {
   @override
@@ -25688,8 +26857,38 @@ class $StudyReviewLogTableTable extends StudyReviewLogTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, cardId, grade, reviewedAt];
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    cardId,
+    grade,
+    reviewedAt,
+    version,
+    deletedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -25731,6 +26930,18 @@ class $StudyReviewLogTableTable extends StudyReviewLogTable
     } else if (isInserting) {
       context.missing(_reviewedAtMeta);
     }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -25759,6 +26970,14 @@ class $StudyReviewLogTableTable extends StudyReviewLogTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}reviewed_at'],
       )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
     );
   }
 
@@ -25774,11 +26993,18 @@ class StudyReviewLogTableData extends DataClass
   final String cardId;
   final String grade;
   final DateTime reviewedAt;
+
+  /// Bumped only by a delete or a restore — the other columns never change
+  /// once the row is written. See [StudyReviewLog].
+  final int version;
+  final DateTime? deletedAt;
   const StudyReviewLogTableData({
     required this.id,
     required this.cardId,
     required this.grade,
     required this.reviewedAt,
+    required this.version,
+    this.deletedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -25787,6 +27013,10 @@ class StudyReviewLogTableData extends DataClass
     map['card_id'] = Variable<String>(cardId);
     map['grade'] = Variable<String>(grade);
     map['reviewed_at'] = Variable<DateTime>(reviewedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
     return map;
   }
 
@@ -25796,6 +27026,10 @@ class StudyReviewLogTableData extends DataClass
       cardId: Value(cardId),
       grade: Value(grade),
       reviewedAt: Value(reviewedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
     );
   }
 
@@ -25809,6 +27043,8 @@ class StudyReviewLogTableData extends DataClass
       cardId: serializer.fromJson<String>(json['cardId']),
       grade: serializer.fromJson<String>(json['grade']),
       reviewedAt: serializer.fromJson<DateTime>(json['reviewedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
   }
   @override
@@ -25819,6 +27055,8 @@ class StudyReviewLogTableData extends DataClass
       'cardId': serializer.toJson<String>(cardId),
       'grade': serializer.toJson<String>(grade),
       'reviewedAt': serializer.toJson<DateTime>(reviewedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
   }
 
@@ -25827,11 +27065,15 @@ class StudyReviewLogTableData extends DataClass
     String? cardId,
     String? grade,
     DateTime? reviewedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
   }) => StudyReviewLogTableData(
     id: id ?? this.id,
     cardId: cardId ?? this.cardId,
     grade: grade ?? this.grade,
     reviewedAt: reviewedAt ?? this.reviewedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
   StudyReviewLogTableData copyWithCompanion(StudyReviewLogTableCompanion data) {
     return StudyReviewLogTableData(
@@ -25841,6 +27083,8 @@ class StudyReviewLogTableData extends DataClass
       reviewedAt: data.reviewedAt.present
           ? data.reviewedAt.value
           : this.reviewedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
   }
 
@@ -25850,13 +27094,16 @@ class StudyReviewLogTableData extends DataClass
           ..write('id: $id, ')
           ..write('cardId: $cardId, ')
           ..write('grade: $grade, ')
-          ..write('reviewedAt: $reviewedAt')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, cardId, grade, reviewedAt);
+  int get hashCode =>
+      Object.hash(id, cardId, grade, reviewedAt, version, deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -25864,7 +27111,9 @@ class StudyReviewLogTableData extends DataClass
           other.id == this.id &&
           other.cardId == this.cardId &&
           other.grade == this.grade &&
-          other.reviewedAt == this.reviewedAt);
+          other.reviewedAt == this.reviewedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
 }
 
 class StudyReviewLogTableCompanion
@@ -25873,12 +27122,16 @@ class StudyReviewLogTableCompanion
   final Value<String> cardId;
   final Value<String> grade;
   final Value<DateTime> reviewedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
   final Value<int> rowid;
   const StudyReviewLogTableCompanion({
     this.id = const Value.absent(),
     this.cardId = const Value.absent(),
     this.grade = const Value.absent(),
     this.reviewedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   StudyReviewLogTableCompanion.insert({
@@ -25886,6 +27139,8 @@ class StudyReviewLogTableCompanion
     required String cardId,
     required String grade,
     required DateTime reviewedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        cardId = Value(cardId),
@@ -25896,6 +27151,8 @@ class StudyReviewLogTableCompanion
     Expression<String>? cardId,
     Expression<String>? grade,
     Expression<DateTime>? reviewedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -25903,6 +27160,8 @@ class StudyReviewLogTableCompanion
       if (cardId != null) 'card_id': cardId,
       if (grade != null) 'grade': grade,
       if (reviewedAt != null) 'reviewed_at': reviewedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -25912,6 +27171,8 @@ class StudyReviewLogTableCompanion
     Value<String>? cardId,
     Value<String>? grade,
     Value<DateTime>? reviewedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
     Value<int>? rowid,
   }) {
     return StudyReviewLogTableCompanion(
@@ -25919,6 +27180,8 @@ class StudyReviewLogTableCompanion
       cardId: cardId ?? this.cardId,
       grade: grade ?? this.grade,
       reviewedAt: reviewedAt ?? this.reviewedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -25938,6 +27201,12 @@ class StudyReviewLogTableCompanion
     if (reviewedAt.present) {
       map['reviewed_at'] = Variable<DateTime>(reviewedAt.value);
     }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -25951,6 +27220,8 @@ class StudyReviewLogTableCompanion
           ..write('cardId: $cardId, ')
           ..write('grade: $grade, ')
           ..write('reviewedAt: $reviewedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -29395,16 +30666,17 @@ class $JobApplicationsTableTable extends JobApplicationsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _seasonIdMeta = const VerificationMeta(
-    'seasonId',
+  static const VerificationMeta _seasonIdsJsonMeta = const VerificationMeta(
+    'seasonIdsJson',
   );
   @override
-  late final GeneratedColumn<String> seasonId = GeneratedColumn<String>(
-    'season_id',
+  late final GeneratedColumn<String> seasonIdsJson = GeneratedColumn<String>(
+    'season_ids_json',
     aliasedName,
-    true,
+    false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -29460,7 +30732,7 @@ class $JobApplicationsTableTable extends JobApplicationsTable
     dateApplied,
     applicationUrl,
     notes,
-    seasonId,
+    seasonIdsJson,
     createdAt,
     updatedAt,
     version,
@@ -29533,10 +30805,13 @@ class $JobApplicationsTableTable extends JobApplicationsTable
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
-    if (data.containsKey('season_id')) {
+    if (data.containsKey('season_ids_json')) {
       context.handle(
-        _seasonIdMeta,
-        seasonId.isAcceptableOrUnknown(data['season_id']!, _seasonIdMeta),
+        _seasonIdsJsonMeta,
+        seasonIdsJson.isAcceptableOrUnknown(
+          data['season_ids_json']!,
+          _seasonIdsJsonMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -29607,10 +30882,10 @@ class $JobApplicationsTableTable extends JobApplicationsTable
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
-      seasonId: attachedDatabase.typeMapping.read(
+      seasonIdsJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}season_id'],
-      ),
+        data['${effectivePrefix}season_ids_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -29646,8 +30921,10 @@ class JobApplicationsTableData extends DataClass
   final String? applicationUrl;
   final String? notes;
 
-  /// Null while active; the season this application was archived into once set.
-  final String? seasonId;
+  /// JSON array of season ids, one per cycle this application is filed under.
+  /// Empty array for "no season". Replaced the single `season_id` column in
+  /// migration 99 — an application can sit in more than one cycle at once.
+  final String seasonIdsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -29660,7 +30937,7 @@ class JobApplicationsTableData extends DataClass
     required this.dateApplied,
     this.applicationUrl,
     this.notes,
-    this.seasonId,
+    required this.seasonIdsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -29680,9 +30957,7 @@ class JobApplicationsTableData extends DataClass
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
-    if (!nullToAbsent || seasonId != null) {
-      map['season_id'] = Variable<String>(seasonId);
-    }
+    map['season_ids_json'] = Variable<String>(seasonIdsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -29705,9 +30980,7 @@ class JobApplicationsTableData extends DataClass
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
-      seasonId: seasonId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(seasonId),
+      seasonIdsJson: Value(seasonIdsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -29730,7 +31003,7 @@ class JobApplicationsTableData extends DataClass
       dateApplied: serializer.fromJson<DateTime>(json['dateApplied']),
       applicationUrl: serializer.fromJson<String?>(json['applicationUrl']),
       notes: serializer.fromJson<String?>(json['notes']),
-      seasonId: serializer.fromJson<String?>(json['seasonId']),
+      seasonIdsJson: serializer.fromJson<String>(json['seasonIdsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -29748,7 +31021,7 @@ class JobApplicationsTableData extends DataClass
       'dateApplied': serializer.toJson<DateTime>(dateApplied),
       'applicationUrl': serializer.toJson<String?>(applicationUrl),
       'notes': serializer.toJson<String?>(notes),
-      'seasonId': serializer.toJson<String?>(seasonId),
+      'seasonIdsJson': serializer.toJson<String>(seasonIdsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -29764,7 +31037,7 @@ class JobApplicationsTableData extends DataClass
     DateTime? dateApplied,
     Value<String?> applicationUrl = const Value.absent(),
     Value<String?> notes = const Value.absent(),
-    Value<String?> seasonId = const Value.absent(),
+    String? seasonIdsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -29779,7 +31052,7 @@ class JobApplicationsTableData extends DataClass
         ? applicationUrl.value
         : this.applicationUrl,
     notes: notes.present ? notes.value : this.notes,
-    seasonId: seasonId.present ? seasonId.value : this.seasonId,
+    seasonIdsJson: seasonIdsJson ?? this.seasonIdsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -29800,7 +31073,9 @@ class JobApplicationsTableData extends DataClass
           ? data.applicationUrl.value
           : this.applicationUrl,
       notes: data.notes.present ? data.notes.value : this.notes,
-      seasonId: data.seasonId.present ? data.seasonId.value : this.seasonId,
+      seasonIdsJson: data.seasonIdsJson.present
+          ? data.seasonIdsJson.value
+          : this.seasonIdsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -29818,7 +31093,7 @@ class JobApplicationsTableData extends DataClass
           ..write('dateApplied: $dateApplied, ')
           ..write('applicationUrl: $applicationUrl, ')
           ..write('notes: $notes, ')
-          ..write('seasonId: $seasonId, ')
+          ..write('seasonIdsJson: $seasonIdsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -29836,7 +31111,7 @@ class JobApplicationsTableData extends DataClass
     dateApplied,
     applicationUrl,
     notes,
-    seasonId,
+    seasonIdsJson,
     createdAt,
     updatedAt,
     version,
@@ -29853,7 +31128,7 @@ class JobApplicationsTableData extends DataClass
           other.dateApplied == this.dateApplied &&
           other.applicationUrl == this.applicationUrl &&
           other.notes == this.notes &&
-          other.seasonId == this.seasonId &&
+          other.seasonIdsJson == this.seasonIdsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -29869,7 +31144,7 @@ class JobApplicationsTableCompanion
   final Value<DateTime> dateApplied;
   final Value<String?> applicationUrl;
   final Value<String?> notes;
-  final Value<String?> seasonId;
+  final Value<String> seasonIdsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -29883,7 +31158,7 @@ class JobApplicationsTableCompanion
     this.dateApplied = const Value.absent(),
     this.applicationUrl = const Value.absent(),
     this.notes = const Value.absent(),
-    this.seasonId = const Value.absent(),
+    this.seasonIdsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -29898,7 +31173,7 @@ class JobApplicationsTableCompanion
     required DateTime dateApplied,
     this.applicationUrl = const Value.absent(),
     this.notes = const Value.absent(),
-    this.seasonId = const Value.absent(),
+    this.seasonIdsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -29919,7 +31194,7 @@ class JobApplicationsTableCompanion
     Expression<DateTime>? dateApplied,
     Expression<String>? applicationUrl,
     Expression<String>? notes,
-    Expression<String>? seasonId,
+    Expression<String>? seasonIdsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -29934,7 +31209,7 @@ class JobApplicationsTableCompanion
       if (dateApplied != null) 'date_applied': dateApplied,
       if (applicationUrl != null) 'application_url': applicationUrl,
       if (notes != null) 'notes': notes,
-      if (seasonId != null) 'season_id': seasonId,
+      if (seasonIdsJson != null) 'season_ids_json': seasonIdsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -29951,7 +31226,7 @@ class JobApplicationsTableCompanion
     Value<DateTime>? dateApplied,
     Value<String?>? applicationUrl,
     Value<String?>? notes,
-    Value<String?>? seasonId,
+    Value<String>? seasonIdsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -29966,7 +31241,7 @@ class JobApplicationsTableCompanion
       dateApplied: dateApplied ?? this.dateApplied,
       applicationUrl: applicationUrl ?? this.applicationUrl,
       notes: notes ?? this.notes,
-      seasonId: seasonId ?? this.seasonId,
+      seasonIdsJson: seasonIdsJson ?? this.seasonIdsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -29999,8 +31274,8 @@ class JobApplicationsTableCompanion
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
-    if (seasonId.present) {
-      map['season_id'] = Variable<String>(seasonId.value);
+    if (seasonIdsJson.present) {
+      map['season_ids_json'] = Variable<String>(seasonIdsJson.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -30030,7 +31305,7 @@ class JobApplicationsTableCompanion
           ..write('dateApplied: $dateApplied, ')
           ..write('applicationUrl: $applicationUrl, ')
           ..write('notes: $notes, ')
-          ..write('seasonId: $seasonId, ')
+          ..write('seasonIdsJson: $seasonIdsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -30651,6 +31926,17 @@ class $JobStagesTableTable extends JobStagesTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -30701,6 +31987,7 @@ class $JobStagesTableTable extends JobStagesTable
     id,
     name,
     sortOrder,
+    colorValue,
     createdAt,
     updatedAt,
     version,
@@ -30735,6 +32022,12 @@ class $JobStagesTableTable extends JobStagesTable
       context.handle(
         _sortOrderMeta,
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -30786,6 +32079,10 @@ class $JobStagesTableTable extends JobStagesTable
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -30816,6 +32113,10 @@ class JobStagesTableData extends DataClass
   final String id;
   final String name;
   final int sortOrder;
+
+  /// Null until the user picks one, which is what leaves the stage on the
+  /// position-derived colour the header falls back to.
+  final int? colorValue;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -30824,6 +32125,7 @@ class JobStagesTableData extends DataClass
     required this.id,
     required this.name,
     required this.sortOrder,
+    this.colorValue,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -30835,6 +32137,9 @@ class JobStagesTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || colorValue != null) {
+      map['color_value'] = Variable<int>(colorValue);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -30849,6 +32154,9 @@ class JobStagesTableData extends DataClass
       id: Value(id),
       name: Value(name),
       sortOrder: Value(sortOrder),
+      colorValue: colorValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorValue),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -30867,6 +32175,7 @@ class JobStagesTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      colorValue: serializer.fromJson<int?>(json['colorValue']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -30880,6 +32189,7 @@ class JobStagesTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'colorValue': serializer.toJson<int?>(colorValue),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -30891,6 +32201,7 @@ class JobStagesTableData extends DataClass
     String? id,
     String? name,
     int? sortOrder,
+    Value<int?> colorValue = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -30899,6 +32210,7 @@ class JobStagesTableData extends DataClass
     id: id ?? this.id,
     name: name ?? this.name,
     sortOrder: sortOrder ?? this.sortOrder,
+    colorValue: colorValue.present ? colorValue.value : this.colorValue,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -30909,6 +32221,9 @@ class JobStagesTableData extends DataClass
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -30922,6 +32237,7 @@ class JobStagesTableData extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -30935,6 +32251,7 @@ class JobStagesTableData extends DataClass
     id,
     name,
     sortOrder,
+    colorValue,
     createdAt,
     updatedAt,
     version,
@@ -30947,6 +32264,7 @@ class JobStagesTableData extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.sortOrder == this.sortOrder &&
+          other.colorValue == this.colorValue &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -30957,6 +32275,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
   final Value<String> id;
   final Value<String> name;
   final Value<int> sortOrder;
+  final Value<int?> colorValue;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -30966,6 +32285,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.colorValue = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -30976,6 +32296,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
     required String id,
     required String name,
     this.sortOrder = const Value.absent(),
+    this.colorValue = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -30989,6 +32310,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<int>? sortOrder,
+    Expression<int>? colorValue,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -30999,6 +32321,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (colorValue != null) 'color_value': colorValue,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -31011,6 +32334,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
     Value<String>? id,
     Value<String>? name,
     Value<int>? sortOrder,
+    Value<int?>? colorValue,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -31021,6 +32345,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
       id: id ?? this.id,
       name: name ?? this.name,
       sortOrder: sortOrder ?? this.sortOrder,
+      colorValue: colorValue ?? this.colorValue,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -31040,6 +32365,9 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -31065,6 +32393,7 @@ class JobStagesTableCompanion extends UpdateCompanion<JobStagesTableData> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('colorValue: $colorValue, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -32088,6 +33417,17 @@ class $JobSeasonsTableTable extends JobSeasonsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _archivedAtMeta = const VerificationMeta(
+    'archivedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> archivedAt = GeneratedColumn<DateTime>(
+    'archived_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -32138,6 +33478,7 @@ class $JobSeasonsTableTable extends JobSeasonsTable
     id,
     name,
     sortOrder,
+    archivedAt,
     createdAt,
     updatedAt,
     version,
@@ -32172,6 +33513,12 @@ class $JobSeasonsTableTable extends JobSeasonsTable
       context.handle(
         _sortOrderMeta,
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('archived_at')) {
+      context.handle(
+        _archivedAtMeta,
+        archivedAt.isAcceptableOrUnknown(data['archived_at']!, _archivedAtMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -32223,6 +33570,10 @@ class $JobSeasonsTableTable extends JobSeasonsTable
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      archivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}archived_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -32253,6 +33604,10 @@ class JobSeasonsTableData extends DataClass
   final String id;
   final String name;
   final int sortOrder;
+
+  /// Null while the season is still running. Set when the cycle is retired,
+  /// which archives every application filed under it at once.
+  final DateTime? archivedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -32261,6 +33616,7 @@ class JobSeasonsTableData extends DataClass
     required this.id,
     required this.name,
     required this.sortOrder,
+    this.archivedAt,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -32272,6 +33628,9 @@ class JobSeasonsTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || archivedAt != null) {
+      map['archived_at'] = Variable<DateTime>(archivedAt);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -32286,6 +33645,9 @@ class JobSeasonsTableData extends DataClass
       id: Value(id),
       name: Value(name),
       sortOrder: Value(sortOrder),
+      archivedAt: archivedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(archivedAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -32304,6 +33666,7 @@ class JobSeasonsTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -32317,6 +33680,7 @@ class JobSeasonsTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'archivedAt': serializer.toJson<DateTime?>(archivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -32328,6 +33692,7 @@ class JobSeasonsTableData extends DataClass
     String? id,
     String? name,
     int? sortOrder,
+    Value<DateTime?> archivedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -32336,6 +33701,7 @@ class JobSeasonsTableData extends DataClass
     id: id ?? this.id,
     name: name ?? this.name,
     sortOrder: sortOrder ?? this.sortOrder,
+    archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -32346,6 +33712,9 @@ class JobSeasonsTableData extends DataClass
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      archivedAt: data.archivedAt.present
+          ? data.archivedAt.value
+          : this.archivedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -32359,6 +33728,7 @@ class JobSeasonsTableData extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -32372,6 +33742,7 @@ class JobSeasonsTableData extends DataClass
     id,
     name,
     sortOrder,
+    archivedAt,
     createdAt,
     updatedAt,
     version,
@@ -32384,6 +33755,7 @@ class JobSeasonsTableData extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.sortOrder == this.sortOrder &&
+          other.archivedAt == this.archivedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -32394,6 +33766,7 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
   final Value<String> id;
   final Value<String> name;
   final Value<int> sortOrder;
+  final Value<DateTime?> archivedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -32403,6 +33776,7 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.archivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -32413,6 +33787,7 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
     required String id,
     required String name,
     this.sortOrder = const Value.absent(),
+    this.archivedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -32426,6 +33801,7 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<int>? sortOrder,
+    Expression<DateTime>? archivedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -32436,6 +33812,7 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (archivedAt != null) 'archived_at': archivedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -32448,6 +33825,7 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
     Value<String>? id,
     Value<String>? name,
     Value<int>? sortOrder,
+    Value<DateTime?>? archivedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -32458,6 +33836,7 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
       id: id ?? this.id,
       name: name ?? this.name,
       sortOrder: sortOrder ?? this.sortOrder,
+      archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -32477,6 +33856,9 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (archivedAt.present) {
+      map['archived_at'] = Variable<DateTime>(archivedAt.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -32501,6 +33883,4301 @@ class JobSeasonsTableCompanion extends UpdateCompanion<JobSeasonsTableData> {
     return (StringBuffer('JobSeasonsTableCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('archivedAt: $archivedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MediaAssetsTableTable extends MediaAssetsTable
+    with TableInfo<$MediaAssetsTableTable, MediaAssetsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MediaAssetsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentHashMeta = const VerificationMeta(
+    'contentHash',
+  );
+  @override
+  late final GeneratedColumn<String> contentHash = GeneratedColumn<String>(
+    'content_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _byteSizeMeta = const VerificationMeta(
+    'byteSize',
+  );
+  @override
+  late final GeneratedColumn<int> byteSize = GeneratedColumn<int>(
+    'byte_size',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mimeTypeMeta = const VerificationMeta(
+    'mimeType',
+  );
+  @override
+  late final GeneratedColumn<String> mimeType = GeneratedColumn<String>(
+    'mime_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _widthMeta = const VerificationMeta('width');
+  @override
+  late final GeneratedColumn<int> width = GeneratedColumn<int>(
+    'width',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _heightMeta = const VerificationMeta('height');
+  @override
+  late final GeneratedColumn<int> height = GeneratedColumn<int>(
+    'height',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _uploadStateMeta = const VerificationMeta(
+    'uploadState',
+  );
+  @override
+  late final GeneratedColumn<String> uploadState = GeneratedColumn<String>(
+    'upload_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('localOnly'),
+  );
+  static const VerificationMeta _downloadStateMeta = const VerificationMeta(
+    'downloadState',
+  );
+  @override
+  late final GeneratedColumn<String> downloadState = GeneratedColumn<String>(
+    'download_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('present'),
+  );
+  static const VerificationMeta _failureReasonMeta = const VerificationMeta(
+    'failureReason',
+  );
+  @override
+  late final GeneratedColumn<String> failureReason = GeneratedColumn<String>(
+    'failure_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _unreferencedAtMeta = const VerificationMeta(
+    'unreferencedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> unreferencedAt =
+      GeneratedColumn<DateTime>(
+        'unreferenced_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    contentHash,
+    byteSize,
+    mimeType,
+    width,
+    height,
+    uploadState,
+    downloadState,
+    failureReason,
+    unreferencedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'media_assets_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MediaAssetsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('content_hash')) {
+      context.handle(
+        _contentHashMeta,
+        contentHash.isAcceptableOrUnknown(
+          data['content_hash']!,
+          _contentHashMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_contentHashMeta);
+    }
+    if (data.containsKey('byte_size')) {
+      context.handle(
+        _byteSizeMeta,
+        byteSize.isAcceptableOrUnknown(data['byte_size']!, _byteSizeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_byteSizeMeta);
+    }
+    if (data.containsKey('mime_type')) {
+      context.handle(
+        _mimeTypeMeta,
+        mimeType.isAcceptableOrUnknown(data['mime_type']!, _mimeTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_mimeTypeMeta);
+    }
+    if (data.containsKey('width')) {
+      context.handle(
+        _widthMeta,
+        width.isAcceptableOrUnknown(data['width']!, _widthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_widthMeta);
+    }
+    if (data.containsKey('height')) {
+      context.handle(
+        _heightMeta,
+        height.isAcceptableOrUnknown(data['height']!, _heightMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_heightMeta);
+    }
+    if (data.containsKey('upload_state')) {
+      context.handle(
+        _uploadStateMeta,
+        uploadState.isAcceptableOrUnknown(
+          data['upload_state']!,
+          _uploadStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('download_state')) {
+      context.handle(
+        _downloadStateMeta,
+        downloadState.isAcceptableOrUnknown(
+          data['download_state']!,
+          _downloadStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('failure_reason')) {
+      context.handle(
+        _failureReasonMeta,
+        failureReason.isAcceptableOrUnknown(
+          data['failure_reason']!,
+          _failureReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('unreferenced_at')) {
+      context.handle(
+        _unreferencedAtMeta,
+        unreferencedAt.isAcceptableOrUnknown(
+          data['unreferenced_at']!,
+          _unreferencedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MediaAssetsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MediaAssetsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      contentHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content_hash'],
+      )!,
+      byteSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}byte_size'],
+      )!,
+      mimeType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mime_type'],
+      )!,
+      width: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}width'],
+      )!,
+      height: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}height'],
+      )!,
+      uploadState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}upload_state'],
+      )!,
+      downloadState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}download_state'],
+      )!,
+      failureReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}failure_reason'],
+      ),
+      unreferencedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}unreferenced_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $MediaAssetsTableTable createAlias(String alias) {
+    return $MediaAssetsTableTable(attachedDatabase, alias);
+  }
+}
+
+class MediaAssetsTableData extends DataClass
+    implements Insertable<MediaAssetsTableData> {
+  final String id;
+  final String contentHash;
+  final int byteSize;
+  final String mimeType;
+  final int width;
+  final int height;
+
+  /// [MediaUploadState] / [MediaDownloadState] by `name`, not index — the
+  /// enum's declaration order is then free to change without rewriting rows.
+  final String uploadState;
+  final String downloadState;
+
+  /// Why the last transfer gave up, kept for the retry UI.
+  final String? failureReason;
+
+  /// When the refcount last hit zero. Distinct from [deletedAt] so that an
+  /// asset which becomes referenced again keeps its bytes — see
+  /// [MediaAsset.unreferencedAt].
+  final DateTime? unreferencedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const MediaAssetsTableData({
+    required this.id,
+    required this.contentHash,
+    required this.byteSize,
+    required this.mimeType,
+    required this.width,
+    required this.height,
+    required this.uploadState,
+    required this.downloadState,
+    this.failureReason,
+    this.unreferencedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['content_hash'] = Variable<String>(contentHash);
+    map['byte_size'] = Variable<int>(byteSize);
+    map['mime_type'] = Variable<String>(mimeType);
+    map['width'] = Variable<int>(width);
+    map['height'] = Variable<int>(height);
+    map['upload_state'] = Variable<String>(uploadState);
+    map['download_state'] = Variable<String>(downloadState);
+    if (!nullToAbsent || failureReason != null) {
+      map['failure_reason'] = Variable<String>(failureReason);
+    }
+    if (!nullToAbsent || unreferencedAt != null) {
+      map['unreferenced_at'] = Variable<DateTime>(unreferencedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  MediaAssetsTableCompanion toCompanion(bool nullToAbsent) {
+    return MediaAssetsTableCompanion(
+      id: Value(id),
+      contentHash: Value(contentHash),
+      byteSize: Value(byteSize),
+      mimeType: Value(mimeType),
+      width: Value(width),
+      height: Value(height),
+      uploadState: Value(uploadState),
+      downloadState: Value(downloadState),
+      failureReason: failureReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureReason),
+      unreferencedAt: unreferencedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unreferencedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory MediaAssetsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MediaAssetsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      contentHash: serializer.fromJson<String>(json['contentHash']),
+      byteSize: serializer.fromJson<int>(json['byteSize']),
+      mimeType: serializer.fromJson<String>(json['mimeType']),
+      width: serializer.fromJson<int>(json['width']),
+      height: serializer.fromJson<int>(json['height']),
+      uploadState: serializer.fromJson<String>(json['uploadState']),
+      downloadState: serializer.fromJson<String>(json['downloadState']),
+      failureReason: serializer.fromJson<String?>(json['failureReason']),
+      unreferencedAt: serializer.fromJson<DateTime?>(json['unreferencedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'contentHash': serializer.toJson<String>(contentHash),
+      'byteSize': serializer.toJson<int>(byteSize),
+      'mimeType': serializer.toJson<String>(mimeType),
+      'width': serializer.toJson<int>(width),
+      'height': serializer.toJson<int>(height),
+      'uploadState': serializer.toJson<String>(uploadState),
+      'downloadState': serializer.toJson<String>(downloadState),
+      'failureReason': serializer.toJson<String?>(failureReason),
+      'unreferencedAt': serializer.toJson<DateTime?>(unreferencedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  MediaAssetsTableData copyWith({
+    String? id,
+    String? contentHash,
+    int? byteSize,
+    String? mimeType,
+    int? width,
+    int? height,
+    String? uploadState,
+    String? downloadState,
+    Value<String?> failureReason = const Value.absent(),
+    Value<DateTime?> unreferencedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => MediaAssetsTableData(
+    id: id ?? this.id,
+    contentHash: contentHash ?? this.contentHash,
+    byteSize: byteSize ?? this.byteSize,
+    mimeType: mimeType ?? this.mimeType,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    uploadState: uploadState ?? this.uploadState,
+    downloadState: downloadState ?? this.downloadState,
+    failureReason: failureReason.present
+        ? failureReason.value
+        : this.failureReason,
+    unreferencedAt: unreferencedAt.present
+        ? unreferencedAt.value
+        : this.unreferencedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  MediaAssetsTableData copyWithCompanion(MediaAssetsTableCompanion data) {
+    return MediaAssetsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      contentHash: data.contentHash.present
+          ? data.contentHash.value
+          : this.contentHash,
+      byteSize: data.byteSize.present ? data.byteSize.value : this.byteSize,
+      mimeType: data.mimeType.present ? data.mimeType.value : this.mimeType,
+      width: data.width.present ? data.width.value : this.width,
+      height: data.height.present ? data.height.value : this.height,
+      uploadState: data.uploadState.present
+          ? data.uploadState.value
+          : this.uploadState,
+      downloadState: data.downloadState.present
+          ? data.downloadState.value
+          : this.downloadState,
+      failureReason: data.failureReason.present
+          ? data.failureReason.value
+          : this.failureReason,
+      unreferencedAt: data.unreferencedAt.present
+          ? data.unreferencedAt.value
+          : this.unreferencedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MediaAssetsTableData(')
+          ..write('id: $id, ')
+          ..write('contentHash: $contentHash, ')
+          ..write('byteSize: $byteSize, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('uploadState: $uploadState, ')
+          ..write('downloadState: $downloadState, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('unreferencedAt: $unreferencedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    contentHash,
+    byteSize,
+    mimeType,
+    width,
+    height,
+    uploadState,
+    downloadState,
+    failureReason,
+    unreferencedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MediaAssetsTableData &&
+          other.id == this.id &&
+          other.contentHash == this.contentHash &&
+          other.byteSize == this.byteSize &&
+          other.mimeType == this.mimeType &&
+          other.width == this.width &&
+          other.height == this.height &&
+          other.uploadState == this.uploadState &&
+          other.downloadState == this.downloadState &&
+          other.failureReason == this.failureReason &&
+          other.unreferencedAt == this.unreferencedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class MediaAssetsTableCompanion extends UpdateCompanion<MediaAssetsTableData> {
+  final Value<String> id;
+  final Value<String> contentHash;
+  final Value<int> byteSize;
+  final Value<String> mimeType;
+  final Value<int> width;
+  final Value<int> height;
+  final Value<String> uploadState;
+  final Value<String> downloadState;
+  final Value<String?> failureReason;
+  final Value<DateTime?> unreferencedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const MediaAssetsTableCompanion({
+    this.id = const Value.absent(),
+    this.contentHash = const Value.absent(),
+    this.byteSize = const Value.absent(),
+    this.mimeType = const Value.absent(),
+    this.width = const Value.absent(),
+    this.height = const Value.absent(),
+    this.uploadState = const Value.absent(),
+    this.downloadState = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    this.unreferencedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MediaAssetsTableCompanion.insert({
+    required String id,
+    required String contentHash,
+    required int byteSize,
+    required String mimeType,
+    required int width,
+    required int height,
+    this.uploadState = const Value.absent(),
+    this.downloadState = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    this.unreferencedAt = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       contentHash = Value(contentHash),
+       byteSize = Value(byteSize),
+       mimeType = Value(mimeType),
+       width = Value(width),
+       height = Value(height),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<MediaAssetsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? contentHash,
+    Expression<int>? byteSize,
+    Expression<String>? mimeType,
+    Expression<int>? width,
+    Expression<int>? height,
+    Expression<String>? uploadState,
+    Expression<String>? downloadState,
+    Expression<String>? failureReason,
+    Expression<DateTime>? unreferencedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (contentHash != null) 'content_hash': contentHash,
+      if (byteSize != null) 'byte_size': byteSize,
+      if (mimeType != null) 'mime_type': mimeType,
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+      if (uploadState != null) 'upload_state': uploadState,
+      if (downloadState != null) 'download_state': downloadState,
+      if (failureReason != null) 'failure_reason': failureReason,
+      if (unreferencedAt != null) 'unreferenced_at': unreferencedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MediaAssetsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? contentHash,
+    Value<int>? byteSize,
+    Value<String>? mimeType,
+    Value<int>? width,
+    Value<int>? height,
+    Value<String>? uploadState,
+    Value<String>? downloadState,
+    Value<String?>? failureReason,
+    Value<DateTime?>? unreferencedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return MediaAssetsTableCompanion(
+      id: id ?? this.id,
+      contentHash: contentHash ?? this.contentHash,
+      byteSize: byteSize ?? this.byteSize,
+      mimeType: mimeType ?? this.mimeType,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      uploadState: uploadState ?? this.uploadState,
+      downloadState: downloadState ?? this.downloadState,
+      failureReason: failureReason ?? this.failureReason,
+      unreferencedAt: unreferencedAt ?? this.unreferencedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (contentHash.present) {
+      map['content_hash'] = Variable<String>(contentHash.value);
+    }
+    if (byteSize.present) {
+      map['byte_size'] = Variable<int>(byteSize.value);
+    }
+    if (mimeType.present) {
+      map['mime_type'] = Variable<String>(mimeType.value);
+    }
+    if (width.present) {
+      map['width'] = Variable<int>(width.value);
+    }
+    if (height.present) {
+      map['height'] = Variable<int>(height.value);
+    }
+    if (uploadState.present) {
+      map['upload_state'] = Variable<String>(uploadState.value);
+    }
+    if (downloadState.present) {
+      map['download_state'] = Variable<String>(downloadState.value);
+    }
+    if (failureReason.present) {
+      map['failure_reason'] = Variable<String>(failureReason.value);
+    }
+    if (unreferencedAt.present) {
+      map['unreferenced_at'] = Variable<DateTime>(unreferencedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MediaAssetsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('contentHash: $contentHash, ')
+          ..write('byteSize: $byteSize, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('uploadState: $uploadState, ')
+          ..write('downloadState: $downloadState, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('unreferencedAt: $unreferencedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MediaReferencesTableTable extends MediaReferencesTable
+    with TableInfo<$MediaReferencesTableTable, MediaReferencesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MediaReferencesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mediaIdMeta = const VerificationMeta(
+    'mediaId',
+  );
+  @override
+  late final GeneratedColumn<String> mediaId = GeneratedColumn<String>(
+    'media_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _collectionMeta = const VerificationMeta(
+    'collection',
+  );
+  @override
+  late final GeneratedColumn<String> collection = GeneratedColumn<String>(
+    'collection',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<String> documentId = GeneratedColumn<String>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _facetMeta = const VerificationMeta('facet');
+  @override
+  late final GeneratedColumn<String> facet = GeneratedColumn<String>(
+    'facet',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('gallery'),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _displayWidthPxMeta = const VerificationMeta(
+    'displayWidthPx',
+  );
+  @override
+  late final GeneratedColumn<int> displayWidthPx = GeneratedColumn<int>(
+    'display_width_px',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    mediaId,
+    collection,
+    documentId,
+    facet,
+    sortOrder,
+    displayWidthPx,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'media_references_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MediaReferencesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('media_id')) {
+      context.handle(
+        _mediaIdMeta,
+        mediaId.isAcceptableOrUnknown(data['media_id']!, _mediaIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_mediaIdMeta);
+    }
+    if (data.containsKey('collection')) {
+      context.handle(
+        _collectionMeta,
+        collection.isAcceptableOrUnknown(data['collection']!, _collectionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_collectionMeta);
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_documentIdMeta);
+    }
+    if (data.containsKey('facet')) {
+      context.handle(
+        _facetMeta,
+        facet.isAcceptableOrUnknown(data['facet']!, _facetMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('display_width_px')) {
+      context.handle(
+        _displayWidthPxMeta,
+        displayWidthPx.isAcceptableOrUnknown(
+          data['display_width_px']!,
+          _displayWidthPxMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MediaReferencesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MediaReferencesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      mediaId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}media_id'],
+      )!,
+      collection: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}collection'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_id'],
+      )!,
+      facet: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}facet'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      displayWidthPx: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}display_width_px'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $MediaReferencesTableTable createAlias(String alias) {
+    return $MediaReferencesTableTable(attachedDatabase, alias);
+  }
+}
+
+class MediaReferencesTableData extends DataClass
+    implements Insertable<MediaReferencesTableData> {
+  final String id;
+  final String mediaId;
+  final String collection;
+  final String documentId;
+
+  /// [MediaFacet] by `name`.
+  final String facet;
+  final int sortOrder;
+  final int? displayWidthPx;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const MediaReferencesTableData({
+    required this.id,
+    required this.mediaId,
+    required this.collection,
+    required this.documentId,
+    required this.facet,
+    required this.sortOrder,
+    this.displayWidthPx,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['media_id'] = Variable<String>(mediaId);
+    map['collection'] = Variable<String>(collection);
+    map['document_id'] = Variable<String>(documentId);
+    map['facet'] = Variable<String>(facet);
+    map['sort_order'] = Variable<int>(sortOrder);
+    if (!nullToAbsent || displayWidthPx != null) {
+      map['display_width_px'] = Variable<int>(displayWidthPx);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  MediaReferencesTableCompanion toCompanion(bool nullToAbsent) {
+    return MediaReferencesTableCompanion(
+      id: Value(id),
+      mediaId: Value(mediaId),
+      collection: Value(collection),
+      documentId: Value(documentId),
+      facet: Value(facet),
+      sortOrder: Value(sortOrder),
+      displayWidthPx: displayWidthPx == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayWidthPx),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory MediaReferencesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MediaReferencesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      mediaId: serializer.fromJson<String>(json['mediaId']),
+      collection: serializer.fromJson<String>(json['collection']),
+      documentId: serializer.fromJson<String>(json['documentId']),
+      facet: serializer.fromJson<String>(json['facet']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      displayWidthPx: serializer.fromJson<int?>(json['displayWidthPx']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'mediaId': serializer.toJson<String>(mediaId),
+      'collection': serializer.toJson<String>(collection),
+      'documentId': serializer.toJson<String>(documentId),
+      'facet': serializer.toJson<String>(facet),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'displayWidthPx': serializer.toJson<int?>(displayWidthPx),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  MediaReferencesTableData copyWith({
+    String? id,
+    String? mediaId,
+    String? collection,
+    String? documentId,
+    String? facet,
+    int? sortOrder,
+    Value<int?> displayWidthPx = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => MediaReferencesTableData(
+    id: id ?? this.id,
+    mediaId: mediaId ?? this.mediaId,
+    collection: collection ?? this.collection,
+    documentId: documentId ?? this.documentId,
+    facet: facet ?? this.facet,
+    sortOrder: sortOrder ?? this.sortOrder,
+    displayWidthPx: displayWidthPx.present
+        ? displayWidthPx.value
+        : this.displayWidthPx,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  MediaReferencesTableData copyWithCompanion(
+    MediaReferencesTableCompanion data,
+  ) {
+    return MediaReferencesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      mediaId: data.mediaId.present ? data.mediaId.value : this.mediaId,
+      collection: data.collection.present
+          ? data.collection.value
+          : this.collection,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      facet: data.facet.present ? data.facet.value : this.facet,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      displayWidthPx: data.displayWidthPx.present
+          ? data.displayWidthPx.value
+          : this.displayWidthPx,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MediaReferencesTableData(')
+          ..write('id: $id, ')
+          ..write('mediaId: $mediaId, ')
+          ..write('collection: $collection, ')
+          ..write('documentId: $documentId, ')
+          ..write('facet: $facet, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('displayWidthPx: $displayWidthPx, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    mediaId,
+    collection,
+    documentId,
+    facet,
+    sortOrder,
+    displayWidthPx,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MediaReferencesTableData &&
+          other.id == this.id &&
+          other.mediaId == this.mediaId &&
+          other.collection == this.collection &&
+          other.documentId == this.documentId &&
+          other.facet == this.facet &&
+          other.sortOrder == this.sortOrder &&
+          other.displayWidthPx == this.displayWidthPx &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class MediaReferencesTableCompanion
+    extends UpdateCompanion<MediaReferencesTableData> {
+  final Value<String> id;
+  final Value<String> mediaId;
+  final Value<String> collection;
+  final Value<String> documentId;
+  final Value<String> facet;
+  final Value<int> sortOrder;
+  final Value<int?> displayWidthPx;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const MediaReferencesTableCompanion({
+    this.id = const Value.absent(),
+    this.mediaId = const Value.absent(),
+    this.collection = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.facet = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.displayWidthPx = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MediaReferencesTableCompanion.insert({
+    required String id,
+    required String mediaId,
+    required String collection,
+    required String documentId,
+    this.facet = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.displayWidthPx = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       mediaId = Value(mediaId),
+       collection = Value(collection),
+       documentId = Value(documentId),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<MediaReferencesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? mediaId,
+    Expression<String>? collection,
+    Expression<String>? documentId,
+    Expression<String>? facet,
+    Expression<int>? sortOrder,
+    Expression<int>? displayWidthPx,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (mediaId != null) 'media_id': mediaId,
+      if (collection != null) 'collection': collection,
+      if (documentId != null) 'document_id': documentId,
+      if (facet != null) 'facet': facet,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (displayWidthPx != null) 'display_width_px': displayWidthPx,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MediaReferencesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? mediaId,
+    Value<String>? collection,
+    Value<String>? documentId,
+    Value<String>? facet,
+    Value<int>? sortOrder,
+    Value<int?>? displayWidthPx,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return MediaReferencesTableCompanion(
+      id: id ?? this.id,
+      mediaId: mediaId ?? this.mediaId,
+      collection: collection ?? this.collection,
+      documentId: documentId ?? this.documentId,
+      facet: facet ?? this.facet,
+      sortOrder: sortOrder ?? this.sortOrder,
+      displayWidthPx: displayWidthPx ?? this.displayWidthPx,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (mediaId.present) {
+      map['media_id'] = Variable<String>(mediaId.value);
+    }
+    if (collection.present) {
+      map['collection'] = Variable<String>(collection.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<String>(documentId.value);
+    }
+    if (facet.present) {
+      map['facet'] = Variable<String>(facet.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (displayWidthPx.present) {
+      map['display_width_px'] = Variable<int>(displayWidthPx.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MediaReferencesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('mediaId: $mediaId, ')
+          ..write('collection: $collection, ')
+          ..write('documentId: $documentId, ')
+          ..write('facet: $facet, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('displayWidthPx: $displayWidthPx, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RankingCategoriesTableTable extends RankingCategoriesTable
+    with TableInfo<$RankingCategoriesTableTable, RankingCategoriesTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RankingCategoriesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _iconKeyMeta = const VerificationMeta(
+    'iconKey',
+  );
+  @override
+  late final GeneratedColumn<String> iconKey = GeneratedColumn<String>(
+    'icon_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('star'),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _childUnitsEnabledMeta = const VerificationMeta(
+    'childUnitsEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> childUnitsEnabled = GeneratedColumn<bool>(
+    'child_units_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("child_units_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _childUnitLabelMeta = const VerificationMeta(
+    'childUnitLabel',
+  );
+  @override
+  late final GeneratedColumn<String> childUnitLabel = GeneratedColumn<String>(
+    'child_unit_label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('Episode'),
+  );
+  static const VerificationMeta _imagesOnParentMeta = const VerificationMeta(
+    'imagesOnParent',
+  );
+  @override
+  late final GeneratedColumn<bool> imagesOnParent = GeneratedColumn<bool>(
+    'images_on_parent',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("images_on_parent" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _imagesOnChildMeta = const VerificationMeta(
+    'imagesOnChild',
+  );
+  @override
+  late final GeneratedColumn<bool> imagesOnChild = GeneratedColumn<bool>(
+    'images_on_child',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("images_on_child" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _parentScoreMaxMeta = const VerificationMeta(
+    'parentScoreMax',
+  );
+  @override
+  late final GeneratedColumn<int> parentScoreMax = GeneratedColumn<int>(
+    'parent_score_max',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(5),
+  );
+  static const VerificationMeta _childScoreMaxMeta = const VerificationMeta(
+    'childScoreMax',
+  );
+  @override
+  late final GeneratedColumn<int> childScoreMax = GeneratedColumn<int>(
+    'child_score_max',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(5),
+  );
+  static const VerificationMeta _parentScorePrecisionMeta =
+      const VerificationMeta('parentScorePrecision');
+  @override
+  late final GeneratedColumn<String> parentScorePrecision =
+      GeneratedColumn<String>(
+        'parent_score_precision',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('half'),
+      );
+  static const VerificationMeta _childScorePrecisionMeta =
+      const VerificationMeta('childScorePrecision');
+  @override
+  late final GeneratedColumn<String> childScorePrecision =
+      GeneratedColumn<String>(
+        'child_score_precision',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('half'),
+      );
+  static const VerificationMeta _parentTemplateJsonMeta =
+      const VerificationMeta('parentTemplateJson');
+  @override
+  late final GeneratedColumn<String> parentTemplateJson =
+      GeneratedColumn<String>(
+        'parent_template_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
+  static const VerificationMeta _childTemplateJsonMeta = const VerificationMeta(
+    'childTemplateJson',
+  );
+  @override
+  late final GeneratedColumn<String> childTemplateJson =
+      GeneratedColumn<String>(
+        'child_template_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
+  static const VerificationMeta _sortModeMeta = const VerificationMeta(
+    'sortMode',
+  );
+  @override
+  late final GeneratedColumn<String> sortMode = GeneratedColumn<String>(
+    'sort_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('overallScore'),
+  );
+  static const VerificationMeta _sortFieldIdMeta = const VerificationMeta(
+    'sortFieldId',
+  );
+  @override
+  late final GeneratedColumn<String> sortFieldId = GeneratedColumn<String>(
+    'sort_field_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sortAscendingMeta = const VerificationMeta(
+    'sortAscending',
+  );
+  @override
+  late final GeneratedColumn<bool> sortAscending = GeneratedColumn<bool>(
+    'sort_ascending',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sort_ascending" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _archivedAtMeta = const VerificationMeta(
+    'archivedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> archivedAt = GeneratedColumn<DateTime>(
+    'archived_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    colorValue,
+    iconKey,
+    sortOrder,
+    childUnitsEnabled,
+    childUnitLabel,
+    imagesOnParent,
+    imagesOnChild,
+    parentScoreMax,
+    childScoreMax,
+    parentScorePrecision,
+    childScorePrecision,
+    parentTemplateJson,
+    childTemplateJson,
+    sortMode,
+    sortFieldId,
+    sortAscending,
+    archivedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ranking_categories_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RankingCategoriesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_colorValueMeta);
+    }
+    if (data.containsKey('icon_key')) {
+      context.handle(
+        _iconKeyMeta,
+        iconKey.isAcceptableOrUnknown(data['icon_key']!, _iconKeyMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('child_units_enabled')) {
+      context.handle(
+        _childUnitsEnabledMeta,
+        childUnitsEnabled.isAcceptableOrUnknown(
+          data['child_units_enabled']!,
+          _childUnitsEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('child_unit_label')) {
+      context.handle(
+        _childUnitLabelMeta,
+        childUnitLabel.isAcceptableOrUnknown(
+          data['child_unit_label']!,
+          _childUnitLabelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('images_on_parent')) {
+      context.handle(
+        _imagesOnParentMeta,
+        imagesOnParent.isAcceptableOrUnknown(
+          data['images_on_parent']!,
+          _imagesOnParentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('images_on_child')) {
+      context.handle(
+        _imagesOnChildMeta,
+        imagesOnChild.isAcceptableOrUnknown(
+          data['images_on_child']!,
+          _imagesOnChildMeta,
+        ),
+      );
+    }
+    if (data.containsKey('parent_score_max')) {
+      context.handle(
+        _parentScoreMaxMeta,
+        parentScoreMax.isAcceptableOrUnknown(
+          data['parent_score_max']!,
+          _parentScoreMaxMeta,
+        ),
+      );
+    }
+    if (data.containsKey('child_score_max')) {
+      context.handle(
+        _childScoreMaxMeta,
+        childScoreMax.isAcceptableOrUnknown(
+          data['child_score_max']!,
+          _childScoreMaxMeta,
+        ),
+      );
+    }
+    if (data.containsKey('parent_score_precision')) {
+      context.handle(
+        _parentScorePrecisionMeta,
+        parentScorePrecision.isAcceptableOrUnknown(
+          data['parent_score_precision']!,
+          _parentScorePrecisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('child_score_precision')) {
+      context.handle(
+        _childScorePrecisionMeta,
+        childScorePrecision.isAcceptableOrUnknown(
+          data['child_score_precision']!,
+          _childScorePrecisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('parent_template_json')) {
+      context.handle(
+        _parentTemplateJsonMeta,
+        parentTemplateJson.isAcceptableOrUnknown(
+          data['parent_template_json']!,
+          _parentTemplateJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('child_template_json')) {
+      context.handle(
+        _childTemplateJsonMeta,
+        childTemplateJson.isAcceptableOrUnknown(
+          data['child_template_json']!,
+          _childTemplateJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sort_mode')) {
+      context.handle(
+        _sortModeMeta,
+        sortMode.isAcceptableOrUnknown(data['sort_mode']!, _sortModeMeta),
+      );
+    }
+    if (data.containsKey('sort_field_id')) {
+      context.handle(
+        _sortFieldIdMeta,
+        sortFieldId.isAcceptableOrUnknown(
+          data['sort_field_id']!,
+          _sortFieldIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sort_ascending')) {
+      context.handle(
+        _sortAscendingMeta,
+        sortAscending.isAcceptableOrUnknown(
+          data['sort_ascending']!,
+          _sortAscendingMeta,
+        ),
+      );
+    }
+    if (data.containsKey('archived_at')) {
+      context.handle(
+        _archivedAtMeta,
+        archivedAt.isAcceptableOrUnknown(data['archived_at']!, _archivedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RankingCategoriesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RankingCategoriesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      )!,
+      iconKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon_key'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      childUnitsEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}child_units_enabled'],
+      )!,
+      childUnitLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}child_unit_label'],
+      )!,
+      imagesOnParent: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}images_on_parent'],
+      )!,
+      imagesOnChild: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}images_on_child'],
+      )!,
+      parentScoreMax: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}parent_score_max'],
+      )!,
+      childScoreMax: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}child_score_max'],
+      )!,
+      parentScorePrecision: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_score_precision'],
+      )!,
+      childScorePrecision: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}child_score_precision'],
+      )!,
+      parentTemplateJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_template_json'],
+      )!,
+      childTemplateJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}child_template_json'],
+      )!,
+      sortMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sort_mode'],
+      )!,
+      sortFieldId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sort_field_id'],
+      ),
+      sortAscending: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sort_ascending'],
+      )!,
+      archivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}archived_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $RankingCategoriesTableTable createAlias(String alias) {
+    return $RankingCategoriesTableTable(attachedDatabase, alias);
+  }
+}
+
+class RankingCategoriesTableData extends DataClass
+    implements Insertable<RankingCategoriesTableData> {
+  final String id;
+  final String name;
+  final int colorValue;
+
+  /// Key into `rankingCategoryIcons`, not a code point: the icon package is
+  /// free to move those between versions.
+  final String iconKey;
+  final int sortOrder;
+  final bool childUnitsEnabled;
+  final String childUnitLabel;
+  final bool imagesOnParent;
+  final bool imagesOnChild;
+  final int parentScoreMax;
+  final int childScoreMax;
+
+  /// [RankingScorePrecision] by `name`. Replaced the two half-step booleans in
+  /// schema 100, which had no way to spell a tenth.
+  final String parentScorePrecision;
+  final String childScorePrecision;
+  final String parentTemplateJson;
+  final String childTemplateJson;
+
+  /// The ranked list's sort, per category. Lives here rather than in a page
+  /// prefs table so it syncs with the category it belongs to.
+  final String sortMode;
+  final String? sortFieldId;
+  final bool sortAscending;
+
+  /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
+  /// does not cascade.
+  final DateTime? archivedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const RankingCategoriesTableData({
+    required this.id,
+    required this.name,
+    required this.colorValue,
+    required this.iconKey,
+    required this.sortOrder,
+    required this.childUnitsEnabled,
+    required this.childUnitLabel,
+    required this.imagesOnParent,
+    required this.imagesOnChild,
+    required this.parentScoreMax,
+    required this.childScoreMax,
+    required this.parentScorePrecision,
+    required this.childScorePrecision,
+    required this.parentTemplateJson,
+    required this.childTemplateJson,
+    required this.sortMode,
+    this.sortFieldId,
+    required this.sortAscending,
+    this.archivedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['color_value'] = Variable<int>(colorValue);
+    map['icon_key'] = Variable<String>(iconKey);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['child_units_enabled'] = Variable<bool>(childUnitsEnabled);
+    map['child_unit_label'] = Variable<String>(childUnitLabel);
+    map['images_on_parent'] = Variable<bool>(imagesOnParent);
+    map['images_on_child'] = Variable<bool>(imagesOnChild);
+    map['parent_score_max'] = Variable<int>(parentScoreMax);
+    map['child_score_max'] = Variable<int>(childScoreMax);
+    map['parent_score_precision'] = Variable<String>(parentScorePrecision);
+    map['child_score_precision'] = Variable<String>(childScorePrecision);
+    map['parent_template_json'] = Variable<String>(parentTemplateJson);
+    map['child_template_json'] = Variable<String>(childTemplateJson);
+    map['sort_mode'] = Variable<String>(sortMode);
+    if (!nullToAbsent || sortFieldId != null) {
+      map['sort_field_id'] = Variable<String>(sortFieldId);
+    }
+    map['sort_ascending'] = Variable<bool>(sortAscending);
+    if (!nullToAbsent || archivedAt != null) {
+      map['archived_at'] = Variable<DateTime>(archivedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  RankingCategoriesTableCompanion toCompanion(bool nullToAbsent) {
+    return RankingCategoriesTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      colorValue: Value(colorValue),
+      iconKey: Value(iconKey),
+      sortOrder: Value(sortOrder),
+      childUnitsEnabled: Value(childUnitsEnabled),
+      childUnitLabel: Value(childUnitLabel),
+      imagesOnParent: Value(imagesOnParent),
+      imagesOnChild: Value(imagesOnChild),
+      parentScoreMax: Value(parentScoreMax),
+      childScoreMax: Value(childScoreMax),
+      parentScorePrecision: Value(parentScorePrecision),
+      childScorePrecision: Value(childScorePrecision),
+      parentTemplateJson: Value(parentTemplateJson),
+      childTemplateJson: Value(childTemplateJson),
+      sortMode: Value(sortMode),
+      sortFieldId: sortFieldId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sortFieldId),
+      sortAscending: Value(sortAscending),
+      archivedAt: archivedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(archivedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory RankingCategoriesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RankingCategoriesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      iconKey: serializer.fromJson<String>(json['iconKey']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      childUnitsEnabled: serializer.fromJson<bool>(json['childUnitsEnabled']),
+      childUnitLabel: serializer.fromJson<String>(json['childUnitLabel']),
+      imagesOnParent: serializer.fromJson<bool>(json['imagesOnParent']),
+      imagesOnChild: serializer.fromJson<bool>(json['imagesOnChild']),
+      parentScoreMax: serializer.fromJson<int>(json['parentScoreMax']),
+      childScoreMax: serializer.fromJson<int>(json['childScoreMax']),
+      parentScorePrecision: serializer.fromJson<String>(
+        json['parentScorePrecision'],
+      ),
+      childScorePrecision: serializer.fromJson<String>(
+        json['childScorePrecision'],
+      ),
+      parentTemplateJson: serializer.fromJson<String>(
+        json['parentTemplateJson'],
+      ),
+      childTemplateJson: serializer.fromJson<String>(json['childTemplateJson']),
+      sortMode: serializer.fromJson<String>(json['sortMode']),
+      sortFieldId: serializer.fromJson<String?>(json['sortFieldId']),
+      sortAscending: serializer.fromJson<bool>(json['sortAscending']),
+      archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'iconKey': serializer.toJson<String>(iconKey),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'childUnitsEnabled': serializer.toJson<bool>(childUnitsEnabled),
+      'childUnitLabel': serializer.toJson<String>(childUnitLabel),
+      'imagesOnParent': serializer.toJson<bool>(imagesOnParent),
+      'imagesOnChild': serializer.toJson<bool>(imagesOnChild),
+      'parentScoreMax': serializer.toJson<int>(parentScoreMax),
+      'childScoreMax': serializer.toJson<int>(childScoreMax),
+      'parentScorePrecision': serializer.toJson<String>(parentScorePrecision),
+      'childScorePrecision': serializer.toJson<String>(childScorePrecision),
+      'parentTemplateJson': serializer.toJson<String>(parentTemplateJson),
+      'childTemplateJson': serializer.toJson<String>(childTemplateJson),
+      'sortMode': serializer.toJson<String>(sortMode),
+      'sortFieldId': serializer.toJson<String?>(sortFieldId),
+      'sortAscending': serializer.toJson<bool>(sortAscending),
+      'archivedAt': serializer.toJson<DateTime?>(archivedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  RankingCategoriesTableData copyWith({
+    String? id,
+    String? name,
+    int? colorValue,
+    String? iconKey,
+    int? sortOrder,
+    bool? childUnitsEnabled,
+    String? childUnitLabel,
+    bool? imagesOnParent,
+    bool? imagesOnChild,
+    int? parentScoreMax,
+    int? childScoreMax,
+    String? parentScorePrecision,
+    String? childScorePrecision,
+    String? parentTemplateJson,
+    String? childTemplateJson,
+    String? sortMode,
+    Value<String?> sortFieldId = const Value.absent(),
+    bool? sortAscending,
+    Value<DateTime?> archivedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => RankingCategoriesTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    colorValue: colorValue ?? this.colorValue,
+    iconKey: iconKey ?? this.iconKey,
+    sortOrder: sortOrder ?? this.sortOrder,
+    childUnitsEnabled: childUnitsEnabled ?? this.childUnitsEnabled,
+    childUnitLabel: childUnitLabel ?? this.childUnitLabel,
+    imagesOnParent: imagesOnParent ?? this.imagesOnParent,
+    imagesOnChild: imagesOnChild ?? this.imagesOnChild,
+    parentScoreMax: parentScoreMax ?? this.parentScoreMax,
+    childScoreMax: childScoreMax ?? this.childScoreMax,
+    parentScorePrecision: parentScorePrecision ?? this.parentScorePrecision,
+    childScorePrecision: childScorePrecision ?? this.childScorePrecision,
+    parentTemplateJson: parentTemplateJson ?? this.parentTemplateJson,
+    childTemplateJson: childTemplateJson ?? this.childTemplateJson,
+    sortMode: sortMode ?? this.sortMode,
+    sortFieldId: sortFieldId.present ? sortFieldId.value : this.sortFieldId,
+    sortAscending: sortAscending ?? this.sortAscending,
+    archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  RankingCategoriesTableData copyWithCompanion(
+    RankingCategoriesTableCompanion data,
+  ) {
+    return RankingCategoriesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
+      iconKey: data.iconKey.present ? data.iconKey.value : this.iconKey,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      childUnitsEnabled: data.childUnitsEnabled.present
+          ? data.childUnitsEnabled.value
+          : this.childUnitsEnabled,
+      childUnitLabel: data.childUnitLabel.present
+          ? data.childUnitLabel.value
+          : this.childUnitLabel,
+      imagesOnParent: data.imagesOnParent.present
+          ? data.imagesOnParent.value
+          : this.imagesOnParent,
+      imagesOnChild: data.imagesOnChild.present
+          ? data.imagesOnChild.value
+          : this.imagesOnChild,
+      parentScoreMax: data.parentScoreMax.present
+          ? data.parentScoreMax.value
+          : this.parentScoreMax,
+      childScoreMax: data.childScoreMax.present
+          ? data.childScoreMax.value
+          : this.childScoreMax,
+      parentScorePrecision: data.parentScorePrecision.present
+          ? data.parentScorePrecision.value
+          : this.parentScorePrecision,
+      childScorePrecision: data.childScorePrecision.present
+          ? data.childScorePrecision.value
+          : this.childScorePrecision,
+      parentTemplateJson: data.parentTemplateJson.present
+          ? data.parentTemplateJson.value
+          : this.parentTemplateJson,
+      childTemplateJson: data.childTemplateJson.present
+          ? data.childTemplateJson.value
+          : this.childTemplateJson,
+      sortMode: data.sortMode.present ? data.sortMode.value : this.sortMode,
+      sortFieldId: data.sortFieldId.present
+          ? data.sortFieldId.value
+          : this.sortFieldId,
+      sortAscending: data.sortAscending.present
+          ? data.sortAscending.value
+          : this.sortAscending,
+      archivedAt: data.archivedAt.present
+          ? data.archivedAt.value
+          : this.archivedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingCategoriesTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('iconKey: $iconKey, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('childUnitsEnabled: $childUnitsEnabled, ')
+          ..write('childUnitLabel: $childUnitLabel, ')
+          ..write('imagesOnParent: $imagesOnParent, ')
+          ..write('imagesOnChild: $imagesOnChild, ')
+          ..write('parentScoreMax: $parentScoreMax, ')
+          ..write('childScoreMax: $childScoreMax, ')
+          ..write('parentScorePrecision: $parentScorePrecision, ')
+          ..write('childScorePrecision: $childScorePrecision, ')
+          ..write('parentTemplateJson: $parentTemplateJson, ')
+          ..write('childTemplateJson: $childTemplateJson, ')
+          ..write('sortMode: $sortMode, ')
+          ..write('sortFieldId: $sortFieldId, ')
+          ..write('sortAscending: $sortAscending, ')
+          ..write('archivedAt: $archivedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    name,
+    colorValue,
+    iconKey,
+    sortOrder,
+    childUnitsEnabled,
+    childUnitLabel,
+    imagesOnParent,
+    imagesOnChild,
+    parentScoreMax,
+    childScoreMax,
+    parentScorePrecision,
+    childScorePrecision,
+    parentTemplateJson,
+    childTemplateJson,
+    sortMode,
+    sortFieldId,
+    sortAscending,
+    archivedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RankingCategoriesTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.colorValue == this.colorValue &&
+          other.iconKey == this.iconKey &&
+          other.sortOrder == this.sortOrder &&
+          other.childUnitsEnabled == this.childUnitsEnabled &&
+          other.childUnitLabel == this.childUnitLabel &&
+          other.imagesOnParent == this.imagesOnParent &&
+          other.imagesOnChild == this.imagesOnChild &&
+          other.parentScoreMax == this.parentScoreMax &&
+          other.childScoreMax == this.childScoreMax &&
+          other.parentScorePrecision == this.parentScorePrecision &&
+          other.childScorePrecision == this.childScorePrecision &&
+          other.parentTemplateJson == this.parentTemplateJson &&
+          other.childTemplateJson == this.childTemplateJson &&
+          other.sortMode == this.sortMode &&
+          other.sortFieldId == this.sortFieldId &&
+          other.sortAscending == this.sortAscending &&
+          other.archivedAt == this.archivedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class RankingCategoriesTableCompanion
+    extends UpdateCompanion<RankingCategoriesTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> colorValue;
+  final Value<String> iconKey;
+  final Value<int> sortOrder;
+  final Value<bool> childUnitsEnabled;
+  final Value<String> childUnitLabel;
+  final Value<bool> imagesOnParent;
+  final Value<bool> imagesOnChild;
+  final Value<int> parentScoreMax;
+  final Value<int> childScoreMax;
+  final Value<String> parentScorePrecision;
+  final Value<String> childScorePrecision;
+  final Value<String> parentTemplateJson;
+  final Value<String> childTemplateJson;
+  final Value<String> sortMode;
+  final Value<String?> sortFieldId;
+  final Value<bool> sortAscending;
+  final Value<DateTime?> archivedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const RankingCategoriesTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.iconKey = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.childUnitsEnabled = const Value.absent(),
+    this.childUnitLabel = const Value.absent(),
+    this.imagesOnParent = const Value.absent(),
+    this.imagesOnChild = const Value.absent(),
+    this.parentScoreMax = const Value.absent(),
+    this.childScoreMax = const Value.absent(),
+    this.parentScorePrecision = const Value.absent(),
+    this.childScorePrecision = const Value.absent(),
+    this.parentTemplateJson = const Value.absent(),
+    this.childTemplateJson = const Value.absent(),
+    this.sortMode = const Value.absent(),
+    this.sortFieldId = const Value.absent(),
+    this.sortAscending = const Value.absent(),
+    this.archivedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RankingCategoriesTableCompanion.insert({
+    required String id,
+    required String name,
+    required int colorValue,
+    this.iconKey = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.childUnitsEnabled = const Value.absent(),
+    this.childUnitLabel = const Value.absent(),
+    this.imagesOnParent = const Value.absent(),
+    this.imagesOnChild = const Value.absent(),
+    this.parentScoreMax = const Value.absent(),
+    this.childScoreMax = const Value.absent(),
+    this.parentScorePrecision = const Value.absent(),
+    this.childScorePrecision = const Value.absent(),
+    this.parentTemplateJson = const Value.absent(),
+    this.childTemplateJson = const Value.absent(),
+    this.sortMode = const Value.absent(),
+    this.sortFieldId = const Value.absent(),
+    this.sortAscending = const Value.absent(),
+    this.archivedAt = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       colorValue = Value(colorValue),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<RankingCategoriesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? colorValue,
+    Expression<String>? iconKey,
+    Expression<int>? sortOrder,
+    Expression<bool>? childUnitsEnabled,
+    Expression<String>? childUnitLabel,
+    Expression<bool>? imagesOnParent,
+    Expression<bool>? imagesOnChild,
+    Expression<int>? parentScoreMax,
+    Expression<int>? childScoreMax,
+    Expression<String>? parentScorePrecision,
+    Expression<String>? childScorePrecision,
+    Expression<String>? parentTemplateJson,
+    Expression<String>? childTemplateJson,
+    Expression<String>? sortMode,
+    Expression<String>? sortFieldId,
+    Expression<bool>? sortAscending,
+    Expression<DateTime>? archivedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (colorValue != null) 'color_value': colorValue,
+      if (iconKey != null) 'icon_key': iconKey,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (childUnitsEnabled != null) 'child_units_enabled': childUnitsEnabled,
+      if (childUnitLabel != null) 'child_unit_label': childUnitLabel,
+      if (imagesOnParent != null) 'images_on_parent': imagesOnParent,
+      if (imagesOnChild != null) 'images_on_child': imagesOnChild,
+      if (parentScoreMax != null) 'parent_score_max': parentScoreMax,
+      if (childScoreMax != null) 'child_score_max': childScoreMax,
+      if (parentScorePrecision != null)
+        'parent_score_precision': parentScorePrecision,
+      if (childScorePrecision != null)
+        'child_score_precision': childScorePrecision,
+      if (parentTemplateJson != null)
+        'parent_template_json': parentTemplateJson,
+      if (childTemplateJson != null) 'child_template_json': childTemplateJson,
+      if (sortMode != null) 'sort_mode': sortMode,
+      if (sortFieldId != null) 'sort_field_id': sortFieldId,
+      if (sortAscending != null) 'sort_ascending': sortAscending,
+      if (archivedAt != null) 'archived_at': archivedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RankingCategoriesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? colorValue,
+    Value<String>? iconKey,
+    Value<int>? sortOrder,
+    Value<bool>? childUnitsEnabled,
+    Value<String>? childUnitLabel,
+    Value<bool>? imagesOnParent,
+    Value<bool>? imagesOnChild,
+    Value<int>? parentScoreMax,
+    Value<int>? childScoreMax,
+    Value<String>? parentScorePrecision,
+    Value<String>? childScorePrecision,
+    Value<String>? parentTemplateJson,
+    Value<String>? childTemplateJson,
+    Value<String>? sortMode,
+    Value<String?>? sortFieldId,
+    Value<bool>? sortAscending,
+    Value<DateTime?>? archivedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return RankingCategoriesTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
+      iconKey: iconKey ?? this.iconKey,
+      sortOrder: sortOrder ?? this.sortOrder,
+      childUnitsEnabled: childUnitsEnabled ?? this.childUnitsEnabled,
+      childUnitLabel: childUnitLabel ?? this.childUnitLabel,
+      imagesOnParent: imagesOnParent ?? this.imagesOnParent,
+      imagesOnChild: imagesOnChild ?? this.imagesOnChild,
+      parentScoreMax: parentScoreMax ?? this.parentScoreMax,
+      childScoreMax: childScoreMax ?? this.childScoreMax,
+      parentScorePrecision: parentScorePrecision ?? this.parentScorePrecision,
+      childScorePrecision: childScorePrecision ?? this.childScorePrecision,
+      parentTemplateJson: parentTemplateJson ?? this.parentTemplateJson,
+      childTemplateJson: childTemplateJson ?? this.childTemplateJson,
+      sortMode: sortMode ?? this.sortMode,
+      sortFieldId: sortFieldId ?? this.sortFieldId,
+      sortAscending: sortAscending ?? this.sortAscending,
+      archivedAt: archivedAt ?? this.archivedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (iconKey.present) {
+      map['icon_key'] = Variable<String>(iconKey.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (childUnitsEnabled.present) {
+      map['child_units_enabled'] = Variable<bool>(childUnitsEnabled.value);
+    }
+    if (childUnitLabel.present) {
+      map['child_unit_label'] = Variable<String>(childUnitLabel.value);
+    }
+    if (imagesOnParent.present) {
+      map['images_on_parent'] = Variable<bool>(imagesOnParent.value);
+    }
+    if (imagesOnChild.present) {
+      map['images_on_child'] = Variable<bool>(imagesOnChild.value);
+    }
+    if (parentScoreMax.present) {
+      map['parent_score_max'] = Variable<int>(parentScoreMax.value);
+    }
+    if (childScoreMax.present) {
+      map['child_score_max'] = Variable<int>(childScoreMax.value);
+    }
+    if (parentScorePrecision.present) {
+      map['parent_score_precision'] = Variable<String>(
+        parentScorePrecision.value,
+      );
+    }
+    if (childScorePrecision.present) {
+      map['child_score_precision'] = Variable<String>(
+        childScorePrecision.value,
+      );
+    }
+    if (parentTemplateJson.present) {
+      map['parent_template_json'] = Variable<String>(parentTemplateJson.value);
+    }
+    if (childTemplateJson.present) {
+      map['child_template_json'] = Variable<String>(childTemplateJson.value);
+    }
+    if (sortMode.present) {
+      map['sort_mode'] = Variable<String>(sortMode.value);
+    }
+    if (sortFieldId.present) {
+      map['sort_field_id'] = Variable<String>(sortFieldId.value);
+    }
+    if (sortAscending.present) {
+      map['sort_ascending'] = Variable<bool>(sortAscending.value);
+    }
+    if (archivedAt.present) {
+      map['archived_at'] = Variable<DateTime>(archivedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingCategoriesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('iconKey: $iconKey, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('childUnitsEnabled: $childUnitsEnabled, ')
+          ..write('childUnitLabel: $childUnitLabel, ')
+          ..write('imagesOnParent: $imagesOnParent, ')
+          ..write('imagesOnChild: $imagesOnChild, ')
+          ..write('parentScoreMax: $parentScoreMax, ')
+          ..write('childScoreMax: $childScoreMax, ')
+          ..write('parentScorePrecision: $parentScorePrecision, ')
+          ..write('childScorePrecision: $childScorePrecision, ')
+          ..write('parentTemplateJson: $parentTemplateJson, ')
+          ..write('childTemplateJson: $childTemplateJson, ')
+          ..write('sortMode: $sortMode, ')
+          ..write('sortFieldId: $sortFieldId, ')
+          ..write('sortAscending: $sortAscending, ')
+          ..write('archivedAt: $archivedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RankingParentsTableTable extends RankingParentsTable
+    with TableInfo<$RankingParentsTableTable, RankingParentsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RankingParentsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _overallScoreMeta = const VerificationMeta(
+    'overallScore',
+  );
+  @override
+  late final GeneratedColumn<double> overallScore = GeneratedColumn<double>(
+    'overall_score',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _fieldValuesJsonMeta = const VerificationMeta(
+    'fieldValuesJson',
+  );
+  @override
+  late final GeneratedColumn<String> fieldValuesJson = GeneratedColumn<String>(
+    'field_values_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _tagsJsonMeta = const VerificationMeta(
+    'tagsJson',
+  );
+  @override
+  late final GeneratedColumn<String> tagsJson = GeneratedColumn<String>(
+    'tags_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('queued'),
+  );
+  static const VerificationMeta _starredMeta = const VerificationMeta(
+    'starred',
+  );
+  @override
+  late final GeneratedColumn<bool> starred = GeneratedColumn<bool>(
+    'starred',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("starred" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _queueSortOrderMeta = const VerificationMeta(
+    'queueSortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> queueSortOrder = GeneratedColumn<int>(
+    'queue_sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    categoryId,
+    title,
+    overallScore,
+    notes,
+    fieldValuesJson,
+    tagsJson,
+    status,
+    starred,
+    queueSortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ranking_parents_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RankingParentsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('overall_score')) {
+      context.handle(
+        _overallScoreMeta,
+        overallScore.isAcceptableOrUnknown(
+          data['overall_score']!,
+          _overallScoreMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('field_values_json')) {
+      context.handle(
+        _fieldValuesJsonMeta,
+        fieldValuesJson.isAcceptableOrUnknown(
+          data['field_values_json']!,
+          _fieldValuesJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tags_json')) {
+      context.handle(
+        _tagsJsonMeta,
+        tagsJson.isAcceptableOrUnknown(data['tags_json']!, _tagsJsonMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('starred')) {
+      context.handle(
+        _starredMeta,
+        starred.isAcceptableOrUnknown(data['starred']!, _starredMeta),
+      );
+    }
+    if (data.containsKey('queue_sort_order')) {
+      context.handle(
+        _queueSortOrderMeta,
+        queueSortOrder.isAcceptableOrUnknown(
+          data['queue_sort_order']!,
+          _queueSortOrderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RankingParentsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RankingParentsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      overallScore: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}overall_score'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      fieldValuesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field_values_json'],
+      )!,
+      tagsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tags_json'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      starred: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}starred'],
+      )!,
+      queueSortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}queue_sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $RankingParentsTableTable createAlias(String alias) {
+    return $RankingParentsTableTable(attachedDatabase, alias);
+  }
+}
+
+class RankingParentsTableData extends DataClass
+    implements Insertable<RankingParentsTableData> {
+  final String id;
+  final String categoryId;
+  final String title;
+  final double? overallScore;
+  final String notes;
+
+  /// `fieldId -> {score?, notes?}` against the category's parent template.
+  final String fieldValuesJson;
+
+  /// Structured classification tags, as a JSON array of names without the
+  /// leading `#`. A column rather than a join table: they are only ever read
+  /// with the parent they hang off, and the one query anyone wants of them is
+  /// "what does this category use", which is a scan of parents either way.
+  final String tagsJson;
+
+  /// [RankingStatus] by `name`. Only read while unranked.
+  final String status;
+  final bool starred;
+  final int queueSortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const RankingParentsTableData({
+    required this.id,
+    required this.categoryId,
+    required this.title,
+    this.overallScore,
+    required this.notes,
+    required this.fieldValuesJson,
+    required this.tagsJson,
+    required this.status,
+    required this.starred,
+    required this.queueSortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['category_id'] = Variable<String>(categoryId);
+    map['title'] = Variable<String>(title);
+    if (!nullToAbsent || overallScore != null) {
+      map['overall_score'] = Variable<double>(overallScore);
+    }
+    map['notes'] = Variable<String>(notes);
+    map['field_values_json'] = Variable<String>(fieldValuesJson);
+    map['tags_json'] = Variable<String>(tagsJson);
+    map['status'] = Variable<String>(status);
+    map['starred'] = Variable<bool>(starred);
+    map['queue_sort_order'] = Variable<int>(queueSortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  RankingParentsTableCompanion toCompanion(bool nullToAbsent) {
+    return RankingParentsTableCompanion(
+      id: Value(id),
+      categoryId: Value(categoryId),
+      title: Value(title),
+      overallScore: overallScore == null && nullToAbsent
+          ? const Value.absent()
+          : Value(overallScore),
+      notes: Value(notes),
+      fieldValuesJson: Value(fieldValuesJson),
+      tagsJson: Value(tagsJson),
+      status: Value(status),
+      starred: Value(starred),
+      queueSortOrder: Value(queueSortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory RankingParentsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RankingParentsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      categoryId: serializer.fromJson<String>(json['categoryId']),
+      title: serializer.fromJson<String>(json['title']),
+      overallScore: serializer.fromJson<double?>(json['overallScore']),
+      notes: serializer.fromJson<String>(json['notes']),
+      fieldValuesJson: serializer.fromJson<String>(json['fieldValuesJson']),
+      tagsJson: serializer.fromJson<String>(json['tagsJson']),
+      status: serializer.fromJson<String>(json['status']),
+      starred: serializer.fromJson<bool>(json['starred']),
+      queueSortOrder: serializer.fromJson<int>(json['queueSortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'categoryId': serializer.toJson<String>(categoryId),
+      'title': serializer.toJson<String>(title),
+      'overallScore': serializer.toJson<double?>(overallScore),
+      'notes': serializer.toJson<String>(notes),
+      'fieldValuesJson': serializer.toJson<String>(fieldValuesJson),
+      'tagsJson': serializer.toJson<String>(tagsJson),
+      'status': serializer.toJson<String>(status),
+      'starred': serializer.toJson<bool>(starred),
+      'queueSortOrder': serializer.toJson<int>(queueSortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  RankingParentsTableData copyWith({
+    String? id,
+    String? categoryId,
+    String? title,
+    Value<double?> overallScore = const Value.absent(),
+    String? notes,
+    String? fieldValuesJson,
+    String? tagsJson,
+    String? status,
+    bool? starred,
+    int? queueSortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => RankingParentsTableData(
+    id: id ?? this.id,
+    categoryId: categoryId ?? this.categoryId,
+    title: title ?? this.title,
+    overallScore: overallScore.present ? overallScore.value : this.overallScore,
+    notes: notes ?? this.notes,
+    fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
+    tagsJson: tagsJson ?? this.tagsJson,
+    status: status ?? this.status,
+    starred: starred ?? this.starred,
+    queueSortOrder: queueSortOrder ?? this.queueSortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  RankingParentsTableData copyWithCompanion(RankingParentsTableCompanion data) {
+    return RankingParentsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
+      title: data.title.present ? data.title.value : this.title,
+      overallScore: data.overallScore.present
+          ? data.overallScore.value
+          : this.overallScore,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      fieldValuesJson: data.fieldValuesJson.present
+          ? data.fieldValuesJson.value
+          : this.fieldValuesJson,
+      tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
+      status: data.status.present ? data.status.value : this.status,
+      starred: data.starred.present ? data.starred.value : this.starred,
+      queueSortOrder: data.queueSortOrder.present
+          ? data.queueSortOrder.value
+          : this.queueSortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingParentsTableData(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('title: $title, ')
+          ..write('overallScore: $overallScore, ')
+          ..write('notes: $notes, ')
+          ..write('fieldValuesJson: $fieldValuesJson, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('status: $status, ')
+          ..write('starred: $starred, ')
+          ..write('queueSortOrder: $queueSortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    categoryId,
+    title,
+    overallScore,
+    notes,
+    fieldValuesJson,
+    tagsJson,
+    status,
+    starred,
+    queueSortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RankingParentsTableData &&
+          other.id == this.id &&
+          other.categoryId == this.categoryId &&
+          other.title == this.title &&
+          other.overallScore == this.overallScore &&
+          other.notes == this.notes &&
+          other.fieldValuesJson == this.fieldValuesJson &&
+          other.tagsJson == this.tagsJson &&
+          other.status == this.status &&
+          other.starred == this.starred &&
+          other.queueSortOrder == this.queueSortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class RankingParentsTableCompanion
+    extends UpdateCompanion<RankingParentsTableData> {
+  final Value<String> id;
+  final Value<String> categoryId;
+  final Value<String> title;
+  final Value<double?> overallScore;
+  final Value<String> notes;
+  final Value<String> fieldValuesJson;
+  final Value<String> tagsJson;
+  final Value<String> status;
+  final Value<bool> starred;
+  final Value<int> queueSortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const RankingParentsTableCompanion({
+    this.id = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.overallScore = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.fieldValuesJson = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    this.status = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.queueSortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RankingParentsTableCompanion.insert({
+    required String id,
+    required String categoryId,
+    required String title,
+    this.overallScore = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.fieldValuesJson = const Value.absent(),
+    this.tagsJson = const Value.absent(),
+    this.status = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.queueSortOrder = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       categoryId = Value(categoryId),
+       title = Value(title),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<RankingParentsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? categoryId,
+    Expression<String>? title,
+    Expression<double>? overallScore,
+    Expression<String>? notes,
+    Expression<String>? fieldValuesJson,
+    Expression<String>? tagsJson,
+    Expression<String>? status,
+    Expression<bool>? starred,
+    Expression<int>? queueSortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (categoryId != null) 'category_id': categoryId,
+      if (title != null) 'title': title,
+      if (overallScore != null) 'overall_score': overallScore,
+      if (notes != null) 'notes': notes,
+      if (fieldValuesJson != null) 'field_values_json': fieldValuesJson,
+      if (tagsJson != null) 'tags_json': tagsJson,
+      if (status != null) 'status': status,
+      if (starred != null) 'starred': starred,
+      if (queueSortOrder != null) 'queue_sort_order': queueSortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RankingParentsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? categoryId,
+    Value<String>? title,
+    Value<double?>? overallScore,
+    Value<String>? notes,
+    Value<String>? fieldValuesJson,
+    Value<String>? tagsJson,
+    Value<String>? status,
+    Value<bool>? starred,
+    Value<int>? queueSortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return RankingParentsTableCompanion(
+      id: id ?? this.id,
+      categoryId: categoryId ?? this.categoryId,
+      title: title ?? this.title,
+      overallScore: overallScore ?? this.overallScore,
+      notes: notes ?? this.notes,
+      fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
+      tagsJson: tagsJson ?? this.tagsJson,
+      status: status ?? this.status,
+      starred: starred ?? this.starred,
+      queueSortOrder: queueSortOrder ?? this.queueSortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (overallScore.present) {
+      map['overall_score'] = Variable<double>(overallScore.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (fieldValuesJson.present) {
+      map['field_values_json'] = Variable<String>(fieldValuesJson.value);
+    }
+    if (tagsJson.present) {
+      map['tags_json'] = Variable<String>(tagsJson.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (starred.present) {
+      map['starred'] = Variable<bool>(starred.value);
+    }
+    if (queueSortOrder.present) {
+      map['queue_sort_order'] = Variable<int>(queueSortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingParentsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('title: $title, ')
+          ..write('overallScore: $overallScore, ')
+          ..write('notes: $notes, ')
+          ..write('fieldValuesJson: $fieldValuesJson, ')
+          ..write('tagsJson: $tagsJson, ')
+          ..write('status: $status, ')
+          ..write('starred: $starred, ')
+          ..write('queueSortOrder: $queueSortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RankingChildrenTableTable extends RankingChildrenTable
+    with TableInfo<$RankingChildrenTableTable, RankingChildrenTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RankingChildrenTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentIdMeta = const VerificationMeta(
+    'parentId',
+  );
+  @override
+  late final GeneratedColumn<String> parentId = GeneratedColumn<String>(
+    'parent_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _overallScoreMeta = const VerificationMeta(
+    'overallScore',
+  );
+  @override
+  late final GeneratedColumn<double> overallScore = GeneratedColumn<double>(
+    'overall_score',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _fieldValuesJsonMeta = const VerificationMeta(
+    'fieldValuesJson',
+  );
+  @override
+  late final GeneratedColumn<String> fieldValuesJson = GeneratedColumn<String>(
+    'field_values_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    parentId,
+    name,
+    overallScore,
+    notes,
+    fieldValuesJson,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ranking_children_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RankingChildrenTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('parent_id')) {
+      context.handle(
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_parentIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('overall_score')) {
+      context.handle(
+        _overallScoreMeta,
+        overallScore.isAcceptableOrUnknown(
+          data['overall_score']!,
+          _overallScoreMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('field_values_json')) {
+      context.handle(
+        _fieldValuesJsonMeta,
+        fieldValuesJson.isAcceptableOrUnknown(
+          data['field_values_json']!,
+          _fieldValuesJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RankingChildrenTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RankingChildrenTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      parentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      overallScore: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}overall_score'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      fieldValuesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field_values_json'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $RankingChildrenTableTable createAlias(String alias) {
+    return $RankingChildrenTableTable(attachedDatabase, alias);
+  }
+}
+
+class RankingChildrenTableData extends DataClass
+    implements Insertable<RankingChildrenTableData> {
+  final String id;
+  final String parentId;
+  final String name;
+  final double? overallScore;
+  final String notes;
+  final String fieldValuesJson;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const RankingChildrenTableData({
+    required this.id,
+    required this.parentId,
+    required this.name,
+    this.overallScore,
+    required this.notes,
+    required this.fieldValuesJson,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['parent_id'] = Variable<String>(parentId);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || overallScore != null) {
+      map['overall_score'] = Variable<double>(overallScore);
+    }
+    map['notes'] = Variable<String>(notes);
+    map['field_values_json'] = Variable<String>(fieldValuesJson);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  RankingChildrenTableCompanion toCompanion(bool nullToAbsent) {
+    return RankingChildrenTableCompanion(
+      id: Value(id),
+      parentId: Value(parentId),
+      name: Value(name),
+      overallScore: overallScore == null && nullToAbsent
+          ? const Value.absent()
+          : Value(overallScore),
+      notes: Value(notes),
+      fieldValuesJson: Value(fieldValuesJson),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory RankingChildrenTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RankingChildrenTableData(
+      id: serializer.fromJson<String>(json['id']),
+      parentId: serializer.fromJson<String>(json['parentId']),
+      name: serializer.fromJson<String>(json['name']),
+      overallScore: serializer.fromJson<double?>(json['overallScore']),
+      notes: serializer.fromJson<String>(json['notes']),
+      fieldValuesJson: serializer.fromJson<String>(json['fieldValuesJson']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'parentId': serializer.toJson<String>(parentId),
+      'name': serializer.toJson<String>(name),
+      'overallScore': serializer.toJson<double?>(overallScore),
+      'notes': serializer.toJson<String>(notes),
+      'fieldValuesJson': serializer.toJson<String>(fieldValuesJson),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  RankingChildrenTableData copyWith({
+    String? id,
+    String? parentId,
+    String? name,
+    Value<double?> overallScore = const Value.absent(),
+    String? notes,
+    String? fieldValuesJson,
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => RankingChildrenTableData(
+    id: id ?? this.id,
+    parentId: parentId ?? this.parentId,
+    name: name ?? this.name,
+    overallScore: overallScore.present ? overallScore.value : this.overallScore,
+    notes: notes ?? this.notes,
+    fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  RankingChildrenTableData copyWithCompanion(
+    RankingChildrenTableCompanion data,
+  ) {
+    return RankingChildrenTableData(
+      id: data.id.present ? data.id.value : this.id,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
+      name: data.name.present ? data.name.value : this.name,
+      overallScore: data.overallScore.present
+          ? data.overallScore.value
+          : this.overallScore,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      fieldValuesJson: data.fieldValuesJson.present
+          ? data.fieldValuesJson.value
+          : this.fieldValuesJson,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingChildrenTableData(')
+          ..write('id: $id, ')
+          ..write('parentId: $parentId, ')
+          ..write('name: $name, ')
+          ..write('overallScore: $overallScore, ')
+          ..write('notes: $notes, ')
+          ..write('fieldValuesJson: $fieldValuesJson, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    parentId,
+    name,
+    overallScore,
+    notes,
+    fieldValuesJson,
+    sortOrder,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RankingChildrenTableData &&
+          other.id == this.id &&
+          other.parentId == this.parentId &&
+          other.name == this.name &&
+          other.overallScore == this.overallScore &&
+          other.notes == this.notes &&
+          other.fieldValuesJson == this.fieldValuesJson &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class RankingChildrenTableCompanion
+    extends UpdateCompanion<RankingChildrenTableData> {
+  final Value<String> id;
+  final Value<String> parentId;
+  final Value<String> name;
+  final Value<double?> overallScore;
+  final Value<String> notes;
+  final Value<String> fieldValuesJson;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const RankingChildrenTableCompanion({
+    this.id = const Value.absent(),
+    this.parentId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.overallScore = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.fieldValuesJson = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RankingChildrenTableCompanion.insert({
+    required String id,
+    required String parentId,
+    required String name,
+    this.overallScore = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.fieldValuesJson = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       parentId = Value(parentId),
+       name = Value(name),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<RankingChildrenTableData> custom({
+    Expression<String>? id,
+    Expression<String>? parentId,
+    Expression<String>? name,
+    Expression<double>? overallScore,
+    Expression<String>? notes,
+    Expression<String>? fieldValuesJson,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (parentId != null) 'parent_id': parentId,
+      if (name != null) 'name': name,
+      if (overallScore != null) 'overall_score': overallScore,
+      if (notes != null) 'notes': notes,
+      if (fieldValuesJson != null) 'field_values_json': fieldValuesJson,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RankingChildrenTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? parentId,
+    Value<String>? name,
+    Value<double?>? overallScore,
+    Value<String>? notes,
+    Value<String>? fieldValuesJson,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return RankingChildrenTableCompanion(
+      id: id ?? this.id,
+      parentId: parentId ?? this.parentId,
+      name: name ?? this.name,
+      overallScore: overallScore ?? this.overallScore,
+      notes: notes ?? this.notes,
+      fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (parentId.present) {
+      map['parent_id'] = Variable<String>(parentId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (overallScore.present) {
+      map['overall_score'] = Variable<double>(overallScore.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (fieldValuesJson.present) {
+      map['field_values_json'] = Variable<String>(fieldValuesJson.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingChildrenTableCompanion(')
+          ..write('id: $id, ')
+          ..write('parentId: $parentId, ')
+          ..write('name: $name, ')
+          ..write('overallScore: $overallScore, ')
+          ..write('notes: $notes, ')
+          ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -32556,6 +38233,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CustomWordsTableTable customWordsTable = $CustomWordsTableTable(
     this,
   );
+  late final $FlaggedWordsTableTable flaggedWordsTable =
+      $FlaggedWordsTableTable(this);
   late final $CustomQuotesTableTable customQuotesTable =
       $CustomQuotesTableTable(this);
   late final $BucketListItemsTableTable bucketListItemsTable =
@@ -32593,6 +38272,17 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $JobSeasonsTableTable jobSeasonsTable = $JobSeasonsTableTable(
     this,
   );
+  late final $MediaAssetsTableTable mediaAssetsTable = $MediaAssetsTableTable(
+    this,
+  );
+  late final $MediaReferencesTableTable mediaReferencesTable =
+      $MediaReferencesTableTable(this);
+  late final $RankingCategoriesTableTable rankingCategoriesTable =
+      $RankingCategoriesTableTable(this);
+  late final $RankingParentsTableTable rankingParentsTable =
+      $RankingParentsTableTable(this);
+  late final $RankingChildrenTableTable rankingChildrenTable =
+      $RankingChildrenTableTable(this);
   late final Index idxTodoTasksListId = Index(
     'idx_todo_tasks_list_id',
     'CREATE INDEX idx_todo_tasks_list_id ON todo_tasks_table (list_id)',
@@ -32600,6 +38290,26 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final Index idxTodoTasksParentTaskId = Index(
     'idx_todo_tasks_parent_task_id',
     'CREATE INDEX idx_todo_tasks_parent_task_id ON todo_tasks_table (parent_task_id)',
+  );
+  late final Index idxMediaAssetsContentHash = Index(
+    'idx_media_assets_content_hash',
+    'CREATE INDEX idx_media_assets_content_hash ON media_assets_table (content_hash)',
+  );
+  late final Index idxMediaReferencesOwner = Index(
+    'idx_media_references_owner',
+    'CREATE INDEX idx_media_references_owner ON media_references_table (collection, document_id)',
+  );
+  late final Index idxMediaReferencesMediaId = Index(
+    'idx_media_references_media_id',
+    'CREATE INDEX idx_media_references_media_id ON media_references_table (media_id)',
+  );
+  late final Index idxRankingParentsCategory = Index(
+    'idx_ranking_parents_category',
+    'CREATE INDEX idx_ranking_parents_category ON ranking_parents_table (category_id)',
+  );
+  late final Index idxRankingChildrenParent = Index(
+    'idx_ranking_children_parent',
+    'CREATE INDEX idx_ranking_children_parent ON ranking_children_table (parent_id)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -32630,6 +38340,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     pinnedNotesTable,
     dismissedNotificationsTable,
     customWordsTable,
+    flaggedWordsTable,
     customQuotesTable,
     bucketListItemsTable,
     leetCodeProblemsTable,
@@ -32648,8 +38359,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     jobCompaniesTable,
     jobCategoriesTable,
     jobSeasonsTable,
+    mediaAssetsTable,
+    mediaReferencesTable,
+    rankingCategoriesTable,
+    rankingParentsTable,
+    rankingChildrenTable,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
+    idxMediaAssetsContentHash,
+    idxMediaReferencesOwner,
+    idxMediaReferencesMediaId,
+    idxRankingParentsCategory,
+    idxRankingChildrenParent,
   ];
   @override
   DriftDatabaseOptions get options =>
@@ -36022,16 +41743,22 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> hideCompletedTasks,
       Value<bool> vimModeEnabled,
       Value<bool> snippetsEnabled,
+      Value<bool> autocorrectEnabled,
       Value<bool> capsLockIndicatorEnabled,
+      Value<bool> mediaRemoteUploadsEnabled,
+      Value<bool> mediaRemoteDownloadsEnabled,
+      Value<bool> mediaBackgroundPrefetchEnabled,
       Value<String> snippetExpandKey,
       Value<String?> snippetsJson,
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
+      Value<String?> lastViewedCalendarId,
       Value<String?> defaultJournalId,
       Value<String?> defaultTodoListId,
       Value<bool> journalShowAllEntries,
       Value<bool> todoShowAllTasks,
+      Value<bool> calendarShowAllCalendars,
       Value<String?> weatherLocationLabel,
       Value<double?> weatherLat,
       Value<double?> weatherLon,
@@ -36099,6 +41826,10 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> showAnnualizedSubscriptionCost,
       Value<String?> jobsHiddenColumnsJson,
       Value<bool> jobsIncludeArchived,
+      Value<String?> rankingsCollapsedQueueCategoriesJson,
+      Value<String?> jobProfileLinkedInUrl,
+      Value<String?> jobProfileGitHubUrl,
+      Value<String?> jobProfilePortfolioUrl,
       Value<double?> dreamSplitWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
@@ -36111,6 +41842,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> leetCodeHideExamples,
       Value<bool> leetCodeHideComplexity,
       Value<bool> leetCodeHideCode,
+      Value<bool> leetCodeEnableScratchCode,
       Value<String> srsFailKey,
       Value<String> srsHardKey,
       Value<String> srsGoodKey,
@@ -36150,16 +41882,22 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> hideCompletedTasks,
       Value<bool> vimModeEnabled,
       Value<bool> snippetsEnabled,
+      Value<bool> autocorrectEnabled,
       Value<bool> capsLockIndicatorEnabled,
+      Value<bool> mediaRemoteUploadsEnabled,
+      Value<bool> mediaRemoteDownloadsEnabled,
+      Value<bool> mediaBackgroundPrefetchEnabled,
       Value<String> snippetExpandKey,
       Value<String?> snippetsJson,
       Value<String?> deviceId,
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
+      Value<String?> lastViewedCalendarId,
       Value<String?> defaultJournalId,
       Value<String?> defaultTodoListId,
       Value<bool> journalShowAllEntries,
       Value<bool> todoShowAllTasks,
+      Value<bool> calendarShowAllCalendars,
       Value<String?> weatherLocationLabel,
       Value<double?> weatherLat,
       Value<double?> weatherLon,
@@ -36227,6 +41965,10 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> showAnnualizedSubscriptionCost,
       Value<String?> jobsHiddenColumnsJson,
       Value<bool> jobsIncludeArchived,
+      Value<String?> rankingsCollapsedQueueCategoriesJson,
+      Value<String?> jobProfileLinkedInUrl,
+      Value<String?> jobProfileGitHubUrl,
+      Value<String?> jobProfilePortfolioUrl,
       Value<double?> dreamSplitWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
@@ -36239,6 +41981,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> leetCodeHideExamples,
       Value<bool> leetCodeHideComplexity,
       Value<bool> leetCodeHideCode,
+      Value<bool> leetCodeEnableScratchCode,
       Value<String> srsFailKey,
       Value<String> srsHardKey,
       Value<String> srsGoodKey,
@@ -36386,8 +42129,28 @@ class $$SettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get autocorrectEnabled => $composableBuilder(
+    column: $table.autocorrectEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get capsLockIndicatorEnabled => $composableBuilder(
     column: $table.capsLockIndicatorEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get mediaRemoteUploadsEnabled => $composableBuilder(
+    column: $table.mediaRemoteUploadsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get mediaRemoteDownloadsEnabled => $composableBuilder(
+    column: $table.mediaRemoteDownloadsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get mediaBackgroundPrefetchEnabled => $composableBuilder(
+    column: $table.mediaBackgroundPrefetchEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -36416,6 +42179,11 @@ class $$SettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get lastViewedCalendarId => $composableBuilder(
+    column: $table.lastViewedCalendarId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get defaultJournalId => $composableBuilder(
     column: $table.defaultJournalId,
     builder: (column) => ColumnFilters(column),
@@ -36433,6 +42201,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get todoShowAllTasks => $composableBuilder(
     column: $table.todoShowAllTasks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get calendarShowAllCalendars => $composableBuilder(
+    column: $table.calendarShowAllCalendars,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -36775,6 +42548,27 @@ class $$SettingsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get rankingsCollapsedQueueCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsCollapsedQueueCategoriesJson,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<String> get jobProfileLinkedInUrl => $composableBuilder(
+    column: $table.jobProfileLinkedInUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get jobProfileGitHubUrl => $composableBuilder(
+    column: $table.jobProfileGitHubUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get jobProfilePortfolioUrl => $composableBuilder(
+    column: $table.jobProfilePortfolioUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
     builder: (column) => ColumnFilters(column),
@@ -36832,6 +42626,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get leetCodeHideCode => $composableBuilder(
     column: $table.leetCodeHideCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get leetCodeEnableScratchCode => $composableBuilder(
+    column: $table.leetCodeEnableScratchCode,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -37025,10 +42824,31 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get autocorrectEnabled => $composableBuilder(
+    column: $table.autocorrectEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get capsLockIndicatorEnabled => $composableBuilder(
     column: $table.capsLockIndicatorEnabled,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get mediaRemoteUploadsEnabled => $composableBuilder(
+    column: $table.mediaRemoteUploadsEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get mediaRemoteDownloadsEnabled => $composableBuilder(
+    column: $table.mediaRemoteDownloadsEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get mediaBackgroundPrefetchEnabled =>
+      $composableBuilder(
+        column: $table.mediaBackgroundPrefetchEnabled,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get snippetExpandKey => $composableBuilder(
     column: $table.snippetExpandKey,
@@ -37055,6 +42875,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get lastViewedCalendarId => $composableBuilder(
+    column: $table.lastViewedCalendarId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get defaultJournalId => $composableBuilder(
     column: $table.defaultJournalId,
     builder: (column) => ColumnOrderings(column),
@@ -37072,6 +42897,11 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<bool> get todoShowAllTasks => $composableBuilder(
     column: $table.todoShowAllTasks,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get calendarShowAllCalendars => $composableBuilder(
+    column: $table.calendarShowAllCalendars,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -37420,6 +43250,27 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get rankingsCollapsedQueueCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsCollapsedQueueCategoriesJson,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<String> get jobProfileLinkedInUrl => $composableBuilder(
+    column: $table.jobProfileLinkedInUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get jobProfileGitHubUrl => $composableBuilder(
+    column: $table.jobProfileGitHubUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get jobProfilePortfolioUrl => $composableBuilder(
+    column: $table.jobProfilePortfolioUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
     builder: (column) => ColumnOrderings(column),
@@ -37477,6 +43328,11 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<bool> get leetCodeHideCode => $composableBuilder(
     column: $table.leetCodeHideCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get leetCodeEnableScratchCode => $composableBuilder(
+    column: $table.leetCodeEnableScratchCode,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -37662,10 +43518,31 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get autocorrectEnabled => $composableBuilder(
+    column: $table.autocorrectEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get capsLockIndicatorEnabled => $composableBuilder(
     column: $table.capsLockIndicatorEnabled,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get mediaRemoteUploadsEnabled => $composableBuilder(
+    column: $table.mediaRemoteUploadsEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get mediaRemoteDownloadsEnabled => $composableBuilder(
+    column: $table.mediaRemoteDownloadsEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get mediaBackgroundPrefetchEnabled =>
+      $composableBuilder(
+        column: $table.mediaBackgroundPrefetchEnabled,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get snippetExpandKey => $composableBuilder(
     column: $table.snippetExpandKey,
@@ -37690,6 +43567,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get lastViewedCalendarId => $composableBuilder(
+    column: $table.lastViewedCalendarId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get defaultJournalId => $composableBuilder(
     column: $table.defaultJournalId,
     builder: (column) => column,
@@ -37707,6 +43589,11 @@ class $$SettingsTableTableAnnotationComposer
 
   GeneratedColumn<bool> get todoShowAllTasks => $composableBuilder(
     column: $table.todoShowAllTasks,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get calendarShowAllCalendars => $composableBuilder(
+    column: $table.calendarShowAllCalendars,
     builder: (column) => column,
   );
 
@@ -38055,6 +43942,27 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get rankingsCollapsedQueueCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsCollapsedQueueCategoriesJson,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get jobProfileLinkedInUrl => $composableBuilder(
+    column: $table.jobProfileLinkedInUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get jobProfileGitHubUrl => $composableBuilder(
+    column: $table.jobProfileGitHubUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get jobProfilePortfolioUrl => $composableBuilder(
+    column: $table.jobProfilePortfolioUrl,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
     builder: (column) => column,
@@ -38112,6 +44020,11 @@ class $$SettingsTableTableAnnotationComposer
 
   GeneratedColumn<bool> get leetCodeHideCode => $composableBuilder(
     column: $table.leetCodeHideCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get leetCodeEnableScratchCode => $composableBuilder(
+    column: $table.leetCodeEnableScratchCode,
     builder: (column) => column,
   );
 
@@ -38230,16 +44143,23 @@ class $$SettingsTableTableTableManager
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
                 Value<bool> snippetsEnabled = const Value.absent(),
+                Value<bool> autocorrectEnabled = const Value.absent(),
                 Value<bool> capsLockIndicatorEnabled = const Value.absent(),
+                Value<bool> mediaRemoteUploadsEnabled = const Value.absent(),
+                Value<bool> mediaRemoteDownloadsEnabled = const Value.absent(),
+                Value<bool> mediaBackgroundPrefetchEnabled =
+                    const Value.absent(),
                 Value<String> snippetExpandKey = const Value.absent(),
                 Value<String?> snippetsJson = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
+                Value<String?> lastViewedCalendarId = const Value.absent(),
                 Value<String?> defaultJournalId = const Value.absent(),
                 Value<String?> defaultTodoListId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
                 Value<bool> todoShowAllTasks = const Value.absent(),
+                Value<bool> calendarShowAllCalendars = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
                 Value<double?> weatherLat = const Value.absent(),
                 Value<double?> weatherLon = const Value.absent(),
@@ -38325,6 +44245,11 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<String?> jobsHiddenColumnsJson = const Value.absent(),
                 Value<bool> jobsIncludeArchived = const Value.absent(),
+                Value<String?> rankingsCollapsedQueueCategoriesJson =
+                    const Value.absent(),
+                Value<String?> jobProfileLinkedInUrl = const Value.absent(),
+                Value<String?> jobProfileGitHubUrl = const Value.absent(),
+                Value<String?> jobProfilePortfolioUrl = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
@@ -38337,6 +44262,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> leetCodeHideExamples = const Value.absent(),
                 Value<bool> leetCodeHideComplexity = const Value.absent(),
                 Value<bool> leetCodeHideCode = const Value.absent(),
+                Value<bool> leetCodeEnableScratchCode = const Value.absent(),
                 Value<String> srsFailKey = const Value.absent(),
                 Value<String> srsHardKey = const Value.absent(),
                 Value<String> srsGoodKey = const Value.absent(),
@@ -38374,16 +44300,22 @@ class $$SettingsTableTableTableManager
                 hideCompletedTasks: hideCompletedTasks,
                 vimModeEnabled: vimModeEnabled,
                 snippetsEnabled: snippetsEnabled,
+                autocorrectEnabled: autocorrectEnabled,
                 capsLockIndicatorEnabled: capsLockIndicatorEnabled,
+                mediaRemoteUploadsEnabled: mediaRemoteUploadsEnabled,
+                mediaRemoteDownloadsEnabled: mediaRemoteDownloadsEnabled,
+                mediaBackgroundPrefetchEnabled: mediaBackgroundPrefetchEnabled,
                 snippetExpandKey: snippetExpandKey,
                 snippetsJson: snippetsJson,
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
+                lastViewedCalendarId: lastViewedCalendarId,
                 defaultJournalId: defaultJournalId,
                 defaultTodoListId: defaultTodoListId,
                 journalShowAllEntries: journalShowAllEntries,
                 todoShowAllTasks: todoShowAllTasks,
+                calendarShowAllCalendars: calendarShowAllCalendars,
                 weatherLocationLabel: weatherLocationLabel,
                 weatherLat: weatherLat,
                 weatherLon: weatherLon,
@@ -38454,6 +44386,11 @@ class $$SettingsTableTableTableManager
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
                 jobsHiddenColumnsJson: jobsHiddenColumnsJson,
                 jobsIncludeArchived: jobsIncludeArchived,
+                rankingsCollapsedQueueCategoriesJson:
+                    rankingsCollapsedQueueCategoriesJson,
+                jobProfileLinkedInUrl: jobProfileLinkedInUrl,
+                jobProfileGitHubUrl: jobProfileGitHubUrl,
+                jobProfilePortfolioUrl: jobProfilePortfolioUrl,
                 dreamSplitWidth: dreamSplitWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
@@ -38466,6 +44403,7 @@ class $$SettingsTableTableTableManager
                 leetCodeHideExamples: leetCodeHideExamples,
                 leetCodeHideComplexity: leetCodeHideComplexity,
                 leetCodeHideCode: leetCodeHideCode,
+                leetCodeEnableScratchCode: leetCodeEnableScratchCode,
                 srsFailKey: srsFailKey,
                 srsHardKey: srsHardKey,
                 srsGoodKey: srsGoodKey,
@@ -38506,16 +44444,23 @@ class $$SettingsTableTableTableManager
                 Value<bool> hideCompletedTasks = const Value.absent(),
                 Value<bool> vimModeEnabled = const Value.absent(),
                 Value<bool> snippetsEnabled = const Value.absent(),
+                Value<bool> autocorrectEnabled = const Value.absent(),
                 Value<bool> capsLockIndicatorEnabled = const Value.absent(),
+                Value<bool> mediaRemoteUploadsEnabled = const Value.absent(),
+                Value<bool> mediaRemoteDownloadsEnabled = const Value.absent(),
+                Value<bool> mediaBackgroundPrefetchEnabled =
+                    const Value.absent(),
                 Value<String> snippetExpandKey = const Value.absent(),
                 Value<String?> snippetsJson = const Value.absent(),
                 Value<String?> deviceId = const Value.absent(),
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
+                Value<String?> lastViewedCalendarId = const Value.absent(),
                 Value<String?> defaultJournalId = const Value.absent(),
                 Value<String?> defaultTodoListId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
                 Value<bool> todoShowAllTasks = const Value.absent(),
+                Value<bool> calendarShowAllCalendars = const Value.absent(),
                 Value<String?> weatherLocationLabel = const Value.absent(),
                 Value<double?> weatherLat = const Value.absent(),
                 Value<double?> weatherLon = const Value.absent(),
@@ -38601,6 +44546,11 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<String?> jobsHiddenColumnsJson = const Value.absent(),
                 Value<bool> jobsIncludeArchived = const Value.absent(),
+                Value<String?> rankingsCollapsedQueueCategoriesJson =
+                    const Value.absent(),
+                Value<String?> jobProfileLinkedInUrl = const Value.absent(),
+                Value<String?> jobProfileGitHubUrl = const Value.absent(),
+                Value<String?> jobProfilePortfolioUrl = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
@@ -38613,6 +44563,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> leetCodeHideExamples = const Value.absent(),
                 Value<bool> leetCodeHideComplexity = const Value.absent(),
                 Value<bool> leetCodeHideCode = const Value.absent(),
+                Value<bool> leetCodeEnableScratchCode = const Value.absent(),
                 Value<String> srsFailKey = const Value.absent(),
                 Value<String> srsHardKey = const Value.absent(),
                 Value<String> srsGoodKey = const Value.absent(),
@@ -38650,16 +44601,22 @@ class $$SettingsTableTableTableManager
                 hideCompletedTasks: hideCompletedTasks,
                 vimModeEnabled: vimModeEnabled,
                 snippetsEnabled: snippetsEnabled,
+                autocorrectEnabled: autocorrectEnabled,
                 capsLockIndicatorEnabled: capsLockIndicatorEnabled,
+                mediaRemoteUploadsEnabled: mediaRemoteUploadsEnabled,
+                mediaRemoteDownloadsEnabled: mediaRemoteDownloadsEnabled,
+                mediaBackgroundPrefetchEnabled: mediaBackgroundPrefetchEnabled,
                 snippetExpandKey: snippetExpandKey,
                 snippetsJson: snippetsJson,
                 deviceId: deviceId,
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
+                lastViewedCalendarId: lastViewedCalendarId,
                 defaultJournalId: defaultJournalId,
                 defaultTodoListId: defaultTodoListId,
                 journalShowAllEntries: journalShowAllEntries,
                 todoShowAllTasks: todoShowAllTasks,
+                calendarShowAllCalendars: calendarShowAllCalendars,
                 weatherLocationLabel: weatherLocationLabel,
                 weatherLat: weatherLat,
                 weatherLon: weatherLon,
@@ -38730,6 +44687,11 @@ class $$SettingsTableTableTableManager
                 showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost,
                 jobsHiddenColumnsJson: jobsHiddenColumnsJson,
                 jobsIncludeArchived: jobsIncludeArchived,
+                rankingsCollapsedQueueCategoriesJson:
+                    rankingsCollapsedQueueCategoriesJson,
+                jobProfileLinkedInUrl: jobProfileLinkedInUrl,
+                jobProfileGitHubUrl: jobProfileGitHubUrl,
+                jobProfilePortfolioUrl: jobProfilePortfolioUrl,
                 dreamSplitWidth: dreamSplitWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
@@ -38742,6 +44704,7 @@ class $$SettingsTableTableTableManager
                 leetCodeHideExamples: leetCodeHideExamples,
                 leetCodeHideComplexity: leetCodeHideComplexity,
                 leetCodeHideCode: leetCodeHideCode,
+                leetCodeEnableScratchCode: leetCodeEnableScratchCode,
                 srsFailKey: srsFailKey,
                 srsHardKey: srsHardKey,
                 srsGoodKey: srsGoodKey,
@@ -42502,6 +48465,240 @@ typedef $$CustomWordsTableTableProcessedTableManager =
       CustomWordsTableData,
       PrefetchHooks Function()
     >;
+typedef $$FlaggedWordsTableTableCreateCompanionBuilder =
+    FlaggedWordsTableCompanion Function({
+      required String word,
+      Value<String?> replacement,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$FlaggedWordsTableTableUpdateCompanionBuilder =
+    FlaggedWordsTableCompanion Function({
+      Value<String> word,
+      Value<String?> replacement,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$FlaggedWordsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $FlaggedWordsTableTable> {
+  $$FlaggedWordsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get word => $composableBuilder(
+    column: $table.word,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get replacement => $composableBuilder(
+    column: $table.replacement,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FlaggedWordsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $FlaggedWordsTableTable> {
+  $$FlaggedWordsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get word => $composableBuilder(
+    column: $table.word,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get replacement => $composableBuilder(
+    column: $table.replacement,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FlaggedWordsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FlaggedWordsTableTable> {
+  $$FlaggedWordsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get word =>
+      $composableBuilder(column: $table.word, builder: (column) => column);
+
+  GeneratedColumn<String> get replacement => $composableBuilder(
+    column: $table.replacement,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$FlaggedWordsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FlaggedWordsTableTable,
+          FlaggedWordsTableData,
+          $$FlaggedWordsTableTableFilterComposer,
+          $$FlaggedWordsTableTableOrderingComposer,
+          $$FlaggedWordsTableTableAnnotationComposer,
+          $$FlaggedWordsTableTableCreateCompanionBuilder,
+          $$FlaggedWordsTableTableUpdateCompanionBuilder,
+          (
+            FlaggedWordsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $FlaggedWordsTableTable,
+              FlaggedWordsTableData
+            >,
+          ),
+          FlaggedWordsTableData,
+          PrefetchHooks Function()
+        > {
+  $$FlaggedWordsTableTableTableManager(
+    _$AppDatabase db,
+    $FlaggedWordsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FlaggedWordsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FlaggedWordsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FlaggedWordsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> word = const Value.absent(),
+                Value<String?> replacement = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FlaggedWordsTableCompanion(
+                word: word,
+                replacement: replacement,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String word,
+                Value<String?> replacement = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FlaggedWordsTableCompanion.insert(
+                word: word,
+                replacement: replacement,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FlaggedWordsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FlaggedWordsTableTable,
+      FlaggedWordsTableData,
+      $$FlaggedWordsTableTableFilterComposer,
+      $$FlaggedWordsTableTableOrderingComposer,
+      $$FlaggedWordsTableTableAnnotationComposer,
+      $$FlaggedWordsTableTableCreateCompanionBuilder,
+      $$FlaggedWordsTableTableUpdateCompanionBuilder,
+      (
+        FlaggedWordsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $FlaggedWordsTableTable,
+          FlaggedWordsTableData
+        >,
+      ),
+      FlaggedWordsTableData,
+      PrefetchHooks Function()
+    >;
 typedef $$CustomQuotesTableTableCreateCompanionBuilder =
     CustomQuotesTableCompanion Function({
       required String id,
@@ -44583,6 +50780,8 @@ typedef $$StudyReviewLogTableTableCreateCompanionBuilder =
       required String cardId,
       required String grade,
       required DateTime reviewedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
 typedef $$StudyReviewLogTableTableUpdateCompanionBuilder =
@@ -44591,6 +50790,8 @@ typedef $$StudyReviewLogTableTableUpdateCompanionBuilder =
       Value<String> cardId,
       Value<String> grade,
       Value<DateTime> reviewedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
       Value<int> rowid,
     });
 
@@ -44620,6 +50821,16 @@ class $$StudyReviewLogTableTableFilterComposer
 
   ColumnFilters<DateTime> get reviewedAt => $composableBuilder(
     column: $table.reviewedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -44652,6 +50863,16 @@ class $$StudyReviewLogTableTableOrderingComposer
     column: $table.reviewedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$StudyReviewLogTableTableAnnotationComposer
@@ -44676,6 +50897,12 @@ class $$StudyReviewLogTableTableAnnotationComposer
     column: $table.reviewedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 }
 
 class $$StudyReviewLogTableTableTableManager
@@ -44725,12 +50952,16 @@ class $$StudyReviewLogTableTableTableManager
                 Value<String> cardId = const Value.absent(),
                 Value<String> grade = const Value.absent(),
                 Value<DateTime> reviewedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => StudyReviewLogTableCompanion(
                 id: id,
                 cardId: cardId,
                 grade: grade,
                 reviewedAt: reviewedAt,
+                version: version,
+                deletedAt: deletedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -44739,12 +50970,16 @@ class $$StudyReviewLogTableTableTableManager
                 required String cardId,
                 required String grade,
                 required DateTime reviewedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => StudyReviewLogTableCompanion.insert(
                 id: id,
                 cardId: cardId,
                 grade: grade,
                 reviewedAt: reviewedAt,
+                version: version,
+                deletedAt: deletedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -46468,7 +52703,7 @@ typedef $$JobApplicationsTableTableCreateCompanionBuilder =
       required DateTime dateApplied,
       Value<String?> applicationUrl,
       Value<String?> notes,
-      Value<String?> seasonId,
+      Value<String> seasonIdsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -46484,7 +52719,7 @@ typedef $$JobApplicationsTableTableUpdateCompanionBuilder =
       Value<DateTime> dateApplied,
       Value<String?> applicationUrl,
       Value<String?> notes,
-      Value<String?> seasonId,
+      Value<String> seasonIdsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -46536,8 +52771,8 @@ class $$JobApplicationsTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get seasonId => $composableBuilder(
-    column: $table.seasonId,
+  ColumnFilters<String> get seasonIdsJson => $composableBuilder(
+    column: $table.seasonIdsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46606,8 +52841,8 @@ class $$JobApplicationsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get seasonId => $composableBuilder(
-    column: $table.seasonId,
+  ColumnOrderings<String> get seasonIdsJson => $composableBuilder(
+    column: $table.seasonIdsJson,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -46666,8 +52901,10 @@ class $$JobApplicationsTableTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
-  GeneratedColumn<String> get seasonId =>
-      $composableBuilder(column: $table.seasonId, builder: (column) => column);
+  GeneratedColumn<String> get seasonIdsJson => $composableBuilder(
+    column: $table.seasonIdsJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -46732,7 +52969,7 @@ class $$JobApplicationsTableTableTableManager
                 Value<DateTime> dateApplied = const Value.absent(),
                 Value<String?> applicationUrl = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
-                Value<String?> seasonId = const Value.absent(),
+                Value<String> seasonIdsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -46746,7 +52983,7 @@ class $$JobApplicationsTableTableTableManager
                 dateApplied: dateApplied,
                 applicationUrl: applicationUrl,
                 notes: notes,
-                seasonId: seasonId,
+                seasonIdsJson: seasonIdsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -46762,7 +52999,7 @@ class $$JobApplicationsTableTableTableManager
                 required DateTime dateApplied,
                 Value<String?> applicationUrl = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
-                Value<String?> seasonId = const Value.absent(),
+                Value<String> seasonIdsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -46776,7 +53013,7 @@ class $$JobApplicationsTableTableTableManager
                 dateApplied: dateApplied,
                 applicationUrl: applicationUrl,
                 notes: notes,
-                seasonId: seasonId,
+                seasonIdsJson: seasonIdsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -47113,6 +53350,7 @@ typedef $$JobStagesTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<int> sortOrder,
+      Value<int?> colorValue,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -47124,6 +53362,7 @@ typedef $$JobStagesTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<int> sortOrder,
+      Value<int?> colorValue,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -47152,6 +53391,11 @@ class $$JobStagesTableTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -47200,6 +53444,11 @@ class $$JobStagesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -47238,6 +53487,11 @@ class $$JobStagesTableTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -47292,6 +53546,7 @@ class $$JobStagesTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -47301,6 +53556,7 @@ class $$JobStagesTableTableTableManager
                 id: id,
                 name: name,
                 sortOrder: sortOrder,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -47312,6 +53568,7 @@ class $$JobStagesTableTableTableManager
                 required String id,
                 required String name,
                 Value<int> sortOrder = const Value.absent(),
+                Value<int?> colorValue = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -47321,6 +53578,7 @@ class $$JobStagesTableTableTableManager
                 id: id,
                 name: name,
                 sortOrder: sortOrder,
+                colorValue: colorValue,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -47882,6 +54140,7 @@ typedef $$JobSeasonsTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<int> sortOrder,
+      Value<DateTime?> archivedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -47893,6 +54152,7 @@ typedef $$JobSeasonsTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<int> sortOrder,
+      Value<DateTime?> archivedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -47921,6 +54181,11 @@ class $$JobSeasonsTableTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -47969,6 +54234,11 @@ class $$JobSeasonsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -48007,6 +54277,11 @@ class $$JobSeasonsTableTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -48061,6 +54336,7 @@ class $$JobSeasonsTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<DateTime?> archivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -48070,6 +54346,7 @@ class $$JobSeasonsTableTableTableManager
                 id: id,
                 name: name,
                 sortOrder: sortOrder,
+                archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -48081,6 +54358,7 @@ class $$JobSeasonsTableTableTableManager
                 required String id,
                 required String name,
                 Value<int> sortOrder = const Value.absent(),
+                Value<DateTime?> archivedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -48090,6 +54368,7 @@ class $$JobSeasonsTableTableTableManager
                 id: id,
                 name: name,
                 sortOrder: sortOrder,
+                archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -48123,6 +54402,2051 @@ typedef $$JobSeasonsTableTableProcessedTableManager =
         >,
       ),
       JobSeasonsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$MediaAssetsTableTableCreateCompanionBuilder =
+    MediaAssetsTableCompanion Function({
+      required String id,
+      required String contentHash,
+      required int byteSize,
+      required String mimeType,
+      required int width,
+      required int height,
+      Value<String> uploadState,
+      Value<String> downloadState,
+      Value<String?> failureReason,
+      Value<DateTime?> unreferencedAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$MediaAssetsTableTableUpdateCompanionBuilder =
+    MediaAssetsTableCompanion Function({
+      Value<String> id,
+      Value<String> contentHash,
+      Value<int> byteSize,
+      Value<String> mimeType,
+      Value<int> width,
+      Value<int> height,
+      Value<String> uploadState,
+      Value<String> downloadState,
+      Value<String?> failureReason,
+      Value<DateTime?> unreferencedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$MediaAssetsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $MediaAssetsTableTable> {
+  $$MediaAssetsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get byteSize => $composableBuilder(
+    column: $table.byteSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get height => $composableBuilder(
+    column: $table.height,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uploadState => $composableBuilder(
+    column: $table.uploadState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get downloadState => $composableBuilder(
+    column: $table.downloadState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get unreferencedAt => $composableBuilder(
+    column: $table.unreferencedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MediaAssetsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $MediaAssetsTableTable> {
+  $$MediaAssetsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get byteSize => $composableBuilder(
+    column: $table.byteSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get width => $composableBuilder(
+    column: $table.width,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get height => $composableBuilder(
+    column: $table.height,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get uploadState => $composableBuilder(
+    column: $table.uploadState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get downloadState => $composableBuilder(
+    column: $table.downloadState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get unreferencedAt => $composableBuilder(
+    column: $table.unreferencedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MediaAssetsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MediaAssetsTableTable> {
+  $$MediaAssetsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get contentHash => $composableBuilder(
+    column: $table.contentHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get byteSize =>
+      $composableBuilder(column: $table.byteSize, builder: (column) => column);
+
+  GeneratedColumn<String> get mimeType =>
+      $composableBuilder(column: $table.mimeType, builder: (column) => column);
+
+  GeneratedColumn<int> get width =>
+      $composableBuilder(column: $table.width, builder: (column) => column);
+
+  GeneratedColumn<int> get height =>
+      $composableBuilder(column: $table.height, builder: (column) => column);
+
+  GeneratedColumn<String> get uploadState => $composableBuilder(
+    column: $table.uploadState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get downloadState => $composableBuilder(
+    column: $table.downloadState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get unreferencedAt => $composableBuilder(
+    column: $table.unreferencedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$MediaAssetsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MediaAssetsTableTable,
+          MediaAssetsTableData,
+          $$MediaAssetsTableTableFilterComposer,
+          $$MediaAssetsTableTableOrderingComposer,
+          $$MediaAssetsTableTableAnnotationComposer,
+          $$MediaAssetsTableTableCreateCompanionBuilder,
+          $$MediaAssetsTableTableUpdateCompanionBuilder,
+          (
+            MediaAssetsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $MediaAssetsTableTable,
+              MediaAssetsTableData
+            >,
+          ),
+          MediaAssetsTableData,
+          PrefetchHooks Function()
+        > {
+  $$MediaAssetsTableTableTableManager(
+    _$AppDatabase db,
+    $MediaAssetsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MediaAssetsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MediaAssetsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MediaAssetsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> contentHash = const Value.absent(),
+                Value<int> byteSize = const Value.absent(),
+                Value<String> mimeType = const Value.absent(),
+                Value<int> width = const Value.absent(),
+                Value<int> height = const Value.absent(),
+                Value<String> uploadState = const Value.absent(),
+                Value<String> downloadState = const Value.absent(),
+                Value<String?> failureReason = const Value.absent(),
+                Value<DateTime?> unreferencedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MediaAssetsTableCompanion(
+                id: id,
+                contentHash: contentHash,
+                byteSize: byteSize,
+                mimeType: mimeType,
+                width: width,
+                height: height,
+                uploadState: uploadState,
+                downloadState: downloadState,
+                failureReason: failureReason,
+                unreferencedAt: unreferencedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String contentHash,
+                required int byteSize,
+                required String mimeType,
+                required int width,
+                required int height,
+                Value<String> uploadState = const Value.absent(),
+                Value<String> downloadState = const Value.absent(),
+                Value<String?> failureReason = const Value.absent(),
+                Value<DateTime?> unreferencedAt = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MediaAssetsTableCompanion.insert(
+                id: id,
+                contentHash: contentHash,
+                byteSize: byteSize,
+                mimeType: mimeType,
+                width: width,
+                height: height,
+                uploadState: uploadState,
+                downloadState: downloadState,
+                failureReason: failureReason,
+                unreferencedAt: unreferencedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MediaAssetsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MediaAssetsTableTable,
+      MediaAssetsTableData,
+      $$MediaAssetsTableTableFilterComposer,
+      $$MediaAssetsTableTableOrderingComposer,
+      $$MediaAssetsTableTableAnnotationComposer,
+      $$MediaAssetsTableTableCreateCompanionBuilder,
+      $$MediaAssetsTableTableUpdateCompanionBuilder,
+      (
+        MediaAssetsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $MediaAssetsTableTable,
+          MediaAssetsTableData
+        >,
+      ),
+      MediaAssetsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$MediaReferencesTableTableCreateCompanionBuilder =
+    MediaReferencesTableCompanion Function({
+      required String id,
+      required String mediaId,
+      required String collection,
+      required String documentId,
+      Value<String> facet,
+      Value<int> sortOrder,
+      Value<int?> displayWidthPx,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$MediaReferencesTableTableUpdateCompanionBuilder =
+    MediaReferencesTableCompanion Function({
+      Value<String> id,
+      Value<String> mediaId,
+      Value<String> collection,
+      Value<String> documentId,
+      Value<String> facet,
+      Value<int> sortOrder,
+      Value<int?> displayWidthPx,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$MediaReferencesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $MediaReferencesTableTable> {
+  $$MediaReferencesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mediaId => $composableBuilder(
+    column: $table.mediaId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get facet => $composableBuilder(
+    column: $table.facet,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get displayWidthPx => $composableBuilder(
+    column: $table.displayWidthPx,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MediaReferencesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $MediaReferencesTableTable> {
+  $$MediaReferencesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mediaId => $composableBuilder(
+    column: $table.mediaId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get facet => $composableBuilder(
+    column: $table.facet,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get displayWidthPx => $composableBuilder(
+    column: $table.displayWidthPx,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MediaReferencesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MediaReferencesTableTable> {
+  $$MediaReferencesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get mediaId =>
+      $composableBuilder(column: $table.mediaId, builder: (column) => column);
+
+  GeneratedColumn<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get facet =>
+      $composableBuilder(column: $table.facet, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<int> get displayWidthPx => $composableBuilder(
+    column: $table.displayWidthPx,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$MediaReferencesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MediaReferencesTableTable,
+          MediaReferencesTableData,
+          $$MediaReferencesTableTableFilterComposer,
+          $$MediaReferencesTableTableOrderingComposer,
+          $$MediaReferencesTableTableAnnotationComposer,
+          $$MediaReferencesTableTableCreateCompanionBuilder,
+          $$MediaReferencesTableTableUpdateCompanionBuilder,
+          (
+            MediaReferencesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $MediaReferencesTableTable,
+              MediaReferencesTableData
+            >,
+          ),
+          MediaReferencesTableData,
+          PrefetchHooks Function()
+        > {
+  $$MediaReferencesTableTableTableManager(
+    _$AppDatabase db,
+    $MediaReferencesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MediaReferencesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MediaReferencesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$MediaReferencesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> mediaId = const Value.absent(),
+                Value<String> collection = const Value.absent(),
+                Value<String> documentId = const Value.absent(),
+                Value<String> facet = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int?> displayWidthPx = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MediaReferencesTableCompanion(
+                id: id,
+                mediaId: mediaId,
+                collection: collection,
+                documentId: documentId,
+                facet: facet,
+                sortOrder: sortOrder,
+                displayWidthPx: displayWidthPx,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String mediaId,
+                required String collection,
+                required String documentId,
+                Value<String> facet = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int?> displayWidthPx = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MediaReferencesTableCompanion.insert(
+                id: id,
+                mediaId: mediaId,
+                collection: collection,
+                documentId: documentId,
+                facet: facet,
+                sortOrder: sortOrder,
+                displayWidthPx: displayWidthPx,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MediaReferencesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MediaReferencesTableTable,
+      MediaReferencesTableData,
+      $$MediaReferencesTableTableFilterComposer,
+      $$MediaReferencesTableTableOrderingComposer,
+      $$MediaReferencesTableTableAnnotationComposer,
+      $$MediaReferencesTableTableCreateCompanionBuilder,
+      $$MediaReferencesTableTableUpdateCompanionBuilder,
+      (
+        MediaReferencesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $MediaReferencesTableTable,
+          MediaReferencesTableData
+        >,
+      ),
+      MediaReferencesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$RankingCategoriesTableTableCreateCompanionBuilder =
+    RankingCategoriesTableCompanion Function({
+      required String id,
+      required String name,
+      required int colorValue,
+      Value<String> iconKey,
+      Value<int> sortOrder,
+      Value<bool> childUnitsEnabled,
+      Value<String> childUnitLabel,
+      Value<bool> imagesOnParent,
+      Value<bool> imagesOnChild,
+      Value<int> parentScoreMax,
+      Value<int> childScoreMax,
+      Value<String> parentScorePrecision,
+      Value<String> childScorePrecision,
+      Value<String> parentTemplateJson,
+      Value<String> childTemplateJson,
+      Value<String> sortMode,
+      Value<String?> sortFieldId,
+      Value<bool> sortAscending,
+      Value<DateTime?> archivedAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$RankingCategoriesTableTableUpdateCompanionBuilder =
+    RankingCategoriesTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> colorValue,
+      Value<String> iconKey,
+      Value<int> sortOrder,
+      Value<bool> childUnitsEnabled,
+      Value<String> childUnitLabel,
+      Value<bool> imagesOnParent,
+      Value<bool> imagesOnChild,
+      Value<int> parentScoreMax,
+      Value<int> childScoreMax,
+      Value<String> parentScorePrecision,
+      Value<String> childScorePrecision,
+      Value<String> parentTemplateJson,
+      Value<String> childTemplateJson,
+      Value<String> sortMode,
+      Value<String?> sortFieldId,
+      Value<bool> sortAscending,
+      Value<DateTime?> archivedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$RankingCategoriesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $RankingCategoriesTableTable> {
+  $$RankingCategoriesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iconKey => $composableBuilder(
+    column: $table.iconKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get childUnitsEnabled => $composableBuilder(
+    column: $table.childUnitsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get childUnitLabel => $composableBuilder(
+    column: $table.childUnitLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get imagesOnParent => $composableBuilder(
+    column: $table.imagesOnParent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get imagesOnChild => $composableBuilder(
+    column: $table.imagesOnChild,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get parentScoreMax => $composableBuilder(
+    column: $table.parentScoreMax,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get childScoreMax => $composableBuilder(
+    column: $table.childScoreMax,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentScorePrecision => $composableBuilder(
+    column: $table.parentScorePrecision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get childScorePrecision => $composableBuilder(
+    column: $table.childScorePrecision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentTemplateJson => $composableBuilder(
+    column: $table.parentTemplateJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get childTemplateJson => $composableBuilder(
+    column: $table.childTemplateJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sortMode => $composableBuilder(
+    column: $table.sortMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sortFieldId => $composableBuilder(
+    column: $table.sortFieldId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get sortAscending => $composableBuilder(
+    column: $table.sortAscending,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RankingCategoriesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $RankingCategoriesTableTable> {
+  $$RankingCategoriesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get iconKey => $composableBuilder(
+    column: $table.iconKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get childUnitsEnabled => $composableBuilder(
+    column: $table.childUnitsEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get childUnitLabel => $composableBuilder(
+    column: $table.childUnitLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get imagesOnParent => $composableBuilder(
+    column: $table.imagesOnParent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get imagesOnChild => $composableBuilder(
+    column: $table.imagesOnChild,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get parentScoreMax => $composableBuilder(
+    column: $table.parentScoreMax,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get childScoreMax => $composableBuilder(
+    column: $table.childScoreMax,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentScorePrecision => $composableBuilder(
+    column: $table.parentScorePrecision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get childScorePrecision => $composableBuilder(
+    column: $table.childScorePrecision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentTemplateJson => $composableBuilder(
+    column: $table.parentTemplateJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get childTemplateJson => $composableBuilder(
+    column: $table.childTemplateJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sortMode => $composableBuilder(
+    column: $table.sortMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sortFieldId => $composableBuilder(
+    column: $table.sortFieldId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get sortAscending => $composableBuilder(
+    column: $table.sortAscending,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RankingCategoriesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RankingCategoriesTableTable> {
+  $$RankingCategoriesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get iconKey =>
+      $composableBuilder(column: $table.iconKey, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<bool> get childUnitsEnabled => $composableBuilder(
+    column: $table.childUnitsEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get childUnitLabel => $composableBuilder(
+    column: $table.childUnitLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get imagesOnParent => $composableBuilder(
+    column: $table.imagesOnParent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get imagesOnChild => $composableBuilder(
+    column: $table.imagesOnChild,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get parentScoreMax => $composableBuilder(
+    column: $table.parentScoreMax,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get childScoreMax => $composableBuilder(
+    column: $table.childScoreMax,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get parentScorePrecision => $composableBuilder(
+    column: $table.parentScorePrecision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get childScorePrecision => $composableBuilder(
+    column: $table.childScorePrecision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get parentTemplateJson => $composableBuilder(
+    column: $table.parentTemplateJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get childTemplateJson => $composableBuilder(
+    column: $table.childTemplateJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sortMode =>
+      $composableBuilder(column: $table.sortMode, builder: (column) => column);
+
+  GeneratedColumn<String> get sortFieldId => $composableBuilder(
+    column: $table.sortFieldId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get sortAscending => $composableBuilder(
+    column: $table.sortAscending,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get archivedAt => $composableBuilder(
+    column: $table.archivedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$RankingCategoriesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RankingCategoriesTableTable,
+          RankingCategoriesTableData,
+          $$RankingCategoriesTableTableFilterComposer,
+          $$RankingCategoriesTableTableOrderingComposer,
+          $$RankingCategoriesTableTableAnnotationComposer,
+          $$RankingCategoriesTableTableCreateCompanionBuilder,
+          $$RankingCategoriesTableTableUpdateCompanionBuilder,
+          (
+            RankingCategoriesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $RankingCategoriesTableTable,
+              RankingCategoriesTableData
+            >,
+          ),
+          RankingCategoriesTableData,
+          PrefetchHooks Function()
+        > {
+  $$RankingCategoriesTableTableTableManager(
+    _$AppDatabase db,
+    $RankingCategoriesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RankingCategoriesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$RankingCategoriesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RankingCategoriesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                Value<String> iconKey = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<bool> childUnitsEnabled = const Value.absent(),
+                Value<String> childUnitLabel = const Value.absent(),
+                Value<bool> imagesOnParent = const Value.absent(),
+                Value<bool> imagesOnChild = const Value.absent(),
+                Value<int> parentScoreMax = const Value.absent(),
+                Value<int> childScoreMax = const Value.absent(),
+                Value<String> parentScorePrecision = const Value.absent(),
+                Value<String> childScorePrecision = const Value.absent(),
+                Value<String> parentTemplateJson = const Value.absent(),
+                Value<String> childTemplateJson = const Value.absent(),
+                Value<String> sortMode = const Value.absent(),
+                Value<String?> sortFieldId = const Value.absent(),
+                Value<bool> sortAscending = const Value.absent(),
+                Value<DateTime?> archivedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingCategoriesTableCompanion(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                iconKey: iconKey,
+                sortOrder: sortOrder,
+                childUnitsEnabled: childUnitsEnabled,
+                childUnitLabel: childUnitLabel,
+                imagesOnParent: imagesOnParent,
+                imagesOnChild: imagesOnChild,
+                parentScoreMax: parentScoreMax,
+                childScoreMax: childScoreMax,
+                parentScorePrecision: parentScorePrecision,
+                childScorePrecision: childScorePrecision,
+                parentTemplateJson: parentTemplateJson,
+                childTemplateJson: childTemplateJson,
+                sortMode: sortMode,
+                sortFieldId: sortFieldId,
+                sortAscending: sortAscending,
+                archivedAt: archivedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required int colorValue,
+                Value<String> iconKey = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<bool> childUnitsEnabled = const Value.absent(),
+                Value<String> childUnitLabel = const Value.absent(),
+                Value<bool> imagesOnParent = const Value.absent(),
+                Value<bool> imagesOnChild = const Value.absent(),
+                Value<int> parentScoreMax = const Value.absent(),
+                Value<int> childScoreMax = const Value.absent(),
+                Value<String> parentScorePrecision = const Value.absent(),
+                Value<String> childScorePrecision = const Value.absent(),
+                Value<String> parentTemplateJson = const Value.absent(),
+                Value<String> childTemplateJson = const Value.absent(),
+                Value<String> sortMode = const Value.absent(),
+                Value<String?> sortFieldId = const Value.absent(),
+                Value<bool> sortAscending = const Value.absent(),
+                Value<DateTime?> archivedAt = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingCategoriesTableCompanion.insert(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                iconKey: iconKey,
+                sortOrder: sortOrder,
+                childUnitsEnabled: childUnitsEnabled,
+                childUnitLabel: childUnitLabel,
+                imagesOnParent: imagesOnParent,
+                imagesOnChild: imagesOnChild,
+                parentScoreMax: parentScoreMax,
+                childScoreMax: childScoreMax,
+                parentScorePrecision: parentScorePrecision,
+                childScorePrecision: childScorePrecision,
+                parentTemplateJson: parentTemplateJson,
+                childTemplateJson: childTemplateJson,
+                sortMode: sortMode,
+                sortFieldId: sortFieldId,
+                sortAscending: sortAscending,
+                archivedAt: archivedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RankingCategoriesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RankingCategoriesTableTable,
+      RankingCategoriesTableData,
+      $$RankingCategoriesTableTableFilterComposer,
+      $$RankingCategoriesTableTableOrderingComposer,
+      $$RankingCategoriesTableTableAnnotationComposer,
+      $$RankingCategoriesTableTableCreateCompanionBuilder,
+      $$RankingCategoriesTableTableUpdateCompanionBuilder,
+      (
+        RankingCategoriesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $RankingCategoriesTableTable,
+          RankingCategoriesTableData
+        >,
+      ),
+      RankingCategoriesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$RankingParentsTableTableCreateCompanionBuilder =
+    RankingParentsTableCompanion Function({
+      required String id,
+      required String categoryId,
+      required String title,
+      Value<double?> overallScore,
+      Value<String> notes,
+      Value<String> fieldValuesJson,
+      Value<String> tagsJson,
+      Value<String> status,
+      Value<bool> starred,
+      Value<int> queueSortOrder,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$RankingParentsTableTableUpdateCompanionBuilder =
+    RankingParentsTableCompanion Function({
+      Value<String> id,
+      Value<String> categoryId,
+      Value<String> title,
+      Value<double?> overallScore,
+      Value<String> notes,
+      Value<String> fieldValuesJson,
+      Value<String> tagsJson,
+      Value<String> status,
+      Value<bool> starred,
+      Value<int> queueSortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$RankingParentsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $RankingParentsTableTable> {
+  $$RankingParentsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get overallScore => $composableBuilder(
+    column: $table.overallScore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fieldValuesJson => $composableBuilder(
+    column: $table.fieldValuesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get queueSortOrder => $composableBuilder(
+    column: $table.queueSortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RankingParentsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $RankingParentsTableTable> {
+  $$RankingParentsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get overallScore => $composableBuilder(
+    column: $table.overallScore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fieldValuesJson => $composableBuilder(
+    column: $table.fieldValuesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tagsJson => $composableBuilder(
+    column: $table.tagsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get queueSortOrder => $composableBuilder(
+    column: $table.queueSortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RankingParentsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RankingParentsTableTable> {
+  $$RankingParentsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get categoryId => $composableBuilder(
+    column: $table.categoryId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<double> get overallScore => $composableBuilder(
+    column: $table.overallScore,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get fieldValuesJson => $composableBuilder(
+    column: $table.fieldValuesJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tagsJson =>
+      $composableBuilder(column: $table.tagsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<bool> get starred =>
+      $composableBuilder(column: $table.starred, builder: (column) => column);
+
+  GeneratedColumn<int> get queueSortOrder => $composableBuilder(
+    column: $table.queueSortOrder,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$RankingParentsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RankingParentsTableTable,
+          RankingParentsTableData,
+          $$RankingParentsTableTableFilterComposer,
+          $$RankingParentsTableTableOrderingComposer,
+          $$RankingParentsTableTableAnnotationComposer,
+          $$RankingParentsTableTableCreateCompanionBuilder,
+          $$RankingParentsTableTableUpdateCompanionBuilder,
+          (
+            RankingParentsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $RankingParentsTableTable,
+              RankingParentsTableData
+            >,
+          ),
+          RankingParentsTableData,
+          PrefetchHooks Function()
+        > {
+  $$RankingParentsTableTableTableManager(
+    _$AppDatabase db,
+    $RankingParentsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RankingParentsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RankingParentsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RankingParentsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> categoryId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<double?> overallScore = const Value.absent(),
+                Value<String> notes = const Value.absent(),
+                Value<String> fieldValuesJson = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<int> queueSortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingParentsTableCompanion(
+                id: id,
+                categoryId: categoryId,
+                title: title,
+                overallScore: overallScore,
+                notes: notes,
+                fieldValuesJson: fieldValuesJson,
+                tagsJson: tagsJson,
+                status: status,
+                starred: starred,
+                queueSortOrder: queueSortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String categoryId,
+                required String title,
+                Value<double?> overallScore = const Value.absent(),
+                Value<String> notes = const Value.absent(),
+                Value<String> fieldValuesJson = const Value.absent(),
+                Value<String> tagsJson = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<int> queueSortOrder = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingParentsTableCompanion.insert(
+                id: id,
+                categoryId: categoryId,
+                title: title,
+                overallScore: overallScore,
+                notes: notes,
+                fieldValuesJson: fieldValuesJson,
+                tagsJson: tagsJson,
+                status: status,
+                starred: starred,
+                queueSortOrder: queueSortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RankingParentsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RankingParentsTableTable,
+      RankingParentsTableData,
+      $$RankingParentsTableTableFilterComposer,
+      $$RankingParentsTableTableOrderingComposer,
+      $$RankingParentsTableTableAnnotationComposer,
+      $$RankingParentsTableTableCreateCompanionBuilder,
+      $$RankingParentsTableTableUpdateCompanionBuilder,
+      (
+        RankingParentsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $RankingParentsTableTable,
+          RankingParentsTableData
+        >,
+      ),
+      RankingParentsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$RankingChildrenTableTableCreateCompanionBuilder =
+    RankingChildrenTableCompanion Function({
+      required String id,
+      required String parentId,
+      required String name,
+      Value<double?> overallScore,
+      Value<String> notes,
+      Value<String> fieldValuesJson,
+      Value<int> sortOrder,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$RankingChildrenTableTableUpdateCompanionBuilder =
+    RankingChildrenTableCompanion Function({
+      Value<String> id,
+      Value<String> parentId,
+      Value<String> name,
+      Value<double?> overallScore,
+      Value<String> notes,
+      Value<String> fieldValuesJson,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$RankingChildrenTableTableFilterComposer
+    extends Composer<_$AppDatabase, $RankingChildrenTableTable> {
+  $$RankingChildrenTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get overallScore => $composableBuilder(
+    column: $table.overallScore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fieldValuesJson => $composableBuilder(
+    column: $table.fieldValuesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RankingChildrenTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $RankingChildrenTableTable> {
+  $$RankingChildrenTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get overallScore => $composableBuilder(
+    column: $table.overallScore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fieldValuesJson => $composableBuilder(
+    column: $table.fieldValuesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RankingChildrenTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RankingChildrenTableTable> {
+  $$RankingChildrenTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get parentId =>
+      $composableBuilder(column: $table.parentId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<double> get overallScore => $composableBuilder(
+    column: $table.overallScore,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get fieldValuesJson => $composableBuilder(
+    column: $table.fieldValuesJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$RankingChildrenTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RankingChildrenTableTable,
+          RankingChildrenTableData,
+          $$RankingChildrenTableTableFilterComposer,
+          $$RankingChildrenTableTableOrderingComposer,
+          $$RankingChildrenTableTableAnnotationComposer,
+          $$RankingChildrenTableTableCreateCompanionBuilder,
+          $$RankingChildrenTableTableUpdateCompanionBuilder,
+          (
+            RankingChildrenTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $RankingChildrenTableTable,
+              RankingChildrenTableData
+            >,
+          ),
+          RankingChildrenTableData,
+          PrefetchHooks Function()
+        > {
+  $$RankingChildrenTableTableTableManager(
+    _$AppDatabase db,
+    $RankingChildrenTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RankingChildrenTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RankingChildrenTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RankingChildrenTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> parentId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<double?> overallScore = const Value.absent(),
+                Value<String> notes = const Value.absent(),
+                Value<String> fieldValuesJson = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingChildrenTableCompanion(
+                id: id,
+                parentId: parentId,
+                name: name,
+                overallScore: overallScore,
+                notes: notes,
+                fieldValuesJson: fieldValuesJson,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String parentId,
+                required String name,
+                Value<double?> overallScore = const Value.absent(),
+                Value<String> notes = const Value.absent(),
+                Value<String> fieldValuesJson = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingChildrenTableCompanion.insert(
+                id: id,
+                parentId: parentId,
+                name: name,
+                overallScore: overallScore,
+                notes: notes,
+                fieldValuesJson: fieldValuesJson,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RankingChildrenTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RankingChildrenTableTable,
+      RankingChildrenTableData,
+      $$RankingChildrenTableTableFilterComposer,
+      $$RankingChildrenTableTableOrderingComposer,
+      $$RankingChildrenTableTableAnnotationComposer,
+      $$RankingChildrenTableTableCreateCompanionBuilder,
+      $$RankingChildrenTableTableUpdateCompanionBuilder,
+      (
+        RankingChildrenTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $RankingChildrenTableTable,
+          RankingChildrenTableData
+        >,
+      ),
+      RankingChildrenTableData,
       PrefetchHooks Function()
     >;
 
@@ -48184,6 +56508,8 @@ class $AppDatabaseManager {
       );
   $$CustomWordsTableTableTableManager get customWordsTable =>
       $$CustomWordsTableTableTableManager(_db, _db.customWordsTable);
+  $$FlaggedWordsTableTableTableManager get flaggedWordsTable =>
+      $$FlaggedWordsTableTableTableManager(_db, _db.flaggedWordsTable);
   $$CustomQuotesTableTableTableManager get customQuotesTable =>
       $$CustomQuotesTableTableTableManager(_db, _db.customQuotesTable);
   $$BucketListItemsTableTableTableManager get bucketListItemsTable =>
@@ -48223,4 +56549,17 @@ class $AppDatabaseManager {
       $$JobCategoriesTableTableTableManager(_db, _db.jobCategoriesTable);
   $$JobSeasonsTableTableTableManager get jobSeasonsTable =>
       $$JobSeasonsTableTableTableManager(_db, _db.jobSeasonsTable);
+  $$MediaAssetsTableTableTableManager get mediaAssetsTable =>
+      $$MediaAssetsTableTableTableManager(_db, _db.mediaAssetsTable);
+  $$MediaReferencesTableTableTableManager get mediaReferencesTable =>
+      $$MediaReferencesTableTableTableManager(_db, _db.mediaReferencesTable);
+  $$RankingCategoriesTableTableTableManager get rankingCategoriesTable =>
+      $$RankingCategoriesTableTableTableManager(
+        _db,
+        _db.rankingCategoriesTable,
+      );
+  $$RankingParentsTableTableTableManager get rankingParentsTable =>
+      $$RankingParentsTableTableTableManager(_db, _db.rankingParentsTable);
+  $$RankingChildrenTableTableTableManager get rankingChildrenTable =>
+      $$RankingChildrenTableTableTableManager(_db, _db.rankingChildrenTable);
 }

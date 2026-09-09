@@ -210,6 +210,22 @@ void main() {
     expect(_algorithmText(tester, 1), 'Hash map of complements');
   });
 
+  // The headings are what tell one solution from the next now that the tinted
+  // panels behind each group are gone, so they carry the accent rather than
+  // the muted grey a caption would.
+  testWidgets('the solution headings are in the accent colour', (tester) async {
+    await _openModal(
+      tester,
+      existing: _problem(solutions: const [_bruteForce, _hashMap]),
+    );
+
+    final heading = tester.widget<Text>(find.text('Solution 1'));
+    final accent = Theme.of(
+      tester.element(find.text('Solution 1')),
+    ).colorScheme.primary;
+    expect(heading.style?.color, accent);
+  });
+
   testWidgets('Add solution names the one that was already there', (
     tester,
   ) async {

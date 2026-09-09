@@ -1,3 +1,4 @@
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
 enum StudyGrade { fail, hard, good, easy }
@@ -230,28 +231,63 @@ class StudyCard extends SoftDeletable {
   }
 }
 
-/// One graded review of a card in real (non-cram) SRS mode. Append-only —
-/// used to answer "cards reviewed today/total" without approximating from
-/// card state. Cram-mode grades never create these (STUDY.md: cram must not
-/// touch persisted SRS metadata).
+/// One graded review of a card in real (non-cram) SRS mode — used to answer
+/// "cards reviewed today/total" without approximating from card state.
+/// Cram-mode grades never create these (STUDY.md: cram must not touch
+/// persisted SRS metadata).
+///
+/// A row's fields never change once written; the only revision it can undergo
+/// is being taken back. Undoing a grade in a session soft-deletes the row and
+/// a redo revives that same row rather than writing a second one, so a grade
+/// given, taken back and then abandoned stops being counted. [version] is what
+/// carries that across devices: conflict resolution is version-first, and a
+/// tombstone left at the live row's version would lose to it. There is no
+/// `updatedAt` to fall back on — the only mutable state here is the tombstone.
 class StudyReviewLog {
   const StudyReviewLog({
     required this.id,
     required this.cardId,
     required this.grade,
     required this.reviewedAt,
+    this.version = 0,
+    this.deletedAt,
   });
 
   final String id;
   final String cardId;
   final StudyGrade grade;
   final DateTime reviewedAt;
+  final int version;
+  final DateTime? deletedAt;
+
+  bool get isDeleted => deletedAt != null;
+
+  /// The tombstone for this row, one version above it.
+  StudyReviewLog deleted() => StudyReviewLog(
+    id: id,
+    cardId: cardId,
+    grade: grade,
+    reviewedAt: reviewedAt,
+    version: version + 1,
+    deletedAt: utcNow(),
+  );
+
+  /// This row live again at [version], undoing [deleted].
+  StudyReviewLog restored({required int version}) => StudyReviewLog(
+    id: id,
+    cardId: cardId,
+    grade: grade,
+    reviewedAt: reviewedAt,
+    version: version,
+  );
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'cardId': cardId,
     'grade': grade.name,
     'reviewedAt': reviewedAt.toUtc().toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toUtc().toIso8601String(),
   };
 
   factory StudyReviewLog.fromJson(Map<String, dynamic> json) {
@@ -260,6 +296,10 @@ class StudyReviewLog {
       cardId: json['cardId'] as String,
       grade: StudyGrade.values.byName(json['grade'] as String? ?? 'good'),
       reviewedAt: DateTime.parse(json['reviewedAt'] as String).toUtc(),
+      version: json['version'] as int? ?? 0,
+      deletedAt: json['deletedAt'] != null
+          ? DateTime.parse(json['deletedAt'] as String).toUtc()
+          : null,
     );
   }
 }

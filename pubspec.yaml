@@ -36,6 +36,18 @@ dependencies:
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
   flutter_math_fork: ^0.7.4
+  # Held at 13.4.3, not the latest. 13.4.4 declares
+  # `firebase_core_platform_interface: ^7.1.0` but its code extends
+  # `FirebasePlugin`, a symbol that only exists from 8.0.0 — so it resolves
+  # cleanly and then fails to compile. 13.4.5+ fix the constraint but require
+  # firebase_core_platform_interface 8.x, which would drag cloud_firestore,
+  # cloud_functions and firebase_auth up with it — and firebase_auth is the
+  # locally patched fork in third_party/. Revisit together with that fork.
+  firebase_storage: 13.4.3
+  image: ^4.3.0
+  super_clipboard: ^0.9.1
+  super_drag_and_drop: ^0.9.1
+  crypto: ^3.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter

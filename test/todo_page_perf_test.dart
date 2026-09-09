@@ -27,16 +27,22 @@ library;
 //                 *layouts*, not rebuilds: the reveal deliberately never
 //                 rebuilds the task list, and animating the list's width is
 //                 purely a relayout cost that rebuild counts cannot see.
+//   * `search step` - one Enter in the list search bar, walking to the next
+//                 match. Reported twice: a discrete press (the panel follows
+//                 it) and a press inside a held walk (the panel holds, so
+//                 only the ring and the scroll move).
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
+import 'package:voyager/features/todo/todo_list_search_bar.dart';
 import 'package:voyager/features/todo/todo_page.dart';
 
 import 'support/todo_page_harness.dart';
@@ -128,6 +134,62 @@ Future<int> _scrollFrameCost(WidgetTester tester) async {
   }
   counts.sort();
   return counts[counts.length ~/ 2];
+}
+
+/// Widgets rebuilt by one Enter in the list search bar.
+///
+/// Returns both halves of the walk: a `discrete` press, which moves the edit
+/// panel onto the match, and a `held` one arriving inside the walk window,
+/// where the panel deliberately stays put (see `_armPanelFollow`) and only the
+/// active-match ring and the scroll move.
+Future<({int discrete, int held})> _searchStepCost(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.pump();
+  await tester.enterText(
+    find.descendant(
+      of: find.byType(TodoListSearchBar),
+      matching: find.byType(TextField),
+    ),
+    'Task 1',
+  );
+  await tester.pump(const Duration(milliseconds: 200));
+  await tester.pumpAndSettle();
+
+  Future<void> step() async {
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    // The step's own frame, then the frame its post-frame work lands in.
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+
+  // Warm up: the first step is the one that opens the panel at all.
+  await step();
+  await tester.pumpAndSettle();
+
+  final discrete = <int>[];
+  for (var i = 0; i < 6; i++) {
+    discrete.add(await _countRebuilds(step));
+    // Settling puts the walk window behind us, so the next step is discrete.
+    await tester.pumpAndSettle();
+  }
+
+  final held = <int>[];
+  for (var i = 0; i < 8; i++) {
+    held.add(await _countRebuilds(step));
+  }
+  await tester.pumpAndSettle();
+  // The first of the burst is still a discrete press; the rest are held.
+  held.removeAt(0);
+
+  discrete.sort();
+  held.sort();
+  return (
+    discrete: discrete[discrete.length ~/ 2],
+    held: held[held.length ~/ 2],
+  );
 }
 
 /// Render objects laid out by one steady-state frame of the edit panel's
@@ -248,9 +310,11 @@ void main() {
         final rebuild = await _rebuildCost(tester);
         final hover = await _hoverStepCost(tester);
         final scroll = await _scrollFrameCost(tester);
+        final search = await _searchStepCost(tester);
         debugPrint(
           '[perf] $label $state '
-          'rebuild=$rebuild  hover=$hover  scrollframe=$scroll',
+          'rebuild=$rebuild  hover=$hover  scrollframe=$scroll  '
+          'searchstep=${search.discrete}/${search.held}',
         );
       });
     }

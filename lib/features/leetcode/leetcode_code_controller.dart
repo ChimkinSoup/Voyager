@@ -14,6 +14,15 @@ List<CodeModifier> leetCodeCodeModifiers() => [
         if (modifier is! CloseBlockModifier) modifier,
     ];
 
+/// One press of Tab, one level of indent.
+///
+/// [EditorParams] defaults to 2, which is half a level everywhere this editor
+/// is used: every scratch-pad starter template is written at four, as is the
+/// LeetCode boilerplate the pads are filled from. Tab has to move by the same
+/// amount the code around it is already indented by, or indenting a line takes
+/// two presses and outdenting it takes two more.
+const kLeetCodeEditorParams = EditorParams(tabSpaces: 4);
+
 /// [CodeController] with correct `}` outdent, Enter-between-braces splitting,
 /// VS Code's auto-close/overtype/surround rules, and no broken
 /// [CloseBlockModifier].
@@ -21,7 +30,7 @@ class LeetCodeCodeController extends CodeController {
   LeetCodeCodeController({
     String? text,
     super.language,
-    super.params,
+    super.params = kLeetCodeEditorParams,
   }) : super(
           text: text == null ? null : normalizeNewlines(text),
           modifiers: leetCodeCodeModifiers(),
@@ -81,6 +90,16 @@ TextEditingValue? applyLeetCodeCodeEdits({
   required TextEditingValue incoming,
   required int tabSpaces,
 }) {
+  // A value that carries the same text is a selection move, not an edit —
+  // a click, a drag, an arrow key. It has to bail out here rather than in the
+  // individual rules, because collapsing a one-character selection onto its
+  // right edge satisfies every check [_typedOverSelection] makes: the text is
+  // one character longer than the selection it "replaced", the caret is at
+  // `start + 1`, and both sides are unchanged. That is indistinguishable from
+  // typing the selected character over itself, so double-clicking a lone `{`
+  // and then clicking to its right read as a surround and wrote `{{}`.
+  if (incoming.text == current.text) return null;
+
   final closed = _smartCloseBrace(
     current: current,
     incoming: incoming,
@@ -106,6 +125,13 @@ TextEditingValue? applyLeetCodeCodeEdits({
 
   final emptied = _deleteEmptyPair(current: current, incoming: incoming);
   if (emptied != null) return emptied;
+
+  final outdented = _outdentBackspace(
+    current: current,
+    incoming: incoming,
+    tabSpaces: tabSpaces,
+  );
+  if (outdented != null) return outdented;
 
   return null;
 }
@@ -413,6 +439,41 @@ TextEditingValue? _deleteEmptyPair({
   return TextEditingValue(
     text: text.replaceRange(at - 1, at + 1, ''),
     selection: TextSelection.collapsed(offset: at - 1),
+  );
+}
+
+/// Backspace inside a line's leading indent deletes back to the previous tab
+/// stop, so one press takes the whole level Tab put there instead of leaving
+/// three quarters of it behind.
+///
+/// Only inside the indent: a space between two words is still one character,
+/// and so is a caret already sitting on a tab stop's first space.
+TextEditingValue? _outdentBackspace({
+  required TextEditingValue current,
+  required TextEditingValue incoming,
+  required int tabSpaces,
+}) {
+  final backspace = _singleBackspace(current, incoming);
+  if (backspace == null) return null;
+
+  final text = current.text;
+  final at = backspace.at;
+  final lineStart = _lineStart(text, at);
+  final column = at - lineStart;
+  if (column == 0 || !_isSpacesOnly(text.substring(lineStart, at))) {
+    return null;
+  }
+
+  // The tab stop *below* the caret, never the one it may already be on.
+  final target = ((column - 1) ~/ tabSpaces) * tabSpaces;
+  // One space to give back is what a plain backspace already does; letting it
+  // through keeps this off the rewrite path for the commonest keystroke there
+  // is.
+  if (target == column - 1) return null;
+
+  return TextEditingValue(
+    text: text.replaceRange(lineStart + target, at, ''),
+    selection: TextSelection.collapsed(offset: lineStart + target),
   );
 }
 

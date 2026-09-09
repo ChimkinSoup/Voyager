@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/text/prose_editing_controller.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
@@ -176,40 +178,43 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
 
   FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
 
+  /// This note is a multiline prose body, so emphasis is always on here — the
+  /// field is built from a raw [TextField] rather than one of the shared
+  /// widgets, so it does its own wrapping (EMPHASIS_FORMATTING.md §5.2).
+  late ProseEditingController _prose;
+
   @override
   void initState() {
     super.initState();
     if (widget.focusNode == null) {
       _ownedFocusNode = FocusNode();
     }
-    widget.controller.addListener(_forceSpellCheck);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
+    _prose = ProseEditingController(
+      source: widget.controller,
+      focusNode: _focusNode,
+    );
   }
 
   @override
   void didUpdateWidget(covariant _StickyNoteContents oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_forceSpellCheck);
-      widget.controller.addListener(_forceSpellCheck);
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.focusNode != widget.focusNode) {
+      _prose.dispose();
+      _prose = ProseEditingController(
+        source: widget.controller,
+        focusNode: _focusNode,
+      );
     }
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_forceSpellCheck);
+    // Before the focus node it listens to, and never the caller's controller.
+    _prose.dispose();
     _ownedFocusNode?.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _forceSpellCheck() {
-    if (!mounted) return;
-    forceSpellCheckDisplay(
-      context: context,
-      fieldKey: _fieldKey,
-      focusNode: _focusNode,
-    );
   }
 
   @override
@@ -218,6 +223,11 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
     final textStyle = withSquiggleRoom(
       theme.textTheme.bodySmall ?? const TextStyle(),
     );
+    final emphasisTheme = ProseEmphasisTheme.of(
+      theme.colorScheme,
+      theme.colorScheme.primary,
+    );
+    _prose.emphasis = emphasisTheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
       child: Column(
@@ -252,6 +262,7 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                 enabled: VimEnabledScope.of(context) && vimSuitsField(),
                 controller: widget.controller,
                 multiline: true,
+                proseEmphasis: true,
                 builder: (context, vim) {
                   const hintText =
                       'Jot a quick note to jog your memory later...';
@@ -264,8 +275,11 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                   return VimOverlayHost(
                     session: vim.session,
               snippetSession: vim.snippetSession,
+              autocorrectSession: vim.autocorrectSession,
                     overlayPaintsSelection: vim.overlayPaintsSelection,
-                    controller: widget.controller,
+                    spanBuilder: _prose.overlaySpan,
+                    highlightFill: emphasisTheme.highlightColor,
+                    controller: _prose,
                     focusNode: _focusNode,
                     style: textStyle,
                     accentColor: theme.colorScheme.primary,
@@ -274,7 +288,8 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                     hintText: hintText,
                     fit: StackFit.expand,
                     underlay: SpellCheckSquiggleLayer(
-                      controller: widget.controller,
+                      spanBuilder: _prose.overlaySpan,
+                      controller: _prose,
                       focusNode: _focusNode,
                       style: textStyle,
                       scrollController: _scrollController,
@@ -284,7 +299,7 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                       fieldKey: _fieldKey,
                       child: TextField(
                         key: _fieldKey,
-                        controller: widget.controller,
+                        controller: _prose,
                         focusNode: _focusNode,
                         scrollController: _scrollController,
                         onChanged: widget.onChanged,
@@ -299,12 +314,11 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                         contextMenuBuilder: voyagerTextContextMenuBuilder(
                           context,
                           snippetsAllowed: vim.snippetsAllowed,
+                          spellcheckAllowed: true,
+                          autocorrectSession: vim.autocorrectSession,
                         ),
                         spellCheckConfiguration:
-                            buildVoyagerSpellCheckConfiguration(
-                              context,
-                              snippetsAllowed: vim.snippetsAllowed,
-                            ),
+                            const SpellCheckConfiguration.disabled(),
                         textAlignVertical: TextAlignVertical.top,
                         style: textStyle,
                         decoration: InputDecoration(

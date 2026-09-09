@@ -7,9 +7,9 @@ Accepted design (pre-implementation). Captures product decisions from the media 
 ## Goals
 
 - Add first-class image support via a **shared media module**, not feature-specific upload code.
-- Surfaces in v1: **Journal** (inline), **Todo** (main tasks only, gallery strip), **Study** (inline on front/back; not LeetCode), and a future **Rankings** page (gallery only — e.g. restaurant food photos).
+- Surfaces in v1: **Journal** (gallery, shown as a corner fan on the body — and on the Search page's entry dialog, which edits the same entry), **Todo** (main tasks only, gallery strip), **Study** (a gallery per card face — `front` / `back`; not LeetCode), and a future **Rankings** page (gallery only — e.g. restaurant food photos).
 - Images sync across devices with offline queueing; devices download bytes so content remains usable offline after the last successful sync.
-- Paste (`Ctrl`/`Cmd+V`), drag-and-drop, and (galleries only) file picker — no camera.
+- Paste (`Ctrl`/`Cmd+V`), drag-and-drop, and file picker — no camera.
 - Full-screen / lightbox viewer with zoom and ordered swipe.
 - Import/export of all app data includes image binaries.
 - User settings for remote upload, background offline prefetch, and on-demand remote download, plus low-disk warning.
@@ -21,7 +21,7 @@ Accepted design (pre-implementation). Captures product decisions from the media 
 - Rotate-before-save
 - Camera capture
 - GIF support
-- Images on todo subtasks, todo notes (inline), LeetCode, or journal attachment galleries
+- Images on todo subtasks, todo notes, or LeetCode
 - Max image count per parent
 
 ---
@@ -31,8 +31,7 @@ Accepted design (pre-implementation). Captures product decisions from the media 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Features (journal / todo / study / rankings)                │
-│  - Inline embed renderer + paste hooks                      │
-│  - Gallery strip widget                                     │
+│  - Gallery strip / fan / card-face widgets + paste hooks     │
 │  - Lightbox entry points                                    │
 └───────────────────────────┬─────────────────────────────────┘
                             │ owner: (collection, documentId[, facet])
@@ -58,13 +57,13 @@ Accepted design (pre-implementation). Captures product decisions from the media 
 
 **Firebase Storage note:** Storage objects have paths and (optional) download URLs. Voyager **must not** persist ephemeral download URLs as the source of truth. Persist a stable **`mediaId`** (and content `hash`). Clients resolve local path first, then Storage path `users/{uid}/media/{hash}` when remote I/O is allowed.
 
-Embed syntax (Obsidian-like) uses the media id, not a URL:
+Nothing about an image's placement is written into the parent's prose: a
+`MediaReference` row *is* the placement, everywhere.
 
-```text
-![[media:<mediaId>|<widthPx>]]
-```
-
-Example: `![[media:a1b2c3d4|480]]`
+> **Removed:** study cards once embedded images as `![[media:<mediaId>|<widthPx>]]`
+> tokens inside their own text. Inline images are gone from the app entirely
+> (see STUDY_IMAGES.md); tokens left in old card text render as nothing, and no
+> new ones are ever written.
 
 ---
 
@@ -72,12 +71,13 @@ Example: `![[media:a1b2c3d4|480]]`
 
 | Surface | Placement | Paste / DnD | File picker |
 |---|---|---|---|
-| Journal body | Inline at caret (text above/below) | Yes | No |
+| Journal body | Fan in the body's bottom-right corner | Yes | No |
 | Journal title | Text only | Text only; image-only clipboard → no-op | — |
+| Search result's entry dialog | Same fan, same entry | Yes | No |
 | Todo main task | Gallery strip on edit panel | Onto strip / panel (not into notes) | Yes |
 | Todo notes / title / subtasks | No images | Text only; image-only → no-op | — |
-| Study card front / back | Inline in that side’s text | Yes when that field focused | No |
-| Rankings (future) | Gallery only (not inline) | Onto gallery | Yes |
+| Study card front / back | Gallery per face (`front` / `back` facet) | Yes when that side’s field focused | Yes |
+| Rankings (future) | Gallery | Onto gallery | Yes |
 
 ### Clipboard rules
 
@@ -85,17 +85,30 @@ Example: `![[media:a1b2c3d4|480]]`
 |---|---|---|
 | Image-capable field | Text | Paste text |
 | Image-capable field | Image | Paste / insert image |
-| Image-capable field | Text + image | Paste **both** (text + image embed / gallery add) |
+| Image-capable field | Text + image | Paste **both** (text at the caret, image onto the gallery) |
 | Non-image field | Text or text+image | Paste **text only** |
 | Non-image field | Image only | **No-op** |
 | Nothing relevant focused | Any | **Ignore** |
 
-### Inline vs gallery
+### Gallery presentations
 
-- **Inline:** embed token in text; rendered as a block image at the token’s position; width from `|widthPx`.
-- **Gallery:** ordered list of `MediaReference`s on the parent; strip UI; no file-picker clutter in inline editors.
+Every surface uses the same model — an ordered list of `MediaReference`s on the
+parent — and differs only in how it is drawn:
 
-The media module supports both modes; each feature opts into one.
+- **Strip:** todo's edit panel, and each side of the study card editor.
+  Thumbnails, drag to reorder, remove, attach.
+- **Fan:** the journal. A stacked corner thumbnail for a surface that is mostly
+  text.
+- **Card face:** study's session, cram and editor preview. Image region on top,
+  text underneath, browsed with arrows and dots (STUDY_IMAGES.md).
+
+Both features that once put images *inside* an editable paragraph have moved off
+it. An image inside an `EditableText` is drawn over transparent glyphs, so
+selecting it selects text rather than a picture, and the size and replace chrome
+it is supposed to carry has nothing to hang off; every layer stacked over the
+field also had to reserve the identical line height or drift out of alignment
+with it. The cost, which was accepted: an entry's or a card face's images are a
+set, not a sequence interleaved with the writing.
 
 ---
 
@@ -107,7 +120,7 @@ One row per unique content hash per user account (local DB; mirrored metadata in
 
 | Field | Notes |
 |---|---|
-| `id` (`mediaId`) | Stable UUID used in embeds and refs |
+| `id` (`mediaId`) | Stable UUID quoted by references |
 | `contentHash` | Hash of **post-ingest** bytes (after HEIC convert + compress) |
 | `localPath` | Device-relative path under app media dir |
 | `byteSize` | Post-ingest size |
@@ -129,17 +142,17 @@ One row per unique content hash per user account (local DB; mirrored metadata in
 | `mediaId` | → `MediaAsset` |
 | `collection` | e.g. `journalEntries`, `todoTasks`, `studyCards`, `rankings` |
 | `documentId` | Parent entity id |
-| `facet` | Optional: `front` \| `back` \| `gallery` \| `inline` |
+| `facet` | Optional: `front` \| `back` \| `gallery` |
 | `sortOrder` | Gallery / swipe order |
-| `displayWidthPx` | For gallery items; inline width lives in the embed token |
+| `displayWidthPx` | For gallery items, where the surface offers a width control |
 | `createdAt` / `deletedAt` | Soft-delete with parent or when unreferenced |
 
-Inline embeds in text are the **canonical** placement for journal/study; references still exist so sync, GC, swipe order, and progress badges have a structured index. Creating an inline embed creates/updates a reference; removing the last embed/ref starts unreferenced retention.
+The reference row is the placement everywhere, which is what gives sync, GC, swipe order and progress badges a structured index without parsing prose. Removing the last reference to an asset starts its unreferenced retention.
 
 ### Parent documents
 
-- **Journal / study:** body (or front/back) may contain `![[media:…\|width]]` tokens. CRDT/text sync carries tokens like any other characters; binary bytes sync via the media pipeline.
-- **Todo / rankings:** no inline tokens; gallery = reference list only.
+- **Study:** two galleries per card, `facet = front` and `facet = back`, both keyed on the card id. `frontText` / `backText` hold prose and LaTeX only.
+- **Journal / todo / rankings:** one gallery per parent; reference list only.
 
 ---
 
@@ -150,25 +163,20 @@ Inline embeds in text are the **canonical** placement for journal/study; referen
 3. Allowed inputs: **PNG, JPEG, WebP, HEIC**. **No GIF.**
 4. **HEIC → JPEG** on ingest; do not keep the HEIC original.
 5. **Auto compress / downscale** to a sensible max dimension (implementation detail; target: good quality on phone + desktop, stay under 10 MB post-ingest).
-6. Hash post-ingest bytes → dedupe → write local file → create/reuse `MediaAsset` → create `MediaReference` → insert embed or append to gallery.
+6. Hash post-ingest bytes → dedupe → write local file → create/reuse `MediaAsset` → create `MediaReference` appended to the target gallery.
 7. If **remote upload** setting is on → enqueue upload. If off → `uploadState = localOnly` forever (until setting enabled and a future re-queue policy is run — v1: new/queued uploads only while setting is on; local-only assets stay local unless user re-enables and triggers sync repair).
 
-### Display width
+### Fan (journal)
 
-- Default: `min(imageWidth, 480)` px.
-- User-resizable via `|widthPx` token and/or hover chrome.
-- Hard cap: `min(editorWidth, 1200)` px.
-
-### Inline image chrome
-
-- Hover (pointer) shows a **small control icon** top-right on the image.
-- Click opens an editor for image aspects (at least: width; **replace image** keeping position / width when possible).
-- `|widthPx` remains editable in source text where the editor exposes raw text.
+- Up to **3** cards, fanned from the body's bottom-right corner, floating over the text; a `+N` badge carries the rest. No cap on how many images an entry holds.
+- Hidden entirely until the entry has an image.
+- The whole stack is one control: it opens the lightbox on the entry's images, in order, where they are looked through and **removed**.
+- The Search page's result dialog carries the identical fan on its own body field. It is the same entry, so an entry must not gain or lose pictures depending on which page it was opened from.
 
 ### Replace image
 
 - Picks/ingests a new blob (or reuses deduped asset).
-- Keeps embed position and display width when replacing inline; keeps gallery slot and width when replacing in a strip.
+- Keeps the gallery slot and width.
 
 ---
 
@@ -178,7 +186,7 @@ Inline embeds in text are the **canonical** placement for journal/study; referen
 
 - Independent of Firestore document outbox (`PendingUploadsTable`), but drained on the same connectivity lifecycle.
 - Persist pending uploads locally; retry with backoff; surface **progress** and **pending sync** badges on the image / parent.
-- Metadata (asset row + references + embed tokens in parent docs) still syncs through existing document sync so other devices learn that an image exists.
+- Metadata (asset rows + references) still syncs through existing document sync so other devices learn that an image exists.
 
 ### Download / prefetch
 
@@ -186,7 +194,7 @@ Default product intent: **all images for all synced docs** end up local after sy
 
 | Setting | Effect |
 |---|---|
-| **Remote image uploads** | Off → never upload; images stay **device-local forever**. Other devices may see embeds/refs but cannot obtain bytes from this device’s cloud path. |
+| **Remote image uploads** | Off → never upload; images stay **device-local forever**. Other devices may see the references but cannot obtain bytes from this device’s cloud path. |
 | **Background offline prefetch** | Off → do not proactively download all remote images after doc sync. On → after learning new remote assets, enqueue downloads for missing locals. |
 | **Remote image downloads** | Off → never download image bytes (prefetch and on-demand). Missing local → **“Download disabled”** empty state (not an infinite spinner). On → allow downloads. |
 
@@ -209,7 +217,7 @@ Align with `softDeleteRetentionDays` (**30**).
 | Event | Behavior |
 |---|---|
 | Soft-delete parent (entry / task / card / ranking item) | Soft-delete its media references; assets become unreferenced when refcount hits 0 |
-| Remove embed / remove from gallery | Drop reference; if unreferenced, mark asset soft-deleted (or `unreferencedAt`) |
+| Remove from gallery | Drop reference; if unreferenced, mark asset soft-deleted (or `unreferencedAt`) |
 | 30 days after soft-delete | **Permanent** delete locally + remote Storage object (when uploads were used) on all devices that learn the purge |
 | Parent + images | Same clock: journal page and its images purge together after 30 days |
 
@@ -223,7 +231,8 @@ Unreferenced files are **not** deleted immediately; they follow the **30-day** u
 
 - Dimmed scrim; image centered; zoom in/out (pinch / scroll / controls as platform-appropriate).
 - Tap outside or Esc closes.
-- **Swipe:** ordered by parent’s image list (inline order in document + gallery order as applicable). Opening image **B** in `[A,B,C]` starts on B; swipe left → A, right → C.
+- **Swipe:** ordered by the parent’s gallery (`sortOrder`). Opening image **B** in `[A,B,C]` starts on B; swipe left → A, right → C. Driven by dragging the picture itself (mouse included) or by the arrow keys; a magnified image keeps the drag for its own panning.
+- The neighbouring image is read and decoded while the viewer is standing still, so it is a picture the moment the slide starts rather than one that arrives after it. Only the neighbour: a viewer opened on forty images must not read forty files.
 - Actions: **Copy image**, **Save as…**.
 
 ### Progress / badges
@@ -250,16 +259,16 @@ Unreferenced files are **not** deleted immediately; they follow the **30-day** u
 ## Import / export
 
 - Full app data export **includes image binaries** (and media metadata / references).
-- Import restores binaries + refs + embed tokens so images round-trip.
+- Import restores binaries + references so images round-trip.
 - Same rules apply for all features that use the media module (journal, todo, study, rankings when present).
 
 ---
 
 ## Modular integration checklist (adding images to a new page)
 
-1. Choose mode: **inline**, **gallery**, or (rarely) both — rankings = gallery only.
-2. Pass `collection` + `documentId` (+ `facet` if needed) into shared widgets/services.
-3. Wire paste/DnD only on image-capable foci; add file picker only for galleries.
+1. Pass `collection` + `documentId` (+ `facet` when the parent has more than one gallery) into the shared widgets/services.
+2. Pick a presentation: strip, fan, or card face.
+3. Wire paste/DnD only on image-capable foci.
 4. Ensure parent soft-delete / export paths include media refs (usually automatic if GC is refcount-based and export walks `MediaReference`).
 5. No new Storage or queue code in the feature module.
 
@@ -290,9 +299,10 @@ Unreferenced files are **not** deleted immediately; they follow the **30-day** u
 
 ## Explicitly deferred
 
-- Thumbnails in lists/decks
+- Inline images anywhere in the app (removed — see STUDY_IMAGES.md)
+- Thumbnails in lists (study's deck grid does show the image of a face that has no text)
 - Captions / alt text
 - Rotate on ingest
 - Camera
 - GIF
-- Journal under-entry gallery
+- Journal gallery laid out under the entry (the fan in the body's corner is what shipped)

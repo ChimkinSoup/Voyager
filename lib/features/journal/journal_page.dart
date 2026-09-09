@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:intl/intl.dart';
+import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 
@@ -18,6 +19,10 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/compact_back_bar.dart';
 import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/media/widgets/media_drop_target.dart';
+import 'package:voyager/core/media/widgets/media_fan_stack.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
@@ -45,7 +50,7 @@ import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/mood_gradient_slider.dart';
 import 'package:voyager/core/widgets/resizable_pane_divider.dart';
-import 'package:voyager/core/widgets/rounded_dropdown.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -54,8 +59,8 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
-import 'package:voyager/features/journal/journal_list_actions.dart';
-import 'package:voyager/features/journal/journal_settings_dialog.dart';
+import 'package:voyager/features/journal/journal_entry_delete.dart';
+import 'package:voyager/features/journal/journal_manage_sheet.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
@@ -89,9 +94,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   String _journalFilter = legacyJournalId;
   var _viewAllJournals = false;
-  final _optimisticallyHiddenJournalIds = <String>{};
   final _optimisticallyHiddenEntryIds = <String>{};
-  Journal? _pendingJournal;
   final _pendingEntries = <String, JournalEntry>{};
   final _pendingEntryIds = <String>[];
   final _entryListScrollController = ScrollController();
@@ -259,40 +262,23 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     }
   }
 
-  Future<void> _toggleViewAllJournals(List<Journal> displayJournals) async {
-    _logJournal(
-      'TOGGLE_VIEW_ALL',
-      details: 'currentlyViewAll=$_viewAllJournals',
-    );
-    if (_viewAllJournals) {
-      final journalId = _selectedEntry?.journalId;
-      if (journalId != null && displayJournals.any((j) => j.id == journalId)) {
-        await ref.read(journalListEntriesProvider(journalId).future);
-        if (!mounted) return;
-      }
-      setState(() {
-        if (journalId != null &&
-            displayJournals.any((j) => j.id == journalId)) {
-          _journalFilter = journalId;
-        }
-        _viewAllJournals = false;
-      });
-      unawaited(_persistShowAllJournals(false));
-      if (journalId != null && displayJournals.any((j) => j.id == journalId)) {
-        unawaited(_persistLastViewedJournal(journalId));
-      }
-      return;
-    }
-
+  /// Turns the all-journals view on.
+  ///
+  /// The reverse trip is a journal row in the same popover, which goes through
+  /// [_selectJournal]; there is no toggle to press twice any more.
+  ///
+  /// Only the view flag is written here: [_journalFilter] deliberately stays on
+  /// the journal that was open, and it is what new entries created from this
+  /// view are filed under.
+  Future<void> _selectAllJournals() async {
+    _logJournal('SELECT_ALL_JOURNALS');
+    if (_viewAllJournals) return;
     await ref.read(journalListEntriesProvider(allJournalEntriesScope).future);
     if (!mounted) return;
     setState(() {
       _optimisticallyHiddenEntryIds.clear();
       _viewAllJournals = true;
     });
-    // Only the view flag is written here: _journalFilter deliberately stays on
-    // the journal that was open, and it is what new entries created from this
-    // view are filed under.
     unawaited(_persistShowAllJournals(true));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -608,145 +594,50 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     unawaited(_persistEntryListWidth(settled));
   }
 
-  void _applyJournalDeletedUiState(
-    String journalId,
-    List<Journal> allJournals,
-  ) {
-    _optimisticallyHiddenJournalIds.add(journalId);
-    if (_pendingJournal?.id == journalId) {
-      _pendingJournal = null;
-    }
-    _pendingEntries.removeWhere((_, entry) => entry.journalId == journalId);
-    _pendingEntryIds.removeWhere((id) => !_pendingEntries.containsKey(id));
-    final remaining = allJournals.where((j) => j.id != journalId).toList();
-    // Falls back to a concrete journal and leaves the all-view alone, matching
-    // the todo page's list deletion. Switching the view mode out from under a
-    // delete is a second, unasked-for change of context.
-    _journalFilter =
-        remaining
-            .cast<Journal?>()
-            .firstWhere(
-              (j) => j!.id == legacyJournalId,
-              orElse: () => remaining.isNotEmpty ? remaining.first : null,
-            )
-            ?.id ??
-        legacyJournalId;
-    unawaited(_persistLastViewedJournal(_journalFilter));
-    _clearEntryFields();
-  }
-
-  void _revertJournalDeletedUiState(String journalId) {
-    _optimisticallyHiddenJournalIds.remove(journalId);
-  }
-
-  Future<void> _createJournalFromDropdown() async {
-    final created = await createJournalList(context, ref);
-    if (!mounted || created == null) return;
-    await ref.read(journalsProvider.future);
-    if (!mounted) return;
-    setState(() {
-      _journalFilter = created.id;
-      _viewAllJournals = false;
-    });
-    unawaited(_persistLastViewedJournal(created.id));
-    unawaited(_persistShowAllJournals(false));
-  }
-
-  Future<void> _handleJournalManage(
-    String journalId,
-    VoyagerMenuCatalogEntry action,
-    List<Journal> allJournals,
-    Map<String, int> entryCounts,
-  ) async {
-    final journal = allJournals.firstWhere((j) => j.id == journalId);
-    switch (action) {
-      case VoyagerMenuCatalogEntry.rename:
-        await renameJournalList(context, ref, journal);
-        await _refreshPendingJournal(journalId);
-      case VoyagerMenuCatalogEntry.changeColor:
-        await changeJournalListColor(context, ref, journal, allJournals);
-        await _refreshPendingJournal(journalId);
-      case VoyagerMenuCatalogEntry.settings:
-        await showJournalSettingsDialog(context, ref, journal);
-        await _refreshPendingJournal(journalId);
-      case VoyagerMenuCatalogEntry.delete:
-        final deleted = await deleteJournalList(
-          context,
-          ref,
-          journal: journal,
-          allJournals: allJournals,
-          entryCount: entryCounts[journalId] ?? 0,
-          onConfirmed: () {
-            if (!mounted) return;
-            setState(() => _applyJournalDeletedUiState(journalId, allJournals));
-          },
-          onLocalDeleteFailed: () {
-            if (!mounted) return;
-            setState(() => _revertJournalDeletedUiState(journalId));
-          },
-        );
-        // Held until the provider has actually produced a list without the
-        // journal. `deleteJournalList` only *invalidates* — invalidation is
-        // synchronous, the refetch is not, and `journalsProvider` is a
-        // keepAlive future whose consumer skips the loading state, so the
-        // previous value (still carrying the deleted journal) is served for at
-        // least one more frame. Dropping the hide the instant it returned made
-        // the journal flash back into the dropdown; without a setState, for a
-        // number of frames that depended on unrelated activity.
-        if (deleted && mounted) {
-          final refreshed = await ref.read(journalsProvider.future);
-          if (!mounted) return;
-          final stillListed = refreshed.any(
-            (j) => j.id == journalId && j.deletedAt == null,
-          );
-          if (!stillListed) {
-            setState(() => _optimisticallyHiddenJournalIds.remove(journalId));
-          }
-        }
-      default:
-        break;
-    }
-  }
-
-  Future<void> _refreshPendingJournal(String journalId) async {
+  /// The gear beside the switcher: create, rename, recolour, configure and
+  /// delete journals, all in one dialog rather than a menu nested in the
+  /// picker.
+  Future<void> _openJournalManageSheet() async {
+    final createdId = await showJournalManageSheet(context, ref);
     if (!mounted) return;
     final journals = await ref.read(journalsProvider.future);
     if (!mounted) return;
-    final updated = journals.cast<Journal?>().firstWhere(
-      (j) => j!.id == journalId,
-      orElse: () => null,
-    );
-    if (updated == null) return;
-    setState(() => _pendingJournal = updated);
+    if (createdId != null) {
+      // Routed through [_selectJournal] rather than setting the filter here:
+      // a brand-new journal is empty, and only that path flushes the outgoing
+      // entry, clears the editor and opens a fresh entry in the journal now on
+      // screen. Setting the filter alone left the previous journal's entry
+      // sitting in the editor under the new journal's name.
+      await _selectJournal(createdId);
+      return;
+    }
+    // A journal may have been deleted out from under the page. Fall back to a
+    // concrete journal and leave the all-view alone, matching the todo page's
+    // list deletion — switching the view mode out from under a delete is a
+    // second, unasked-for change of context.
+    final live = journals.where((j) => j.deletedAt == null).toList();
+    if (live.any((j) => j.id == _journalFilter)) return;
+    final fallback =
+        live
+            .cast<Journal?>()
+            .firstWhere(
+              (j) => j!.id == legacyJournalId,
+              orElse: () => live.isNotEmpty ? live.first : null,
+            )
+            ?.id ??
+        legacyJournalId;
+    final liveIds = {for (final journal in live) journal.id};
+    setState(() {
+      _pendingEntries.removeWhere(
+        (_, entry) => !liveIds.contains(entry.journalId),
+      );
+      _pendingEntryIds.removeWhere((id) => !_pendingEntries.containsKey(id));
+    });
+    await _selectJournal(fallback);
   }
 
   List<Journal> _displayJournals(List<Journal> journals) {
-    final active = journals
-        .where(
-          (journal) =>
-              journal.deletedAt == null &&
-              !_optimisticallyHiddenJournalIds.contains(journal.id),
-        )
-        .toList();
-    final pending = _pendingJournal;
-    if (pending == null || pending.deletedAt != null) return active;
-    if (!active.any((journal) => journal.id == pending.id)) {
-      return [...active, pending];
-    }
-    return [
-      for (final journal in active)
-        journal.id == pending.id ? pending : journal,
-    ];
-  }
-
-  void _reconcilePendingJournal(List<Journal> journals) {
-    final pending = _pendingJournal;
-    if (pending == null) return;
-    if (!journals.any((journal) => journal.id == pending.id)) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _pendingJournal = null);
-    });
+    return journals.where((journal) => journal.deletedAt == null).toList();
   }
 
   /// Evicts entries from [_pendingEntries] that have been confirmed saved to the
@@ -809,8 +700,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final persisted = entries.where(
       (entry) =>
           !_pendingEntries.containsKey(entry.id) &&
-          !_optimisticallyHiddenEntryIds.contains(entry.id) &&
-          !_optimisticallyHiddenJournalIds.contains(entry.journalId),
+          !_optimisticallyHiddenEntryIds.contains(entry.id),
     );
     final pending = [
       for (final id in _pendingEntryIds)
@@ -1621,8 +1511,24 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return _saveMetadata(refreshList: refreshList);
   }
 
+  /// Enter/Tab out of the title: save it once, then move on to the body.
+  ///
+  /// Focus staying inside the same entry is deliberately *not* a commitment
+  /// point. Marking the metadata dirty here used to make the blur that follows
+  /// [FocusNode.requestFocus] fire [_handleTitleFocusChanged], so a single
+  /// keystroke started a second, concurrent flush of the same title *and* swept
+  /// every entry list with it — four keepAlive providers re-reading and
+  /// re-mapping the whole entry table, plus the tag pool refolding over it,
+  /// on the frame the key went down. That is the stutter Enter used to cause.
+  ///
+  /// Nothing that sweep reloads can have moved: a title-only save leaves the
+  /// list's sort (`entryDate`), the per-journal counts and the id set alone,
+  /// and tags come from the body, not the title. The row on screen is already
+  /// following the new title live through [_listTitlePreview], and the body's
+  /// own blur is the commitment point that refreshes the lists — it re-persists
+  /// the title on the way past. See [_refreshEntryLists].
   void _submitTitleAndFocusBody() {
-    _metadataDirty = true;
+    _metadataDirty = false;
     unawaited(_flushMetadataSave());
     _bodyFocusNode.requestFocus();
   }
@@ -1630,32 +1536,43 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
     final entry = _selectedEntry;
     if (entry == null) return;
-
-    _metadataSaveTimer?.cancel();
-    await _flushMetadataSave();
-    if (!mounted) return;
+    // Raised here rather than just before the popover: the flush and the
+    // journal read below run with nothing on screen, and a second press
+    // landing in that gap would stack a second picker on the first.
+    if (_isDatePickerOpen) return;
+    setState(() => _isDatePickerOpen = true);
 
     final repo = ref.read(journalRepositoryProvider);
-    final journal = await repo.getJournal(entry.journalId);
-    final accentColor = Color(
-      journal != null
-          ? _journalFlagColor(journal)
-          : Theme.of(context).colorScheme.primary.toARGB32(),
-    );
+    DateTime? pickedDt;
+    try {
+      _metadataSaveTimer?.cancel();
+      await _flushMetadataSave();
+      if (!mounted) return;
 
-    setState(() => _isDatePickerOpen = true);
-    final pickedDt = await showContextualPopover<DateTime>(
-      context: context,
-      buttonContext: buttonContext,
-      width: 500,
-      height: 380,
-      accentColor: accentColor,
-      builder: (ctx) => DateTimeSelectorPopover(
-        initialDateTime: entry.entryDate.toLocal(),
+      final journal = await repo.getJournal(entry.journalId);
+      final accentColor = Color(
+        journal != null
+            ? _journalFlagColor(journal)
+            : Theme.of(context).colorScheme.primary.toARGB32(),
+      );
+
+      pickedDt = await showContextualPopover<DateTime>(
+        context: context,
+        buttonContext: buttonContext,
+        width: 500,
+        height: 380,
         accentColor: accentColor,
-      ),
-    );
-    if (mounted) setState(() => _isDatePickerOpen = false);
+        builder: (ctx) => DateTimeSelectorPopover(
+          initialDateTime: entry.entryDate.toLocal(),
+          accentColor: accentColor,
+        ),
+      );
+    } finally {
+      // Left set by a throwing read or route, the date pill would render in
+      // its active state for the life of the page — and the button would
+      // never open again.
+      if (mounted) setState(() => _isDatePickerOpen = false);
+    }
     if (pickedDt == null) return;
 
     if (!mounted) return;
@@ -1718,7 +1635,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (!mounted || !_entryListScrollController.hasClients) return;
     final pos = _entryListScrollController.position;
 
-    if (attempt < 8 && target > pos.maxScrollExtent && pos.maxScrollExtent > 0) {
+    if (attempt < 8 &&
+        target > pos.maxScrollExtent &&
+        pos.maxScrollExtent > 0) {
       // Force layout by jumping to current max extent, then repeat next frame
       pos.jumpTo(pos.maxScrollExtent);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1753,17 +1672,66 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   /// back — resurrecting the entry everywhere. Reading the row back after
   /// [JournalRepository.softDeleteEntry] (which now bumps the version itself)
   /// keeps the pushed tombstone monotonic.
-  Future<void> _softDeleteAndPushTombstone(String entryId) async {
-    final repo = ref.read(journalRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    await repo.softDeleteEntry(entryId);
-    final tombstone = await repo.getEntry(entryId);
-    if (tombstone != null) remoteSync.pushJournalEntryNow(tombstone);
+  Future<JournalEntryDeletion?> _softDeleteAndPushTombstone(String entryId) {
+    // Shared with Search, which deletes the same rows and has to restore the
+    // same three things — see [softDeleteJournalEntry].
+    return softDeleteJournalEntry(
+      ProviderScope.containerOf(context, listen: false),
+      entryId,
+    );
+  }
+
+  /// Brings back an entry the toast's Undo was pressed for, and opens it.
+  ///
+  /// The database restore is only half of it. The list hides a deleted entry
+  /// optimistically ([_optimisticallyHiddenEntryIds]) so the row goes the
+  /// instant it is confirmed rather than a provider refresh later — and that
+  /// hide would outlive the restore, leaving the entry back on disk but still
+  /// invisible here.
+  ///
+  /// Opening it is the point of the undo: the delete moved the selection onto
+  /// whatever row took its place (see [_selectReplacementForRemovedEntry]), so
+  /// restoring without re-selecting would put the entry back into the list and
+  /// leave the editor on the wrong one.
+  Future<void> _undoEntryDelete(
+    ProviderContainer container,
+    JournalEntryDeletion deletion,
+  ) async {
+    try {
+      await restoreJournalEntry(container, deletion);
+    } finally {
+      // In a `finally` because the hide has to go however the restore ended.
+      // The build-time reconciliation only drops ids the provider has stopped
+      // returning, so an id left here for a row that *is* back is preserved
+      // deliberately — the entry would sit on disk, synced to every device,
+      // and invisible on this page until the next journal switch. Cleared
+      // unconditionally the list simply re-derives: back if the write landed,
+      // still gone if it did not.
+      if (mounted) {
+        setState(() => _optimisticallyHiddenEntryIds.remove(deletion.entry.id));
+        _invalidateJournalEntryCaches();
+      }
+    }
+    if (!mounted) return;
+    // Waited on before the entry is opened. [build]'s auto-select takes the
+    // selection over whenever the selected entry is not among the rows on
+    // screen, and the restored entry is not back among them until this future
+    // resolves — so selecting it any sooner is immediately undone, and the
+    // editor lands back on the replacement the delete had moved it to.
+    final scope = _entryListScope(ref.read(journalsProvider).valueOrNull);
+    await ref.read(journalListEntriesProvider(scope).future);
+    if (!mounted) return;
+    await _openEntry(deletion.entry.id);
   }
 
   Future<void> _deleteEntry() async {
     final entry = _selectedEntry;
     if (entry == null) return;
+    // Captured while this widget is certainly mounted: the toast that offers
+    // the undo outlives the row, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete entry?',
@@ -1773,12 +1741,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _logJournal('DELETE_ENTRY', details: 'id=${entry.id}');
     await _flushActiveEntryEdits(refreshList: false);
     if (!mounted) return;
-    await _softDeleteAndPushTombstone(entry.id);
+    final deletion = await _softDeleteAndPushTombstone(entry.id);
     if (!mounted) return;
     final emptied = _selectReplacementForRemovedEntry(entry);
     _removePendingEntry(entry.id);
     _invalidateJournalEntryCaches();
     if (emptied) _replaceEmptiedJournalEntry(entry);
+    if (deletion == null) return;
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(entry.title, fallback: 'entry'),
+      restore: () => _undoEntryDelete(container, deletion),
+    );
   }
 
   /// Hides [entry] from the list up front and moves the selection onto whatever
@@ -1841,6 +1815,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _deleteEntryItem(JournalEntry entry) async {
+    // See [_deleteEntry] on why both are captured before the delete.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete entry?',
@@ -1853,7 +1831,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       await _flushActiveEntryEdits(refreshList: false);
       if (!mounted) return;
     }
-    await _softDeleteAndPushTombstone(entry.id);
+    final deletion = await _softDeleteAndPushTombstone(entry.id);
     if (!mounted) return;
     var emptied = false;
     if (wasSelected) {
@@ -1864,6 +1842,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _removePendingEntry(entry.id);
     _invalidateJournalEntryCaches();
     if (emptied) _replaceEmptiedJournalEntry(entry);
+    if (deletion == null) return;
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(entry.title, fallback: 'entry'),
+      restore: () => _undoEntryDelete(container, deletion),
+    );
   }
 
   Future<void> _moveEntryItemToJournal(
@@ -2165,7 +2149,6 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }) {
     final entryCountsAsync = ref.watch(journalEntryCountsProvider);
     final allEntryIdsAsync = ref.watch(journalAllEntryIdsProvider);
-    _reconcilePendingJournal(journals);
     _reconcilePendingEntries(allEntryIdsAsync.valueOrNull ?? const {});
     final displayEntries = _buildDisplayEntries(entries);
     _reconcileSelectedEntryFromProvider(entries);
@@ -2460,79 +2443,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 padding: const EdgeInsets.all(
                                   _entryListHeaderPadding,
                                 ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: RoundedDropdown<String?>(
-                                        value: _viewAllJournals
-                                            ? null
-                                            : journalFilter,
-                                        displayLabel: _viewAllJournals
-                                            ? 'All journals'
-                                            : null,
-                                        labelColor: journalBarColor,
-                                        closedTrailing: _viewAllJournals
-                                            ? '${filtered.length}'
-                                            : '${entryCounts[journalFilter] ?? 0}',
-                                        onAddList: () => unawaited(
-                                          _createJournalFromDropdown(),
-                                        ),
-                                        addListLabel: 'Add journal',
-                                        manageMenuEntriesFor: (journalId) =>
-                                            journalId == legacyJournalId
-                                            ? defaultConfigurableManageMenuEntries
-                                            : configurableManageMenuEntries,
-                                        onManage: (journalId, action) =>
-                                            _handleJournalManage(
-                                              journalId!,
-                                              action,
-                                              displayJournals,
-                                              entryCounts,
-                                            ),
-                                        items: displayJournals
-                                            .map(
-                                              (j) => RoundedDropdownItem(
-                                                value: j.id,
-                                                label: j.name,
-                                                labelColor: Color(
-                                                  _journalFlagColor(j),
-                                                ),
-                                                trailing:
-                                                    '${entryCounts[j.id] ?? 0}',
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: displayJournals.isEmpty
-                                            ? null
-                                            : (v) {
-                                                if (v != null)
-                                                  unawaited(_selectJournal(v));
-                                              },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    IconButton(
-                                      tooltip: _viewAllJournals
-                                          ? 'Show selected journal only'
-                                          : 'Show all journals',
-                                      onPressed: displayJournals.isEmpty
-                                          ? null
-                                          : () => unawaited(
-                                              _toggleViewAllJournals(
-                                                displayJournals,
-                                              ),
-                                            ),
-                                      icon: Icon(
-                                        PhosphorIconsRegular
-                                            .listMagnifyingGlass,
-                                        color: _viewAllJournals
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.primary
-                                            : null,
-                                      ),
-                                    ),
-                                  ],
+                                child: _JournalScopeHeader(
+                                  journals: displayJournals,
+                                  entryCounts: entryCounts,
+                                  allEntriesCount: filtered.length,
+                                  selectedJournalId: journalFilter,
+                                  viewAllJournals: _viewAllJournals,
+                                  accent: journalBarColor,
+                                  flagColorOf: _journalFlagColor,
+                                  onSelectJournal: (id) =>
+                                      unawaited(_selectJournal(id)),
+                                  onSelectAllJournals: () =>
+                                      unawaited(_selectAllJournals()),
+                                  onManage: () =>
+                                      unawaited(_openJournalManageSheet()),
                                 ),
                               ),
                             ),
@@ -2644,105 +2568,123 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             // [_deleteEntry] and [_changeEntryDateAndTime]
                             // both return early with no selection, so the two
                             // live controls simply do nothing there.
-                            Row(
-                              children: [
-                                // With the mood bar hidden the slider's
-                                // Expanded goes with it, so a Spacer takes
-                                // over its stretch — otherwise the date pill
-                                // and trash slide left into the empty space
-                                // instead of staying where they always are.
-                                if (showMoodBar) ...[
-                                  Text(
-                                    'Mood',
-                                    style: TextStyle(color: accentColor),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: MoodGradientSlider(
-                                      value: _mood,
-                                      accent: accentColor,
-                                      onChanged: (value) {
+                            // Pinned to the mood slider's own height. The
+                            // slider is 48 tall and ignores visual density,
+                            // while every other control in the row is an
+                            // icon button that does not: on desktop those
+                            // shrink to 40, so hiding the mood bar took 8px
+                            // out of the row and slid the body box up with
+                            // it. The floor holds the row still whichever
+                            // toggles are off.
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minHeight: kMinInteractiveDimension,
+                              ),
+                              child: Row(
+                                children: [
+                                  // With the mood bar hidden the slider's
+                                  // Expanded goes with it, so a Spacer takes
+                                  // over its stretch — otherwise the date pill
+                                  // and trash slide left into the empty space
+                                  // instead of staying where they always are.
+                                  if (showMoodBar) ...[
+                                    Text(
+                                      'Mood',
+                                      style: TextStyle(color: accentColor),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: MoodGradientSlider(
+                                        value: _mood,
+                                        accent: accentColor,
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _mood = value;
+                                            _metadataDirty = true;
+                                          });
+                                          _scheduleMetadataSave();
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                  ] else
+                                    const Spacer(),
+                                  if (showWeatherPicker) ...[
+                                    PopupMenuButton<VoyagerMenuCatalogEntry>(
+                                      tooltip: 'Weather',
+                                      icon: Icon(
+                                        _weatherData(_weatherIcon),
+                                        color: accentColor,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 40,
+                                        minHeight: 40,
+                                      ),
+                                      onSelected: (entry) {
                                         setState(() {
-                                          _mood = value;
+                                          _weatherIcon = entry.weatherIconValue;
                                           _metadataDirty = true;
                                         });
                                         _scheduleMetadataSave();
                                       },
+                                      itemBuilder: (context) =>
+                                          buildCatalogMenu(
+                                            context,
+                                            from: weatherMenuEntries,
+                                          ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                ] else
-                                  const Spacer(),
-                                if (showWeatherPicker) ...[
-                                  PopupMenuButton<VoyagerMenuCatalogEntry>(
-                                    tooltip: 'Weather',
-                                    icon: Icon(
-                                      _weatherData(_weatherIcon),
-                                      color: accentColor,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 40,
-                                      minHeight: 40,
-                                    ),
-                                    onSelected: (entry) {
-                                      setState(() {
-                                        _weatherIcon = entry.weatherIconValue;
-                                        _metadataDirty = true;
-                                      });
-                                      _scheduleMetadataSave();
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Builder(
+                                    builder: (ctx) {
+                                      // Now, with nothing selected: the date a
+                                      // new entry would be filed under.
+                                      final date =
+                                          _selectedEntry?.entryDate.toLocal() ??
+                                          DateTime.now();
+                                      final label =
+                                          '${DateFormat.yMMMd().format(date)} at ${formatTime12Hour(date)}';
+                                      return SelectorPill(
+                                        dense: false,
+                                        ellipsize: false,
+                                        isActive: _isDatePickerOpen,
+                                        label: label,
+                                        accentColor: accentColor,
+                                        onTap: () =>
+                                            _changeEntryDateAndTime(ctx),
+                                      );
                                     },
-                                    itemBuilder: (context) => buildCatalogMenu(
-                                      context,
-                                      from: weatherMenuEntries,
-                                    ),
                                   ),
                                   const SizedBox(width: 8),
-                                ],
-                                Builder(
-                                  builder: (ctx) {
-                                    // Now, with nothing selected: the date a
-                                    // new entry would be filed under.
-                                    final date =
-                                        _selectedEntry?.entryDate.toLocal() ??
-                                        DateTime.now();
-                                    final label =
-                                        '${DateFormat.yMMMd().format(date)} at ${formatTime12Hour(date)}';
-                                    return SelectorPill(
-                                      dense: false,
-                                      ellipsize: false,
-                                      isActive: _isDatePickerOpen,
-                                      label: label,
-                                      accentColor: accentColor,
-                                      onTap: () => _changeEntryDateAndTime(ctx),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(width: 8),
-                                if (_selectedEntry != null &&
-                                    ref
-                                        .watch(devSettingsProvider)
-                                        .showJournalRemotePullButton) ...[
+                                  if (_selectedEntry != null &&
+                                      ref
+                                          .watch(devSettingsProvider)
+                                          .showJournalRemotePullButton) ...[
+                                    IconButton(
+                                      tooltip: 'Compare remote DB value',
+                                      onPressed: () =>
+                                          _pullAndCompareRemoteValue(
+                                            _selectedEntry!,
+                                          ),
+                                      icon: const Icon(
+                                        PhosphorIconsRegular.cloudArrowDown,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
                                   IconButton(
-                                    tooltip: 'Compare remote DB value',
-                                    onPressed: () => _pullAndCompareRemoteValue(
-                                      _selectedEntry!,
-                                    ),
-                                    icon: const Icon(
-                                      PhosphorIconsRegular.cloudArrowDown,
+                                    tooltip: 'Delete entry',
+                                    onPressed: _deleteEntry,
+                                    icon: Icon(
+                                      PhosphorIconsRegular.trash,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
                                 ],
-                                IconButton(
-                                  tooltip: 'Delete entry',
-                                  onPressed: _deleteEntry,
-                                  icon: Icon(
-                                    PhosphorIconsRegular.trash,
-                                    color: Theme.of(context).colorScheme.error,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                             const SizedBox(height: 12),
                             Expanded(
@@ -2865,18 +2807,14 @@ class _BrowseQuotesDialogState extends ConsumerState<_BrowseQuotesDialog> {
             const SizedBox(height: 12),
             Expanded(
               child: poolAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
-                error: (error, _) => Center(
-                  child: Text('Could not load quotes: $error'),
-                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) =>
+                    Center(child: Text('Could not load quotes: $error')),
                 data: (pool) {
                   final matches = needle.isEmpty
                       ? pool
                       : pool
-                            .where(
-                              (q) => q.text.toLowerCase().contains(needle),
-                            )
+                            .where((q) => q.text.toLowerCase().contains(needle))
                             .toList();
                   if (matches.isEmpty) {
                     return Center(
@@ -3358,35 +3296,87 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _remoteSync = ref.read(remoteSyncServiceProvider);
     _settingsRepo = ref.read(settingsRepositoryProvider);
 
-    return Listener(
-      onPointerDown: (_) => _handlePointerDown(),
-      child: TagHighlightedTextField(
-        controller: _controller,
-        focusNode: widget.focusNode,
-        tagScope: TagScope.journal,
-        onKeyEvent: _handleBodyKey,
-        readOnly: false,
-        expands: true,
-        keyboardType: TextInputType.multiline,
-        cursorColor: widget.accentColor,
-        onChanged: _handleChanged,
-        hintText: 'Start writing...',
-        // Vertical contentPadding frames the field's internal scrollable
-        // viewport rather than scrolling away with the text inside it, so a
-        // large value (the previous default of 16) left a permanent blank
-        // strip at the top/bottom whenever the body was scrolled, with the
-        // first/last visible line clipped right at its edge. Top and bottom
-        // are set apart rather than symmetrically: the top carries the breathing
-        // room the first line needs below the border, while the bottom stays
-        // small so the strip under a scrolled body remains imperceptible.
-        // Horizontal padding is unaffected since it isn't part of the
-        // scrollable axis.
-        contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-        decoration: const InputDecoration(
-          filled: false,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
+    return _withImages(
+      Listener(
+        onPointerDown: (_) => _handlePointerDown(),
+        child: TagHighlightedTextField(
+          controller: _controller,
+          focusNode: widget.focusNode,
+          tagScope: TagScope.journal,
+          onKeyEvent: _handleBodyKey,
+          readOnly: false,
+          expands: true,
+          keyboardType: TextInputType.multiline,
+          cursorColor: widget.accentColor,
+          onChanged: _handleChanged,
+          hintText: 'Start writing...',
+          // Vertical contentPadding frames the field's internal scrollable
+          // viewport rather than scrolling away with the text inside it, so a
+          // large value (the previous default of 16) left a permanent blank
+          // strip at the top/bottom whenever the body was scrolled, with the
+          // first/last visible line clipped right at its edge. Top and bottom
+          // are set apart rather than symmetrically: the top carries the
+          // breathing room the first line needs below the border, while the
+          // bottom stays small so the strip under a scrolled body remains
+          // imperceptible. Horizontal padding is unaffected since it isn't
+          // part of the scrollable axis.
+          contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+          decoration: const InputDecoration(
+            filled: false,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Wraps the writing area in this entry's images.
+  ///
+  /// The images belong to the entry, not to its text: they are reference rows
+  /// on the entry, and the fan in the corner is where they are seen. Pasting
+  /// and dropping are what puts them there — the journal offers no file
+  /// picker, per MEDIA.md.
+  ///
+  /// An entry that has not been created yet (no selection, hence no id to own
+  /// anything) gets the same wrappers around the same field, holding a null
+  /// owner: the editor is built before the page has picked an entry, so
+  /// handing back the bare field there and the wrapped one a frame later
+  /// re-inflates everything below — a new [EditableText], a new
+  /// `TagSuggestionPortal`, and a body that has quietly lost the caret's
+  /// input connection and its key handling. Only the fan is conditional, and
+  /// it is the last child of the [Stack] so adding it leaves the field's own
+  /// element where it was.
+  Widget _withImages(Widget field) {
+    final entryId = widget.entry?.id;
+    return MediaPasteScope(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entryId,
+      // The body is image-capable, so a clipboard holding both a screenshot
+      // and its caption pastes both rather than dropping the picture.
+      fieldTakesBoth: true,
+      child: MediaDropTarget(
+        collection: FirestoreCollections.journalEntries,
+        documentId: entryId,
+        child: Stack(
+          children: [
+            Positioned.fill(child: field),
+            // Floating over the text rather than reserving a band under it:
+            // Flutter cannot wrap a paragraph around a corner, so the only
+            // alternative would be padding the full width of every entry,
+            // images or not. A long entry's last lines pass beneath the fan.
+            if (entryId != null)
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: MediaFanStack(
+                  collection: FirestoreCollections.journalEntries,
+                  documentId: entryId,
+                  accentColor: widget.accentColor,
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -3401,8 +3391,17 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   }
 }
 
+/// Guards the dev-only "compare remote" button: the Firestore read below runs
+/// with nothing on screen, so a second press landing in that gap would stack a
+/// second dialog on the first. Released the moment the dialog goes up, whose
+/// own barrier covers the button from there. Module level because an extension
+/// cannot hold state.
+bool _remoteCompareOpen = false;
+
 extension on _JournalPageState {
   Future<void> _pullAndCompareRemoteValue(JournalEntry entry) async {
+    if (_remoteCompareOpen) return;
+    _remoteCompareOpen = true;
     final scaffoldMsg = ScaffoldMessenger.of(context);
     try {
       final userId = FirebaseAuth.instance.currentUser?.uid;
@@ -3424,6 +3423,7 @@ extension on _JournalPageState {
       final currentLocalText =
           _editorKey.currentState?.currentBodyText ?? entry.body;
 
+      _remoteCompareOpen = false;
       await showVoyagerDialog<void>(
         context: this.context,
         builder: (dialogContext) => AlertDialog(
@@ -3484,6 +3484,10 @@ extension on _JournalPageState {
       scaffoldMsg.showSnackBar(
         SnackBar(content: Text('Failed to pull remote value: $e')),
       );
+    } finally {
+      // Already cleared on the path that reaches the dialog; this catches the
+      // early returns and the throw.
+      _remoteCompareOpen = false;
     }
   }
 }
@@ -3584,7 +3588,7 @@ class _JournalEntryListTile extends StatelessWidget {
                 builder: (context, body, _) {
                   final preview = firstSentencePreview(body);
                   if (preview.isEmpty) return const SizedBox.shrink();
-                  return Text(
+                  return VoyagerProseText(
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3597,7 +3601,7 @@ class _JournalEntryListTile extends StatelessWidget {
                 builder: (context) {
                   final preview = firstSentencePreview(entry.body);
                   if (preview.isEmpty) return const SizedBox.shrink();
-                  return Text(
+                  return VoyagerProseText(
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3611,6 +3615,90 @@ class _JournalEntryListTile extends StatelessWidget {
         ),
         onTap: onTap,
       ),
+    );
+  }
+}
+
+/// The entry list's title: which journal is open, how many entries it holds,
+/// and the way into Manage.
+///
+/// The all-journals view used to be a second control beside the picker — an
+/// icon for the same scope decision the dropdown was already making. It is the
+/// first row of the popover now, so there is one place to answer "what am I
+/// looking at?" and one gear beside it for everything else.
+class _JournalScopeHeader extends StatelessWidget {
+  const _JournalScopeHeader({
+    required this.journals,
+    required this.entryCounts,
+    required this.allEntriesCount,
+    required this.selectedJournalId,
+    required this.viewAllJournals,
+    required this.accent,
+    required this.flagColorOf,
+    required this.onSelectJournal,
+    required this.onSelectAllJournals,
+    required this.onManage,
+  });
+
+  final List<Journal> journals;
+  final Map<String, int> entryCounts;
+  final int allEntriesCount;
+  final String selectedJournalId;
+  final bool viewAllJournals;
+  final Color accent;
+  final int Function(Journal journal) flagColorOf;
+  final ValueChanged<String> onSelectJournal;
+  final VoidCallback onSelectAllJournals;
+  final VoidCallback onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        // The switcher takes the whole leftover width so the gear stays
+        // pinned to the row's right edge; the name itself still sits
+        // left at its natural width, whichever scope is selected.
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ScopeSwitcher<String?>(
+              // Null while "All journals" is on: no single journal is being
+              // viewed.
+              selectedValue: viewAllJournals ? null : selectedJournalId,
+              accent: accent,
+              onSelected: (value) {
+                if (value == null) {
+                  onSelectAllJournals();
+                } else {
+                  onSelectJournal(value);
+                }
+              },
+              items: [
+                ScopeSwitcherItem<String?>(
+                  value: null,
+                  label: 'All journals',
+                  count: '$allEntriesCount',
+                ),
+                for (final journal in journals)
+                  ScopeSwitcherItem<String?>(
+                    value: journal.id,
+                    label: journal.name,
+                    count: '${entryCounts[journal.id] ?? 0}',
+                    color: Color(flagColorOf(journal)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'Manage journals',
+          iconSize: 18,
+          visualDensity: VisualDensity.compact,
+          onPressed: onManage,
+          icon: const Icon(PhosphorIconsRegular.gear),
+        ),
+      ],
     );
   }
 }

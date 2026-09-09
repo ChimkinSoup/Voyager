@@ -224,6 +224,23 @@ class SnippetSession {
 
   bool get hasSession => _stack.isNotEmpty;
 
+  /// Whether an auto-expansion has been detected and is waiting on its
+  /// microtask.
+  ///
+  /// Read by `AutocorrectSession`, which must not correct a word an expansion
+  /// is about to replace (AUTOCORRECT.md §5.1). Asking the session directly
+  /// rather than relying on which controller listener happens to have been
+  /// registered first: settings changes create and destroy this session over
+  /// the life of a field, so that order is not fixed.
+  bool get hasPendingExpansion => _pending != null;
+
+  /// Whether this session is inside [_applyValue] right now.
+  ///
+  /// Read by `AutocorrectSession`, whose "was this typed?" test works off the
+  /// shape of the diff and cannot tell an expansion one character longer than
+  /// its trigger apart from a typed character (AUTOCORRECT.md §5.2).
+  bool get isApplying => _applying;
+
   void dispose() {
     _disposed = true;
     textController.removeListener(_handleEditingChanged);

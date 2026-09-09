@@ -1,3 +1,4 @@
+import 'package:voyager/core/text/prose_markup.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
 /// The mood every new entry starts at, and what the v85 migration wrote over
@@ -226,10 +227,17 @@ String firstSentencePreview(String body) {
   // a `maxLines: 1` Text, so an entry whose first sentence runs for a whole
   // paragraph would pay the full text-layout cost per row, per rebuild, only
   // to draw an ellipsis.
+  //
+  // Carried as an offset into [trimmed] rather than as a substring, so
+  // [proseSlice] can resolve emphasis against the whole body and take out the
+  // delimiter a cut through `**bold**` would otherwise show the reader raw
+  // (EMPHASIS_FORMATTING.md §5.3).
   final match = _firstSentenceExp.firstMatch(trimmed);
-  final raw = match != null
-      ? match.group(1)!.trim()
-      : trimmed.split('\n').first.trim();
-  if (raw.length <= 120) return raw;
-  return '${raw.substring(0, 117)}...';
+  // Group 1's length is its end offset: the pattern is anchored at `^`, so it
+  // starts at 0. [Match] exposes no per-group offsets.
+  var end = match != null ? match.group(1)!.length : trimmed.indexOf('\n');
+  if (end < 0) end = trimmed.length;
+  end = trimmed.substring(0, end).trimRight().length;
+  if (end <= 120) return proseSlice(trimmed, 0, end);
+  return '${proseSlice(trimmed, 0, 117)}...';
 }

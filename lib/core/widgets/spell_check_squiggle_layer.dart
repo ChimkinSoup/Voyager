@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/text/styled_runs.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 
-/// Paints the misspelled-word wavy underline for a field, entirely
-/// independent of Flutter's own [SpellCheckConfiguration] rendering (which
-/// is neutralized via `misspelledTextStyle: const TextStyle()` in
-/// [buildVoyagerSpellCheckConfiguration]).
+/// Paints the misspelled-word wavy underline for a field. This is the app's
+/// *only* spellcheck rendering: Voyager's fields are built with
+/// `SpellCheckConfiguration.disabled()`, so Flutter's own never runs (see
+/// [misspellingAtCursor] for why that is load-bearing and where the
+/// right-click corrections come from instead).
 ///
 /// Flutter's built-in misspelled-word style hides the underline for a word
 /// whenever the cursor sits anywhere inside it — not just while it's being
@@ -41,6 +44,7 @@ class SpellCheckSquiggleLayer extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.scrollController,
     this.suppressActiveWord = true,
+    this.spanBuilder,
   });
 
   final TextEditingController controller;
@@ -62,6 +66,14 @@ class SpellCheckSquiggleLayer extends StatefulWidget {
   /// content), pass the same [ScrollController] given to its [TextField] so
   /// this layer's text scrolls in lockstep.
   final ScrollController? scrollController;
+
+  /// Builds the paragraph the squiggles are laid into. Null means the flat one
+  /// — the text in [style], restyled only on the flagged ranges. A field with
+  /// emphasis passes [ProseEditingController.overlaySpan], which threads those
+  /// same ranges through the emphasis tree: a misspelling inside `**bold**` is
+  /// wider than the same word outside it, and a hidden `**` takes no width at
+  /// all, so a flat paragraph would put the wave under the wrong letters.
+  final ProseSpanBuilder? spanBuilder;
 
   /// How far below the font's own underline position the squiggle is dropped,
   /// in em.
@@ -240,29 +252,23 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
   Widget build(BuildContext context) {
     final text = widget.controller.text;
     final spans = _spansFor(text);
-    final children = <TextSpan>[];
-    var pointer = 0;
-    for (final span in spans) {
-      final start = span.range.start.clamp(0, text.length);
-      final end = span.range.end.clamp(0, text.length);
-      if (start > pointer) {
-        children.add(TextSpan(text: text.substring(pointer, start), style: _transparent));
-      }
-      final isActive = widget.suppressActiveWord &&
-          _activeEditRange != null &&
-          span.range.start == _activeEditRange!.start &&
-          span.range.end == _activeEditRange!.end;
-      children.add(
-        TextSpan(
-          text: text.substring(start, end),
-          style: isActive ? _transparent : _squiggleStyle,
+    // One sorted walk over the flagged words. Every run carries an explicit
+    // style — the glyphs themselves must stay invisible here, the real field
+    // draws those.
+    final ranges = <StyledRange>[
+      for (final span in spans)
+        (
+          start: span.range.start.clamp(0, text.length),
+          end: span.range.end.clamp(0, text.length),
+          style:
+              widget.suppressActiveWord &&
+                  _activeEditRange != null &&
+                  span.range.start == _activeEditRange!.start &&
+                  span.range.end == _activeEditRange!.end
+              ? _transparent
+              : _squiggleStyle,
         ),
-      );
-      pointer = end;
-    }
-    if (pointer < text.length) {
-      children.add(TextSpan(text: text.substring(pointer), style: _transparent));
-    }
+    ]..sort((a, b) => a.start.compareTo(b.start));
 
     final textScaler = MediaQuery.textScalerOf(context);
     // Applied to the rendered size, not widget.style.fontSize: the decoration
@@ -272,7 +278,11 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
         SpellCheckSquiggleLayer.descenderClearance;
 
     final richText = RichText(
-      text: TextSpan(style: widget.style, children: children),
+      text: (widget.spanBuilder ?? flatProseSpan)(
+        text,
+        widget.style.merge(_transparent),
+        extra: ranges,
+      ),
       textAlign: widget.textAlign,
       strutStyle: widget.strutStyle,
       textScaler: textScaler,

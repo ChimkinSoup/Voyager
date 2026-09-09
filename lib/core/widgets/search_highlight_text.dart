@@ -1,6 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/text/prose_markup.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/text/styled_runs.dart';
+import 'package:voyager/core/widgets/prose_highlight_underlay.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 
 /// A match-centred window into [text], for a one- or two-line result blurb.
@@ -38,11 +42,19 @@ String searchSnippet(
   }
 
   final end = math.min(collapsed.length, start + maxLength);
-  final window = collapsed.substring(start, end);
+  // Emphasis is resolved against the whole of [collapsed] — which is still the
+  // whole document, only respaced — so a pair the window cut through loses its
+  // orphaned delimiter rather than showing the reader a raw `**` (§5.3).
+  final window = proseSlice(collapsed, start, end);
   return start == 0 ? window : '…$window';
 }
 
-/// Rich text for search results with tag pills and keyword emphasis.
+/// Rich text for search results with tag pills, keyword emphasis and stored
+/// formatting markers rendered (EMPHASIS_FORMATTING.md §10).
+///
+/// [emphasis] is parsed here rather than by the caller because this is the
+/// only place that knows the whole string: the tag pills split it up, and a
+/// `**` pair wrapping a tag has one delimiter on each side of the split.
 Widget searchHighlightedText(
   String text, {
   required TextStyle style,
@@ -50,6 +62,7 @@ Widget searchHighlightedText(
   int? maxLines,
   TextOverflow? overflow,
   int Function(String tag)? tagColorFor,
+  ProseEmphasisTheme? emphasisTheme,
 }) {
   final colorFor = tagColorFor ?? colorForTag;
 
@@ -57,12 +70,24 @@ Widget searchHighlightedText(
     return Text('', style: style, maxLines: maxLines, overflow: overflow);
   }
 
+  final emphasis = emphasisTheme == null
+      ? const <StyledRange>[]
+      : proseReadRanges(text, emphasisTheme);
+  // `==highlight==` leaves a mark, not a fill — see [kProseHighlightMark].
+  final highlightFill = emphasisTheme?.highlightColor;
+
   final spans = <InlineSpan>[];
   var cursor = 0;
   for (final match in journalTagPattern.allMatches(text)) {
     if (match.start > cursor) {
       spans.addAll(
-        keywordSpans(text.substring(cursor, match.start), style, keywords),
+        keywordSpans(
+          text.substring(cursor, match.start),
+          style,
+          keywords,
+          emphasis: emphasis,
+          offset: cursor,
+        ),
       );
     }
     final tagName = match.group(1)!;
@@ -82,8 +107,19 @@ Widget searchHighlightedText(
           // that only occurs in a tag name (`proj` against `#project-alpha`)
           // matched the entry but emphasised nothing, so the result read as a
           // false positive.
-          child: Text.rich(
-            TextSpan(children: keywordSpans(tagText, style, keywords)),
+          child: _withHighlightFill(
+            highlightFill,
+            Text.rich(
+              TextSpan(
+                children: keywordSpans(
+                  tagText,
+                  style,
+                  keywords,
+                  emphasis: emphasis,
+                  offset: match.start,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -91,7 +127,15 @@ Widget searchHighlightedText(
     cursor = match.end;
   }
   if (cursor < text.length) {
-    spans.addAll(keywordSpans(text.substring(cursor), style, keywords));
+    spans.addAll(
+      keywordSpans(
+        text.substring(cursor),
+        style,
+        keywords,
+        emphasis: emphasis,
+        offset: cursor,
+      ),
+    );
   }
 
   if (spans.isEmpty) {
@@ -103,12 +147,17 @@ Widget searchHighlightedText(
     );
   }
 
-  return Text.rich(
-    TextSpan(children: spans),
-    maxLines: maxLines,
-    overflow: overflow,
+  return _withHighlightFill(
+    highlightFill,
+    Text.rich(TextSpan(children: spans), maxLines: maxLines, overflow: overflow),
   );
 }
+
+/// [paragraph] under the fill for its `==highlight==` runs, when the surface
+/// renders emphasis at all.
+Widget _withHighlightFill(Color? fill, Widget paragraph) => fill == null
+    ? paragraph
+    : ProseHighlightUnderlay(color: fill, child: paragraph);
 
 /// Plain search-result text with every occurrence of [keywords] emphasised.
 ///
@@ -119,6 +168,10 @@ Widget searchHighlightedText(
 /// `ListTile` title wants, since the tile styles its own slots and an explicit
 /// style here would quietly override that. Give [highlightColor] alongside it,
 /// as there's then no base colour to derive the emphasis wash from.
+/// [emphasis] is opt-in for the same reason: a quote or a problem title is
+/// not journal prose, and its `*` is an asterisk. Pass [highlightFill]
+/// alongside it — `==highlight==` leaves a mark rather than a fill, and this
+/// is the colour [ProseHighlightUnderlay] paints it in.
 Widget keywordHighlightedText(
   String text, {
   TextStyle? style,
@@ -127,14 +180,17 @@ Widget keywordHighlightedText(
   int? maxLines,
   TextOverflow? overflow,
   TextAlign? textAlign,
+  List<StyledRange> emphasis = const [],
+  Color? highlightFill,
 }) {
   final spans = keywordSpans(
     text,
     style,
     keywords,
     highlightColor: highlightColor,
+    emphasis: emphasis,
   );
-  if (spans.length == 1) {
+  if (spans.length == 1 && emphasis.isEmpty) {
     return Text(
       text,
       style: style,
@@ -143,11 +199,14 @@ Widget keywordHighlightedText(
       textAlign: textAlign,
     );
   }
-  return Text.rich(
-    TextSpan(children: spans),
-    maxLines: maxLines,
-    overflow: overflow,
-    textAlign: textAlign,
+  return _withHighlightFill(
+    highlightFill,
+    Text.rich(
+      TextSpan(children: spans),
+      maxLines: maxLines,
+      overflow: overflow,
+      textAlign: textAlign,
+    ),
   );
 }
 
@@ -157,15 +216,23 @@ Widget keywordHighlightedText(
 /// Normalises [keywords] itself rather than trusting callers to pass them
 /// pre-folded — it's reached from several search surfaces, and a stray
 /// uppercase needle would silently match nothing.
+///
+/// [emphasis] carries the formatting of the *whole* document this slice came
+/// from, in document offsets, with [offset] saying where the slice starts in
+/// it — see [applyStyledRanges].
 List<TextSpan> keywordSpans(
   String text,
   TextStyle? style,
   List<String> keywords, {
   Color? highlightColor,
+  List<StyledRange> emphasis = const [],
+  int offset = 0,
 }) {
   final needles = _normalizedKeywords(keywords);
   if (needles.isEmpty || text.isEmpty) {
-    return [TextSpan(text: text, style: style)];
+    return applyStyledRanges([
+      TextSpan(text: text, style: style),
+    ], emphasis, offset);
   }
 
   final patterns = <String>[
@@ -214,7 +281,11 @@ List<TextSpan> keywordSpans(
     index = hitAt + hitLen;
   }
 
-  return spans.isEmpty ? [TextSpan(text: text, style: style)] : spans;
+  return applyStyledRanges(
+    spans.isEmpty ? [TextSpan(text: text, style: style)] : spans,
+    emphasis,
+    offset,
+  );
 }
 
 List<String> _normalizedKeywords(List<String> keywords) => keywords

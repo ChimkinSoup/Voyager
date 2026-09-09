@@ -12,6 +12,7 @@ import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
@@ -19,8 +20,7 @@ import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/domain/services/calendar_recurrence_editing.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
-import 'package:voyager/core/widgets/rounded_dropdown.dart';
-import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -30,9 +30,22 @@ import 'package:voyager/features/calendar/calendar_event_panel.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
-import 'package:voyager/features/calendar/calendar_list_actions.dart';
+import 'package:voyager/features/calendar/calendar_event_delete.dart';
+import 'package:voyager/features/calendar/calendar_manage_sheet.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
+import 'package:voyager/features/todo/todo_list_actions.dart';
+
+/// Width of the toolbar slot the calendar scope switcher sits in.
+///
+/// The switcher has no right edge to lean on the way Journal's and
+/// Todo's headers do — it sits inline between Go-to-today and the
+/// toolbar's [Spacer]. A constant slot is what keeps the Manage gear at
+/// the same x whichever calendar is open, at the cost of a gap after
+/// short names. 'All calendars' measures 93px in the trigger's own
+/// style, so the whole closed trigger is ~125px; the rest is headroom
+/// for user-named calendars. Anything longer ellipsises in place.
+const double _calendarScopeSlotWidth = 170;
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
 final _mmmmFormat = DateFormat.MMMM();
@@ -61,6 +74,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// calendars" toggle is turned back off, and used as the calendar
   /// dropdown's displayed selection while all calendars are showing.
   String _lastSpecificCalendarId = legacyCalendarId;
+
+  /// Whether the saved calendar view has been restored yet. Settings may still
+  /// be loading when [initState] runs, so the first build that has them gets a
+  /// second chance at it — see [_applySavedCalendarPreferences].
+  bool _appliedSavedCalendarView = false;
 
   _CalendarSidebarKind _sidebarKind = _CalendarSidebarKind.none;
   CalendarEvent? _sidebarEvent;
@@ -177,7 +195,46 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     _weekTimelineScrollController.addListener(_onWeekTimelineScrolled);
     final now = DateTime.now();
     _lastViewedMonth = DateTime(now.year, now.month, 1);
+    _restoreSavedCalendarView(ref.read(settingsProvider).valueOrNull);
     _ensureDefaultCalendar();
+  }
+
+  /// Reopens the calendar the page was last left on, all-calendars included.
+  ///
+  /// Both facts are restored, not one or the other: the all-view still needs
+  /// the concrete calendar, since that is where a new event is filed.
+  void _restoreSavedCalendarView(AppSettings? settings) {
+    if (settings == null) return;
+    _appliedSavedCalendarView = true;
+    final savedId = settings.lastViewedCalendarId;
+    if (savedId != null) _lastSpecificCalendarId = savedId;
+    _selectedCalendarId = settings.calendarShowAllCalendars
+        ? null
+        : _lastSpecificCalendarId;
+  }
+
+  /// The [initState] restore, retried on the first build that actually has
+  /// settings — `ref.read` returns null while the provider is still loading,
+  /// which is the normal case on a cold start.
+  void _applySavedCalendarPreferences(AppSettings? settings) {
+    if (_appliedSavedCalendarView || settings == null) return;
+    _restoreSavedCalendarView(settings);
+  }
+
+  Future<void> _persistCalendarView() async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    final showAll = _selectedCalendarId == null;
+    if (settings.lastViewedCalendarId == _lastSpecificCalendarId &&
+        settings.calendarShowAllCalendars == showAll) {
+      return;
+    }
+    await settingsRepo.saveSettings(
+      settings.copyWith(
+        lastViewedCalendarId: _lastSpecificCalendarId,
+        calendarShowAllCalendars: showAll,
+      ),
+    );
   }
 
   /// Lazily creates the built-in default calendar for fresh installs (schema
@@ -844,77 +901,25 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   Future<void> _deleteEvent(CalendarEvent event, {DateTime? day}) async {
-    final repo = ref.read(calendarRepositoryProvider);
-
-    // A repeating series asks which occurrences to drop instead of confirming;
-    // the three choices are themselves the confirmation.
-    if (event.recurrence.repeats && !event.isRecurrenceOverride) {
-      final occurrence =
-          calendarOccurrenceStartOn(event, day ?? _focused) ??
-          DateUtils.dateOnly(event.start.toLocal());
-      final scope = await showRecurrenceScopeDialog(
-        context,
-        title: event.title.trim().isEmpty
-            ? 'Delete repeating event?'
-            : 'Delete "${event.title}"?',
-        isDelete: true,
-      );
-      if (scope == null || !mounted) return;
-      final writes = deleteRecurringEvent(event, occurrence, scope);
-      for (final row in writes.upserts) {
-        await repo.upsertEvent(row);
-      }
-      for (final id in writes.softDeletes) {
-        await repo.softDeleteEvent(id);
-      }
-      // Occurrences previously split off with "this event only" are separate
-      // rows, so nothing above touches them. Left alone they would outlive the
-      // series they came from and reappear as stray one-off events.
-      for (final id in await _orphanedOverrideIds(event, occurrence, scope)) {
-        await repo.softDeleteEvent(id);
-      }
-      ref.invalidate(calendarEventsProvider);
-      return;
-    }
-
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Delete event?',
-      message: event.title.trim().isEmpty
-          ? 'This event will be moved to trash.'
-          : '"${event.title}" will be moved to trash.',
+    // Captured while this widget is certainly mounted: the toast that offers
+    // the undo outlives the row it deleted, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    await deleteCalendarEventInteractive(
+      context: context,
+      container: container,
+      overlay: overlay,
+      event: event,
+      occurrenceDay: day ?? _focused,
+      onConfirmed: () async => mounted,
     );
-    if (!confirmed || !mounted) return;
-    await repo.softDeleteEvent(event.id);
-    ref.invalidate(calendarEventsProvider);
-  }
-
-  /// Override rows of [master] that a delete at [scope] should take with it.
-  ///
-  /// "This event only" removes a single occurrence, which by definition is not
-  /// one that was already detached, so it orphans nothing.
-  Future<List<String>> _orphanedOverrideIds(
-    CalendarEvent master,
-    DateTime occurrence,
-    RecurrenceEditScope scope,
-  ) async {
-    if (scope == RecurrenceEditScope.thisEvent) return const [];
-    // Across every calendar, not just the master's: editing a single occurrence
-    // can move that override to another calendar, which would put it out of a
-    // calendar-scoped query's reach and leave it behind as a stray event
-    // pointing at a deleted series. [recurrenceParentId] is the real link.
-    final all = await ref.read(calendarRepositoryProvider).listEvents();
-    return [
-      for (final candidate in all)
-        if (candidate.recurrenceParentId == master.id &&
-            (scope == RecurrenceEditScope.allEvents ||
-                !(candidate.recurrenceDate ?? candidate.start)
-                    .isBefore(occurrence)))
-          candidate.id,
-    ];
   }
 
   Future<void> _deleteTodoTask(CalendarTodoMarker marker) async {
+    // See [_deleteEvent] on why both are captured before the delete.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final title = marker.title?.trim();
     final confirmed = await showConfirmDialog(
       context,
@@ -927,10 +932,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final tasks = await ref.read(allTodoTasksProvider.future);
     final match = tasks.where((t) => t.id == marker.taskId).firstOrNull;
     if (match == null || !mounted) return;
-    final deleted = match.copyWith(deletedAt: utcNow());
-    await ref.read(todoRepositoryProvider).upsertTask(deleted);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
-    _invalidateTodoProviders({deleted.listId});
+    // Through the shared path rather than a lone `upsertTask` here: deleting a
+    // task from the calendar has to take its subtasks and its images with it,
+    // exactly as deleting it from the To-Do page does.
+    final deletion = await softDeleteTaskWithSubtasks(container, match);
+    if (!mounted) return;
+    _invalidateTodoProviders({match.listId});
+
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(match.title, fallback: 'task'),
+      restore: () async {
+        await restoreTaskWithSubtasks(container, deletion);
+        if (!mounted) return;
+        _invalidateTodoProviders({match.listId});
+      },
+    );
   }
 
   Future<void> _openEditor({
@@ -1024,7 +1041,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// Handles "Show in Calendar" from the notification popover: snaps the
   /// view to the event's month (switching to whatever calendar shows it, if
   /// it isn't the one currently selected) and opens its edit sidebar.
-  void _revealCalendarEvent(CalendarEvent event) {
+  void _revealCalendarEvent(CalendarEvent event, {DateTime? day}) {
+    // The occurrence the caller was looking at, not the series anchor: a
+    // weekly event surfaced by the inbox for tonight must not open January.
+    final target = day ?? event.start;
     _abortMorphAnimation();
     setState(() {
       _isZooming = false;
@@ -1039,12 +1059,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       }
       _dayViewDate = null;
       _mode = CalendarViewMode.month;
-      _focused = DateTime(event.start.year, event.start.month, 1);
+      _focused = DateTime(target.year, target.month, 1);
       _rememberViewedMonth(_focused);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _openEventSidebar(event: event, day: event.start, focusTitle: false);
+      _openEventSidebar(event: event, day: target, focusTitle: false);
     });
   }
 
@@ -1063,109 +1083,111 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     );
   }
 
-  Widget _buildAllCalendarsToggle(BuildContext context) {
-    final active = _selectedCalendarId == null;
-    return IconButton(
-      tooltip: active ? 'Show selected calendar only' : 'Show all calendars',
-      onPressed: () => setState(() {
-        if (active) {
-          _selectedCalendarId = _lastSpecificCalendarId;
-        } else {
-          if (_selectedCalendarId != null) {
-            _lastSpecificCalendarId = _selectedCalendarId!;
-          }
-          _selectedCalendarId = null;
-        }
-      }),
-      icon: Icon(
-        PhosphorIconsRegular.calendarDots,
-        color: active ? Theme.of(context).colorScheme.primary : null,
-      ),
-    );
-  }
-
+  /// The toolbar's title: which calendar is open, and the way into Manage.
+  ///
+  /// The all-view used to be a second control beside the picker — an icon for
+  /// the same scope decision the dropdown was already making. It is the first
+  /// row of the popover now. Calendars carry no quiet count: a month grid
+  /// already shows how full it is.
   Widget _buildCalendarSelector(
     BuildContext context,
     List<Calendar> calendars,
   ) {
-    final accent = Theme.of(context).colorScheme.primary.toARGB32();
-    final dropdownValue = _selectedCalendarId ?? _lastSpecificCalendarId;
-    final selected = calendars.cast<Calendar?>().firstWhere(
-      (c) => c?.id == dropdownValue,
-      orElse: () => null,
-    );
-    return RoundedDropdown<String?>(
-      value: dropdownValue,
-      labelColor: Color(selected?.colorValue ?? accent),
-      onAddList: () => _createCalendarFromDropdown(),
-      addListLabel: 'Add calendar',
-      manageMenuEntriesFor: (id) => id == legacyCalendarId
-          ? defaultEntityManageMenuEntries
-          : entityManageMenuEntries,
-      onManage: (id, action) => _handleCalendarManage(id!, action, calendars),
-      items: [
-        ...calendars.map(
-          (c) => RoundedDropdownItem(
-            value: c.id,
-            label: c.name,
-            labelColor: Color(c.colorValue ?? accent),
+    final primary = Theme.of(context).colorScheme.primary;
+    final selected = _selectedCalendarId == null
+        ? null
+        : calendars.cast<Calendar?>().firstWhere(
+            (c) => c?.id == _selectedCalendarId,
+            orElse: () => null,
+          );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // A fixed slot, so the gear beside it does not slide around as
+        // scopes of different name lengths are selected.
+        SizedBox(
+          width: _calendarScopeSlotWidth,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ScopeSwitcher<String?>(
+              // Null while the all-view is on, and the trigger names it
+              // outright rather than sitting on whichever calendar happened
+              // to be open before — which read as if that one calendar were
+              // still the filter.
+              selectedValue: _selectedCalendarId,
+              accent: selected?.colorValue != null
+                  ? Color(selected!.colorValue!)
+                  : primary,
+              onSelected: _selectCalendarFromSwitcher,
+              items: [
+                const ScopeSwitcherItem<String?>(
+                  value: null,
+                  label: 'All calendars',
+                ),
+                for (final calendar in calendars)
+                  ScopeSwitcherItem<String?>(
+                    value: calendar.id,
+                    label: calendar.name,
+                    color: Color(calendar.colorValue ?? primary.toARGB32()),
+                  ),
+              ],
+            ),
           ),
         ),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'Manage calendars',
+          iconSize: 18,
+          visualDensity: VisualDensity.compact,
+          onPressed: () => unawaited(_openCalendarManageSheet()),
+          icon: const Icon(PhosphorIconsRegular.gear),
+        ),
       ],
-      onChanged: (v) => setState(() {
-        _selectedCalendarId = v;
-        if (v != null) _lastSpecificCalendarId = v;
-      }),
     );
   }
 
-  Future<void> _createCalendarFromDropdown() async {
-    final created = await createCalendarList(context, ref);
-    if (!mounted || created == null) return;
-    await ref.read(calendarsProvider.future);
-    if (!mounted) return;
+  /// Points the page at [calendarId], or at the all-view when it is null.
+  ///
+  /// [_lastSpecificCalendarId] is kept across the all-view so leaving it — and
+  /// filing a new event from inside it — has a calendar to fall back on.
+  void _selectCalendarFromSwitcher(String? calendarId) {
     setState(() {
-      _selectedCalendarId = created.id;
-      _lastSpecificCalendarId = created.id;
+      _selectedCalendarId = calendarId;
+      if (calendarId != null) _lastSpecificCalendarId = calendarId;
     });
+    unawaited(_persistCalendarView());
   }
 
-  Future<void> _handleCalendarManage(
-    String calendarId,
-    VoyagerMenuCatalogEntry action,
-    List<Calendar> allCalendars,
-  ) async {
-    final calendar = allCalendars.firstWhere((c) => c.id == calendarId);
-    switch (action) {
-      case VoyagerMenuCatalogEntry.rename:
-        await renameCalendarList(context, ref, calendar);
-      case VoyagerMenuCatalogEntry.changeColor:
-        await changeCalendarListColor(context, ref, calendar, allCalendars);
-      case VoyagerMenuCatalogEntry.delete:
-        final eventsForCalendar = await ref
-            .read(calendarRepositoryProvider)
-            .listEvents(calendarId: calendarId);
-        if (!mounted) return;
-        final deleted = await deleteCalendarList(
-          context,
-          ref,
-          calendar: calendar,
-          allCalendars: allCalendars,
-          eventCount: eventsForCalendar.length,
-        );
-        if (deleted && mounted) {
-          setState(() {
-            if (_selectedCalendarId == calendarId) {
-              _selectedCalendarId = legacyCalendarId;
-            }
-            if (_lastSpecificCalendarId == calendarId) {
-              _lastSpecificCalendarId = legacyCalendarId;
-            }
-          });
-        }
-      default:
-        break;
+  /// The gear beside the switcher: create, rename, recolour and delete
+  /// calendars, all in one dialog rather than a menu nested in the picker.
+  Future<void> _openCalendarManageSheet() async {
+    final createdId = await showCalendarManageSheet(context, ref);
+    if (!mounted) return;
+    final calendars = await ref.read(calendarsProvider.future);
+    if (!mounted) return;
+    if (createdId != null) {
+      _selectCalendarFromSwitcher(createdId);
+      return;
     }
+    // A calendar may have been deleted out from under the page. The saved view
+    // may name it too, so rewrite that rather than leave the next launch
+    // restoring a dead id.
+    final liveIds = {for (final calendar in calendars) calendar.id};
+    if (liveIds.contains(_selectedCalendarId) &&
+        liveIds.contains(_lastSpecificCalendarId)) {
+      return;
+    }
+    setState(() {
+      if (!liveIds.contains(_lastSpecificCalendarId)) {
+        _lastSpecificCalendarId = legacyCalendarId;
+      }
+      if (_selectedCalendarId != null &&
+          !liveIds.contains(_selectedCalendarId)) {
+        _selectedCalendarId = _lastSpecificCalendarId;
+      }
+    });
+    unawaited(_persistCalendarView());
   }
 
   Future<void> _syncGoogle() async {
@@ -2572,7 +2594,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       if (next == null || next.type != RevealTargetType.event) return;
       final event = next.event!;
       ref.read(revealRequestProvider.notifier).state = null;
-      _revealCalendarEvent(event);
+      _revealCalendarEvent(event, day: next.day);
     });
 
     final eventsAsync = ref.watch(calendarEventsProvider(_selectedCalendarId));
@@ -2591,6 +2613,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final calendarsAsync = ref.watch(calendarsProvider);
     final calendars = calendarsAsync.valueOrNull ?? const <Calendar>[];
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    _applySavedCalendarPreferences(ref.watch(settingsProvider).valueOrNull);
     final weekStartsMonday = settings.weekStartsOnMonday;
     _workoutDays = settings.showWorkoutsOnCalendar
         ? (ref.watch(workoutDaysProvider).valueOrNull ?? const {})
@@ -2628,12 +2651,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                     ),
                     _buildGoToTodayButton(weekStartsMonday),
                     const SizedBox(width: 8),
-                    SizedBox(
-                      width: 360,
-                      child: _buildCalendarSelector(context, calendars),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildAllCalendarsToggle(context),
+                    _buildCalendarSelector(context, calendars),
                     if (ref
                         .watch(devSettingsProvider)
                         .showCalendarInstantViewSwitch) ...[

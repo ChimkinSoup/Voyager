@@ -3,12 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/newline_normalization.dart';
+import 'package:voyager/core/text/prose_editing_controller.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
+import 'package:voyager/core/widgets/prose_highlight_layer.dart';
 import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
@@ -42,6 +46,7 @@ class VoyagerTextField extends StatefulWidget {
     this.tagScope,
     this.onKeyEvent,
     this.snippetsAllowed = true,
+    this.autocorrectAllowed = true,
   }) : assert(
          tagScope == null || controller != null,
          'Tag completion reads and rewrites the field text, so it needs a '
@@ -89,6 +94,11 @@ class VoyagerTextField extends StatefulWidget {
   /// snippets themselves, where a trigger has to stay literal.
   final bool snippetsAllowed;
 
+  /// Whether autocorrect may run here, on top of the user's own setting and
+  /// the multiline rule. Set false for the fields whose text is a literal —
+  /// a snippet trigger, a dictionary word (AUTOCORRECT.md §4.1).
+  final bool autocorrectAllowed;
+
   @override
   State<VoyagerTextField> createState() => _VoyagerTextFieldState();
 }
@@ -103,11 +113,25 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
 
   bool _hasText = false;
 
+  ProseEditingController? _prose;
+
+  /// The controller the [TextField] and every overlay below are given: the
+  /// caller's, wrapped for emphasis wherever this field is eligible for it.
+  /// See [ProseEditingController] for why the wrapping happens here rather
+  /// than at the ~50 call sites that build these fields.
+  TextEditingController? get _controller => _prose ?? widget.controller;
+
   bool get _spellcheckOn => isMultilineField(
     expands: widget.expands,
     maxLines: widget.maxLines,
     minLines: widget.minLines,
   );
+
+  /// Emphasis rides on the same multiline predicate as spellcheck: v1 leaves
+  /// single-line fields on plain text (EMPHASIS_FORMATTING.md §10), which is
+  /// also what keeps the §4.1 exclusions — the snippet trigger and the
+  /// dictionary word boxes — literal without a flag of their own.
+  bool get _emphasisOn => _spellcheckOn && widget.controller != null;
 
   @override
   void initState() {
@@ -117,9 +141,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     }
     _hasText = widget.controller?.text.isNotEmpty ?? false;
     widget.controller?.addListener(_handleTextChanged);
-    if (_spellcheckOn) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
-    }
+    _syncProseController();
   }
 
   @override
@@ -130,23 +152,36 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       widget.controller?.addListener(_handleTextChanged);
       _hasText = widget.controller?.text.isNotEmpty ?? false;
     }
+    // The shape too: [_emphasisOn] is derived from it, so a field rebuilt from
+    // `maxLines: 1` to `maxLines: null` would otherwise keep the stale
+    // decision — emphasis off in a field that is now multiline, or still on in
+    // one that is now single-line, where §10 says v1 renders plain text and
+    // where the overlay layers below are no longer mounted to match.
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.focusNode != widget.focusNode ||
+        oldWidget.expands != widget.expands ||
+        oldWidget.maxLines != widget.maxLines ||
+        oldWidget.minLines != widget.minLines) {
+      _syncProseController();
+    }
+  }
+
+  void _syncProseController() {
+    _prose?.dispose();
+    final source = widget.controller;
+    _prose = _emphasisOn && source != null
+        ? ProseEditingController(source: source, focusNode: _focusNode)
+        : null;
   }
 
   @override
   void dispose() {
     widget.controller?.removeListener(_handleTextChanged);
+    // Before the focus node it listens to, and never the caller's controller.
+    _prose?.dispose();
     _ownedFocusNode?.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _forceSpellCheck() {
-    if (!mounted || !_spellcheckOn) return;
-    forceSpellCheckDisplay(
-      context: context,
-      fieldKey: _fieldKey,
-      focusNode: _focusNode,
-    );
   }
 
   void _handleTextChanged() {
@@ -154,7 +189,6 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
-    if (_spellcheckOn) _forceSpellCheck();
   }
 
   @override
@@ -170,8 +204,10 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     return VimTextScope(
       enabled: VimEnabledScope.of(context) && suits,
       snippetsAllowed: widget.snippetsAllowed && suits,
+      autocorrectAllowed: widget.autocorrectAllowed && suits,
       controller: widget.controller,
       multiline: _spellcheckOn,
+      proseEmphasis: _prose != null,
       accentColor: widget.accentColor,
       builder: _buildField,
     );
@@ -180,6 +216,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
   Widget _buildField(BuildContext context, VimFieldBinding vim) {
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
+    _prose?.emphasis = ProseEmphasisTheme.of(theme.colorScheme, accent);
     final decoration = widget.decoration ?? const InputDecoration();
     final contentPadding =
         decoration.contentPadding ??
@@ -202,11 +239,11 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     // isOutline branch). The visible label is painted entirely by
     // NotchedFieldBorder below, so the real TextField's border is given an
     // invisible outline shape purely to take that zero-gap code path.
-    final spellcheckOn = isMultilineField(
-      expands: widget.expands,
-      maxLines: widget.maxLines,
-      minLines: widget.minLines,
-    );
+    // The same getter the prose controller was built from, not a second
+    // reading of the same three properties: §5.2's invariant is that the
+    // paragraph and the layers stacked around it agree about whether emphasis
+    // applies, and two copies of one predicate is how they drift apart.
+    final spellcheckOn = _spellcheckOn;
 
     var textStyle =
         widget.style ??
@@ -259,14 +296,15 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         contextMenuBuilder: voyagerTextContextMenuBuilder(
           context,
           snippetsAllowed: vim.snippetsAllowed,
+          spellcheckAllowed: spellcheckOn,
+          autocorrectSession: vim.autocorrectSession,
         ),
-        spellCheckConfiguration: spellcheckOn
-            ? buildVoyagerSpellCheckConfiguration(
-                context,
-                snippetsAllowed: vim.snippetsAllowed,
-              )
-            : const SpellCheckConfiguration.disabled(),
-        controller: widget.controller,
+        // No spell config: squiggles come from [SpellCheckSquiggleLayer] and
+        // the right-click corrections from [misspellingAtCursor]. Giving
+        // EditableText results of its own makes it build the paragraph itself
+        // and drop the controller's span.
+        spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+        controller: _controller,
         focusNode: _focusNode,
         scrollController: _scrollController,
         decoration: innerDecoration,
@@ -317,10 +355,20 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       ),
       cursorWidth: vim.overlayCaretWidth,
     );
+    // `==highlight==` runs carry only a mark; [ProseHighlightLayer] is what
+    // fills them — see [kProseHighlightMark].
+    final highlightFill = ProseEmphasisTheme.of(
+      theme.colorScheme,
+      accent,
+    ).highlightColor!;
     final vimSession = vim.session;
     final snippetSession = vim.snippetSession;
+    final autocorrectSession = vim.autocorrectSession;
     final needsTextOverlay = vimSession != null || snippetSession != null;
-    final controller = widget.controller;
+    final controller = _controller;
+    // Null on a field with emphasis off, which is exactly the flat paragraph
+    // every layer built for itself before emphasis existed.
+    final spanBuilder = _prose?.overlaySpan;
 
     // Same predicate as [spellcheckOn]: only a wrapped paragraph can show the
     // ragged block and the seam that [SelectionHighlightLayer] exists to fix,
@@ -336,12 +384,36 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       field = Stack(
         fit: StackFit.passthrough,
         children: [
+          // Bottom of the stack: the tint sits behind the squiggle as well as
+          // behind the glyphs, so a word that is still flagged after being
+          // corrected keeps its underline readable.
+          if (autocorrectSession != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: AutocorrectFlashLayer(
+                    spanBuilder: spanBuilder,
+                    session: autocorrectSession,
+                    controller: controller,
+                    style: textStyle ?? const TextStyle(),
+                    color: accent,
+                    strutStyle: StrutStyle.fromTextStyle(
+                      textStyle ?? const TextStyle(),
+                      forceStrutHeight: true,
+                    ),
+                    scrollController: _scrollController,
+                  ),
+                ),
+              ),
+            ),
           if (spellcheckOn)
             Positioned.fill(
               child: IgnorePointer(
                 child: Padding(
                   padding: overlayPadding,
                   child: SpellCheckSquiggleLayer(
+                    spanBuilder: spanBuilder,
                     controller: controller,
                     focusNode: _focusNode,
                     style: textStyle ?? const TextStyle(),
@@ -359,6 +431,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
                 child: Padding(
                   padding: overlayPadding,
                   child: SelectionHighlightLayer(
+                    spanBuilder: spanBuilder,
                     controller: controller,
                     focusNode: _focusNode,
                     style: textStyle ?? const TextStyle(),
@@ -376,6 +449,28 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
                 ),
               ),
             ),
+          // Above the selection and still beneath the field: this is where
+          // the paragraph itself used to fill a `==highlight==`, back when the
+          // fill was a `backgroundColor` and its corners were square.
+          if (spanBuilder != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: ProseHighlightLayer(
+                    spanBuilder: spanBuilder,
+                    controller: controller,
+                    style: textStyle ?? const TextStyle(),
+                    strutStyle: StrutStyle.fromTextStyle(
+                      textStyle ?? const TextStyle(),
+                      forceStrutHeight: true,
+                    ),
+                    color: highlightFill,
+                    scrollController: _scrollController,
+                  ),
+                ),
+              ),
+            ),
           field,
           // Above the field, not behind it — see [VimTextOverlay]. Mounted for
           // a snippet session too, which is what puts dotted tabstop marks on
@@ -386,6 +481,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
                 child: Padding(
                   padding: overlayPadding,
                   child: VimTextOverlay(
+                    spanBuilder: spanBuilder,
                     session: vimSession,
                     snippetSession: snippetSession,
                     controller: controller,

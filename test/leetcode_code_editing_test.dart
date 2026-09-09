@@ -337,6 +337,60 @@ void main() {
       );
       expect(result, isNull);
     });
+
+    test('backspace in the indent deletes a whole level', () {
+      final current = TextEditingValue(
+        text: 'def f():\n        x',
+        selection: const TextSelection.collapsed(offset: 17),
+      );
+      final result = applyLeetCodeCodeEdits(
+        current: current,
+        incoming: backspace(current),
+        tabSpaces: 4,
+      );
+      expect(result!.text, 'def f():\n    x');
+      expect(result.selection.baseOffset, 13);
+    });
+
+    test('backspace off a partial indent falls back to the tab stop', () {
+      final current = TextEditingValue(
+        text: '      x',
+        selection: const TextSelection.collapsed(offset: 6),
+      );
+      final result = applyLeetCodeCodeEdits(
+        current: current,
+        incoming: backspace(current),
+        tabSpaces: 4,
+      );
+      expect(result!.text, '    x');
+      expect(result.selection.baseOffset, 4);
+    });
+
+    test('backspace one space into an indent is left to the field', () {
+      final current = TextEditingValue(
+        text: '     x',
+        selection: const TextSelection.collapsed(offset: 5),
+      );
+      final result = applyLeetCodeCodeEdits(
+        current: current,
+        incoming: backspace(current),
+        tabSpaces: 4,
+      );
+      expect(result, isNull);
+    });
+
+    test('backspace over a space between words stays one character', () {
+      final current = TextEditingValue(
+        text: '    a    b',
+        selection: const TextSelection.collapsed(offset: 9),
+      );
+      final result = applyLeetCodeCodeEdits(
+        current: current,
+        incoming: backspace(current),
+        tabSpaces: 4,
+      );
+      expect(result, isNull);
+    });
   });
 
   group('LeetCodeCodeController', () {
@@ -360,12 +414,37 @@ void main() {
       c.value = addChar(c.value, '{');
       expect(c.text, '{}');
       c.value = addChar(c.value, '\n');
-      expect(c.text, '{\n  \n}');
+      // One indent level, which is four spaces — see [kLeetCodeEditorParams].
+      expect(c.text, '{\n    \n}');
       // The closer on the line below is the one this block already has. A `}`
       // typed on the blank line is a second brace, outdented to match.
       c.value = addChar(c.value, '}');
       expect(c.text, '{\n}\n}');
       expect(c.selection.baseOffset, 3);
+      c.dispose();
+    });
+
+    test('collapsing a one-character selection is not a surround', () {
+      // Double-click a lone `{`, then click to its right. The click sends the
+      // same text back with the caret at offset 1, which is byte-for-byte what
+      // typing `{` over that selection would send — the editor used to read it
+      // as a surround and write `{{}` with nothing touched on the keyboard.
+      final c = LeetCodeCodeController(text: '{');
+      c.selection = const TextSelection(baseOffset: 0, extentOffset: 1);
+      c.value = const TextEditingValue(
+        text: '{',
+        selection: TextSelection.collapsed(offset: 1),
+      );
+      expect(c.text, '{');
+      expect(c.selection.baseOffset, 1);
+      c.dispose();
+    });
+
+    test('Tab indents by one four-space level', () {
+      final c = LeetCodeCodeController(text: 'x');
+      c.selection = const TextSelection.collapsed(offset: 0);
+      c.onTabKeyAction();
+      expect(c.text, '    x');
       c.dispose();
     });
 

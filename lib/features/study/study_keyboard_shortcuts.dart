@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/widgets/media_lightbox.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/domain/models/study_models.dart';
@@ -22,6 +23,7 @@ class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
     this.onGrade,
     this.onUndo,
     this.onRedo,
+    this.onFocusScratch,
     this.arrowsNavigateHistory = false,
   });
 
@@ -38,6 +40,10 @@ class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
   /// also what greys out the header buttons.
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
+
+  /// Puts the caret in the session's scratch code pad, bound to C. Null when
+  /// the session has no pad — the key then does nothing, as it did before.
+  final VoidCallback? onFocusScratch;
 
   /// Whether ←/→ step through the history alongside U/R. On for the review
   /// sessions, where nothing else claims the arrows; off for cram, where they
@@ -69,12 +75,19 @@ class _StudyKeyboardShortcutsState
     if (route?.isCurrent != true) return false;
     if (isTextInputFocused()) return false;
     if (!subtreeIsVisible(context)) return false;
+    // Inspecting a card's image puts a viewer over the whole session, and it
+    // is the only thing the keyboard should be driving while it is up —
+    // neither of the tests above sees it, for the reasons its own doc gives.
+    if (mediaLightboxIsOpen) return false;
     return true;
   }
 
   bool _handleKeyEvent(KeyEvent event) {
     if (!_enabled()) return false;
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    // Presses only: neither grading nor flipping is a repeatable action, and on
+    // auto-repeat Space re-entered `_flip()` every tick and thrashed the flip
+    // controller's queued state.
+    if (event is! KeyDownEvent) return false;
 
     if (event.logicalKey == LogicalKeyboardKey.space) {
       widget.onSpace();
@@ -82,7 +95,28 @@ class _StudyKeyboardShortcutsState
     }
 
     if (_handleGradeKey(event)) return true;
+    if (_handleScratchKey(event)) return true;
     return _handleHistoryKey(event);
+  }
+
+  /// C opens the scratch pad — but only after the grading keys have had the
+  /// event. The four grades are the user's own bindings and one of them may
+  /// well be C; a key they chose for grading must not be quietly taken away by
+  /// a feature they turned on for a different reason.
+  ///
+  /// Nothing is needed here for the *focused* pad: [_enabled] already bails on
+  /// a focused text input, which is what lets Space type a space and keeps the
+  /// grading keys out of the editor.
+  bool _handleScratchKey(KeyEvent event) {
+    if (widget.onFocusScratch == null) return false;
+    if (HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed ||
+        HardwareKeyboard.instance.isMetaPressed) {
+      return false;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.keyC) return false;
+    widget.onFocusScratch!();
+    return true;
   }
 
   /// The grading keys are checked before the history keys, so a user who has

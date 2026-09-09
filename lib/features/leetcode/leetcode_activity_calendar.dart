@@ -64,13 +64,21 @@ class LeetCodeActivityCalendar extends ConsumerStatefulWidget {
       _LeetCodeActivityCalendarState();
 }
 
-/// The hovered day and where the pointer is in the grid's own coordinates,
-/// which is what the bubble is laid out against.
-typedef _CalendarHover = ({DateTime date, Offset position});
+/// The hovered day, where the pointer is in the grid's own coordinates — which
+/// is what the bubble is laid out against — and the band of those coordinates
+/// the year is actually being shown through. The grid scrolls, so the space
+/// above the pointer inside the stack is not necessarily space on screen.
+typedef _CalendarHover = ({
+  DateTime date,
+  Offset position,
+  double visibleTop,
+  double visibleBottom,
+});
 
 class _LeetCodeActivityCalendarState
     extends ConsumerState<LeetCodeActivityCalendar> {
   final _stackKey = GlobalKey();
+  final _scrollController = ScrollController();
 
   late int _year = DateTime.now().year;
 
@@ -84,15 +92,29 @@ class _LeetCodeActivityCalendarState
   @override
   void dispose() {
     _hover.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   void _onHover(DateTime date, Offset globalPosition) {
     final box = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
+    // Read on every move rather than watched: the pointer has to move for a
+    // bubble to exist at all, so the metrics are never staler than the hover
+    // they travel with.
+    final position = _scrollController.hasClients
+        ? _scrollController.position
+        : null;
+    final visibleTop = position?.pixels ?? 0.0;
     // Records compare by value, so a pointer event that resolves to the same
     // day and position notifies nobody.
-    _hover.value = (date: date, position: box.globalToLocal(globalPosition));
+    _hover.value = (
+      date: date,
+      position: box.globalToLocal(globalPosition),
+      visibleTop: visibleTop,
+      visibleBottom:
+          visibleTop + (position?.viewportDimension ?? box.size.height),
+    );
   }
 
   /// Only the cell that is still the hovered one may clear the bubble — the
@@ -141,6 +163,7 @@ class _LeetCodeActivityCalendarState
         const SizedBox(height: 8),
         Expanded(
           child: VoyagerScrollView(
+            controller: _scrollController,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final columns = _columnsFor(constraints.maxWidth);
@@ -196,6 +219,8 @@ class _LeetCodeActivityCalendarState
                         if (hover == null) return const SizedBox.shrink();
                         return LeetCodeActivityBubbleLayer(
                           anchor: hover.position,
+                          visibleTop: hover.visibleTop,
+                          visibleBottom: hover.visibleBottom,
                           child: LeetCodeActivityBubble(
                             date: hover.date,
                             counts:

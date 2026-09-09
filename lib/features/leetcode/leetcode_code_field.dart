@@ -61,6 +61,24 @@ Map<String, TextStyle> _spanStyles(Map<String, TextStyle> theme) => {
 Map<String, TextStyle> leetCodeSyntaxStyles(Brightness brightness) =>
     _spanStyles(_themeFor(brightness));
 
+/// The code box's own paper: the Atom One `root` background the surface fills
+/// with, and the foreground its untokenized text takes.
+///
+/// Exported because chrome mounted *on* the box — the scratch pad's notepad
+/// header — sits on that paper rather than on the app's surface, and Atom One
+/// dark is dark in both app themes. Reading `onSurface` there would put black
+/// text on a near-black strip in light mode.
+({Color background, Color foreground}) leetCodeCodePalette(
+  BuildContext context,
+) {
+  final theme = Theme.of(context);
+  final root = _themeFor(theme.brightness)['root'];
+  return (
+    background: root?.backgroundColor ?? theme.colorScheme.surface,
+    foreground: root?.color ?? theme.colorScheme.onSurface,
+  );
+}
+
 /// Size and leading are pinned rather than inherited. Left unset, the two
 /// columns resolve them from different theme slots — the line numbers'
 /// [TextField] falls back to `bodyLarge`, while a bare code [TextField]
@@ -194,6 +212,121 @@ class _LineNumbersState extends State<_LineNumbers> {
   }
 }
 
+/// The decorated code box: background, border, line-number column and the
+/// editor itself. Everything a caller wraps around it — a size, a language
+/// row, a tap target — is that caller's own chrome.
+///
+/// Public because the scratch code pad mounts the same surface with a
+/// different frame around it: it fills its parent instead of taking a fixed
+/// 160–320px, and its toolbar lives above the whole pad rather than above the
+/// box.
+class LeetCodeCodeSurface extends StatelessWidget {
+  const LeetCodeCodeSurface({
+    super.key,
+    required this.controller,
+    this.focusNode,
+    this.readOnly = false,
+    this.scrollable = true,
+    this.framed = true,
+  });
+
+  final CodeController controller;
+
+  /// Supplied when the caller needs to focus the editor itself — the tap
+  /// target in [LeetCodeCodeInput], the `C` shortcut in a session.
+  final FocusNode? focusNode;
+
+  final bool readOnly;
+
+  /// Whether the box scrolls its own overflow. Off for a surface that is
+  /// already inside a scrolling page, which would otherwise nest two.
+  final bool scrollable;
+
+  /// Whether the box draws its own paper, border and corners. Off for a caller
+  /// that has already framed it — the scratch pad, whose expand strip and
+  /// editor share one notepad border.
+  final bool framed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final codeTheme = _themeFor(theme.brightness);
+    final palette = leetCodeCodePalette(context);
+    final lineNumberColor = palette.foreground.withValues(alpha: 0.5);
+    final textStyle = _codeTextStyle.copyWith(color: palette.foreground);
+
+    // The Vim scope wraps the whole box rather than the editor inside it. The
+    // mode badge hangs off the bottom-right of whatever the scope calls "the
+    // field" (see VimTextScope's *Mode badge placement*), and the editor is as
+    // tall as the code it holds and scrolls inside this box — so anchoring to
+    // it pinned the badge to the last line, where scrolling up took it out of
+    // view entirely. The box is the part with a fixed height, so hanging the
+    // badge off that keeps it in the corner it belongs in.
+    return VimTextScope(
+      enabled:
+          VimEnabledScope.of(context) && vimSuitsField(readOnly: readOnly),
+      // Hard off, per SNIPPET.md §2.3. Tab here indents the code (see
+      // [_codeEditorShortcuts]), and a prose trigger firing inside a code
+      // block would corrupt the very text it is meant to be showing verbatim.
+      snippetsAllowed: false,
+      // Hard off, per AUTOCORRECT.md §4.1. Code is the one place where a word
+      // that is not in the dictionary is almost always exactly right.
+      autocorrectAllowed: false,
+      // Hard off, per CAPS_LOCK.md §2.2 — a mark riding beside the caret
+      // through code is chrome the editor never asked for, and the gutter,
+      // highlight and Vim block are already competing for that strip.
+      capsLockIndicatorAllowed: false,
+      controller: controller,
+      multiline: true,
+      accentColor: theme.colorScheme.primary,
+      builder: (context, vim) {
+        final Widget body = Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _LineNumbers(source: controller, color: lineNumberColor),
+              const SizedBox(width: _lineNumberGap),
+              Expanded(
+                child: _LeetCodeCodeEditor(
+                  controller: controller,
+                  vim: vim,
+                  focusNode: focusNode,
+                  readOnly: readOnly,
+                  textStyle: textStyle,
+                  cursorColor: palette.foreground,
+                ),
+              ),
+            ],
+          ),
+        );
+
+        final Widget box = CodeTheme(
+          data: CodeThemeData(styles: _spanStyles(codeTheme)),
+          child: Theme(
+            data: theme.copyWith(
+              inputDecorationTheme: const InputDecorationTheme(),
+            ),
+            child: scrollable ? VoyagerScrollView(child: body) : body,
+          ),
+        );
+        if (!framed) return box;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: palette.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            ),
+          ),
+          child: box,
+        );
+      },
+    );
+  }
+}
+
 /// Editable, syntax-highlighted code input for the Track modal. The code
 /// pasted here is display-only text with highlighting — never compiled or
 /// executed by the app.
@@ -249,7 +382,12 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
   void _stripComments() {
     final controller = widget.controller;
     final source = controller.fullText;
-    final stripped = stripLeetCodeLineComments(source, widget.language);
+    // Comments first, then the trailing blank line — stripping a lone comment
+    // off the last line leaves exactly that blank line behind, so the second
+    // pass has to see what the first one produced.
+    final stripped = stripLeetCodeTrailingBlankLine(
+      stripLeetCodeLineComments(source, widget.language),
+    );
     if (stripped == source) return;
     final caret = controller.selection.baseOffset;
     controller.fullText = stripped;
@@ -277,12 +415,6 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final codeTheme = _themeFor(theme.brightness);
-    final background = codeTheme['root']?.backgroundColor ?? theme.colorScheme.surface;
-    final rootColor = codeTheme['root']?.color ?? theme.colorScheme.onSurface;
-    final lineNumberColor = rootColor.withValues(alpha: 0.5);
-    final textStyle = _codeTextStyle.copyWith(color: rootColor);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -321,8 +453,9 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
                 height: 32,
                 icon: const Icon(Icons.comments_disabled_outlined),
                 label: 'Strip',
-                tooltip: 'Remove ${labelForLeetCodeLanguage(widget.language)} '
-                    'comments',
+                tooltip:
+                    'Remove ${labelForLeetCodeLanguage(widget.language)} '
+                    'comments and the trailing blank line',
                 onPressed: _stripComments,
               ),
             ],
@@ -334,38 +467,9 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: _focusCodeAtEnd,
-            child: Container(
-              decoration: BoxDecoration(
-                color: background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
-              ),
-              child: CodeTheme(
-                data: CodeThemeData(styles: _spanStyles(codeTheme)),
-                child: Theme(
-                  data: theme.copyWith(inputDecorationTheme: const InputDecorationTheme()),
-                  child: VoyagerScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _LineNumbers(source: widget.controller, color: lineNumberColor),
-                          const SizedBox(width: _lineNumberGap),
-                          Expanded(
-                            child: _LeetCodeCodeEditor(
-                              controller: widget.controller,
-                              focusNode: _codeFocusNode,
-                              textStyle: textStyle,
-                              cursorColor: rootColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            child: LeetCodeCodeSurface(
+              controller: widget.controller,
+              focusNode: _codeFocusNode,
             ),
           ),
         ),
@@ -417,42 +521,10 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final codeTheme = _themeFor(theme.brightness);
-    final background = codeTheme['root']?.backgroundColor ?? theme.colorScheme.surface;
-    final rootColor = codeTheme['root']?.color ?? theme.colorScheme.onSurface;
-    final lineNumberColor = rootColor.withValues(alpha: 0.5);
-    final textStyle = _codeTextStyle.copyWith(color: rootColor);
-    return Container(
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.3)),
-      ),
-      child: CodeTheme(
-        data: CodeThemeData(styles: _spanStyles(codeTheme)),
-        child: Theme(
-          data: theme.copyWith(inputDecorationTheme: const InputDecorationTheme()),
-          child: Padding(
-            padding: const EdgeInsets.only(left: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _LineNumbers(source: _controller, color: lineNumberColor),
-                const SizedBox(width: _lineNumberGap),
-                Expanded(
-                  child: _LeetCodeCodeEditor(
-                    controller: _controller,
-                    readOnly: true,
-                    textStyle: textStyle,
-                    cursorColor: rootColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return LeetCodeCodeSurface(
+      controller: _controller,
+      readOnly: true,
+      scrollable: false,
     );
   }
 }
@@ -469,6 +541,7 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
 class _LeetCodeCodeEditor extends StatefulWidget {
   const _LeetCodeCodeEditor({
     required this.controller,
+    required this.vim,
     required this.textStyle,
     required this.cursorColor,
     this.focusNode,
@@ -476,6 +549,10 @@ class _LeetCodeCodeEditor extends StatefulWidget {
   });
 
   final CodeController controller;
+
+  /// The binding from the [VimTextScope] the whole box is wrapped in — see
+  /// [LeetCodeCodeSurface.build] for why the scope sits up there and not here.
+  final VimFieldBinding vim;
 
   /// Supplied when the caller needs to focus the field itself; one is created
   /// and owned here otherwise.
@@ -535,25 +612,7 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return VimTextScope(
-      enabled: VimEnabledScope.of(context) &&
-          vimSuitsField(readOnly: widget.readOnly),
-      // Hard off, per SNIPPET.md §2.3. Tab here indents the code (see
-      // [_codeEditorShortcuts]), and a prose trigger firing inside a code
-      // block would corrupt the very text it is meant to be showing verbatim.
-      snippetsAllowed: false,
-      // Hard off, per CAPS_LOCK.md §2.2 — a mark riding beside the caret
-      // through code is chrome the editor never asked for, and the gutter,
-      // highlight and Vim block are already competing for that strip.
-      capsLockIndicatorAllowed: false,
-      controller: widget.controller,
-      multiline: true,
-      accentColor: Theme.of(context).colorScheme.primary,
-      builder: _buildEditor,
-    );
-  }
-
-  Widget _buildEditor(BuildContext context, VimFieldBinding vim) {
+    final vim = widget.vim;
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final selectionColor = resolveSelectionColor(context);

@@ -42,16 +42,22 @@ class AppSettings {
     this.hideCompletedTasks = false,
     this.vimModeEnabled = false,
     this.snippetsEnabled = true,
+    this.autocorrectEnabled = true,
     this.capsLockIndicatorEnabled = true,
+    this.mediaRemoteUploadsEnabled = true,
+    this.mediaRemoteDownloadsEnabled = true,
+    this.mediaBackgroundPrefetchEnabled = true,
     this.snippetExpandKey = SnippetExpandKey.tab,
     this.snippets = const [],
     this.deviceId,
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
+    this.lastViewedCalendarId,
     this.defaultJournalId,
     this.defaultTodoListId,
     this.journalShowAllEntries = false,
     this.todoShowAllTasks = false,
+    this.calendarShowAllCalendars = false,
     this.weatherLocationLabel,
     this.weatherLat,
     this.weatherLon,
@@ -118,6 +124,10 @@ class AppSettings {
     this.showAnnualizedSubscriptionCost = false,
     this.jobsHiddenColumns = const [],
     this.jobsIncludeArchived = false,
+    this.rankingsCollapsedQueueCategories = const [],
+    this.jobProfileLinkedInUrl,
+    this.jobProfileGitHubUrl,
+    this.jobProfilePortfolioUrl,
     this.dreamSplitWidth,
     this.showDreamStatistics = false,
     this.dreamNotesPinned = false,
@@ -130,6 +140,7 @@ class AppSettings {
     this.leetCodeHideExamples = false,
     this.leetCodeHideComplexity = false,
     this.leetCodeHideCode = false,
+    this.leetCodeEnableScratchCode = false,
     this.weightUnit = WeightUnit.lb,
     this.workoutRestTimerEnabled = false,
     this.workoutRestSeconds = 90,
@@ -211,6 +222,11 @@ class AppSettings {
   /// fields Vim would suit, whether or not Vim itself is switched on.
   final bool snippetsEnabled;
 
+  /// Whether prose fields fix obvious typos on space, newline or sentence
+  /// punctuation. See AUTOCORRECT.md — independent of [snippetsEnabled],
+  /// though the two share a boundary keystroke.
+  final bool autocorrectEnabled;
+
   /// Master switch for the Caps Lock caret mark. On by default: it costs
   /// nothing until Caps Lock is actually on, and the one moment it matters —
   /// typing a password in caps without noticing — is the moment nobody would
@@ -219,6 +235,18 @@ class AppSettings {
   /// Windows and Linux only whatever this says; macOS draws its own glyph and a
   /// soft keyboard has no lock key. See `CapsLockIndicatorScope`.
   final bool capsLockIndicatorEnabled;
+
+  /// Off => attached images never leave this device. See
+  /// `SettingsTable.mediaRemoteUploadsEnabled`.
+  final bool mediaRemoteUploadsEnabled;
+
+  /// Off => image bytes are never fetched, so a missing local file shows
+  /// "Download disabled" rather than a spinner.
+  final bool mediaRemoteDownloadsEnabled;
+
+  /// Off => images are fetched only when something needs to show them.
+  /// Gated by [mediaRemoteDownloadsEnabled].
+  final bool mediaBackgroundPrefetchEnabled;
 
   /// Which key expands a non-auto snippet. Global rather than per-snippet.
   final SnippetExpandKey snippetExpandKey;
@@ -229,6 +257,11 @@ class AppSettings {
   final String? deviceId;
   final String? lastViewedJournalId;
   final String? lastViewedTodoListId;
+
+  /// The calendar the calendar page reopens into; null means the default one.
+  /// Paired with [calendarShowAllCalendars] for the same reason the journal
+  /// and todo ids are paired with their all-view flags.
+  final String? lastViewedCalendarId;
 
   /// The journal the journal page always opens into. When set it wins over
   /// both [lastViewedJournalId] and [journalShowAllEntries]; null restores
@@ -245,6 +278,11 @@ class AppSettings {
   /// which journal/list a new entry or task should be created in.
   final bool journalShowAllEntries;
   final bool todoShowAllTasks;
+
+  /// Whether the calendar page was left showing every calendar at once. Held
+  /// apart from [lastViewedCalendarId] so restoring the all-view still knows
+  /// which calendar a new event should be filed under.
+  final bool calendarShowAllCalendars;
   final String? weatherLocationLabel;
   final double? weatherLat;
   final double? weatherLon;
@@ -326,6 +364,18 @@ class AppSettings {
   /// Whether the Jobs page includes archived applications in the list, the
   /// sparkline and the Sankey.
   final bool jobsIncludeArchived;
+
+  /// Rankings categories whose Queue section is collapsed, by category id.
+  /// The collapsed set rather than the expanded one, so a category made on
+  /// another device opens expanded — which is the default (§6.1).
+  final List<String> rankingsCollapsedQueueCategories;
+
+  /// The user's own profile links, offered as one-tap clipboard copies in the
+  /// Jobs header (§3.4). Written only from Settings; the Jobs page reads them
+  /// and never exposes an edit affordance. A null or empty slot has no button.
+  final String? jobProfileLinkedInUrl;
+  final String? jobProfileGitHubUrl;
+  final String? jobProfilePortfolioUrl;
   final List<int> colorPalette;
 
   /// Adjustable width of the Dream Journal's entry-list pane, mirroring
@@ -363,6 +413,11 @@ class AppSettings {
   /// Back-of-card hides: the Time/Space line, and the solution code.
   final bool leetCodeHideComplexity;
   final bool leetCodeHideCode;
+
+  /// Whether a Study or Cram session puts a scratch code pad beside the card.
+  /// Unlike the hides above this adds a surface rather than blanking one, and
+  /// nothing typed into it is ever written to the problem.
+  final bool leetCodeEnableScratchCode;
 
   /// Display unit for every weight in the workout tracker. Storage stays in
   /// kilograms, so flipping this converts what's shown without rewriting a
@@ -422,7 +477,11 @@ class AppSettings {
     bool? hideCompletedTasks,
     bool? vimModeEnabled,
     bool? snippetsEnabled,
+    bool? autocorrectEnabled,
     bool? capsLockIndicatorEnabled,
+    bool? mediaRemoteUploadsEnabled,
+    bool? mediaRemoteDownloadsEnabled,
+    bool? mediaBackgroundPrefetchEnabled,
     SnippetExpandKey? snippetExpandKey,
     List<Snippet>? snippets,
     bool? timelineModeYearZero,
@@ -434,10 +493,12 @@ class AppSettings {
     String? deviceId,
     String? lastViewedJournalId,
     String? lastViewedTodoListId,
+    String? lastViewedCalendarId,
     String? defaultJournalId,
     String? defaultTodoListId,
     bool? journalShowAllEntries,
     bool? todoShowAllTasks,
+    bool? calendarShowAllCalendars,
     String? weatherLocationLabel,
     double? weatherLat,
     double? weatherLon,
@@ -504,6 +565,10 @@ class AppSettings {
     bool? showAnnualizedSubscriptionCost,
     List<String>? jobsHiddenColumns,
     bool? jobsIncludeArchived,
+    List<String>? rankingsCollapsedQueueCategories,
+    String? jobProfileLinkedInUrl,
+    String? jobProfileGitHubUrl,
+    String? jobProfilePortfolioUrl,
     double? dreamSplitWidth,
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
@@ -516,6 +581,7 @@ class AppSettings {
     bool? leetCodeHideExamples,
     bool? leetCodeHideComplexity,
     bool? leetCodeHideCode,
+    bool? leetCodeEnableScratchCode,
     WeightUnit? weightUnit,
     bool? workoutRestTimerEnabled,
     int? workoutRestSeconds,
@@ -524,6 +590,9 @@ class AppSettings {
     DateTime? updatedAt,
     int? syncBackfillVersion,
     List<int>? colorPalette,
+    bool clearJobProfileLinkedInUrl = false,
+    bool clearJobProfileGitHubUrl = false,
+    bool clearJobProfilePortfolioUrl = false,
     bool clearLeetcodeUsername = false,
     bool clearWeatherLocationLabel = false,
     bool clearWeatherLat = false,
@@ -537,6 +606,7 @@ class AppSettings {
     bool clearWeatherForecastJson = false,
     bool clearLastViewedJournalId = false,
     bool clearLastViewedTodoListId = false,
+    bool clearLastViewedCalendarId = false,
     bool clearDefaultJournalId = false,
     bool clearDefaultTodoListId = false,
     bool clearJournalEntryListWidth = false,
@@ -585,8 +655,15 @@ class AppSettings {
       hideCompletedTasks: hideCompletedTasks ?? this.hideCompletedTasks,
       vimModeEnabled: vimModeEnabled ?? this.vimModeEnabled,
       snippetsEnabled: snippetsEnabled ?? this.snippetsEnabled,
+      autocorrectEnabled: autocorrectEnabled ?? this.autocorrectEnabled,
       capsLockIndicatorEnabled:
           capsLockIndicatorEnabled ?? this.capsLockIndicatorEnabled,
+      mediaRemoteUploadsEnabled:
+          mediaRemoteUploadsEnabled ?? this.mediaRemoteUploadsEnabled,
+      mediaRemoteDownloadsEnabled:
+          mediaRemoteDownloadsEnabled ?? this.mediaRemoteDownloadsEnabled,
+      mediaBackgroundPrefetchEnabled:
+          mediaBackgroundPrefetchEnabled ?? this.mediaBackgroundPrefetchEnabled,
       snippetExpandKey: snippetExpandKey ?? this.snippetExpandKey,
       snippets: snippets ?? this.snippets,
       deviceId: deviceId ?? this.deviceId,
@@ -596,6 +673,9 @@ class AppSettings {
       lastViewedTodoListId: clearLastViewedTodoListId
           ? null
           : (lastViewedTodoListId ?? this.lastViewedTodoListId),
+      lastViewedCalendarId: clearLastViewedCalendarId
+          ? null
+          : (lastViewedCalendarId ?? this.lastViewedCalendarId),
       defaultJournalId: clearDefaultJournalId
           ? null
           : (defaultJournalId ?? this.defaultJournalId),
@@ -605,6 +685,8 @@ class AppSettings {
       journalShowAllEntries:
           journalShowAllEntries ?? this.journalShowAllEntries,
       todoShowAllTasks: todoShowAllTasks ?? this.todoShowAllTasks,
+      calendarShowAllCalendars:
+          calendarShowAllCalendars ?? this.calendarShowAllCalendars,
       weatherLocationLabel: clearWeatherLocationLabel
           ? null
           : (weatherLocationLabel ?? this.weatherLocationLabel),
@@ -730,6 +812,17 @@ class AppSettings {
           this.showAnnualizedSubscriptionCost,
       jobsHiddenColumns: jobsHiddenColumns ?? this.jobsHiddenColumns,
       jobsIncludeArchived: jobsIncludeArchived ?? this.jobsIncludeArchived,
+      rankingsCollapsedQueueCategories: rankingsCollapsedQueueCategories ??
+          this.rankingsCollapsedQueueCategories,
+      jobProfileLinkedInUrl: clearJobProfileLinkedInUrl
+          ? null
+          : (jobProfileLinkedInUrl ?? this.jobProfileLinkedInUrl),
+      jobProfileGitHubUrl: clearJobProfileGitHubUrl
+          ? null
+          : (jobProfileGitHubUrl ?? this.jobProfileGitHubUrl),
+      jobProfilePortfolioUrl: clearJobProfilePortfolioUrl
+          ? null
+          : (jobProfilePortfolioUrl ?? this.jobProfilePortfolioUrl),
       colorPalette: colorPalette ?? this.colorPalette,
       dreamSplitWidth: clearDreamSplitWidth
           ? null
@@ -752,6 +845,8 @@ class AppSettings {
       leetCodeHideComplexity:
           leetCodeHideComplexity ?? this.leetCodeHideComplexity,
       leetCodeHideCode: leetCodeHideCode ?? this.leetCodeHideCode,
+      leetCodeEnableScratchCode:
+          leetCodeEnableScratchCode ?? this.leetCodeEnableScratchCode,
       weightUnit: weightUnit ?? this.weightUnit,
       workoutRestTimerEnabled:
           workoutRestTimerEnabled ?? this.workoutRestTimerEnabled,
@@ -812,6 +907,38 @@ class CustomWord {
   });
 
   final String word;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+}
+
+/// A word the user has told the checker to treat as wrong *for them*, even
+/// though the bundled English list accepts it (`FLAGGED_WORDS.md`).
+///
+/// The bundled asset is never edited: `known` is `(bundled u custom) - flagged`,
+/// so one of these rows is what makes `neve` squiggle. [replacement] is the
+/// optional other half — the word finishing that token rewrites to.
+///
+/// Removing a flag tombstones the row for the same reason [CustomWord] does:
+/// the user's other devices have to hear that the word is allowed again rather
+/// than re-flagging it on their next pull.
+class FlaggedWord {
+  const FlaggedWord({
+    required this.word,
+    required this.createdAt,
+    required this.updatedAt,
+    this.replacement,
+    this.version = 0,
+    this.deletedAt,
+  });
+
+  final String word;
+
+  /// What finishing this token rewrites to, or null for a flag-only row.
+  /// Lowercase, a single word token, never equal to [word].
+  final String? replacement;
+
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;

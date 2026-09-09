@@ -1,8 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:voyager/core/platform/window_focus_watcher.dart';
 import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_session.dart';
+import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
+import 'package:voyager/core/spellcheck/autocorrect_session.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
+import 'package:voyager/core/text/prose_paste.dart';
 import 'package:voyager/core/vim/vim_anchored_chrome.dart';
 import 'package:voyager/core/vim/vim_session.dart';
 
@@ -19,6 +26,7 @@ class VimFieldBinding {
     this.undoController,
     this.session,
     this.snippetSession,
+    this.autocorrectSession,
     this.snippetsAllowed = false,
   });
 
@@ -40,6 +48,14 @@ class VimFieldBinding {
   /// stack a `VimTextOverlay` pass this to it so the dotted tabstop marks get
   /// drawn — and must mount that overlay when *either* session is live.
   final SnippetSession? snippetSession;
+
+  /// The field's autocorrect runtime, or null when autocorrect is off, the
+  /// field opted out, or the field is not a multiline prose box.
+  ///
+  /// Independent of both sessions above. Fields pass it to their overlay stack
+  /// so a correction can flash behind the word it replaced — see
+  /// `AutocorrectFlashLayer`.
+  final AutocorrectSession? autocorrectSession;
 
   /// Whether a *new* snippet could be written from this field — the field's
   /// own opt-in narrowed by the suitability rule, and the user's global
@@ -190,8 +206,10 @@ class VimTextScope extends StatefulWidget {
     required this.controller,
     required this.multiline,
     required this.builder,
+    this.proseEmphasis = false,
     this.accentColor,
     this.snippetsAllowed = true,
+    this.autocorrectAllowed = true,
     this.capsLockIndicatorAllowed = true,
   });
 
@@ -208,11 +226,25 @@ class VimTextScope extends StatefulWidget {
   /// whether `o`/`O` and a linewise `p` may insert newlines.
   final bool multiline;
 
+  /// Whether the wrapped field renders emphasis — the field's own
+  /// `_prose != null`, published rather than re-derived, so the set of fields
+  /// that *writes* markers on paste is exactly the set that renders them.
+  /// See [_prosePasteActive].
+  final bool proseEmphasis;
+
   /// Whether this field may run text snippets, on top of the user's own
   /// setting. The hard opt-out for the two places expansion would be wrong:
   /// the LeetCode code editor (SNIPPET.md §2.3) and the snippet editor itself,
   /// where a trigger being typed into a form field must stay literal.
   final bool snippetsAllowed;
+
+  /// Whether this field may autocorrect, on top of the user's own setting and
+  /// the multiline rule below. The hard opt-out for the places a correction
+  /// would be wrong whatever the text looks like: the LeetCode code editor,
+  /// the boxes snippets are written in, and the dictionary editor, where the
+  /// whole point of the word being typed is that it is *not* in the
+  /// dictionary yet (AUTOCORRECT.md §4.1).
+  final bool autocorrectAllowed;
 
   /// Whether this field may draw the Caps Lock caret mark, on top of the
   /// user's own setting. False only for code editors (CAPS_LOCK.md §2.2) —
@@ -264,11 +296,20 @@ class _VimTextScopeState extends State<VimTextScope> {
 
   VimSession? _session;
   SnippetSession? _snippetSession;
+  AutocorrectSession? _autocorrectSession;
 
   /// The snippet settings this field last built against, read in
   /// [didChangeDependencies] rather than [initState] because it comes from an
   /// inherited widget.
   SnippetScopeData _snippetScope = SnippetScopeData.disabled;
+
+  /// The autocorrect settings this field last built against, read from an
+  /// inherited widget for the same reason [_snippetScope] is.
+  AutocorrectScopeData _autocorrectScope = AutocorrectScopeData.disabled;
+
+  /// Whether a [MediaPasteScope] above this field already owns Ctrl+V — see
+  /// [MediaPasteOwnerScope].
+  bool _mediaOwnsPaste = false;
 
   /// Stands in for [VimSession.modeListenable] when Vim is off, so a field with
   /// only snippets running builds through the same [ValueListenableBuilder] as
@@ -318,6 +359,24 @@ class _VimTextScopeState extends State<VimTextScope> {
   bool get _canCreateSnippets =>
       widget.snippetsAllowed && _snippetScope.enabled;
 
+  /// Whether this field runs an [AutocorrectSession]. [VimTextScope.multiline]
+  /// is the field's own "is this a prose box?" answer — the same predicate
+  /// `isMultilineField` gives the squiggle layer — so a one-line composer,
+  /// rename box or search field is excluded by construction
+  /// (AUTOCORRECT.md §4.1).
+  ///
+  /// Deliberately *not* gated on the user's autocorrect setting, which is now
+  /// [AutocorrectSession.cascadeEnabled] instead: a stored flagged-word pair
+  /// is a rule the user wrote and applies with autocorrect off
+  /// (`FLAGGED_WORDS.md` §5.1), and "Replace this one" needs the session's
+  /// apply path to flash at all (§5.4). With the toggle off the session does
+  /// nothing but those two things.
+  bool get _autocorrectActive =>
+      widget.autocorrectAllowed &&
+      widget.multiline &&
+      _autocorrectScope.service != null &&
+      widget.controller != null;
+
   @override
   void initState() {
     super.initState();
@@ -330,9 +389,16 @@ class _VimTextScopeState extends State<VimTextScope> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final scope = SnippetEnabledScope.of(context);
-    if (scope == _snippetScope) return;
-    _snippetScope = scope;
-    _syncSnippetSession();
+    if (scope != _snippetScope) {
+      _snippetScope = scope;
+      _syncSnippetSession();
+    }
+    _mediaOwnsPaste = MediaPasteOwnerScope.of(context);
+    final autocorrect = AutocorrectEnabledScope.of(context);
+    if (autocorrect != _autocorrectScope) {
+      _autocorrectScope = autocorrect;
+      _syncAutocorrectSession();
+    }
   }
 
   @override
@@ -355,8 +421,14 @@ class _VimTextScopeState extends State<VimTextScope> {
         _overlayVisible = false;
         _portal.hide();
       }
-    } else if (oldWidget.snippetsAllowed != widget.snippetsAllowed) {
-      _syncSnippetSession();
+    } else {
+      if (oldWidget.snippetsAllowed != widget.snippetsAllowed) {
+        _syncSnippetSession();
+      }
+      if (oldWidget.autocorrectAllowed != widget.autocorrectAllowed ||
+          oldWidget.multiline != widget.multiline) {
+        _syncAutocorrectSession();
+      }
     }
   }
 
@@ -391,6 +463,54 @@ class _VimTextScopeState extends State<VimTextScope> {
       _session = session;
     }
     _syncSnippetSession();
+    _syncAutocorrectSession();
+  }
+
+  /// Creates or tears down the autocorrect runtime to match the current
+  /// settings.
+  ///
+  /// Unlike the snippet session there is nothing to *update*: everything that
+  /// can change under a live session — the dictionary, the trigger list, the
+  /// mode — is read through a callback at the moment it is needed.
+  void _syncAutocorrectSession() {
+    final existing = _autocorrectSession;
+    if (!_autocorrectActive) {
+      if (existing == null) return;
+      existing.dispose();
+      _autocorrectSession = null;
+      return;
+    }
+    if (existing != null) return;
+    _autocorrectSession = AutocorrectSession(
+      textController: widget.controller!,
+      resolveEditableState: _resolveEditableState,
+      isFieldFocused: () => _scopeNode.hasFocus,
+      undoController: _undoController,
+      isInsertMode: _isInsertBehaviour,
+      // Gated on the bundled dictionary rather than on the set being
+      // non-empty: custom words alone are not a dictionary, and correcting
+      // against them would rewrite ordinary words toward the few names the
+      // user has added (AUTOCORRECT.md §4.5).
+      knownWords: () {
+        final service = _autocorrectScope.service;
+        if (service == null || !service.dictionaryLoaded) return const {};
+        return service.knownWords;
+      },
+      // Read live off the same service, so a flag saved from the popover or
+      // the Dictionary dialog reaches a field that is already open.
+      replacementFor: (word) => _autocorrectScope.service?.replacementFor(word),
+      // The setting gates the speculative cascade and nothing else
+      // (`FLAGGED_WORDS.md` §5.1). Read live: flipping it must not have to
+      // rebuild the session.
+      cascadeEnabled: () => _autocorrectScope.enabled,
+      // Read live off the scope, not off a captured index: the exemption has
+      // to follow the user editing their snippets, and it applies whether or
+      // not expansion is switched on (AUTOCORRECT.md §4.5).
+      isSnippetTrigger: (word) => _snippetScope.index.hasTrigger(word),
+      snippetExpansionPending: () =>
+          _snippetSession?.hasPendingExpansion ?? false,
+      snippetIsApplying: () => _snippetSession?.isApplying ?? false,
+    );
   }
 
   /// Creates, updates or tears down the snippet runtime to match the current
@@ -460,26 +580,38 @@ class _VimTextScopeState extends State<VimTextScope> {
     return _editableState = _findEditableState();
   }
 
+  /// The [EditableText] under this scope that is driven by [widget.controller].
+  ///
+  /// The controller match is what makes the search safe on a field that is
+  /// more than one text box — the LeetCode code editor mounts a second,
+  /// read-only [TextField] for its line numbers, and that one comes first in
+  /// the tree. Falls back to the first one found, for the fields whose
+  /// [EditableText] takes a controller of its own.
   EditableTextState? _findEditableState() {
     final context = _fieldKey.currentContext;
     if (context is! Element) return null;
-    EditableTextState? found;
+    EditableTextState? match;
+    EditableTextState? first;
     void visit(Element element) {
-      if (found != null) return;
+      if (match != null) return;
       if (element is StatefulElement && element.state is EditableTextState) {
-        found = element.state as EditableTextState;
+        final state = element.state as EditableTextState;
+        first ??= state;
+        if (state.widget.controller == widget.controller) match = state;
         return;
       }
       element.visitChildren(visit);
     }
 
     context.visitChildren(visit);
-    return found;
+    return match ?? first;
   }
 
   void _disposeSession() {
     _snippetSession?.dispose();
     _snippetSession = null;
+    _autocorrectSession?.dispose();
+    _autocorrectSession = null;
     final session = _session;
     if (session == null) return;
     session.modeListenable.removeListener(_syncOverlay);
@@ -514,6 +646,7 @@ class _VimTextScopeState extends State<VimTextScope> {
       // as the Vim mode: a window switch is not the user leaving the box.
       _session?.reset();
       _snippetSession?.reset();
+      _autocorrectSession?.reset();
     }
     _syncOverlay();
   }
@@ -572,6 +705,7 @@ class _VimTextScopeState extends State<VimTextScope> {
       _parkedSelection = null;
       _session?.reset();
       _snippetSession?.reset();
+      _autocorrectSession?.reset();
       _syncOverlay();
     });
   }
@@ -612,7 +746,13 @@ class _VimTextScopeState extends State<VimTextScope> {
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     final session = _session;
     final snippets = _snippetSession;
-    if (session == null && snippets == null) return KeyEventResult.ignored;
+    final autocorrect = _autocorrectSession;
+    if (session == null &&
+        snippets == null &&
+        autocorrect == null &&
+        !_prosePasteActive) {
+      return KeyEventResult.ignored;
+    }
     // Only claim keys destined for a real text field. The scope's subtree can
     // also contain focusable chrome (a suffix icon button, say), and Vim has
     // no business intercepting keys typed at those.
@@ -629,9 +769,31 @@ class _VimTextScopeState extends State<VimTextScope> {
     // Visual mode with a highlight the next motion jumps back out of. The
     // tabstops stay live and Tab works again the moment Escape drops back to
     // Normal or Insert.
+    // Recorded before anything claims the key: a key the autocorrect layer
+    // never saw would leave a stale "the user typed this" token behind, and
+    // the snippet layer takes several of them (see [AutocorrectSession.noteKey]).
+    autocorrect?.noteKey(event);
+    // Before every layer below, because none of them wants Ctrl+V and the
+    // field's own paste is what this replaces. Claimed only where no
+    // [MediaPasteScope] is already routing the key for its gallery, which
+    // would otherwise never see a pasted screenshot again.
+    if (_prosePasteActive &&
+        !_mediaOwnsPaste &&
+        _isInsertBehaviour() &&
+        _isPasteKey(event)) {
+      unawaited(pasteProse(editable));
+      return KeyEventResult.handled;
+    }
     if (snippets != null && !(session?.mode.isVisual ?? false)) {
       final result = snippets.handleKey(event);
       if (result == KeyEventResult.handled) return result;
+    }
+    // After snippets, whose Ctrl+Z restores a trigger, and before Vim, which
+    // only wants Backspace outside Insert — where autocorrect never has a
+    // correction to revert.
+    if (autocorrect != null &&
+        autocorrect.handleKey(event) == KeyEventResult.handled) {
+      return KeyEventResult.handled;
     }
     return session?.handleKey(event) ?? KeyEventResult.ignored;
   }
@@ -646,20 +808,52 @@ class _VimTextScopeState extends State<VimTextScope> {
   /// selection and Vim layers there is nothing per-field to keep in step.
   @override
   Widget build(BuildContext context) {
-    return CapsLockCaretIndicator(
-      session: _session,
-      allowed: widget.capsLockIndicatorAllowed,
-      // Null for the fields that never named one, which is what the mark's own
-      // fallback to the app accent is for.
-      accentColor: widget.accentColor,
-      child: _build(context),
+    return ProsePasteScope(
+      enabled: _prosePasteActive,
+      child: CapsLockCaretIndicator(
+        session: _session,
+        allowed: widget.capsLockIndicatorAllowed,
+        // Null for the fields that never named one, which is what the mark's
+        // own fallback to the app accent is for.
+        accentColor: widget.accentColor,
+        child: _build(context),
+      ),
     );
+  }
+
+  /// Whether this field pastes rich clipboard HTML as Voyager's markers
+  /// (EMPHASIS_FORMATTING.md §7).
+  ///
+  /// [VimTextScope.proseEmphasis] rather than [VimTextScope.multiline]: the
+  /// two used to be separate readings of the same intent and gave different
+  /// answers. `autocorrectAllowed` folds in `vimSuitsField`, which is false
+  /// for `readOnly`, a `maxLength` and any non-empty `inputFormatters`, so a
+  /// multiline field with a formatter rendered emphasis but pasted HTML flat;
+  /// and nothing here required a caller-owned controller, so an uncontrolled
+  /// multiline field would have converted a Word paste into markers it then
+  /// showed literally. Publishing the field's own decision makes the set that
+  /// writes markers exactly the set that renders them. `autocorrectAllowed`
+  /// stays as the hard opt-out for §4.1's three literal-text surfaces — the
+  /// snippet editor, the dictionary dialog and the LeetCode code field.
+  bool get _prosePasteActive =>
+      widget.proseEmphasis && widget.autocorrectAllowed;
+
+  static bool _isPasteKey(KeyEvent event) {
+    if (event is KeyUpEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyV) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed || keyboard.isAltPressed) return false;
+    return keyboard.isControlPressed || keyboard.isMetaPressed;
   }
 
   Widget _build(BuildContext context) {
     final session = _session;
     final snippets = _snippetSession;
-    if (session == null && snippets == null) {
+    final autocorrect = _autocorrectSession;
+    if (session == null &&
+        snippets == null &&
+        autocorrect == null &&
+        !_prosePasteActive) {
       return widget.builder(
         context,
         VimFieldBinding(snippetsAllowed: _canCreateSnippets),
@@ -686,6 +880,7 @@ class _VimTextScopeState extends State<VimTextScope> {
             undoController: _undoController,
             session: session,
             snippetSession: snippets,
+            autocorrectSession: autocorrect,
             snippetsAllowed: _canCreateSnippets,
           ),
         ),
