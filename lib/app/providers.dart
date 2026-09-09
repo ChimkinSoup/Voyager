@@ -19,15 +19,21 @@ import 'package:voyager/core/dev/sync_compare_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_index.dart';
+import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
 import 'package:voyager/core/spellcheck/dictionary_loader.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
+import 'package:voyager/core/media/media_service.dart';
+import 'package:voyager/core/media/media_transfer_worker.dart';
+import 'package:voyager/core/media/remote_media_sync_publisher.dart';
 import 'package:voyager/core/sync/connectivity_status.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
@@ -36,11 +42,13 @@ import 'package:voyager/core/widgets/petal_field.dart';
 import 'package:voyager/data/remote/cloud_function_weather_client.dart';
 import 'package:voyager/data/remote/dev_openweather_client.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
+import 'package:voyager/data/remote/firebase_media_storage.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
 import 'package:voyager/data/remote/http_callable_client.dart';
 import 'package:voyager/data/remote/leetcode_api_client.dart';
 import 'package:voyager/firebase_options.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/data/services/media_file_store.dart';
 import 'package:voyager/data/services/quotes_loader.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -52,6 +60,7 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
@@ -62,6 +71,7 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
 import 'package:voyager/features/settings/services/data_import_service.dart';
+import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/domain/repositories/weather_api_client.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/domain/services/periodic_prompt_service.dart';
@@ -172,6 +182,13 @@ final jobRepositoryProvider = Provider<JobRepository>((ref) {
   );
 });
 
+final rankingRepositoryProvider = Provider<RankingRepository>((ref) {
+  return DriftRankingRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
+});
+
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   return DriftNotificationRepository(
     ref.watch(databaseProvider),
@@ -191,6 +208,102 @@ final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
     ref.watch(databaseProvider),
     syncedWrites: ref.watch(syncedWriteNotifierProvider),
   );
+});
+
+final mediaRepositoryProvider = Provider<MediaRepository>((ref) {
+  return DriftMediaRepository(
+    ref.watch(databaseProvider),
+    syncActivity: ref.read(syncActivityProvider),
+  );
+});
+
+/// The on-disk blob cache. Held app-wide so the documents directory is
+/// resolved once rather than on every attach.
+final mediaFileStoreProvider = Provider<MediaFileStore>((ref) {
+  return MediaFileStore();
+});
+
+final mediaStorageProvider = Provider<MediaStorage>((ref) {
+  return FirebaseMediaStorage();
+});
+
+/// The media module's front door — see [MediaService].
+///
+/// The transfer worker and the sync publisher are attached *after*
+/// construction rather than passed in: the worker needs the service (to reach
+/// the file store and to announce progress) and the service needs the worker
+/// (to wake the queues), so one of the two edges has to be tied afterwards.
+/// The publisher is deferred for the same reason `dataImportServiceProvider`
+/// reads its sync service lazily — building the whole sync stack just to
+/// attach an image would be work done for nothing.
+// Explicitly typed, both here and on the worker below, to break the static
+// inference cycle the two form. There is no cycle in the provider graph
+// either, but only because the worker *reads* this provider rather than
+// watching it — see the note there, and do not turn that read back into a
+// watch.
+final ChangeNotifierProvider<MediaService> mediaServiceProvider =
+    ChangeNotifierProvider<MediaService>((ref) {
+      final service = MediaService(
+        repository: ref.watch(mediaRepositoryProvider),
+        fileStore: ref.watch(mediaFileStoreProvider),
+        readSettings: () => ref.read(settingsRepositoryProvider).getSettings(),
+      );
+      // Assigned as statements rather than a cascade: `..x = () => f()` binds
+      // the next `..` to f()'s return value, not to `service`.
+      service.uploadScheduler = () =>
+          ref.read(mediaTransferWorkerProvider).drainUploads();
+      service.downloadScheduler = () =>
+          ref.read(mediaTransferWorkerProvider).drainDownloads();
+      service.publisher = RemoteMediaSyncPublisher(
+        ref.read(remoteSyncServiceProvider),
+      );
+      return service;
+    });
+
+final Provider<MediaTransferWorker> mediaTransferWorkerProvider =
+    Provider<MediaTransferWorker>((ref) {
+      return MediaTransferWorker(
+        repository: ref.watch(mediaRepositoryProvider),
+        // Read, not watched, for two reasons. Watching records an edge from
+        // this provider to the service, and the service's schedulers read
+        // this one back — a loop Riverpod refuses in debug, which failed
+        // every attach the moment an upload was queued. Watching a
+        // *ChangeNotifier* also rebuilds this provider on every
+        // `notifyListeners`, so attaching an image would throw the worker
+        // away mid-drain, taking its re-entrancy guards and attempt counts
+        // with it and letting a second drain start on the same asset.
+        service: ref.read(mediaServiceProvider),
+        storage: ref.watch(mediaStorageProvider),
+        readSettings: () => ref.read(settingsRepositoryProvider).getSettings(),
+      );
+    });
+
+/// The ids of documents in [collection] that have at least one live image.
+///
+/// One query per collection rather than one per row: deciding whether to draw
+/// a 10px icon on fifty task rows should not cost fifty reference lookups.
+/// Watched rather than read so attaching or removing an image updates the
+/// rows without the page having to be rebuilt from somewhere else.
+final mediaOwnersWithImagesProvider =
+    FutureProvider.family<Set<String>, String>((ref, collection) async {
+      final service = ref.watch(mediaServiceProvider);
+      final references = await service.repository.listReferences();
+      return {
+        for (final reference in references)
+          if (reference.collection == collection) reference.documentId,
+      };
+    });
+
+/// How much disk the image cache is using, for the settings readout.
+final mediaStorageUsageProvider = FutureProvider<MediaStorageUsage>((ref) {
+  // Watched rather than read: attaching or purging an image changes the
+  // number, and the settings page should not need re-opening to see it.
+  return ref.watch(mediaServiceProvider).storageUsage();
+});
+
+/// True when free disk has fallen under 5% — the warning the design requires.
+final mediaDiskLowProvider = FutureProvider<bool>((ref) {
+  return ref.watch(mediaFileStoreProvider).isDiskLow();
 });
 
 final syncConflictRepositoryProvider = Provider<SyncConflictRepository>((ref) {
@@ -213,6 +326,8 @@ final backupCollectionsProvider = Provider<List<BackupCollection>>((ref) {
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     jobRepository: ref.watch(jobRepositoryProvider),
+    rankingRepository: ref.watch(rankingRepositoryProvider),
+    mediaRepository: ref.watch(mediaRepositoryProvider),
   );
 });
 
@@ -220,6 +335,8 @@ final dataExportServiceProvider = Provider<DataExportService>((ref) {
   return DataExportService(
     collections: ref.watch(backupCollectionsProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    mediaRepository: ref.watch(mediaRepositoryProvider),
+    mediaFileStore: ref.watch(mediaFileStoreProvider),
   );
 });
 
@@ -236,6 +353,8 @@ final dataImportServiceProvider = Provider<DataImportService>((ref) {
         .pushRestoredRecords(collection, records),
     pushSettings: (settings) =>
         ref.read(remoteSyncServiceProvider).pushSettings(settings),
+    mediaRepository: ref.watch(mediaRepositoryProvider),
+    mediaFileStore: ref.watch(mediaFileStoreProvider),
   );
 });
 
@@ -348,11 +467,13 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     studyRepository: ref.watch(studyRepositoryProvider),
     workoutRepository: ref.watch(workoutRepositoryProvider),
     jobRepository: ref.watch(jobRepositoryProvider),
+    rankingRepository: ref.watch(rankingRepositoryProvider),
     calendarRepository: ref.watch(calendarRepositoryProvider),
     trackerRepository: ref.watch(trackerRepositoryProvider),
     financeRepository: ref.watch(financeRepositoryProvider),
     notificationRepository: ref.watch(notificationRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
+    mediaRepository: ref.watch(mediaRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     weatherService: ref.watch(weatherServiceProvider),
     syncEngine: ref.watch(syncEngineProvider),
@@ -520,9 +641,15 @@ final backgroundSyncOrchestratorProvider = Provider((ref) {
     studyRepository: ref.watch(studyRepositoryProvider),
     workoutRepository: ref.watch(workoutRepositoryProvider),
     jobRepository: ref.watch(jobRepositoryProvider),
+    rankingRepository: ref.watch(rankingRepositoryProvider),
     notificationRepository: ref.watch(notificationRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    // Read, not watched: the purge runs once per launch, and rebuilding the
+    // orchestrator every time an image changes would buy nothing.
+    mediaPurge: (now) => ref
+        .read(mediaServiceProvider)
+        .purgeExpired(now, storage: ref.read(mediaStorageProvider)),
   );
 });
 
@@ -603,6 +730,24 @@ final snippetScopeProvider = Provider<SnippetScopeData>((ref) {
     enabled: config.enabled,
     expandKey: expandKey,
     index: SnippetIndex.from(snippets),
+  );
+});
+
+/// The user's autocorrect setting, paired with the dictionary it corrects
+/// against.
+///
+/// The service travels with the flag because `VimTextScope`, which owns the
+/// per-field sessions, has no Riverpod ref of its own — see
+/// [AutocorrectScopeData]. It is a single long-lived instance, so this
+/// provider only re-publishes when the *flag* moves.
+final autocorrectScopeProvider = Provider<AutocorrectScopeData>((ref) {
+  final enabled = ref.watch(
+    settingsProvider.select((async) => async.valueOrNull?.autocorrectEnabled),
+  );
+  if (enabled == null) return AutocorrectScopeData.disabled;
+  return AutocorrectScopeData(
+    enabled: enabled,
+    service: ref.watch(voyagerSpellCheckServiceProvider),
   );
 });
 
@@ -854,20 +999,70 @@ final studyAllCardsProvider = FutureProvider<List<StudyCard>>((ref) {
   return ref.watch(studyRepositoryProvider).getAllCards(includeDeleted: false);
 });
 
+/// The images attached to one study card, split by the face they sit on and
+/// ordered as the carousel shows them.
+typedef StudyCardImages = ({List<MediaAsset> front, List<MediaAsset> back});
+
+/// Every study card's front and back gallery, in one pass.
+///
+/// One query for the whole library rather than a load per card: the deck
+/// grid renders a hundred tiles at a time and each of them has to know
+/// whether its side carries images. Keyed by card id; a card with no images
+/// is simply absent.
+///
+/// Watches [mediaServiceProvider] so attaching, removing or reordering an
+/// image re-runs this — which is what repaints the editor's preview and the
+/// session card without either of them tracking a transfer.
+final studyCardImagesProvider = FutureProvider<Map<String, StudyCardImages>>((
+  ref,
+) async {
+  final service = ref.watch(mediaServiceProvider);
+  final references = await service.repository.listReferences();
+  final byCard = <String, List<MediaReference>>{};
+  for (final reference in references) {
+    if (reference.collection != FirestoreCollections.studyCards) continue;
+    if (reference.facet != MediaFacet.front &&
+        reference.facet != MediaFacet.back) {
+      continue;
+    }
+    byCard.putIfAbsent(reference.documentId, () => []).add(reference);
+  }
+  final images = <String, StudyCardImages>{};
+  for (final entry in byCard.entries) {
+    final ordered = entry.value
+      ..sort((a, b) {
+        final bySortOrder = a.sortOrder.compareTo(b.sortOrder);
+        return bySortOrder != 0
+            ? bySortOrder
+            : a.createdAt.compareTo(b.createdAt);
+      });
+    images[entry.key] = (
+      front: await service.assetsFor(
+        [for (final r in ordered) if (r.facet == MediaFacet.front) r],
+      ),
+      back: await service.assetsFor(
+        [for (final r in ordered) if (r.facet == MediaFacet.back) r],
+      ),
+    );
+  }
+  return images;
+});
+
 /// Global Study Hub header stats.
+///
+/// No `pendingToday` here. STUDY.md's "cards pending review today" is shown by
+/// the Hub's own Study button, which derives both the number and the id set it
+/// hands the session from [studyAllCardsProvider] — one list, so the button can
+/// never offer to study a count different from the one it shows. A second
+/// `countDueCards()` here would be a full scan of `study_cards` on every
+/// invalidation, resolved against a different `now`, for a figure nothing
+/// renders.
 final studyStatsProvider =
-    FutureProvider<({int pendingToday, int reviewedToday, int reviewedTotal})>((
-      ref,
-    ) async {
+    FutureProvider<({int reviewedToday, int reviewedTotal})>((ref) async {
       final repo = ref.watch(studyRepositoryProvider);
-      final pendingToday = await repo.countDueCards();
       final reviewedToday = await repo.countCardsReviewedToday();
       final reviewedTotal = await repo.countCardsReviewedTotal();
-      return (
-        pendingToday: pendingToday,
-        reviewedToday: reviewedToday,
-        reviewedTotal: reviewedTotal,
-      );
+      return (reviewedToday: reviewedToday, reviewedTotal: reviewedTotal);
     });
 
 /// Per-deck tile stats shown in the library grid and Workbench header.
@@ -998,6 +1193,14 @@ void invalidateWorkoutProvidersFrom(WidgetRef ref) {
   }
 }
 
+/// [invalidateWorkoutProviders] for a caller holding a container — a soft
+/// delete's undo, which outlives the widget that asked for the delete.
+void invalidateWorkoutProvidersIn(ProviderContainer container) {
+  for (final provider in _workoutDataProviders) {
+    container.invalidate(provider);
+  }
+}
+
 /// Seeds the stage list and the company typeahead the first time anything
 /// reads them. Every Jobs provider below waits on it, so no page can render
 /// against a half-seeded pipeline.
@@ -1044,6 +1247,71 @@ final jobStatusEventsProvider =
       return ref.watch(jobRepositoryProvider).listStatusEvents(id);
     });
 
+/// Every category the user has made, archived ones included — the strip hides
+/// them, but the manage sheet has to be able to list them.
+final rankingCategoriesProvider = FutureProvider<List<RankingCategory>>((
+  ref,
+) async {
+  ref.keepAlive();
+  return ref.watch(rankingRepositoryProvider).listCategories();
+});
+
+/// One category's entries, ranked and unranked together. The page splits them
+/// into its two sections; the split is derived, so it does not belong here.
+final rankingParentsProvider =
+    FutureProvider.family<List<RankingParent>, String>((ref, categoryId) async {
+      ref.keepAlive();
+      return ref.watch(rankingRepositoryProvider).listParents(categoryId);
+    });
+
+/// Every child in one category, keyed by parent id.
+///
+/// Fetched per category rather than per parent because the list rows need
+/// their own child counts and scored-progress the moment the page paints —
+/// one query per visible row would be a query storm on a long list.
+final rankingChildrenByParentProvider =
+    FutureProvider.family<Map<String, List<RankingChild>>, String>((
+      ref,
+      categoryId,
+    ) async {
+      ref.keepAlive();
+      final repository = ref.watch(rankingRepositoryProvider);
+      final parents = await ref.watch(rankingParentsProvider(categoryId).future);
+      final byParent = <String, List<RankingChild>>{};
+      for (final parent in parents) {
+        byParent[parent.id] = await repository.listChildren(parent.id);
+      }
+      return byParent;
+    });
+
+final _rankingDataProviders = <ProviderOrFamily>[
+  rankingCategoriesProvider,
+  rankingParentsProvider,
+  rankingChildrenByParentProvider,
+];
+
+void invalidateRankingProviders(Ref ref) {
+  for (final provider in _rankingDataProviders) {
+    ref.invalidate(provider);
+  }
+}
+
+/// Widget-side counterpart of [invalidateRankingProviders].
+void invalidateRankingProvidersFrom(WidgetRef ref) {
+  for (final provider in _rankingDataProviders) {
+    ref.invalidate(provider);
+  }
+}
+
+/// [invalidateRankingProviders] for work that outlives the widget that started
+/// it — a soft delete unmounts the row it deleted, and that row's `WidgetRef`
+/// throws from then on.
+void invalidateRankingProvidersIn(ProviderContainer container) {
+  for (final provider in _rankingDataProviders) {
+    container.invalidate(provider);
+  }
+}
+
 final _jobDataProviders = <ProviderOrFamily>[
   jobApplicationsProvider,
   jobStagesProvider,
@@ -1089,7 +1357,9 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   bucketListItemsProvider,
   tagColorsProvider,
   customWordsProvider,
+  flaggedWordsProvider,
   ..._jobDataProviders,
+  ..._rankingDataProviders,
   settingsProvider,
 ];
 
@@ -1191,6 +1461,15 @@ final customWordsProvider = FutureProvider<Set<String>>((ref) {
   return ref.watch(settingsRepositoryProvider).getCustomWords();
 });
 
+/// Words the user has flagged as wrong for them, mapped to the replacement
+/// each one stores (`FLAGGED_WORDS.md`). Synced and tombstoned exactly like
+/// [customWordsProvider]; the checker subtracts these from `bundled u custom`,
+/// so a live row here is what makes a word the bundled list accepts squiggle.
+final flaggedWordsProvider = FutureProvider<Map<String, String?>>((ref) {
+  ref.keepAlive();
+  return ref.watch(settingsRepositoryProvider).getFlaggedWords();
+});
+
 /// Single long-lived [VoyagerSpellCheckService] instance kept in sync with
 /// [dictionaryProvider]/[customWordsProvider]. Read (not watched) by text
 /// field widgets, since the service mutates its internal word sets in place
@@ -1208,6 +1487,11 @@ final voyagerSpellCheckServiceProvider = Provider<VoyagerSpellCheckService>((
   ref.listen(
     customWordsProvider,
     (_, next) => next.whenData(service.updateCustomWords),
+    fireImmediately: true,
+  );
+  ref.listen(
+    flaggedWordsProvider,
+    (_, next) => next.whenData(service.updateFlaggedWords),
     fireImmediately: true,
   );
   return service;
@@ -1631,6 +1915,7 @@ final shellDataWarmupProvider = FutureProvider<void>((ref) async {
     ref.read(quotesLoadedProvider.future),
     ref.read(dictionaryProvider.future).then((_) {}),
     ref.read(customWordsProvider.future).then((_) {}),
+    ref.read(flaggedWordsProvider.future).then((_) {}),
     ref.read(settingsProvider.future).then((_) {}),
     ref.read(journalsProvider.future).then((_) {}),
     ref.read(journalEntriesProvider.future).then((_) {}),

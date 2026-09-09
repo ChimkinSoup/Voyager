@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
@@ -21,6 +22,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/compact_back_bar.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -145,6 +147,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   /// newest dream does not count as the user asking to open it.
   var _compactShowingEditor = false;
   var _isDatePickerOpen = false;
+
+  /// Guards [_showEntryStatistics] against a second press opening a second
+  /// dialog while the first one's flushes are still in flight.
+  var _statisticsOpen = false;
   VoidCallback? _removeBackInterceptor;
   late final Future<void> Function() _lifecycleFlushCallback;
 
@@ -629,6 +635,11 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   }
 
   Future<void> _deleteEntry(DreamEntry entry) async {
+    // Captured while this widget is certainly mounted: the toast that offers
+    // the undo outlives the row it deleted, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete dream?',
@@ -664,6 +675,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     if (wasPending) return;
     final repo = _repoOrNull();
     if (repo == null) return;
+    // Read off disk rather than taken from `entry`: the list this came from
+    // lags an in-flight save, and restoring from a stale snapshot would
+    // quietly roll the last edit back with the undo.
+    final snapshot = await repo.getEntry(entry.id) ?? entry;
     // Push the row the delete actually produced, not one rebuilt from the
     // list's snapshot: `copyWith` bumps *that snapshot's* version, and
     // whenever it lagged disk the tombstone went out at a version Firestore
@@ -679,23 +694,91 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       _syncOrNull()?.pushDreamEntryNow(tombstone);
     }
     if (mounted) ref.invalidate(allDreamEntriesProvider);
+
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(snapshot.title, fallback: 'dream'),
+      restore: () => _undoEntryDelete(container, snapshot),
+    );
+  }
+
+  /// Brings back a dream the toast's Undo was pressed for, and opens it.
+  ///
+  /// The database restore is only half of it: the list hides a deleted row
+  /// through [_deletedEntryStamps] rather than waiting on a provider refresh,
+  /// and that hide would outlive the restore — leaving the dream back on disk
+  /// but still missing from the list.
+  ///
+  /// Selecting it again is the other half: deleting the open dream cleared the
+  /// editor, so a restore that only put the row back would leave the page
+  /// showing nothing — or, once [build]'s auto-select has run, some other
+  /// dream.
+  ///
+  /// Rebuilt field by field rather than `copyWith`'d, because `copyWith` reads
+  /// `deletedAt ?? this.deletedAt` and so cannot clear a tombstone.
+  Future<void> _undoEntryDelete(
+    ProviderContainer container,
+    DreamEntry snapshot,
+  ) async {
+    final repository = container.read(dreamRepositoryProvider);
+    // Resolved against disk rather than the snapshot: an eight-second offer is
+    // long enough for a pull to land a newer revision, and a restore written
+    // under it loses the next pull and deletes the dream again.
+    final current = await repository.getEntry(snapshot.id);
+    abortIfAlreadyRestored(
+      found: current != null,
+      deletedAt: current?.deletedAt,
+    );
+    final restored = DreamEntry(
+      id: snapshot.id,
+      createdAt: snapshot.createdAt,
+      updatedAt: utcNow(),
+      version: restoreVersionFrom(
+        preDeleteVersion: snapshot.version,
+        currentVersion: current?.version,
+      ),
+      title: snapshot.title,
+      body: snapshot.body,
+      notes: snapshot.notes,
+      entryDate: snapshot.entryDate,
+      tags: snapshot.tags,
+    );
+    try {
+      await repository.upsertEntry(restored);
+      container.read(remoteSyncServiceProvider).pushDreamEntryNow(restored);
+    } finally {
+      // Unconditional: the hide is what stands in for the row until the
+      // provider catches up, and a throw out of the write would otherwise
+      // strand it — the dream visible to every other device and missing here.
+      // Clearing it either way lets the list re-derive: back if the write
+      // landed, still gone if it did not.
+      container.invalidate(allDreamEntriesProvider);
+      if (mounted) setState(() => _deletedEntryStamps.remove(restored.id));
+    }
+    if (!mounted) return;
+    await _selectEntry(restored);
   }
 
   Future<void> _changeEntryDate(BuildContext buttonContext) async {
     final entry = _selectedEntry;
     if (entry == null) return;
-    await _flushActiveEdits();
-    // The sticky note's debounce stays armed across the popover's lifetime, so
-    // without this its save could read its baseline before the date write and
-    // land after it, writing the *old* entryDate back. entryDate is the list's
-    // primary sort key, so the row visibly snapped back into its old place.
-    await _flushNotes();
-    if (!mounted || !buttonContext.mounted) return;
-
-    final accent = Theme.of(context).colorScheme.primary;
+    // Raised here rather than just before the popover: the two flushes below
+    // run with nothing on screen, and a second press landing in that gap
+    // would stack a second picker on the first.
+    if (_isDatePickerOpen) return;
     setState(() => _isDatePickerOpen = true);
     DateTime? picked;
     try {
+      await _flushActiveEdits();
+      // The sticky note's debounce stays armed across the popover's lifetime,
+      // so without this its save could read its baseline before the date write
+      // and land after it, writing the *old* entryDate back. entryDate is the
+      // list's primary sort key, so the row visibly snapped back into its old
+      // place.
+      await _flushNotes();
+      if (!mounted || !buttonContext.mounted) return;
+
+      final accent = Theme.of(context).colorScheme.primary;
       picked = await showContextualPopover<DateTime>(
         context: context,
         buttonContext: buttonContext,
@@ -708,8 +791,9 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         ),
       );
     } finally {
-      // Left set by a throwing builder or route, the date pill would render in
-      // its active state for the life of the page.
+      // Left set by a throwing flush, builder or route, the date pill would
+      // render in its active state for the life of the page — and the button
+      // would never open again.
       if (mounted) setState(() => _isDatePickerOpen = false);
     }
     final chosen = picked;
@@ -761,26 +845,37 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   }
 
   Future<void> _showEntryStatistics(DreamEntry entry) async {
-    // The row hands over whatever the list last loaded, and the title, body
-    // and notes boxes all save on a debounce — so opening statistics straight
-    // after typing showed the previous text. Flush what is on screen, then
-    // re-read the stored entry, and the dialog reports what the user sees.
-    if (_selectedEntryId == entry.id) {
-      await _flushNotes();
-      await _flushActiveEdits();
+    // The flushes and the re-read below run with nothing on screen, so a
+    // second press landing in that gap would stack a second dialog on the
+    // first. Held until the dialog closes, which costs nothing: its barrier
+    // already covers the row.
+    if (_statisticsOpen) return;
+    _statisticsOpen = true;
+    try {
+      // The row hands over whatever the list last loaded, and the title, body
+      // and notes boxes all save on a debounce — so opening statistics
+      // straight after typing showed the previous text. Flush what is on
+      // screen, then re-read the stored entry, and the dialog reports what the
+      // user sees.
+      if (_selectedEntryId == entry.id) {
+        await _flushNotes();
+        await _flushActiveEdits();
+        if (!mounted) return;
+      }
+      final fresh = await _repoOrNull()?.getEntry(entry.id) ?? entry;
       if (!mounted) return;
-    }
-    final fresh = await _repoOrNull()?.getEntry(entry.id) ?? entry;
-    if (!mounted) return;
 
-    final wordCount = ref.read(analyticsServiceProvider).countWords(fresh.body);
-    unawaited(
-      showVoyagerDialog<void>(
+      final wordCount = ref
+          .read(analyticsServiceProvider)
+          .countWords(fresh.body);
+      await showVoyagerDialog<void>(
         context: context,
         builder: (context) =>
             DreamStatisticsDialog(entry: fresh, wordCount: wordCount),
-      ),
-    );
+      );
+    } finally {
+      _statisticsOpen = false;
+    }
   }
 
   Future<void> _persistSplitWidth(double? width) async {
@@ -1181,6 +1276,11 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
               textInputAction: TextInputAction.next,
               accentColor: accent,
               onChanged: (_) => _scheduleBodySave(),
+              // Enter leaves the title the same way Tab does, matching the
+              // journal page. No flush here on purpose: focus is staying
+              // inside the same dream, and [_handleTitleFocusChanged] already
+              // flushes on the blur this causes.
+              onSubmitted: (_) => _bodyFocusNode.requestFocus(),
             ),
           ),
           const SizedBox(height: 12),
@@ -1309,7 +1409,7 @@ class _DreamEntryListTile extends StatelessWidget {
                 builder: (context, body, _) {
                   final preview = firstSentencePreview(body);
                   if (preview.isEmpty) return const SizedBox.shrink();
-                  return Text(
+                  return VoyagerProseText(
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1322,7 +1422,7 @@ class _DreamEntryListTile extends StatelessWidget {
                 builder: (context) {
                   final preview = firstSentencePreview(entry.body);
                   if (preview.isEmpty) return const SizedBox.shrink();
-                  return Text(
+                  return VoyagerProseText(
                     preview,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1671,6 +1771,7 @@ class DreamStatisticsDialog extends StatelessWidget {
             ),
             _StatLine(
               label: 'Notes',
+              prose: true,
               value: (entry.notes ?? '').trim().isEmpty
                   ? 'None'
                   : entry.notes!.trim(),
@@ -1706,10 +1807,19 @@ class DreamStatisticsDialog extends StatelessWidget {
 }
 
 class _StatLine extends StatelessWidget {
-  const _StatLine({required this.label, required this.value});
+  const _StatLine({
+    required this.label,
+    required this.value,
+    this.prose = false,
+  });
 
   final String label;
   final String value;
+
+  /// Whether [value] is stored prose, and so carries formatting markers the
+  /// reader should see rendered rather than raw (§10). Off for the numbers
+  /// and dates, which are built here.
+  final bool prose;
 
   @override
   Widget build(BuildContext context) {
@@ -1728,7 +1838,11 @@ class _StatLine extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
+          Expanded(
+            child: prose
+                ? VoyagerProseText(value, style: theme.textTheme.bodyMedium)
+                : Text(value, style: theme.textTheme.bodyMedium),
+          ),
         ],
       ),
     );

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
@@ -57,6 +59,23 @@ class CalendarEventTapState extends ChangeNotifier {
     _tapAnchorRect = widgetRect;
     notifyListeners();
   }
+}
+
+/// The key a tapped segment broadcasts, identifying the *occurrence* under
+/// [day] rather than the series it belongs to.
+///
+/// Every segment of one multi-day occurrence resolves to the same string, so a
+/// tap still presses the whole bar as a single unit. Two occurrences of the
+/// same recurring event resolve to different ones, so clicking Monday's repeat
+/// no longer plays the press animation on every other repeat on screen.
+///
+/// Falls back to the bare id when the day carries no occurrence — a segment
+/// that is not on screen for a real occurrence has nothing to sync with anyway.
+String calendarEventTapKey(CalendarEvent event, DateTime? day) {
+  if (day == null) return event.id;
+  final start = calendarOccurrenceStartOn(event, day);
+  if (start == null) return event.id;
+  return '${event.id}@${start.year}-${start.month}-${start.day}';
 }
 
 /// Plain [InheritedWidget] that carries [CalendarEventTapState] down the tree.
@@ -1882,7 +1901,7 @@ Future<void> _showTodoPopover({
   );
 }
 
-class CalendarDayTodoPopover extends StatelessWidget {
+class CalendarDayTodoPopover extends ConsumerWidget {
   const CalendarDayTodoPopover({
     super.key,
     required this.todos,
@@ -1894,19 +1913,43 @@ class CalendarDayTodoPopover extends StatelessWidget {
   /// The day cell this popover belongs to, carried into every entry so a
   /// recurring item stays identifiable as one occurrence.
   final DateTime day;
+
+  /// The markers the badge was showing when this opened, used only until
+  /// [calendarTodoMarkersProvider] has a value of its own — which, since the
+  /// badge was itself built from that provider, is normally the first build.
   final List<CalendarTodoMarker> todos;
+
   final ValueChanged<CalendarTodoMarker> onTodoTap;
   final CalendarEntryMenuBuilder? entryMenuBuilder;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Watched rather than rendered straight from [todos]: this popover is a
+    // route, so the list it was opened with would otherwise stand for as long
+    // as it is up. Deleting a task from its own right-click menu left the
+    // deleted row sitting in the menu until it was closed and reopened.
+    final live = ref.watch(calendarTodoMarkersProvider).valueOrNull;
+    final dayTodos = live == null
+        ? todos
+        : calendarTodoMarkersForDay(live, day);
+
+    if (dayTodos.isEmpty) {
+      // The day's last task has gone. An empty card hanging over the grid says
+      // less than no card at all, so the popover takes itself away — off a
+      // post-frame callback, since a route cannot be popped during a build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) Navigator.of(context).maybePop();
+      });
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final todo in todos)
+          for (final todo in dayTodos)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: calendarEntryContextMenu(
@@ -2103,7 +2146,7 @@ class CalendarDayEventBar extends StatelessWidget {
             borderRadius: borderRadius,
             highlighted: highlighted,
             onTap: onTap,
-            eventId: event.id,
+            eventId: calendarEventTapKey(event, date),
             isSegmentStart: isStart,
             isSegmentEnd: isEnd,
             child: Container(

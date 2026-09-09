@@ -2,8 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/snippets/snippet_session.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/vim/vim_session.dart';
 import 'package:voyager/core/vim/vim_text_ops.dart';
+import 'package:voyager/core/spellcheck/autocorrect_session.dart';
+import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
+import 'package:voyager/core/widgets/prose_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 
 /// WCAG relative-luminance cutoff: below this the accent reads as dark and the
@@ -119,6 +123,7 @@ class VimTextOverlay extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.scrollController,
     this.hintText,
+    this.spanBuilder,
   });
 
   /// Null on a field that has snippets but not Vim, where this layer exists
@@ -155,6 +160,14 @@ class VimTextOverlay extends StatefulWidget {
   /// The same [ScrollController] the field's [TextField] was given, when it
   /// can scroll internally.
   final ScrollController? scrollController;
+
+  /// Builds the paragraph this layer measures against. Null means the flat one
+  /// — the text in [style] and nothing else. A field with emphasis passes
+  /// [ProseEditingController.overlaySpan]: the block caret, the Visual
+  /// highlight and the tabstop marks are all positioned from box geometry, and
+  /// bold glyphs — or a `**` collapsed to no width — move every box on the
+  /// line they sit on.
+  final ProseSpanBuilder? spanBuilder;
 
   @override
   State<VimTextOverlay> createState() => _VimTextOverlayState();
@@ -246,9 +259,11 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
       hintText: widget.hintText,
     );
 
+    final text = widget.controller.text;
     final painter = _VimOverlayPainter(
       layout: _layout,
-      text: widget.controller.text,
+      text: text,
+      span: (widget.spanBuilder ?? flatProseSpan)(text, widget.style),
       hintGlyph: hintGlyph,
       style: widget.style,
       strutStyle: widget.strutStyle,
@@ -293,6 +308,7 @@ class _VimOverlayPainter extends CustomPainter {
   _VimOverlayPainter({
     required this.layout,
     required this.text,
+    required this.span,
     required this.hintGlyph,
     required this.style,
     required this.strutStyle,
@@ -311,6 +327,10 @@ class _VimOverlayPainter extends CustomPainter {
 
   /// The paragraph layout, held by the [State] so it outlives this painter.
   final _OverlayLayoutCache layout;
+
+  /// [text] as the field itself renders it — same weights, same slants, same
+  /// collapsed delimiters — so every box below lands on the real glyph.
+  final TextSpan span;
 
   final String text;
 
@@ -485,6 +505,7 @@ class _VimOverlayPainter extends CustomPainter {
   void _paintCaret(Canvas canvas, TextPainter painter, int offset) {
     final clamped = offset.clamp(0, text.length);
     final blockPaint = Paint()..color = accentColor;
+
     final lineEnd = vimLineEnd(text, clamped);
 
     if (clamped < lineEnd) {
@@ -513,6 +534,7 @@ class _VimOverlayPainter extends CustomPainter {
           text[clamped],
           glyphRect,
           clipRect: blockRect,
+          offset: clamped,
         );
         return;
       }
@@ -583,11 +605,18 @@ class _VimOverlayPainter extends CustomPainter {
     Rect blockRect, {
     Offset? origin,
     Rect? clipRect,
+    int? offset,
   }) {
+    // The letter comes back in the weight the field drew it in, or a caret
+    // resting inside `**bold**` prints a regular copy over a bold one. A null
+    // [offset] is the empty-field hint, which is not in the paragraph at all.
+    final glyphStyle = offset == null
+        ? style
+        : proseStyleAt(span, offset) ?? style;
     final charPainter = TextPainter(
       text: TextSpan(
         text: glyph,
-        style: style.copyWith(color: _caretForegroundFor(accentColor)),
+        style: glyphStyle.copyWith(color: _caretForegroundFor(accentColor)),
       ),
       textAlign: textAlign,
       textDirection: textDirection,
@@ -622,6 +651,7 @@ class _VimOverlayPainter extends CustomPainter {
     // Visual highlight and the tabstop marks at the old geometry until
     // something else happened to dirty the layer.
     return old.text != text ||
+        old.span != span ||
         old.hintGlyph != hintGlyph ||
         old.style != style ||
         old.strutStyle != strutStyle ||
@@ -662,7 +692,7 @@ class _VimOverlayPainter extends CustomPainter {
 /// every build, so the painter itself has nowhere to keep it.
 class _OverlayLayoutCache {
   TextPainter? _paragraph;
-  String? _paragraphText;
+  TextSpan? _paragraphSpan;
   double? _paragraphWidth;
 
   TextPainter? _probe;
@@ -681,14 +711,16 @@ class _OverlayLayoutCache {
   TextPainter paragraph(_VimOverlayPainter p, double width) {
     _syncStyle(p);
     final cached = _paragraph;
-    if (cached != null && _paragraphText == p.text && _paragraphWidth == width) {
+    if (cached != null &&
+        _paragraphSpan == p.span &&
+        _paragraphWidth == width) {
       return cached;
     }
     _paragraph?.dispose();
-    _paragraphText = p.text;
+    _paragraphSpan = p.span;
     _paragraphWidth = width;
     return _paragraph = TextPainter(
-      text: TextSpan(text: p.text, style: p.style),
+      text: p.span,
       textAlign: p.textAlign,
       textDirection: p.textDirection,
       textScaler: p.textScaler,
@@ -739,7 +771,7 @@ class _OverlayLayoutCache {
   void dispose() {
     _paragraph?.dispose();
     _paragraph = null;
-    _paragraphText = null;
+    _paragraphSpan = null;
     _paragraphWidth = null;
     _probe?.dispose();
     _probe = null;
@@ -836,11 +868,14 @@ class VimOverlayHost extends StatelessWidget {
     required this.overlayPadding,
     required this.child,
     this.snippetSession,
+    this.autocorrectSession,
     this.scrollController,
     this.hintText,
     this.strutStyle,
     this.underlay,
     this.fit = StackFit.passthrough,
+    this.spanBuilder,
+    this.highlightFill,
   });
 
   final VimSession? session;
@@ -848,6 +883,11 @@ class VimOverlayHost extends StatelessWidget {
   /// The field's snippet runtime, when it has one. Mounting the overlay for
   /// this alone is what puts dotted tabstop marks on a field with Vim off.
   final SnippetSession? snippetSession;
+
+  /// The field's autocorrect runtime, when it has one. Mounts the flash that
+  /// marks a word a correction just replaced (AUTOCORRECT.md §9).
+  final AutocorrectSession? autocorrectSession;
+
   final bool overlayPaintsSelection;
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -861,18 +901,84 @@ class VimOverlayHost extends StatelessWidget {
   final Widget? underlay;
   final StackFit fit;
 
+  /// Builds the paragraph the layers here measure against — see
+  /// [VimTextOverlay.spanBuilder]. A caller passing this has to give the same
+  /// builder to its own [underlay] and its [TextField] the wrapped controller,
+  /// or the three paragraphs come apart.
+  final ProseSpanBuilder? spanBuilder;
+
+  /// What `==highlight==` fills with — [ProseEmphasisTheme.highlightColor].
+  ///
+  /// Only meaningful alongside [spanBuilder]: a field with emphasis off has no
+  /// marked runs to fill. Null leaves the layer out.
+  final Color? highlightFill;
+
   @override
   Widget build(BuildContext context) {
     final overlayNeeded = session != null || snippetSession != null;
-    if (!overlayNeeded && underlay == null) return child;
+    final flash = autocorrectSession;
+    final builder = spanBuilder;
+    final fill = highlightFill;
+    final highlight = builder == null || fill == null
+        ? null
+        : ProseHighlightLayer(
+            spanBuilder: builder,
+            controller: controller,
+            style: style,
+            // The same fallback the other layers here take: EditableText
+            // struts an unstrutted field itself, so a bare TextPainter would
+            // otherwise wrap against a paragraph the field never drew.
+            strutStyle:
+                strutStyle ??
+                StrutStyle.fromTextStyle(style, forceStrutHeight: true),
+            color: fill,
+            scrollController: scrollController,
+          );
+    if (!overlayNeeded &&
+        underlay == null &&
+        flash == null &&
+        highlight == null) {
+      return child;
+    }
 
     Widget field = Stack(
       fit: fit,
       children: [
+        // Bottom of the stack, below the [underlay] the caller supplies (the
+        // squiggles): the tint is the background changing colour, not a mark
+        // that should sit over one.
+        if (flash != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Padding(
+                padding: overlayPadding,
+                child: AutocorrectFlashLayer(
+                  session: flash,
+                  spanBuilder: spanBuilder,
+                  controller: controller,
+                  style: style,
+                  color: accentColor,
+                  strutStyle:
+                      strutStyle ??
+                      StrutStyle.fromTextStyle(style, forceStrutHeight: true),
+                  scrollController: scrollController,
+                ),
+              ),
+            ),
+          ),
         if (underlay != null)
           Positioned.fill(
             child: IgnorePointer(
               child: Padding(padding: overlayPadding, child: underlay),
+            ),
+          ),
+        // Still beneath the field: this is where the paragraph itself used to
+        // fill a `==highlight==`, back when the fill was a `backgroundColor`
+        // and its corners were square.
+        if (highlight != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Padding(padding: overlayPadding, child: highlight),
             ),
           ),
         child,
@@ -884,6 +990,7 @@ class VimOverlayHost extends StatelessWidget {
                 child: VimTextOverlay(
                   session: session,
                   snippetSession: snippetSession,
+                  spanBuilder: spanBuilder,
                   controller: controller,
                   focusNode: focusNode,
                   style: style,

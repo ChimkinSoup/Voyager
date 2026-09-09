@@ -470,6 +470,18 @@ List<_HideToggle> _hideToggles(AppSettings s) => [
   ),
 ];
 
+/// Toggles that *add* something to a session rather than blank part of the
+/// card. Kept out of [_hideToggles] deliberately: that list is also what
+/// lights the button up, and it means "something is being hidden" — a scratch
+/// pad is the opposite of that.
+List<_HideToggle> _sessionToggles(AppSettings s) => [
+  (
+    label: 'Enable scratch code',
+    value: s.leetCodeEnableScratchCode,
+    apply: (settings, v) => settings.copyWith(leetCodeEnableScratchCode: v),
+  ),
+];
+
 /// Opens the session display menu — what a Study or Cram run leaves off the
 /// card. Unlike the filters beside it these are settings rather than page
 /// state: they persist, and they follow the account to another device.
@@ -510,7 +522,52 @@ class _SessionDisplayList extends ConsumerWidget {
     final theme = Theme.of(context);
     final settings = ref.watch(settingsProvider).valueOrNull;
     if (settings == null) return const SizedBox.shrink();
-    final toggles = _hideToggles(settings);
+
+    Widget row(_HideToggle toggle) => InkWell(
+      // Computed against the notifier's value at tap time rather than
+      // against the settings captured when this menu was built: a second
+      // tap that lands before the first has published would otherwise
+      // write a delta against a base the first tap has already moved,
+      // and silently undo it.
+      onTap: () {
+        final live = ref.read(settingsProvider).valueOrNull;
+        if (live == null) return;
+        // The captured `toggle.value` is exactly as stale as the
+        // settings it came from, so the flag is re-read too.
+        final current = [
+          ..._hideToggles(live),
+          ..._sessionToggles(live),
+        ].firstWhere((t) => t.label == toggle.label);
+        ref
+            .read(settingsProvider.notifier)
+            .saveSettings(current.apply(live, !current.value));
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              toggle.value
+                  ? PhosphorIconsFill.checkSquare
+                  : PhosphorIconsRegular.square,
+              size: 16,
+              color: toggle.value
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                toggle.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -525,51 +582,17 @@ class _SessionDisplayList extends ConsumerWidget {
             ),
           ),
         ),
-        for (final toggle in toggles)
-          InkWell(
-            // Computed against the notifier's value at tap time rather than
-            // against the settings captured when this menu was built: a second
-            // tap that lands before the first has published would otherwise
-            // write a delta against a base the first tap has already moved,
-            // and silently undo it.
-            onTap: () {
-              final live = ref.read(settingsProvider).valueOrNull;
-              if (live == null) return;
-              // The captured `toggle.value` is exactly as stale as the
-              // settings it came from, so the flag is re-read too.
-              final current = _hideToggles(
-                live,
-              ).firstWhere((t) => t.label == toggle.label);
-              ref
-                  .read(settingsProvider.notifier)
-                  .saveSettings(current.apply(live, !current.value));
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    toggle.value
-                        ? PhosphorIconsFill.checkSquare
-                        : PhosphorIconsRegular.square,
-                    size: 16,
-                    color: toggle.value
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      toggle.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        for (final toggle in _hideToggles(settings)) row(toggle),
+        // A rule, not a second heading: the pad belongs to the same menu, it
+        // just does the opposite of everything above it.
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Divider(
+            height: 1,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
           ),
+        ),
+        for (final toggle in _sessionToggles(settings)) row(toggle),
         const SizedBox(height: 4),
       ],
     );

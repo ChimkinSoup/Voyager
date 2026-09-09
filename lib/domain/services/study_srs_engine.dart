@@ -142,6 +142,10 @@ String formatStudyInterval(double days) {
     if (minutes < 1) return '<1m';
     if (minutes < 60) return '${minutes}m';
     final hours = (days * 24).round();
+    // Clamped below the day boundary: `days` in [0.979, 1) is reachable from a
+    // learning card graded Hard (0.82 * 1.2 = 0.984), and rounds to a "24h"
+    // the next branch would have printed as "1d".
+    if (hours >= 24) return '1d';
     return '${hours}h';
   }
   if (days < 30) return '${days.round()}d';

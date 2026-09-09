@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -33,7 +35,14 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
     showContextualPopoverAt<void>(
       context: context,
       targetRect: topLeft & box.size,
-      width: 380,
+      // The bell is in the compact status strip too, where the window can be
+      // narrower than the panel wants to be. Give up width rather than hang
+      // off the edge of the screen — the popover is laid out at exactly the
+      // width it is handed.
+      width: math.min(
+        kNotificationPopoverWidth,
+        MediaQuery.sizeOf(context).width - 16,
+      ),
       accentColor: widget.accent,
       builder: (ctx) => const NotificationInboxPopover(),
     );

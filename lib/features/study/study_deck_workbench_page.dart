@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -62,12 +65,24 @@ class _StudyDeckWorkbenchPageState
   Widget build(BuildContext context) {
     final deckId = widget.deckId;
     final theme = Theme.of(context);
+    // The Hub stays live and hit-testable while the zoom is neither forward
+    // nor at 1, so a deck can be deleted from its tile's context menu with
+    // this workbench as the visible layer. Nothing else closes it, and the
+    // page would go on rendering a full workbench — title, stats, Add card,
+    // Import — over a tombstoned row, creating cards against a dead deckId.
+    ref.listen(studyDeckByIdProvider(deckId), (_, next) {
+      final deck = next.valueOrNull;
+      if (next.hasValue && (deck == null || deck.deletedAt != null)) {
+        widget.onBack();
+      }
+    });
     final deckAsync = ref.watch(studyDeckByIdProvider(deckId));
     final cardsAsync = ref.watch(studyCardsProvider(deckId));
     final dueAsync = ref.watch(studyDeckStatsProvider(deckId));
     final multiSelect = ref.watch(studyMultiSelectEnabledProvider);
     final selected = ref.watch(studySelectedCardIdsProvider);
     final query = ref.watch(studySearchQueryProvider);
+    final cardImages = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
 
     final deckName = deckAsync.valueOrNull?.name ?? widget.deckNameHint ?? '';
     final cards = cardsAsync.valueOrNull ?? const <StudyCard>[];
@@ -115,8 +130,14 @@ class _StudyDeckWorkbenchPageState
                   Row(
                     children: [
                       Expanded(
+                        // Gated on the due count, not on the roster. The
+                        // session's queue is due-only, so a deck whose cards
+                        // are all scheduled into the future opened straight
+                        // onto "Session complete" — tap Study on 40 cards, be
+                        // told you have finished. Matches the Hub's button,
+                        // which already disables and relabels itself at zero.
                         child: GlassButton(
-                          onPressed: cards.isEmpty
+                          onPressed: due == 0
                               ? null
                               : () => Navigator.of(context).push(
                                   MaterialPageRoute(
@@ -126,7 +147,7 @@ class _StudyDeckWorkbenchPageState
                                   ),
                                 ),
                           icon: const Icon(PhosphorIconsRegular.playCircle),
-                          label: 'Study',
+                          label: due == 0 ? 'Nothing due' : 'Study $due due',
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -225,6 +246,10 @@ class _StudyDeckWorkbenchPageState
                               return StudyCardTile(
                                 key: ValueKey(card.id),
                                 card: card,
+                                frontImages:
+                                    cardImages[card.id]?.front ?? const [],
+                                backImages:
+                                    cardImages[card.id]?.back ?? const [],
                                 keywords: keywords,
                                 showBack: backOnly != _flipped.contains(card.id),
                                 onFlipped: (showingBack) => setState(() {
@@ -299,27 +324,97 @@ class _StudySelectionBar extends ConsumerWidget {
   final String deckId;
   final Set<String> selected;
 
-  Future<void> _duplicate(WidgetRef ref) async {
+  Future<void> _duplicate(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(studyRepositoryProvider);
-    await repo.duplicateCards(selected.toList());
-    ref.invalidate(studyCardsProvider);
-    ref.invalidate(studyDeckStatsProvider);
-    ref.read(studySelectedCardIdsProvider.notifier).state = {};
-    ref.read(studyMultiSelectEnabledProvider.notifier).state = false;
+    final media = ref.read(mediaServiceProvider);
+    try {
+      final copies = await repo.duplicateCards(selected.toList());
+      final duplicated = <StudyCard>[];
+      for (final entry in copies.entries) {
+        // The copy points at the same blobs, under its own id — see
+        // [MediaService.duplicateReferencesForOwner].
+        await media.duplicateReferencesForOwner(
+          collection: FirestoreCollections.studyCards,
+          fromDocumentId: entry.key,
+          toDocumentId: entry.value,
+        );
+        final card = await repo.getCard(entry.value);
+        if (card != null) duplicated.add(card);
+      }
+      await ref.read(remoteSyncServiceProvider).pushStudyCardsBatch(duplicated);
+      invalidateStudyCards(ref);
+      ref.read(studySelectedCardIdsProvider.notifier).state = {};
+      ref.read(studyMultiSelectEnabledProvider.notifier).state = false;
+    } catch (error, stackTrace) {
+      // Reported rather than left loose in the zone: the bar stays as it was
+      // and nothing on screen would otherwise say the copies were not made.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'study workbench',
+          context: ErrorDescription('while duplicating ${selected.length} cards'),
+        ),
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not duplicate the cards.')),
+        );
+      }
+    }
   }
 
-  Future<void> _delete(WidgetRef ref) async {
-    final repo = ref.read(studyRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    for (final id in selected) {
-      await repo.softDeleteCard(id);
-      final card = await repo.getCard(id);
-      if (card != null) remoteSync.pushStudyCard(card);
-    }
-    ref.invalidate(studyCardsProvider);
-    ref.invalidate(studyDeckStatsProvider);
-    ref.read(studySelectedCardIdsProvider.notifier).state = {};
-    ref.read(studyMultiSelectEnabledProvider.notifier).state = false;
+  /// The same confirm-then-undo machinery every other card-deletion path uses,
+  /// rather than a second implementation of the delete. This was the only path
+  /// that tombstoned a whole selection on one tap with no prompt and no way
+  /// back short of the 30-day trash — and the only one that threw away the
+  /// media detach stamps, without which those cards' images could not be
+  /// restored even by hand.
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    // Captured while the bar is still mounted: the delete unmounts it, and the
+    // toast offering the undo has to outlive that.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final ids = selected.toList();
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete ${ids.length} card${ids.length == 1 ? '' : 's'}?',
+      message: 'They will be moved to trash.',
+    );
+    if (!confirmed) return;
+
+    var deletions = <StudyCardDeletion>[];
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: 'Deleted ${ids.length} card${ids.length == 1 ? '' : 's'}',
+      delete: () async {
+        final repo = container.read(studyRepositoryProvider);
+        final collected = <StudyCardDeletion>[];
+        for (final id in ids) {
+          final card = await repo.getCard(id);
+          if (card == null || card.deletedAt != null) continue;
+          collected.add(await softDeleteStudyCard(container, card));
+        }
+        deletions = collected;
+      },
+      restore: () async {
+        for (final deletion in deletions) {
+          // Per card: a pull that brought one of them back on its own must not
+          // stop the rest of the selection from being restored.
+          try {
+            await restoreStudyCard(container, deletion);
+          } on RestoreSuperseded {
+            continue;
+          }
+        }
+      },
+    );
+
+    // Through the container, not `ref`: clearing the selection unmounts this
+    // bar, and the delete that preceded it may already have.
+    container.read(studySelectedCardIdsProvider.notifier).state = {};
+    container.read(studyMultiSelectEnabledProvider.notifier).state = false;
   }
 
   @override
@@ -356,7 +451,7 @@ class _StudySelectionBar extends ConsumerWidget {
               dense: true,
               label: 'Duplicate',
               icon: const Icon(PhosphorIconsRegular.copySimple),
-              onPressed: () => _duplicate(ref),
+              onPressed: () => _duplicate(context, ref),
             ),
             const SizedBox(width: 8),
             GlassButton(
@@ -364,7 +459,7 @@ class _StudySelectionBar extends ConsumerWidget {
               label: 'Delete',
               icon: const Icon(PhosphorIconsRegular.trash),
               color: theme.colorScheme.error,
-              onPressed: () => _delete(ref),
+              onPressed: () => _delete(context, ref),
             ),
           ],
         ),

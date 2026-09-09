@@ -197,6 +197,20 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           await remoteSync.pullAll();
           if (!mounted) return;
           liveSync.start();
+          // Uploads parked by a permanent refusal get one more shot per
+          // launch — otherwise a Storage rule that has since been fixed
+          // leaves every image attached before the fix stranded for good.
+          // Ahead of the prefetch for the reason `drain` puts uploads first:
+          // this device may be the only one holding those bytes.
+          unawaited(
+            ref.read(mediaTransferWorkerProvider).requeueFailedUploads(),
+          );
+          // The pull is where this device learns which images exist
+          // elsewhere, so it is also where the ones it has no bytes for
+          // become fetchable. Unawaited: nothing on screen is waiting for a
+          // blob, and the startup sync should not be held open by a download
+          // queue. Both settings are checked inside.
+          unawaited(ref.read(mediaTransferWorkerProvider).prefetchMissing());
           ref.invalidate(journalEntriesProvider);
           ref.invalidate(journalsProvider);
           ref.invalidate(settingsProvider);

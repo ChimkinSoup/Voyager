@@ -562,7 +562,7 @@ class CalendarWeekEventBlock extends StatelessWidget {
             borderRadius: borderRadius,
             highlighted: highlighted,
             onTap: onTap,
-            eventId: event.id,
+            eventId: calendarEventTapKey(event, day),
             isSegmentStart: !bridgeLeft,
             isSegmentEnd: !bridgeRight,
             child: Container(

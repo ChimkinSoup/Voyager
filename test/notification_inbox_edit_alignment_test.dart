@@ -32,11 +32,16 @@ const _longNote =
     'Water the plants on the balcony before the weekend, and check whether '
     'the basil needs repotting again this month or it can wait';
 
-/// Window width at which this note's fourth line break falls inside the strip
+/// Window width at which one of this note's line breaks falls inside the strip
 /// RenderEditable keeps clear for the caret — the 3px window where the field
 /// wraps one word earlier than a Text laid out at the same padding, and the
 /// note grows a whole extra line on the way into the editor.
-const double _kWrapWidth = 418;
+///
+/// Tied to the note's type size: a reminder renders at `bodySmall`, and the
+/// window moves whenever that does. Re-find it by sweeping widths with
+/// [withCaretMargin] taken out of `_kPinnedNoteTextPadding` — the widths that
+/// then disagree are the ones this test is for.
+const double _kWrapWidth = 386;
 
 Future<void> _pumpInbox(
   WidgetTester tester,

@@ -1,11 +1,12 @@
 // The Search result popup's write gate.
 //
-// Both cases here are ways the dialog wrote — or refused to write — without the
-// user asking. They assert against SQLite rather than the widget tree: the
-// dialog keeps its own copy of the text, so the damage is invisible until the
-// row is read back.
+// Every case here is a way the dialog wrote — or refused to write — something
+// other than what the user asked for. They assert against SQLite rather than
+// the widget tree: the dialog keeps its own copy of the text, so the damage is
+// invisible until the row is read back.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -77,27 +78,80 @@ void main() {
     await disposeSearchPage(tester);
   });
 
-  testWidgets('an edit after a lifecycle flush still saves on close', (
-    tester,
-  ) async {
+  testWidgets('an edit after a lifecycle flush still saves', (tester) async {
     final db = await pumpSearchPage(tester, entries: _seed);
     await _openEntryDialog(tester);
 
     // What alt-tabbing away on desktop does: AppLifecycleState.inactive drains
     // the registry. The old code latched `_isSaved` here and skipped every
-    // later save, so everything typed afterwards was dropped by Close and
-    // Escape alike, silently and completely.
+    // later save, so everything typed afterwards was dropped silently and
+    // completely.
     await PendingFlushRegistry.instance.flushAll();
     await settle(tester);
 
     await tester.enterText(_titleField().first, 'Typed after the flush');
     await settle(tester);
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.text('Save'));
     await settle(tester);
 
     final after = await _readEntry(db);
     expect(after.title, 'Typed after the flush');
     expect(after.body, 'Untouched body');
+
+    await disposeSearchPage(tester);
+  });
+
+  // Close is the way out that throws the edit away. Everything else that ends
+  // the dialog — Save, Enter, a click on the barrier, a lifecycle flush — is
+  // still a write, so the discard has to be exactly these two gestures and no
+  // more.
+  testWidgets('Close discards what was typed', (tester) async {
+    final db = await pumpSearchPage(tester, entries: _seed);
+    final before = await _readEntry(db);
+    await _openEntryDialog(tester);
+
+    await tester.enterText(_titleField().first, 'Typed then thrown away');
+    await settle(tester);
+    await tester.tap(find.text('Close'));
+    await settle(tester);
+
+    final after = await _readEntry(db);
+    expect(after.title, 'Untouched title');
+    expect(after.body, 'Untouched body');
+    expect(after.version, before.version);
+    expect(after.updatedAt, before.updatedAt);
+
+    await disposeSearchPage(tester);
+  });
+
+  testWidgets('Escape discards what was typed', (tester) async {
+    final db = await pumpSearchPage(tester, entries: _seed);
+    await _openEntryDialog(tester);
+
+    await tester.enterText(_titleField().first, 'Typed then escaped');
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+
+    expect(find.text('Journal entry'), findsNothing);
+    expect((await _readEntry(db)).title, 'Untouched title');
+
+    await disposeSearchPage(tester);
+  });
+
+  // The barrier is the one dismissal that is not a decision: a mis-click
+  // outside the dialog must not cost the paragraph that was just typed.
+  testWidgets('a click on the barrier still saves', (tester) async {
+    final db = await pumpSearchPage(tester, entries: _seed);
+    await _openEntryDialog(tester);
+
+    await tester.enterText(_titleField().first, 'Typed then clicked away');
+    await settle(tester);
+    await tester.tapAt(const Offset(4, 4));
+    await settle(tester);
+
+    expect(find.text('Journal entry'), findsNothing);
+    expect((await _readEntry(db)).title, 'Typed then clicked away');
 
     await disposeSearchPage(tester);
   });

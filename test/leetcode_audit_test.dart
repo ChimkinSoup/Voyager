@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/leetcode_api_client.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -22,7 +23,6 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
-import 'package:voyager/features/leetcode/leetcode_loading_toast.dart';
 import 'package:voyager/features/leetcode/leetcode_mini_flashcard.dart';
 import 'package:voyager/features/leetcode/leetcode_review_deck.dart';
 import 'package:voyager/features/leetcode/leetcode_track_modal.dart';
@@ -293,8 +293,8 @@ void main() {
     // Show and dismiss inside one frame gap — what a fetch that fails on a
     // host lookup does, in single-digit milliseconds. The overlay entry has
     // not built yet, so there is no State to hear the dismiss notifier.
-    final dismiss = showLeetCodeToast(ctx, message: 'Fetching…');
-    dismiss();
+    final dismiss = showVoyagerToast(ctx, message: 'Fetching…');
+    dismiss.dismiss();
 
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));

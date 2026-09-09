@@ -6,7 +6,9 @@ import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -193,6 +195,10 @@ abstract class FinanceRepository {
   Future<List<FinancialTransaction>> listTransactions({
     bool includeDeleted = false,
   });
+
+  /// The row as it stands right now, tombstone included — what a restore reads
+  /// to resolve the version it has to write. Null when the row is not there.
+  Future<FinancialTransaction?> getTransaction(String id);
   Future<void> upsertTransaction(
     FinancialTransaction transaction, {
     bool recordLocalActivity = true,
@@ -200,6 +206,9 @@ abstract class FinanceRepository {
   Future<void> softDeleteTransaction(String id);
 
   Future<List<Subscription>> listSubscriptions({bool includeDeleted = false});
+
+  /// See [getTransaction].
+  Future<Subscription?> getSubscription(String id);
   Future<void> upsertSubscription(
     Subscription subscription, {
     bool recordLocalActivity = true,
@@ -284,9 +293,22 @@ abstract class StudyRepository {
   Future<void> upsertCard(StudyCard card, {bool recordLocalActivity = true});
   Future<void> softDeleteCard(String id);
   Future<void> moveCards(List<String> cardIds, String targetDeckId);
-  Future<void> duplicateCards(List<String> cardIds);
+  /// Copies each card in [cardIds] into its own deck, returning the source
+  /// card id mapped to the id of the copy.
+  ///
+  /// The mapping is what lets the caller finish the job the text alone
+  /// cannot: pushing the copies to sync, and giving each one its own
+  /// references to the originals' images.
+  Future<Map<String, String>> duplicateCards(List<String> cardIds);
 
-  Future<void> logReview(StudyReviewLog log);
+  Future<void> logReview(StudyReviewLog log, {bool recordLocalActivity = true});
+
+  Future<StudyReviewLog?> getReviewLog(String id);
+
+  /// Takes a logged review back, for a session whose undo removed the grade
+  /// that wrote it. A tombstone rather than a row delete, so the removal
+  /// reaches the other devices — see [StudyReviewLog].
+  Future<void> softDeleteReviewLog(String id);
   Future<int> countCardsReviewedToday({DateTime? now});
   Future<int> countCardsReviewedTotal();
   Future<int> countDueCards({DateTime? now});
@@ -377,6 +399,83 @@ abstract class WorkoutRepository {
   Future<List<WorkoutSetLog>> getAllSetLogs({bool includeDeleted = true});
 }
 
+/// Metadata half of the media module: asset rows and the references that
+/// point at them. The bytes themselves live in `MediaFileStore`, and nothing
+/// here touches them.
+abstract class MediaRepository {
+  Future<List<MediaAsset>> listAssets({bool includeDeleted = false});
+  Future<MediaAsset?> getAsset(String id);
+
+  /// [getAsset] for many ids in one read, keyed by id and skipping any whose
+  /// row has gone. A caller resolving a whole gallery — or every gallery in the
+  /// library — would otherwise pay one round-trip per image.
+  Future<Map<String, MediaAsset>> getAssets(Iterable<String> ids);
+
+  /// The live asset with these exact post-ingest bytes, if this account
+  /// already has one. The dedupe lookup, run on every ingest.
+  ///
+  /// A soft-deleted or unreferenced asset still counts as a hit — reusing it
+  /// and clearing its retention clock is what makes re-pasting an image the
+  /// user deleted last week cost nothing and resurrect nothing.
+  Future<MediaAsset?> findAssetByContentHash(String contentHash);
+
+  Future<void> upsertAsset(MediaAsset asset, {bool recordLocalActivity = true});
+  Future<void> softDeleteAsset(String id);
+
+  /// Assets whose bytes this device is meant to be moving, in either
+  /// direction. Drives both transfer queues.
+  Future<List<MediaAsset>> listAssetsByUploadState(Set<MediaUploadState> states);
+  Future<List<MediaAsset>> listAssetsByDownloadState(
+    Set<MediaDownloadState> states,
+  );
+
+  Future<List<MediaReference>> listReferences({bool includeDeleted = false});
+
+  /// Every live reference on one parent, in [MediaReference.sortOrder] order —
+  /// which is also the lightbox's swipe order.
+  Future<List<MediaReference>> listReferencesForOwner(
+    String collection,
+    String documentId, {
+    MediaFacet? facet,
+    bool includeDeleted = false,
+  });
+
+  /// Live references pointing at [mediaId]. The refcount, in list form.
+  Future<List<MediaReference>> listReferencesForAsset(String mediaId);
+
+  Future<MediaReference?> getReference(String id);
+  Future<void> upsertReference(
+    MediaReference reference, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteReference(String id);
+
+  /// Soft-deletes every live reference on a parent, for when the parent
+  /// itself is soft-deleted. Returns the affected references so the caller
+  /// can re-check the refcount of each asset they pointed at.
+  Future<List<MediaReference>> softDeleteReferencesForOwner(
+    String collection,
+    String documentId,
+  );
+
+  /// Mirror of [softDeleteReferencesForOwner], for a parent whose deletion was
+  /// undone. Only references tombstoned at [deletedAt] come back, so an image
+  /// the user had removed on its own beforehand stays removed.
+  Future<List<MediaReference>> restoreReferencesForOwner(
+    String collection,
+    String documentId,
+    DateTime deletedAt,
+  );
+
+  /// Permanently removes assets and references whose retention window has
+  /// closed, and returns the assets removed so their bytes can be deleted
+  /// too. [now] is the moment the 30-day cutoff is measured back from.
+  Future<List<MediaAsset>> purgeExpiredDeleted(DateTime now);
+
+  Future<List<MediaAsset>> getAllAssets({bool includeDeleted = true});
+  Future<List<MediaReference>> getAllReferences({bool includeDeleted = true});
+}
+
 abstract class SettingsRepository {
   Future<AppSettings> getSettings();
 
@@ -429,6 +528,37 @@ abstract class SettingsRepository {
     bool recordLocalActivity = true,
   });
 
+  /// Live flags, word -> replacement (null for a flag with no replacement).
+  /// The map the checker subtracts from `bundled u custom`.
+  Future<Map<String, String?>> getFlaggedWords();
+
+  /// Every flagged-word row including tombstoned ones, for the sync layer.
+  Future<List<FlaggedWord>> getFlaggedWordRecords();
+  Future<FlaggedWord?> getFlaggedWordRecord(String word);
+
+  /// Flags [word], optionally storing [replacement], and tombstones a live
+  /// custom row for the same string in the same transaction
+  /// (`FLAGGED_WORDS.md` §10) — otherwise "remove the custom word" would look
+  /// like it worked while the bundled spelling kept the word known.
+  ///
+  /// A no-op if [word] isn't a single word token, or if [replacement] is
+  /// non-null and either isn't a word token or equals [word]. The caller owns
+  /// the rest of §10's validation (the target must be known and not itself
+  /// flagged), which needs the dictionary this layer can't see.
+  Future<void> flagWord(String word, {String? replacement});
+
+  /// Changes or clears a live flag's replacement in place. Clearing keeps the
+  /// flag. A no-op if [word] isn't currently flagged.
+  Future<void> setFlaggedReplacement(String word, String? replacement);
+
+  /// Lifts the flag: tombstones the row, so a bundled word is allowed again.
+  Future<void> unflagWord(String word);
+
+  Future<void> upsertFlaggedWord(
+    FlaggedWord word, {
+    bool recordLocalActivity = true,
+  });
+
   Future<void> purgeExpiredDeleted(DateTime now);
 
   /// User-written quotes, newest first. Tombstoned rows are included only when
@@ -447,11 +577,11 @@ abstract class SettingsRepository {
 /// pipeline stages, the company typeahead, category colours and archive
 /// seasons.
 ///
-/// Applications are the one entity in the app the user hard-deletes (§7.4).
-/// The sync layer has no way to propagate a Firestore document removal — see
-/// [deleteApplication] — so "hard" is implemented as a content-wiped tombstone
-/// that [purgeExpiredDeleted] drops for good once it has had time to reach
-/// every device.
+/// Applications soft-delete like everything else in the app (§7.4): the row
+/// stays as a tombstone the other devices can read the deletion off — the sync
+/// layer has no way to propagate a Firestore document removal — and
+/// [purgeExpiredDeleted] drops it for good once it has had time to reach every
+/// device.
 abstract class JobRepository {
   /// Creates the seed stages and the seed company list the first time the page
   /// is opened. Gated on each table being completely empty, tombstones
@@ -465,9 +595,9 @@ abstract class JobRepository {
     bool recordLocalActivity = true,
   });
 
-  /// Hard delete from the user's point of view: the row keeps only its id and
-  /// sync bookkeeping, every content field is blanked, and the status timeline
-  /// goes with it. Returns the tombstoned application and the tombstoned
+  /// Soft-deletes the application and its status timeline with it. Content is
+  /// left on the row, so a caller holding a pre-delete snapshot can put the
+  /// application back. Returns the tombstoned application and the tombstoned
   /// events so the caller can push all of them.
   Future<({JobApplication application, List<JobStatusEvent> events})>
   deleteApplication(String id);
@@ -514,9 +644,13 @@ abstract class JobRepository {
   Future<List<JobSeason>> listSeasons({bool includeDeleted = false});
   Future<void> upsertSeason(JobSeason season, {bool recordLocalActivity = true});
 
-  /// Tombstones the season and un-archives everything in it, so no application
-  /// is ever stranded pointing at a season that no longer exists. Returns the
-  /// applications it rewrote.
+  /// Rewrites season sort order to match [orderedIds]. Returns only the
+  /// seasons whose position actually moved, so the caller pushes the minimum.
+  Future<List<JobSeason>> reorderSeasons(List<String> orderedIds);
+
+  /// Tombstones the season and clears it off every application filed under it,
+  /// so no application is ever stranded pointing at a season that no longer
+  /// exists. Returns the applications it rewrote.
   Future<List<JobApplication>> softDeleteSeason(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
@@ -526,6 +660,93 @@ abstract class JobRepository {
   Future<List<JobCompany>> getAllCompanies({bool includeDeleted = true});
   Future<List<JobCategory>> getAllCategories({bool includeDeleted = true});
   Future<List<JobSeason>> getAllSeasons({bool includeDeleted = true});
+}
+
+/// Rankings: categories, their entries, and the optional units under them.
+///
+/// Everything soft-deletes. Deleting a category cascades to its parents and
+/// their children in one transaction, and restoring it brings back exactly
+/// what that cascade tombstoned — which is why the cascade records nothing
+/// beyond `deletedAt`, leaving the content intact to come back to.
+abstract class RankingRepository {
+  Future<List<RankingCategory>> listCategories({bool includeDeleted = false});
+  Future<RankingCategory?> getCategory(String id);
+  Future<void> upsertCategory(
+    RankingCategory category, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Rewrites `sortOrder` across [orderedIds]. Returns only the categories
+  /// that actually moved, so the caller pushes the minimum.
+  Future<List<RankingCategory>> reorderCategories(List<String> orderedIds);
+
+  /// Tombstones the category and everything filed under it. Returns all three
+  /// lists so the caller can push the whole cascade.
+  Future<
+    ({
+      RankingCategory category,
+      List<RankingParent> parents,
+      List<RankingChild> children,
+    })
+  >
+  softDeleteCategory(String id);
+
+  /// Undoes [softDeleteCategory] — the category and every entry the same
+  /// cascade tombstoned come back together, since a restored category with an
+  /// empty list would read as data loss.
+  Future<
+    ({
+      RankingCategory category,
+      List<RankingParent> parents,
+      List<RankingChild> children,
+    })
+  >
+  restoreCategory(String id);
+
+  Future<List<RankingParent>> listParents(
+    String categoryId, {
+    bool includeDeleted = false,
+  });
+  Future<RankingParent?> getParent(String id);
+  Future<void> upsertParent(
+    RankingParent parent, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Tombstones the parent and its children. Returns both so the caller can
+  /// push them and offer an undo.
+  Future<({RankingParent parent, List<RankingChild> children})> softDeleteParent(
+    String id,
+  );
+
+  Future<({RankingParent parent, List<RankingChild> children})> restoreParent(
+    String id,
+  );
+
+  /// Rewrites `queueSortOrder` across [orderedIds]. Returns only the parents
+  /// that moved.
+  Future<List<RankingParent>> reorderQueue(List<String> orderedIds);
+
+  Future<List<RankingChild>> listChildren(
+    String parentId, {
+    bool includeDeleted = false,
+  });
+  Future<RankingChild?> getChild(String id);
+  Future<void> upsertChild(
+    RankingChild child, {
+    bool recordLocalActivity = true,
+  });
+  Future<RankingChild> softDeleteChild(String id);
+  Future<RankingChild> restoreChild(String id);
+
+  /// Rewrites `sortOrder` across [orderedIds]. Returns only the children that
+  /// moved.
+  Future<List<RankingChild>> reorderChildren(List<String> orderedIds);
+
+  Future<void> purgeExpiredDeleted(DateTime now);
+  Future<List<RankingCategory>> getAllCategories({bool includeDeleted = true});
+  Future<List<RankingParent>> getAllParents({bool includeDeleted = true});
+  Future<List<RankingChild>> getAllChildren({bool includeDeleted = true});
 }
 
 abstract class AuthRepository {

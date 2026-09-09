@@ -57,8 +57,29 @@ class _StudyMoveDestinationModalState
   Future<void> _moveHere() async {
     if (_moving) return;
     setState(() => _moving = true);
-    await widget.onSelect(_stack.isEmpty ? null : _stack.last);
-    if (mounted) Navigator.of(context).pop();
+    try {
+      await widget.onSelect(_stack.isEmpty ? null : _stack.last);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error, stackTrace) {
+      // `moveFolder` throws a StateError on a cycle. Without this the sheet
+      // never pops and every row in it stays disabled, with nothing on screen
+      // saying the move failed.
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'study move destination',
+          context: ErrorDescription('while running "${widget.title}"'),
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not move it there.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _moving = false);
+    }
   }
 
   @override

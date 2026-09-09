@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/theme/srs_mastery_color.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
 import 'package:voyager/features/study/study_actions.dart';
+import 'package:voyager/features/study/study_card_face.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_rich_text.dart';
 
@@ -52,11 +56,19 @@ class StudyCardTile extends StatelessWidget {
     required this.onReverse,
     required this.onResetProgress,
     required this.onDelete,
+    this.frontImages = const [],
+    this.backImages = const [],
     this.keywords = const [],
     this.now,
   });
 
   final StudyCard card;
+
+  /// The card's two galleries. A tile is a thumbnail of a thumbnail, so only
+  /// the first image of a side is ever drawn and only when that side has no
+  /// text to show instead — see [_face].
+  final List<MediaAsset> frontImages;
+  final List<MediaAsset> backImages;
 
   /// Which face the tile shows right now.
   final bool showBack;
@@ -81,10 +93,15 @@ class StudyCardTile extends StatelessWidget {
   final DateTime? now;
 
   /// Windows long text onto the match, except when the card holds LaTeX:
-  /// [StudyRichText] pairs `$` delimiters, and a cut between a pair would
-  /// render the source verbatim instead of as math.
-  String _preview(String text) =>
-      text.contains(r'$') ? text : searchSnippet(text, keywords: keywords);
+  /// [StudyRichText] pairs `$` delimiters, and a cut between them would render
+  /// the source verbatim instead of as math. Legacy embed tokens come out
+  /// first so the window is measured against what will actually be shown.
+  String _preview(String text) {
+    final source = stripStudyMediaTokens(text);
+    return source.contains(r'$')
+        ? source
+        : searchSnippet(source, keywords: keywords);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +129,7 @@ class StudyCardTile extends StatelessWidget {
               front: _face(
                 context,
                 text: card.frontText,
+                images: frontImages,
                 mastery: mastery,
                 // The countdown is a property of the question you're about to
                 // be asked, so it only belongs on the side that asks it.
@@ -120,6 +138,7 @@ class StudyCardTile extends StatelessWidget {
               back: _face(
                 context,
                 text: card.backText,
+                images: backImages,
                 mastery: mastery,
                 textColor: theme.colorScheme.primary,
               ),
@@ -143,14 +162,23 @@ class StudyCardTile extends StatelessWidget {
 
   /// One side of the miniature card. Both faces carry the mastery border, so
   /// a flipped card still reports how well it's known.
+  ///
+  /// Images get the compact treatment STUDY_IMAGES.md asks for rather than
+  /// the session's split layout: a face with text keeps showing its text and
+  /// only reports that it has pictures, while a face that is nothing *but*
+  /// pictures shows the first one across the whole tile — there is no text
+  /// for it to compete with.
   Widget _face(
     BuildContext context, {
     required String text,
+    required List<MediaAsset> images,
     required Color mastery,
     Color? textColor,
     int? daysUntilDue,
   }) {
     final theme = Theme.of(context);
+    final imageOnly =
+        images.isNotEmpty && !StudyCardFace.hasVisibleText(text);
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
@@ -165,16 +193,36 @@ class StudyCardTile extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
-              child: Center(
-                child: StudyRichText(
-                  _preview(text),
-                  keywords: keywords,
-                  textAlign: TextAlign.center,
-                  maxLines: 5,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(color: textColor),
-                ),
-              ),
+              child: imageOnly
+                  ? MediaImage(asset: images.first, fit: BoxFit.contain)
+                  : Stack(
+                      children: [
+                        Center(
+                          child: StudyRichText(
+                            _preview(text),
+                            keywords: keywords,
+                            textAlign: TextAlign.center,
+                            maxLines: 5,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                        if (images.isNotEmpty)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: Icon(
+                              PhosphorIconsRegular.image,
+                              size: 12,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.45,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
             ),
             // Reserved on both faces so the text block doesn't shift as the
             // card turns over.

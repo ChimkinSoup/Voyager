@@ -1538,8 +1538,15 @@ class VimSession {
     final insertAt = below
         ? vimLineEnd(text, _cursor)
         : vimLineStart(text, _cursor);
-    final next = text.replaceRange(insertAt, insertAt, '\n');
-    final caret = below ? insertAt + 1 : insertAt;
+    final indent = _autoIndent(below: below);
+    final next = text.replaceRange(
+      insertAt,
+      insertAt,
+      below ? '\n$indent' : '$indent\n',
+    );
+    final caret = below
+        ? insertAt + 1 + indent.length
+        : insertAt + indent.length;
     _setMode(VimMode.insert);
     _applyValue(
       TextEditingValue(
@@ -1550,6 +1557,24 @@ class VimSession {
     _insertAnchor = caret;
     _insertCommandKeys = below ? const ['o'] : const ['O'];
     _clearPending();
+  }
+
+  /// Vim's `autoindent`: a line opened with `o`/`O` starts at the same
+  /// indentation as the line it was opened from.
+  ///
+  /// `o` on a list line is the exception. There the host field's Enter
+  /// continuation (`applyListEditing`, run from its `onChanged`) writes the
+  /// whole `indent + marker` prefix itself, and it recognises the edit only
+  /// while the newline is the single inserted character — so an indent added
+  /// here would cost the bullet rather than add to it. `O` opens no such
+  /// continuation, so it indents on a list line like anywhere else.
+  String _autoIndent({required bool below}) {
+    if (below && isOnListLine(textController)) return '';
+    final text = _text;
+    return text.substring(
+      vimLineStart(text, _cursor),
+      vimFirstNonBlank(text, _cursor),
+    );
   }
 
   // ==========================================================================
@@ -1564,7 +1589,14 @@ class VimSession {
       return;
     }
     final start = _cursor;
-    final end = math.min(vimLineEnd(text, start), start + count);
+    // Counted one object at a time rather than one character: an inline
+    // image's token goes whole or not at all — see [vimObjectEndForward].
+    var end = start;
+    for (var i = 0; i < count; i++) {
+      final next = vimObjectEndForward(text, end);
+      if (next <= end) break;
+      end = next;
+    }
     if (end <= start) {
       _clearPending();
       return;
@@ -1578,7 +1610,12 @@ class VimSession {
     _recordDot();
     final text = _text;
     final end = _cursor;
-    final start = math.max(vimLineStart(text, end), end - count);
+    var start = end;
+    for (var i = 0; i < count; i++) {
+      final previous = vimObjectStartBackward(text, start);
+      if (previous >= start) break;
+      start = previous;
+    }
     if (end <= start) {
       _clearPending();
       return;

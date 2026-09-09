@@ -24,6 +24,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
+  // Flutter 3.47+ defaults to Impeller on Windows, which regresses CPU/temp for
+  // Voyager's shader/canvas backgrounds. Force Skia until upstream fixes land.
+  // Guarded so 3.44.6 (current pin) still compiles — ImpellerSwitch is 3.47+.
+#if FLUTTER_VERSION_MAJOR > 3 || \
+    (FLUTTER_VERSION_MAJOR == 3 && FLUTTER_VERSION_MINOR >= 47)
+  project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);
+#endif
+
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);

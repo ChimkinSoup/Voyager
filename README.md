@@ -23,6 +23,8 @@ Local-first journaling and productivity app for Windows and Android.
 
 ## Setup
 
+**Flutter 3.44.6** (Dart 3.12.2) — pinned; do not `flutter upgrade` without reading [docs/flutter-toolchain.md](docs/flutter-toolchain.md).
+
 ```bash
 flutter pub get
 dart run build_runner build

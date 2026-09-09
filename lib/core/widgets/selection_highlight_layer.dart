@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 
 /// Paints a multi-line field's selection highlight in place of the one
 /// [EditableText] draws, because two things about Flutter's are wrong on a
@@ -64,11 +65,19 @@ class SelectionHighlightLayer extends StatefulWidget {
     this.textHeightBehavior,
     this.locale,
     this.scrollController,
+    this.spanBuilder,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final TextStyle style;
+
+  /// Builds the paragraph this layer measures against. Null means the flat
+  /// one — [text] in [style] and nothing else. A field with emphasis passes
+  /// [ProseEditingController.overlaySpan], because bold is wider than regular
+  /// and a hidden `**` is not there at all: laid out flat, every box below
+  /// would land on the wrong glyph.
+  final ProseSpanBuilder? spanBuilder;
 
   /// The highlight fill, already resolved from the ambient
   /// [TextSelectionThemeData] — see [resolveSelectionColor].
@@ -149,8 +158,10 @@ class _SelectionHighlightLayerState extends State<SelectionHighlightLayer> {
       return const SizedBox.shrink();
     }
 
+    final text = widget.controller.text;
     final painter = _SelectionHighlightPainter(
-      text: widget.controller.text,
+      text: text,
+      span: (widget.spanBuilder ?? flatProseSpan)(text, widget.style),
       selection: selection,
       style: widget.style,
       strutStyle: widget.strutStyle,
@@ -186,6 +197,7 @@ class _SelectionHighlightLayerState extends State<SelectionHighlightLayer> {
 class _SelectionHighlightPainter extends CustomPainter {
   _SelectionHighlightPainter({
     required this.text,
+    required this.span,
     required this.selection,
     required this.style,
     required this.strutStyle,
@@ -198,6 +210,11 @@ class _SelectionHighlightPainter extends CustomPainter {
   });
 
   final String text;
+
+  /// [text] as the field itself renders it — same weights, same slants, same
+  /// collapsed delimiters — so the boxes below land on the real glyphs.
+  final TextSpan span;
+
   final TextSelection selection;
   final TextStyle style;
   final StrutStyle? strutStyle;
@@ -221,7 +238,7 @@ class _SelectionHighlightPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
     final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
+      text: span,
       textAlign: textAlign,
       textDirection: textDirection,
       textScaler: textScaler,
@@ -333,6 +350,7 @@ class _SelectionHighlightPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SelectionHighlightPainter old) {
     return old.text != text ||
+        old.span != span ||
         old.selection != selection ||
         old.style != style ||
         old.strutStyle != strutStyle ||

@@ -67,11 +67,13 @@ class _Device {
       studyRepository: DriftStudyRepository(db),
       workoutRepository: DriftWorkoutRepository(db),
       jobRepository: DriftJobRepository(db),
+      rankingRepository: DriftRankingRepository(db),
       calendarRepository: calendars,
       trackerRepository: DriftTrackerRepository(db),
       financeRepository: DriftFinanceRepository(db),
       notificationRepository: DriftNotificationRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
+      mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,
       weatherService: WeatherService(
         settingsRepository: settings,

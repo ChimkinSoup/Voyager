@@ -37,8 +37,23 @@ abstract final class FirestoreCollections {
   static const jobCompanies = 'job_companies';
   static const jobCategories = 'job_categories';
   static const jobSeasons = 'job_seasons';
+  static const rankingCategories = 'ranking_categories';
+  static const rankingParents = 'ranking_parents';
+  static const rankingChildren = 'ranking_children';
+  /// The owner tag rankings' images carry on their [MediaReference]s, per
+  /// `MEDIA.md`. Not a collection of records — a picture hangs off either a
+  /// parent or a child, and one tag over both is what lets the page ask "does
+  /// this entry have images" in a single pass.
+  static const rankings = 'rankings';
+  static const mediaAssets = 'media_assets';
+  static const mediaReferences = 'media_references';
   static const tagColors = 'tag_colors';
   static const customWords = 'custom_words';
+
+  /// Words the user has flagged as wrong for them (`FLAGGED_WORDS.md`).
+  /// Separate from [customWords]: a row there means "allow", and there is no
+  /// way to say "deny a bundled word" in that vocabulary.
+  static const flaggedWords = 'flagged_words';
   static const syncOperations = 'sync_operations';
 
   /// Not a collection of records but a single document — `settings/app`, the
@@ -92,8 +107,14 @@ abstract final class FirestoreCollections {
     jobCompanies,
     jobCategories,
     jobSeasons,
+    rankingCategories,
+    rankingParents,
+    rankingChildren,
+    mediaAssets,
+    mediaReferences,
     tagColors,
     customWords,
+    flaggedWords,
   };
 
   /// The only collections whose documents carry text two devices can edit at

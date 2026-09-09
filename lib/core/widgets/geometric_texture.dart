@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/window_visibility.dart';
 import 'package:voyager/domain/models/enums.dart' show GeometricWaveShape;
 
 export 'package:voyager/domain/models/enums.dart' show GeometricWaveShape;
@@ -423,7 +424,8 @@ class GeometricTexture extends StatefulWidget {
   State<GeometricTexture> createState() => _GeometricTextureState();
 }
 
-class _GeometricTextureState extends State<GeometricTexture> {
+class _GeometricTextureState extends State<GeometricTexture>
+    with WindowVisibility<GeometricTexture> {
   FragmentShader? _shader;
   Timer? _timer;
   final Stopwatch _clock = Stopwatch();
@@ -457,9 +459,14 @@ class _GeometricTextureState extends State<GeometricTexture> {
   // whatever that tab was actually doing. Checking TickerMode explicitly
   // restores the pause-when-inactive behavior a Ticker would have given for
   // free.
+  //
+  // [WindowVisibility] closes the other half of the same gap: TickerMode only
+  // knows about tabs inside the app, so a minimised window still had the wave
+  // redrawing at 60fps behind it. See there.
   bool get _animating =>
       (widget.waveParams.animates || widget.debugRowFade) &&
-      _tickerModeEnabled;
+      _tickerModeEnabled &&
+      windowVisible;
 
   var _tickerModeEnabled = true;
 
@@ -479,6 +486,9 @@ class _GeometricTextureState extends State<GeometricTexture> {
       _syncAnimation();
     }
   }
+
+  @override
+  void onWindowVisibilityChanged() => _syncAnimation();
 
   @override
   void didUpdateWidget(covariant GeometricTexture oldWidget) {

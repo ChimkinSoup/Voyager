@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
@@ -15,7 +16,9 @@ import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
@@ -26,6 +29,7 @@ import 'package:voyager/domain/models/todo_models.dart';
 const encodedIdCollections = {
   FirestoreCollections.tagColors,
   FirestoreCollections.customWords,
+  FirestoreCollections.flaggedWords,
   FirestoreCollections.dismissedNotifications,
 };
 
@@ -538,22 +542,196 @@ StudyCard mergeStudyCardFromRemote(
   );
 }
 
+/// The blob metadata that travels between devices.
+///
+/// [MediaAsset.uploadState] and [MediaAsset.downloadState] are deliberately
+/// *not* on the wire: they describe where this particular device has got to
+/// with the bytes, and syncing them would tell a phone that a file it has
+/// never seen is already `present`. Every device works its own transfer
+/// state out from what it finds on disk.
+Map<String, dynamic> mediaAssetToFirestore(MediaAsset asset) => {
+  'id': asset.id,
+  'contentHash': asset.contentHash,
+  'byteSize': asset.byteSize,
+  'mimeType': asset.mimeType,
+  'width': asset.width,
+  'height': asset.height,
+  'unreferencedAt': _dateToFirestore(asset.unreferencedAt),
+  'createdAt': _dateToFirestoreRequired(asset.createdAt),
+  'updatedAt': _dateToFirestoreRequired(asset.updatedAt),
+  'version': asset.version,
+  'deletedAt': _dateToFirestore(asset.deletedAt),
+};
+
+MediaAsset mergeMediaAssetFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  MediaAsset? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  // Transfer state is carried over from the local row rather than read off
+  // the document. A newly learned asset has no local row, so it starts as
+  // `missing` — which is exactly what it is: this device knows the image
+  // exists and does not have it. The download queue takes it from there.
+  return MediaAsset(
+    id: id,
+    contentHash: data['contentHash'] as String? ?? local?.contentHash ?? '',
+    byteSize: (data['byteSize'] as num?)?.toInt() ?? local?.byteSize ?? 0,
+    mimeType: data['mimeType'] as String? ?? local?.mimeType ?? 'image/jpeg',
+    width: (data['width'] as num?)?.toInt() ?? local?.width ?? 0,
+    height: (data['height'] as num?)?.toInt() ?? local?.height ?? 0,
+    uploadState: local?.uploadState ?? MediaUploadState.uploaded,
+    downloadState: local?.downloadState ?? MediaDownloadState.missing,
+    failureReason: local?.failureReason,
+    unreferencedAt: parseFirestoreDate(data['unreferencedAt']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> mediaReferenceToFirestore(MediaReference reference) => {
+  'id': reference.id,
+  'mediaId': reference.mediaId,
+  'collection': reference.collection,
+  'documentId': mediaOwnerDocumentIdForFirestore(
+    reference.collection,
+    reference.documentId,
+  ),
+  'facet': reference.facet.name,
+  'sortOrder': reference.sortOrder,
+  'displayWidthPx': reference.displayWidthPx,
+  'createdAt': _dateToFirestoreRequired(reference.createdAt),
+  'updatedAt': _dateToFirestoreRequired(reference.updatedAt),
+  'version': reference.version,
+  'deletedAt': _dateToFirestore(reference.deletedAt),
+};
+
+MediaReference mergeMediaReferenceFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  MediaReference? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  // A reference whose owner is a todo list or journal carries that parent's
+  // *Firestore* id on the wire, so it has to come back through the same
+  // legacy mapping the parent document itself does — otherwise the gallery
+  // on the device that pulled it hangs off an id no local row has.
+  final collection =
+      data['collection'] as String? ?? local?.collection ?? '';
+  final rawDocumentId =
+      data['documentId'] as String? ?? local?.documentId ?? '';
+
+  return MediaReference(
+    id: id,
+    mediaId: data['mediaId'] as String? ?? local?.mediaId ?? '',
+    collection: collection,
+    documentId: mediaOwnerDocumentIdFromFirestore(collection, rawDocumentId),
+    facet: _enumFromName(
+      MediaFacet.values,
+      data['facet'],
+      local?.facet ?? MediaFacet.gallery,
+    ),
+    sortOrder:
+        (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    displayWidthPx:
+        (data['displayWidthPx'] as num?)?.toInt() ?? local?.displayWidthPx,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+/// Maps a media reference's owner id to the form the wire uses.
+///
+/// Journals and todo lists are the two collections whose local id differs
+/// from their Firestore id, and a reference stores its owner's id as data
+/// rather than as a document name — so [firestoreDocumentIdForLocal], which
+/// the outbox applies to document *names*, never sees it. Without this a
+/// gallery attached to a todo task in a legacy-id list would sync as an
+/// orphan.
+String mediaOwnerDocumentIdForFirestore(
+  String collection,
+  String localDocumentId,
+) {
+  return firestoreDocumentIdForLocal(collection, localDocumentId);
+}
+
+/// Inverse of [mediaOwnerDocumentIdForFirestore].
+String mediaOwnerDocumentIdFromFirestore(
+  String collection,
+  String firestoreDocumentId,
+) {
+  if (collection == FirestoreCollections.journals) {
+    return journalDocumentIdFromFirestore(firestoreDocumentId);
+  }
+  if (collection == FirestoreCollections.todoLists) {
+    return todoListDocumentIdFromFirestore(firestoreDocumentId);
+  }
+  if (encodedIdCollections.contains(collection)) {
+    return decodeDocumentId(firestoreDocumentId) ?? firestoreDocumentId;
+  }
+  return firestoreDocumentId;
+}
+
 Map<String, dynamic> studyReviewLogToFirestore(StudyReviewLog log) => {
   'id': log.id,
   'cardId': log.cardId,
   'grade': log.grade.name,
   'reviewedAt': _dateToFirestoreRequired(log.reviewedAt),
+  'version': log.version,
+  'deletedAt': _dateToFirestore(log.deletedAt),
 };
 
+/// Version-first, with no `updatedAt` tie-break: every field but the tombstone
+/// is fixed at insert, so two revisions of a log row can only differ by having
+/// been deleted or restored, and the higher version is the later one. A row at
+/// the same version is the same row.
 StudyReviewLog mergeStudyReviewLogFromRemote(
   Map<String, dynamic> data,
-  String id,
-) {
+  String id, {
+  StudyReviewLog? local,
+}) {
+  final remoteVersion = parseVersion(data);
+  if (local != null && remoteVersion <= local.version) return local;
   return StudyReviewLog(
     id: id,
-    cardId: data['cardId'] as String? ?? '',
+    cardId: data['cardId'] as String? ?? local?.cardId ?? '',
     grade: StudyGrade.values.byName(data['grade'] as String? ?? 'good'),
-    reviewedAt: parseFirestoreDate(data['reviewedAt']) ?? utcNow(),
+    reviewedAt:
+        parseFirestoreDate(data['reviewedAt']) ?? local?.reviewedAt ?? utcNow(),
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
 }
 
@@ -848,12 +1026,26 @@ Map<String, dynamic> jobApplicationToFirestore(JobApplication application) => {
   'dateApplied': _dateToFirestoreRequired(application.dateApplied),
   'applicationUrl': application.applicationUrl,
   'notes': application.notes,
-  'seasonId': application.seasonId,
+  'seasonIds': application.seasonIds,
   'createdAt': _dateToFirestoreRequired(application.createdAt),
   'updatedAt': _dateToFirestoreRequired(application.updatedAt),
   'version': application.version,
   'deletedAt': _dateToFirestore(application.deletedAt),
 };
+
+/// The seasons a remote application is filed under, reading a document from a
+/// device that still writes the single `seasonId` as the one-element list it
+/// means. Absent on both sides is "no season", not "unknown".
+List<String> _jobSeasonIdsFromFirestore(Map<String, dynamic> data) {
+  if (data['seasonIds'] case final List<dynamic> ids) {
+    return [
+      for (final id in ids)
+        if (id is String && id.isNotEmpty) id,
+    ];
+  }
+  final legacy = data['seasonId'] as String?;
+  return legacy == null || legacy.isEmpty ? const [] : [legacy];
+}
 
 JobApplication mergeJobApplicationFromRemote(
   Map<String, dynamic> data,
@@ -872,10 +1064,10 @@ JobApplication mergeJobApplicationFromRemote(
     return local;
   }
 
-  // `seasonId` and the two optional text fields fall back to null rather than
-  // to the local value: un-archiving and clearing a URL are both expressed as
-  // the field going away, and inheriting the local value would make either
-  // change impossible to sync.
+  // `seasonIds` and the two optional text fields fall back to empty/null rather
+  // than to the local value: taking an application out of every season and
+  // clearing a URL are both expressed as the field going away, and inheriting
+  // the local value would make either change impossible to sync.
   return JobApplication(
     id: id,
     company: data['company'] as String? ?? local?.company ?? '',
@@ -887,7 +1079,7 @@ JobApplication mergeJobApplicationFromRemote(
         remoteUpdated,
     applicationUrl: data['applicationUrl'] as String?,
     notes: data['notes'] as String?,
-    seasonId: data['seasonId'] as String?,
+    seasonIds: _jobSeasonIdsFromFirestore(data),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -951,6 +1143,7 @@ Map<String, dynamic> jobStageToFirestore(JobStage stage) => {
   'id': stage.id,
   'name': stage.name,
   'sortOrder': stage.sortOrder,
+  'colorValue': stage.colorValue,
   'createdAt': _dateToFirestoreRequired(stage.createdAt),
   'updatedAt': _dateToFirestoreRequired(stage.updatedAt),
   'version': stage.version,
@@ -978,6 +1171,12 @@ JobStage mergeJobStageFromRemote(
     id: id,
     name: data['name'] as String? ?? local?.name ?? '',
     sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    // A remote that predates the field carries no key at all; a stage whose
+    // colour was cleared carries an explicit null. Only the first should keep
+    // the local colour, so the key's presence is what decides.
+    colorValue: data.containsKey('colorValue')
+        ? (data['colorValue'] as num?)?.toInt()
+        : local?.colorValue,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -1079,6 +1278,7 @@ Map<String, dynamic> jobSeasonToFirestore(JobSeason season) => {
   'id': season.id,
   'name': season.name,
   'sortOrder': season.sortOrder,
+  'archivedAt': _dateToFirestore(season.archivedAt),
   'createdAt': _dateToFirestoreRequired(season.createdAt),
   'updatedAt': _dateToFirestoreRequired(season.updatedAt),
   'version': season.version,
@@ -1106,6 +1306,13 @@ JobSeason mergeJobSeasonFromRemote(
     id: id,
     name: data['name'] as String? ?? local?.name ?? '',
     sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    // Un-archiving has to survive the round trip, so a document that carries
+    // the key with a null value clears it rather than falling back to the
+    // local value. Only a document from before this field existed — no key at
+    // all — keeps what is here.
+    archivedAt: data.containsKey('archivedAt')
+        ? parseFirestoreDate(data['archivedAt'])
+        : local?.archivedAt,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2315,6 +2522,46 @@ CustomWord mergeCustomWordFromRemote(
   );
 }
 
+Map<String, dynamic> flaggedWordToFirestore(FlaggedWord word) => {
+  'word': word.word,
+  'replacement': word.replacement,
+  'createdAt': _dateToFirestoreRequired(word.createdAt),
+  'updatedAt': _dateToFirestoreRequired(word.updatedAt),
+  'version': word.version,
+  'deletedAt': _dateToFirestore(word.deletedAt),
+};
+
+FlaggedWord mergeFlaggedWordFromRemote(
+  Map<String, dynamic> data,
+  String word, {
+  FlaggedWord? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return FlaggedWord(
+    word: word,
+    // Taken verbatim, never falling back to the local value: clearing a
+    // replacement while keeping the flag is a real edit, and a fallback would
+    // silently restore the rule the user deleted.
+    replacement: (data['replacement'] as String?),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    // Re-flagging a word whose flag was lifted clears its tombstone, so the
+    // remote value wins here too.
+    deletedAt: parseFirestoreDate(data['deletedAt']),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The settings document (`users/{uid}/settings/app`, alongside the weather
 // location the weather service already keeps there).
@@ -2384,15 +2631,21 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'hideCompletedTasks': s.hideCompletedTasks,
   'vimModeEnabled': s.vimModeEnabled,
   'snippetsEnabled': s.snippetsEnabled,
+  'autocorrectEnabled': s.autocorrectEnabled,
   'capsLockIndicatorEnabled': s.capsLockIndicatorEnabled,
+  'mediaRemoteUploadsEnabled': s.mediaRemoteUploadsEnabled,
+  'mediaRemoteDownloadsEnabled': s.mediaRemoteDownloadsEnabled,
+  'mediaBackgroundPrefetchEnabled': s.mediaBackgroundPrefetchEnabled,
   'snippetExpandKey': s.snippetExpandKey.name,
   'snippets': [for (final snippet in s.snippets) snippet.toJson()],
   'lastViewedJournalId': s.lastViewedJournalId,
   'lastViewedTodoListId': s.lastViewedTodoListId,
+  'lastViewedCalendarId': s.lastViewedCalendarId,
   'defaultJournalId': s.defaultJournalId,
   'defaultTodoListId': s.defaultTodoListId,
   'journalShowAllEntries': s.journalShowAllEntries,
   'todoShowAllTasks': s.todoShowAllTasks,
+  'calendarShowAllCalendars': s.calendarShowAllCalendars,
   'geometricTextureScale': s.geometricTextureScale,
   'geometricTextureIntensity': s.geometricTextureIntensity,
   'geometricTextureFocalSpread': s.geometricTextureFocalSpread,
@@ -2429,6 +2682,10 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'navPageOrder': s.navPageOrder,
   'jobsHiddenColumns': s.jobsHiddenColumns,
   'jobsIncludeArchived': s.jobsIncludeArchived,
+  'rankingsCollapsedQueueCategories': s.rankingsCollapsedQueueCategories,
+  'jobProfileLinkedInUrl': s.jobProfileLinkedInUrl,
+  'jobProfileGitHubUrl': s.jobProfileGitHubUrl,
+  'jobProfilePortfolioUrl': s.jobProfilePortfolioUrl,
   'startupPageMode': s.startupPageMode.name,
   'customStartupPage': s.customStartupPage,
   'lastSeenNavPage': s.lastSeenNavPage,
@@ -2445,6 +2702,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'leetCodeHideExamples': s.leetCodeHideExamples,
   'leetCodeHideComplexity': s.leetCodeHideComplexity,
   'leetCodeHideCode': s.leetCodeHideCode,
+  'leetCodeEnableScratchCode': s.leetCodeEnableScratchCode,
   'weightUnit': s.weightUnit.name,
   'workoutRestTimerEnabled': s.workoutRestTimerEnabled,
   'workoutRestSeconds': s.workoutRestSeconds,
@@ -2519,7 +2777,12 @@ AppSettings mergeSettingsFromRemote(
     hideCompletedTasks: data['hideCompletedTasks'] as bool?,
     vimModeEnabled: data['vimModeEnabled'] as bool?,
     snippetsEnabled: data['snippetsEnabled'] as bool?,
+    autocorrectEnabled: data['autocorrectEnabled'] as bool?,
     capsLockIndicatorEnabled: data['capsLockIndicatorEnabled'] as bool?,
+    mediaRemoteUploadsEnabled: data['mediaRemoteUploadsEnabled'] as bool?,
+    mediaRemoteDownloadsEnabled: data['mediaRemoteDownloadsEnabled'] as bool?,
+    mediaBackgroundPrefetchEnabled:
+        data['mediaBackgroundPrefetchEnabled'] as bool?,
     snippetExpandKey: _enumFromName(
       SnippetExpandKey.values,
       data['snippetExpandKey'],
@@ -2535,12 +2798,15 @@ AppSettings mergeSettingsFromRemote(
     clearLastViewedJournalId: _remoteClears(data, 'lastViewedJournalId'),
     lastViewedTodoListId: data['lastViewedTodoListId'] as String?,
     clearLastViewedTodoListId: _remoteClears(data, 'lastViewedTodoListId'),
+    lastViewedCalendarId: data['lastViewedCalendarId'] as String?,
+    clearLastViewedCalendarId: _remoteClears(data, 'lastViewedCalendarId'),
     defaultJournalId: data['defaultJournalId'] as String?,
     clearDefaultJournalId: _remoteClears(data, 'defaultJournalId'),
     defaultTodoListId: data['defaultTodoListId'] as String?,
     clearDefaultTodoListId: _remoteClears(data, 'defaultTodoListId'),
     journalShowAllEntries: data['journalShowAllEntries'] as bool?,
     todoShowAllTasks: data['todoShowAllTasks'] as bool?,
+    calendarShowAllCalendars: data['calendarShowAllCalendars'] as bool?,
     geometricTextureScale: _remoteDouble(data, 'geometricTextureScale'),
     geometricTextureIntensity: _remoteDouble(data, 'geometricTextureIntensity'),
     geometricTextureFocalSpread: _remoteDouble(
@@ -2629,6 +2895,9 @@ AppSettings mergeSettingsFromRemote(
     clearNavPageOrder: _remoteClears(data, 'navPageOrder'),
     jobsHiddenColumns: _stringListOrNull(data['jobsHiddenColumns']),
     jobsIncludeArchived: data['jobsIncludeArchived'] as bool?,
+    rankingsCollapsedQueueCategories: _stringListOrNull(
+      data['rankingsCollapsedQueueCategories'],
+    ),
     startupPageMode: _enumFromName(
       StartupPageMode.values,
       data['startupPageMode'],
@@ -2643,6 +2912,12 @@ AppSettings mergeSettingsFromRemote(
         data['showAnnualizedSubscriptionCost'] as bool?,
     showDreamStatistics: data['showDreamStatistics'] as bool?,
     dreamNotesPinned: data['dreamNotesPinned'] as bool?,
+    jobProfileLinkedInUrl: data['jobProfileLinkedInUrl'] as String?,
+    clearJobProfileLinkedInUrl: _remoteClears(data, 'jobProfileLinkedInUrl'),
+    jobProfileGitHubUrl: data['jobProfileGitHubUrl'] as String?,
+    clearJobProfileGitHubUrl: _remoteClears(data, 'jobProfileGitHubUrl'),
+    jobProfilePortfolioUrl: data['jobProfilePortfolioUrl'] as String?,
+    clearJobProfilePortfolioUrl: _remoteClears(data, 'jobProfilePortfolioUrl'),
     leetcodeUsername: data['leetcodeUsername'] as String?,
     clearLeetcodeUsername: _remoteClears(data, 'leetcodeUsername'),
     showNeetCode150: data['showNeetCode150'] as bool?,
@@ -2653,6 +2928,7 @@ AppSettings mergeSettingsFromRemote(
     leetCodeHideExamples: data['leetCodeHideExamples'] as bool?,
     leetCodeHideComplexity: data['leetCodeHideComplexity'] as bool?,
     leetCodeHideCode: data['leetCodeHideCode'] as bool?,
+    leetCodeEnableScratchCode: data['leetCodeEnableScratchCode'] as bool?,
     weightUnit: _enumFromName(
       WeightUnit.values,
       data['weightUnit'],
@@ -2672,4 +2948,294 @@ List<String>? _stringListOrNull(Object? value) {
     for (final item in value)
       if (item is String) item,
   ];
+}
+
+/// Templates and field values travel as native Firestore arrays and maps
+/// rather than as the JSON strings the local columns hold: the payload is what
+/// a backup file stores too, and a nested map survives a mapper gaining a
+/// field where an opaque string would not.
+Map<String, dynamic> rankingCategoryToFirestore(RankingCategory category) => {
+  'id': category.id,
+  'name': category.name,
+  'colorValue': category.colorValue,
+  'iconKey': category.iconKey,
+  'sortOrder': category.sortOrder,
+  'childUnitsEnabled': category.childUnitsEnabled,
+  'childUnitLabel': category.childUnitLabel,
+  'imagesOnParent': category.imagesOnParent,
+  'imagesOnChild': category.imagesOnChild,
+  'parentScoreMax': category.parentScoreMax,
+  'childScoreMax': category.childScoreMax,
+  'parentScorePrecision': category.parentScorePrecision.name,
+  'childScorePrecision': category.childScorePrecision.name,
+  // Written alongside the enums, not instead of them: a device still on the
+  // build before precision existed reads only these, and without them it
+  // would push its own stale half-step setting back over a tenths category.
+  'parentHalfStepsEnabled': category.parentScorePrecision.halfStepsEquivalent,
+  'childHalfStepsEnabled': category.childScorePrecision.halfStepsEquivalent,
+  'parentTemplate': [for (final f in category.parentTemplate) f.toJson()],
+  'childTemplate': [for (final f in category.childTemplate) f.toJson()],
+  'sortMode': category.sortMode.name,
+  'sortFieldId': category.sortFieldId,
+  'sortAscending': category.sortAscending,
+  'archivedAt': _dateToFirestore(category.archivedAt),
+  'createdAt': _dateToFirestoreRequired(category.createdAt),
+  'updatedAt': _dateToFirestoreRequired(category.updatedAt),
+  'version': category.version,
+  'deletedAt': _dateToFirestore(category.deletedAt),
+};
+
+/// The precision a remote category is on, preferring the enum and falling
+/// back to the half-step boolean a payload written before it carries.
+RankingScorePrecision _precisionFromRemote(
+  dynamic precision,
+  dynamic legacyHalfSteps,
+  RankingScorePrecision? local,
+) {
+  if (precision is String) return RankingScorePrecision.fromName(precision);
+  if (legacyHalfSteps is bool) {
+    return RankingScorePrecision.fromHalfSteps(legacyHalfSteps);
+  }
+  return local ?? RankingScorePrecision.half;
+}
+
+List<RankingTemplateField> _templateFromRemote(
+  dynamic value,
+  List<RankingTemplateField> fallback,
+) {
+  if (value is! List) return fallback;
+  final fields = [
+    for (final entry in value)
+      if (entry is Map) RankingTemplateField.fromJson(
+        Map<String, dynamic>.from(entry),
+      ),
+  ];
+  fields.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  return fields;
+}
+
+RankingCategory mergeRankingCategoryFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  RankingCategory? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return RankingCategory(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    colorValue:
+        (data['colorValue'] as num?)?.toInt() ??
+        local?.colorValue ??
+        defaultColorPalette.first,
+    iconKey: data['iconKey'] as String? ?? local?.iconKey ?? 'star',
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    childUnitsEnabled:
+        data['childUnitsEnabled'] as bool? ?? local?.childUnitsEnabled ?? false,
+    childUnitLabel:
+        data['childUnitLabel'] as String? ?? local?.childUnitLabel ?? 'Episode',
+    imagesOnParent:
+        data['imagesOnParent'] as bool? ?? local?.imagesOnParent ?? true,
+    imagesOnChild:
+        data['imagesOnChild'] as bool? ?? local?.imagesOnChild ?? false,
+    parentScoreMax:
+        (data['parentScoreMax'] as num?)?.toInt() ?? local?.parentScoreMax ?? 5,
+    childScoreMax:
+        (data['childScoreMax'] as num?)?.toInt() ?? local?.childScoreMax ?? 5,
+    parentScorePrecision: _precisionFromRemote(
+      data['parentScorePrecision'],
+      data['parentHalfStepsEnabled'],
+      local?.parentScorePrecision,
+    ),
+    childScorePrecision: _precisionFromRemote(
+      data['childScorePrecision'],
+      data['childHalfStepsEnabled'],
+      local?.childScorePrecision,
+    ),
+    parentTemplate: _templateFromRemote(
+      data['parentTemplate'],
+      local?.parentTemplate ?? const [],
+    ),
+    childTemplate: _templateFromRemote(
+      data['childTemplate'],
+      local?.childTemplate ?? const [],
+    ),
+    sortMode: RankingSortMode.fromName(
+      data['sortMode'] as String? ?? local?.sortMode.name,
+    ),
+    // Presence, not nullness: a remote that predates the field keeps whatever
+    // sort this device had, while one that cleared it must clear it here too.
+    sortFieldId: data.containsKey('sortFieldId')
+        ? data['sortFieldId'] as String?
+        : local?.sortFieldId,
+    sortAscending:
+        data['sortAscending'] as bool? ?? local?.sortAscending ?? false,
+    archivedAt: data.containsKey('archivedAt')
+        ? parseFirestoreDate(data['archivedAt'])
+        : local?.archivedAt,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> _fieldValuesToFirestore(
+  Map<String, RankingFieldValue> values,
+) => {
+  for (final entry in values.entries)
+    if (!entry.value.isEmpty) entry.key: entry.value.toJson(),
+};
+
+Map<String, RankingFieldValue> _fieldValuesFromRemote(
+  dynamic value,
+  Map<String, RankingFieldValue> fallback,
+) {
+  if (value is! Map) return fallback;
+  return {
+    for (final entry in value.entries)
+      if (entry.value is Map)
+        entry.key as String: RankingFieldValue.fromJson(
+          Map<String, dynamic>.from(entry.value as Map),
+        ),
+  };
+}
+
+Map<String, dynamic> rankingParentToFirestore(RankingParent parent) => {
+  'id': parent.id,
+  'categoryId': parent.categoryId,
+  'title': parent.title,
+  'overallScore': parent.overallScore,
+  'notes': parent.notes,
+  'fieldValues': _fieldValuesToFirestore(parent.fieldValues),
+  'tags': parent.tags,
+  'status': parent.status.name,
+  'starred': parent.starred,
+  'queueSortOrder': parent.queueSortOrder,
+  'createdAt': _dateToFirestoreRequired(parent.createdAt),
+  'updatedAt': _dateToFirestoreRequired(parent.updatedAt),
+  'version': parent.version,
+  'deletedAt': _dateToFirestore(parent.deletedAt),
+};
+
+RankingParent mergeRankingParentFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  RankingParent? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return RankingParent(
+    id: id,
+    categoryId: data['categoryId'] as String? ?? local?.categoryId ?? '',
+    title: data['title'] as String? ?? local?.title ?? '',
+    // Presence again: clearing an overall score is how a ranked entry is
+    // demoted, and treating that null as "no news" would keep it ranked here.
+    overallScore: data.containsKey('overallScore')
+        ? (data['overallScore'] as num?)?.toDouble()
+        : local?.overallScore,
+    notes: data['notes'] as String? ?? local?.notes ?? '',
+    fieldValues: _fieldValuesFromRemote(
+      data['fieldValues'],
+      local?.fieldValues ?? const {},
+    ),
+    // Normalized on the way in as well as on the way out: a payload written by
+    // a build that predates the cap or the lowercasing is still a payload this
+    // one has to be able to hold.
+    tags: normalizeRankingTags(
+      _stringListFromRemote(data['tags'], local?.tags ?? const []),
+    ),
+    status: RankingStatus.fromName(
+      data['status'] as String? ?? local?.status.name,
+    ),
+    starred: data['starred'] as bool? ?? local?.starred ?? false,
+    queueSortOrder:
+        (data['queueSortOrder'] as num?)?.toInt() ??
+        local?.queueSortOrder ??
+        0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> rankingChildToFirestore(RankingChild child) => {
+  'id': child.id,
+  'parentId': child.parentId,
+  'name': child.name,
+  'overallScore': child.overallScore,
+  'notes': child.notes,
+  'fieldValues': _fieldValuesToFirestore(child.fieldValues),
+  'sortOrder': child.sortOrder,
+  'createdAt': _dateToFirestoreRequired(child.createdAt),
+  'updatedAt': _dateToFirestoreRequired(child.updatedAt),
+  'version': child.version,
+  'deletedAt': _dateToFirestore(child.deletedAt),
+};
+
+RankingChild mergeRankingChildFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  RankingChild? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return RankingChild(
+    id: id,
+    parentId: data['parentId'] as String? ?? local?.parentId ?? '',
+    name: data['name'] as String? ?? local?.name ?? '',
+    overallScore: data.containsKey('overallScore')
+        ? (data['overallScore'] as num?)?.toDouble()
+        : local?.overallScore,
+    notes: data['notes'] as String? ?? local?.notes ?? '',
+    fieldValues: _fieldValuesFromRemote(
+      data['fieldValues'],
+      local?.fieldValues ?? const {},
+    ),
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
 }

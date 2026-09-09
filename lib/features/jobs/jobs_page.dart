@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
-import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -15,8 +18,11 @@ import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_edit_panel.dart';
 import 'package:voyager/features/jobs/jobs_header.dart';
 import 'package:voyager/features/jobs/jobs_manage_sheet.dart';
+import 'package:voyager/features/jobs/jobs_option_list.dart';
 import 'package:voyager/features/jobs/jobs_providers.dart';
+import 'package:voyager/features/jobs/jobs_stage_colors.dart';
 import 'package:voyager/features/jobs/jobs_table.dart';
+import 'package:voyager/features/jobs/jobs_track_modal.dart';
 
 class JobsPage extends ConsumerStatefulWidget {
   const JobsPage({super.key});
@@ -94,7 +100,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
         tooltip: 'Add an application',
         label: 'Add',
         icon: const Icon(PhosphorIconsRegular.plus),
-        onPressed: () => _createApplication(companies),
+        onPressed: _createApplication,
       ),
       body: SafeArea(
         child: applicationsAsync.when(
@@ -107,30 +113,39 @@ class _JobsPageState extends ConsumerState<JobsPage>
               categories: categories,
               fallback: Theme.of(context).colorScheme.outline,
             );
-            final statusColors = _StatusColors(
+            final statusColors = JobStageColors(
               stages: stages,
               fallback: Theme.of(context).colorScheme.primary,
             );
 
+            // Archived-ness lives on the seasons, not on the application: a
+            // season is picked while tracking, and an application is archived
+            // only once every cycle it is filed under has been retired.
+            final archivedSeasonIds = jobArchivedSeasonIds(seasons);
             final active = [
               for (final application in applications)
-                if (!application.isArchived) application,
+                if (!jobIsArchived(application, archivedSeasonIds)) application,
             ];
-            // Three different scopes, deliberately (§8.1–§8.4). The lifetime
+            // Three different scopes, deliberately (§8.1–§8.3). The lifetime
             // total counts everything ever. The per-status counts are always
-            // active-only, whatever the toggle says. Only the sparkline and the
-            // Sankey follow the toggle.
+            // active-only, whatever the toggle says. Only the list and the
+            // sparkline follow the toggle.
             final inScope = includeArchived ? applications : active;
             final rows = filterJobApplications(
               applications,
               includeArchived: includeArchived,
+              archivedSeasonIds: archivedSeasonIds,
               statuses: statusFilter,
               query: query,
-            )..sort((a, b) => b.dateApplied.compareTo(a.dateApplied));
+            )..sort(compareJobApplications);
             final duplicates = jobDuplicateIds(rows);
-            final seasonNames = {
-              for (final season in seasons) season.id: season.name,
-            };
+            // Named in the user's own season order rather than in the order
+            // the ids happen to sit in on the application, so two rows in the
+            // same pair of cycles read identically.
+            List<String> namesFor(JobApplication application) => [
+              for (final season in seasons)
+                if (application.seasonIds.contains(season.id)) season.name,
+            ];
             final selected = selectedId == null
                 ? null
                 : applications.cast<JobApplication?>().firstWhere(
@@ -143,7 +158,6 @@ class _JobsPageState extends ConsumerState<JobsPage>
                 JobsHeader(
                   lifetimeTotal: applications.length,
                   statusCounts: jobStatusCounts(stages, active),
-                  sankeyCounts: jobStatusCounts(stages, inScope),
                   dailyCounts: [
                     for (final day in jobDailyCounts(
                       inScope,
@@ -158,6 +172,9 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   activeStatuses: statusFilter,
                   onStatusTapped: _toggleStatusFilter,
                   statusColors: statusColors.of,
+                  profileLinkedInUrl: settings?.jobProfileLinkedInUrl,
+                  profileGitHubUrl: settings?.jobProfileGitHubUrl,
+                  profilePortfolioUrl: settings?.jobProfilePortfolioUrl,
                 ),
                 _Toolbar(
                   searchController: _searchController,
@@ -204,15 +221,52 @@ class _JobsPageState extends ConsumerState<JobsPage>
                                           application: application,
                                           columns: columns,
                                           color: colors.of(application.company),
+                                          statusColor: statusColors.of(
+                                            application.status,
+                                          ),
                                           isDuplicate: duplicates.contains(
                                             application.id,
                                           ),
                                           isSelected:
                                               application.id == selectedId,
-                                          seasonName:
-                                              seasonNames[application.seasonId],
+                                          isArchived: jobIsArchived(
+                                            application,
+                                            archivedSeasonIds,
+                                          ),
+                                          seasonNames: namesFor(application),
                                           onTap: () =>
                                               _openPanel(application.id),
+                                          onStatusTap: (pillContext) =>
+                                              _editStatus(
+                                                pillContext,
+                                                application,
+                                                stages,
+                                              ),
+                                          menuItems: () =>
+                                              jobApplicationMenuItems(
+                                                application: application,
+                                                stages: stages,
+                                                seasons: jobSelectableSeasons(
+                                                  seasons,
+                                                ),
+                                                onChangeStatus: (status) =>
+                                                    _setStatus(
+                                                      application,
+                                                      status,
+                                                    ),
+                                                onSetSeasons: (seasonIds) =>
+                                                    _setSeasons(
+                                                      application,
+                                                      seasonIds,
+                                                    ),
+                                                onOpenUrl: () => _openUrl(
+                                                  application.applicationUrl!,
+                                                ),
+                                                onDuplicate: () =>
+                                                    _duplicate(application),
+                                                onDelete: () =>
+                                                    _confirmDelete(application),
+                                              ),
                                         );
                                       },
                                     ),
@@ -242,12 +296,12 @@ class _JobsPageState extends ConsumerState<JobsPage>
                                       stages: stages,
                                       companies: companies,
                                       seasons: seasons,
+                                      recentCompanyKeys: jobRecentCompanyKeys(
+                                        applications,
+                                      ),
                                       accentColor: colors.of(selected.company),
                                       categoryColorFor: colors.forCompany,
                                       onClose: _closePanel,
-                                      onDeleted: _closePanel,
-                                      onDuplicated: (copy) =>
-                                          _openPanel(copy.id),
                                     ),
                             ),
                           ),
@@ -264,26 +318,116 @@ class _JobsPageState extends ConsumerState<JobsPage>
     );
   }
 
-  Future<void> _createApplication(List<JobCompany> companies) async {
-    final company = await showPromptNameDialog(
-      context,
-      title: 'New application',
-      label: 'Company',
+  /// One page collects the whole application — company, role, stage, date,
+  /// season, URL and notes — and nothing is written until it is saved. The
+  /// panel is deliberately not opened afterwards: there is nothing left to
+  /// fill in.
+  Future<void> _createApplication() async {
+    await startJobsTrackFlow(context, ref);
+  }
+
+  /// Applies a status picked from the row's capsule or its right-click menu.
+  /// The same write the editor panel makes, so it records the timeline entry
+  /// too.
+  Future<void> _setStatus(JobApplication application, String status) async {
+    if (status == application.status) return;
+    await JobsActions(ref).saveApplication(
+      application.copyWith(status: status),
+      previous: application,
     );
-    if (company == null || company.trim().isEmpty || !mounted) return;
-    final title = await showPromptNameDialog(
-      context,
-      title: 'New application',
-      label: 'Title',
+  }
+
+  Future<void> _editStatus(
+    BuildContext pillContext,
+    JobApplication application,
+    List<JobStage> stages,
+  ) async {
+    // Orphans included: a status whose stage was deleted still has to be
+    // selectable back onto itself, and visible as an option so the user can
+    // see what the application is actually on.
+    final names = [
+      for (final stage in stages) stage.name,
+      if (application.status.isNotEmpty &&
+          !stages.any((s) => s.name == application.status))
+        application.status,
+    ];
+    final picked = await showContextualPopover<String>(
+      context: context,
+      buttonContext: pillContext,
+      builder: (context) => JobsOptionList(
+        options: [for (final name in names) (value: name, label: name)],
+        selected: application.status,
+      ),
     );
-    if (title == null || title.trim().isEmpty) return;
-    final created = await JobsActions(
-      ref,
-    ).createApplication(company: company, title: title);
-    if (!mounted) return;
-    // Opened straight away: company and title are the only fields create asks
-    // for, and everything else — status, date, URL, notes — is edited here.
-    _openPanel(created.id);
+    if (picked == null) return;
+    await _setStatus(application, picked);
+  }
+
+  /// Copies the application and opens the copy. Lives on the row's right-click
+  /// menu rather than in the editor panel — the panel is for editing the one
+  /// application it is showing, not for minting another.
+  Future<void> _duplicate(JobApplication application) async {
+    final copy = await JobsActions(ref).duplicateApplication(application);
+    _openPanel(copy.id);
+  }
+
+  Future<void> _setSeasons(
+    JobApplication application,
+    Set<String> seasonIds,
+  ) async {
+    if (setEquals(seasonIds, application.seasonIds.toSet())) return;
+    await JobsActions(ref).setSeasons(application, seasonIds.toList());
+  }
+
+  Future<void> _confirmDelete(JobApplication application) async {
+    // Captured while this widget is still mounted: the delete unmounts the row
+    // that asked for it, and the toast offering the undo has to outlive both.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete application?',
+      message:
+          '${application.title} at ${application.company} and its status '
+          'history will be moved to trash.',
+    );
+    if (!confirmed) return;
+    // The panel would otherwise be left showing a tombstone, and its dispose
+    // flush would write the content straight back.
+    if (ref.read(jobSelectedApplicationProvider) == application.id) {
+      _closePanel();
+    }
+
+    final actions = JobsActions.detached(container);
+    late final JobApplicationSnapshot snapshot;
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: deletedMessage(
+        '${application.title} at ${application.company}',
+        fallback: 'application',
+      ),
+      delete: () async => snapshot = await actions.deleteApplication(application),
+      // Reopened whether or not it was the application on screen when it went:
+      // the undo is about that one row, and the editor is where it lives.
+      restore: () async {
+        await actions.restoreApplication(snapshot);
+        if (!mounted) return;
+        // The panel resolves its application out of [jobApplicationsProvider],
+        // which the restore has just invalidated. Opening before it has the
+        // row back slides an empty panel out and fills it a frame or two
+        // later; waiting means it opens on the application straight away.
+        await ref.read(jobApplicationsProvider.future);
+        if (!mounted) return;
+        _openPanel(application.id);
+      },
+    );
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.tryParse(url.contains('://') ? url : 'https://$url');
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   void _toggleStatusFilter(String status) {
@@ -355,28 +499,6 @@ class _CompanyColors {
   }
 }
 
-/// A stable colour per status, spread around the theme's hue wheel by the
-/// stage's position. Orphan statuses (not in the stage list) all share the
-/// muted outline colour, which is what marks them apart at a glance.
-class _StatusColors {
-  _StatusColors({required List<JobStage> stages, required this.fallback})
-    : _indexByName = {
-        for (var i = 0; i < stages.length; i++) stages[i].name: i,
-      },
-      _count = stages.length;
-
-  final Color fallback;
-  final Map<String, int> _indexByName;
-  final int _count;
-
-  Color of(String status) {
-    final index = _indexByName[status];
-    if (index == null || _count == 0) return fallback;
-    final hsl = HSLColor.fromColor(fallback);
-    return hsl.withHue((hsl.hue + (360 / _count) * index) % 360).toColor();
-  }
-}
-
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.searchController,
@@ -405,7 +527,7 @@ class _Toolbar extends StatelessWidget {
         children: [
           Expanded(
             child: SizedBox(
-              height: 32,
+              height: 38,
               // Not under [VimTextScope] like the app's prose fields, so the
               // Caps Lock mark is opted into by hand here.
               child: CapsLockCaretIndicator(
@@ -430,13 +552,11 @@ class _Toolbar extends StatelessWidget {
           ),
           if (onClearFilters != null) ...[
             const SizedBox(width: 6),
-            TextButton(
+            GlassButton(
+              dense: true,
+              height: 38,
+              label: 'Clear',
               onPressed: onClearFilters,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                textStyle: theme.textTheme.labelSmall,
-              ),
-              child: const Text('Clear'),
             ),
           ],
           const SizedBox(width: 6),

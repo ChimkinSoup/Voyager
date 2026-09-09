@@ -1,22 +1,36 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/media/media_service.dart';
+import 'package:voyager/core/media/widgets/media_attach.dart';
+import 'package:voyager/core/media/widgets/media_drop_target.dart';
+import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/features/study/study_actions.dart';
+import 'package:voyager/features/study/study_card_face.dart';
 import 'package:voyager/features/study/study_rich_text.dart';
 
 /// Create/edit a single card. Front/back are plain text inputs — `$...$`
-/// LaTeX source is typed as-is (no live reformatting per STUDY.md) with a
-/// small rendered preview shown underneath so the author can check it
-/// without leaving the editor. Editing an existing card also reports its SRS
-/// standing, which is otherwise only legible as a border color in the grid.
+/// LaTeX source is typed as-is (no live reformatting per STUDY.md) — with a
+/// rendered preview underneath so the author can check the face they are
+/// building without leaving the editor. Images are attached to each side's
+/// own gallery rather than typed into the text (STUDY_IMAGES.md). Editing an
+/// existing card also reports its SRS standing, which is otherwise only
+/// legible as a border color in the grid.
 Future<void> showStudyCardEditorModal(
   BuildContext context,
   WidgetRef ref, {
@@ -39,7 +53,8 @@ class _StudyCardEditorModal extends ConsumerStatefulWidget {
   final StudyCard? existing;
 
   @override
-  ConsumerState<_StudyCardEditorModal> createState() => _StudyCardEditorModalState();
+  ConsumerState<_StudyCardEditorModal> createState() =>
+      _StudyCardEditorModalState();
 }
 
 class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
@@ -49,68 +64,144 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
   late final TextEditingController _back = TextEditingController(
     text: widget.existing?.backText ?? '',
   );
+
+  /// The card's id, allocated here rather than at save time so the gallery
+  /// strips have an owner to attach to from the moment the editor opens. A
+  /// new card is a real document id with no row behind it yet.
+  late final String _cardId = widget.existing?.id ?? newId();
+
+  /// Resolved in [initState] rather than lazily: [dispose] needs the service
+  /// after this widget's `ref` has stopped being readable, so a `late` field
+  /// that first ran there would throw instead of detaching.
+  late final MediaService _media;
+
   bool _saving = false;
+  bool _saved = false;
 
   @override
   void initState() {
     super.initState();
+    _media = ref.read(mediaServiceProvider);
     _front.addListener(() => setState(() {}));
     _back.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
+    // Images attach the instant they are picked, but a new card's row only
+    // appears on save. Closing without saving would otherwise leave
+    // references hanging off a document that never existed — and a live
+    // reference keeps its asset off the retention clock forever.
+    if (widget.existing == null && !_saved) {
+      unawaited(
+        _media.removeReferencesForOwner(
+          FirestoreCollections.studyCards,
+          _cardId,
+        ),
+      );
+    }
     _front.dispose();
     _back.dispose();
     super.dispose();
   }
 
-  bool get _canSave =>
-      _front.text.trim().isNotEmpty && _back.text.trim().isNotEmpty && !_saving;
+  /// A side is complete when it has something to show — text or images. Either
+  /// alone is a valid face (STUDY_IMAGES.md).
+  static bool _sideFilled(String text, List<MediaAsset> images) =>
+      text.trim().isNotEmpty || images.isNotEmpty;
 
+  /// Writes the two faces this sheet owns and nothing else.
+  ///
+  /// The row is re-read at save time rather than rebuilt from `widget.existing`.
+  /// This is a long-lived modal: a sync pull landing a grade from another
+  /// device can revise the card while it is open, and reconstructing it from
+  /// the snapshot taken when the sheet opened would roll `interval` / `ease` /
+  /// `dueAt` / `reviewCount` back to that moment — then write a `version` that
+  /// may be no higher than what is already on disk, which makes the next pull's
+  /// verdict a coin flip rather than a defined last-write-wins. The SRS columns
+  /// are not the editor's to write at all.
   Future<void> _save() async {
-    if (!_canSave) return;
+    if (_saving) return;
     setState(() => _saving = true);
-    final now = utcNow();
-    final existing = widget.existing;
-    final card = StudyCard(
-      id: existing?.id ?? newId(),
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      version: existing == null ? 0 : existing.version + 1,
-      deckId: widget.deckId,
-      frontText: _front.text.trim(),
-      backText: _back.text.trim(),
-      interval: existing?.interval ?? 0,
-      ease: existing?.ease ?? kStudyBaseEase,
-      dueAt: existing?.dueAt ?? now,
-      reviewCount: existing?.reviewCount ?? 0,
-    );
-    await ref.read(studyRepositoryProvider).upsertCard(card);
-    ref.read(remoteSyncServiceProvider).pushStudyCard(card);
-    ref.invalidate(studyCardsProvider);
-    // Also the flattened list a session works from — an edit made from inside
-    // one is invisible to it otherwise.
-    ref.invalidate(studyAllCardsProvider);
-    ref.invalidate(studyDeckStatsProvider);
-    ref.invalidate(studyStatsProvider);
-    if (mounted) Navigator.of(context).pop();
+    try {
+      final repo = ref.read(studyRepositoryProvider);
+      final now = utcNow();
+      final current = widget.existing == null
+          ? null
+          : await repo.getCard(_cardId);
+      final card = current == null
+          ? StudyCard(
+              id: _cardId,
+              createdAt: now,
+              updatedAt: now,
+              deckId: widget.deckId,
+              frontText: _front.text.trim(),
+              backText: _back.text.trim(),
+              dueAt: now,
+            )
+          // copyWith bumps version off the row as it stands now, and leaves
+          // interval/ease/dueAt/reviewCount alone.
+          : current.copyWith(
+              frontText: _front.text.trim(),
+              backText: _back.text.trim(),
+            );
+      await repo.upsertCard(card);
+      // Only true once the row the image references hang off actually exists —
+      // set before the write, a throw would skip dispose's cleanup and strand
+      // those references on a document id with no row, off the retention clock
+      // forever.
+      _saved = true;
+      ref.read(remoteSyncServiceProvider).pushStudyCard(card);
+      // All four: the per-deck roster, the flattened list a session works from,
+      // and both stat providers.
+      invalidateStudyCards(ref);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'study card editor',
+          context: ErrorDescription('while saving card $_cardId'),
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save the card.')),
+        );
+      }
+    } finally {
+      // Cleared however the write ended, or Save is disabled for good and the
+      // only way out of the sheet discards the user's typing.
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _delete() async {
     final existing = widget.existing;
     if (existing == null) return;
-    final repo = ref.read(studyRepositoryProvider);
-    await repo.softDeleteCard(existing.id);
-    final tombstone = await repo.getCard(existing.id);
-    if (tombstone != null) {
-      ref.read(remoteSyncServiceProvider).pushStudyCard(tombstone);
-    }
-    ref.invalidate(studyCardsProvider);
-    ref.invalidate(studyAllCardsProvider);
-    ref.invalidate(studyDeckStatsProvider);
-    ref.invalidate(studyStatsProvider);
-    if (mounted) Navigator.of(context).pop();
+    // Captured before the modal closes: the toast that offers the undo outlives
+    // this route, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final navigator = Navigator.of(context);
+
+    // No confirm dialog here on purpose. The editor's trash button has never
+    // asked, and the undo is what makes that safe rather than a new dialog.
+    // A local rather than a field on this State: the restore closure outlives
+    // the modal, and a field would keep the disposed State reachable from the
+    // toast's standing offer for as long as the offer stands. Assigned inside
+    // `delete` and read only from `restore`, which `softDeleteWithUndo`
+    // reaches only once `delete` has returned normally.
+    late final StudyCardDeletion deletion;
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: deletedMessage(existing.frontText, fallback: 'card'),
+      delete: () async =>
+          deletion = await softDeleteStudyCard(container, existing),
+      restore: () => restoreStudyCard(container, deletion),
+    );
+    navigator.pop();
   }
 
   /// e.g. "New card · due today" or "Interval 21d · ease 2.5 · 7 reviews ·
@@ -132,6 +223,13 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+    final images =
+        ref.watch(studyCardImagesProvider).valueOrNull?[_cardId] ??
+        (front: const <MediaAsset>[], back: const <MediaAsset>[]);
+    final canSave =
+        !_saving &&
+        _sideFilled(_front.text, images.front) &&
+        _sideFilled(_back.text, images.back);
 
     return Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
@@ -148,7 +246,9 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.3,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -191,40 +291,181 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
                 ),
               ],
               const SizedBox(height: 12),
-              VoyagerTextField(
+              _CardSide(
+                cardId: _cardId,
+                facet: MediaFacet.front,
                 controller: _front,
+                images: images.front,
+                label: 'Front',
+                hintText: r'Supports LaTeX between $...$',
                 autofocus: widget.existing == null,
-                maxLines: 4,
-                minLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Front',
-                  hintText: r'Supports LaTeX between $...$',
-                ),
               ),
-              if (_front.text.contains('\$')) ...[
-                const SizedBox(height: 6),
-                StudyRichText(_front.text, style: theme.textTheme.bodySmall),
-              ],
               const SizedBox(height: 16),
-              VoyagerTextField(
+              _CardSide(
+                cardId: _cardId,
+                facet: MediaFacet.back,
                 controller: _back,
-                maxLines: 4,
-                minLines: 2,
-                decoration: const InputDecoration(labelText: 'Back'),
+                images: images.back,
+                label: 'Back',
               ),
-              if (_back.text.contains('\$')) ...[
-                const SizedBox(height: 6),
-                StudyRichText(_back.text, style: theme.textTheme.bodySmall),
-              ],
               const SizedBox(height: 18),
               GlassButton(
-                onPressed: _canSave ? _save : null,
+                onPressed: canSave ? _save : null,
                 label: 'Save',
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One face's editor: its text field, the preview of what that face will look
+/// like, and its gallery.
+///
+/// The whole side is a paste and drop target for its own facet, which is what
+/// scopes an image to the field the caret is in.
+class _CardSide extends ConsumerWidget {
+  const _CardSide({
+    required this.cardId,
+    required this.facet,
+    required this.controller,
+    required this.images,
+    required this.label,
+    this.hintText,
+    this.autofocus = false,
+  });
+
+  final String cardId;
+  final MediaFacet facet;
+  final TextEditingController controller;
+  final List<MediaAsset> images;
+  final String label;
+  final String? hintText;
+  final bool autofocus;
+
+  /// Height of the rendered preview when this side has images. Tall enough
+  /// for the split layout to read as a split, short enough that both sides
+  /// still fit in the sheet.
+  static const double _previewHeight = 200;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final hasLatex = controller.text.contains(r'$');
+
+    return MediaDropTarget(
+      collection: FirestoreCollections.studyCards,
+      documentId: cardId,
+      facet: facet,
+      child: MediaPasteScope(
+        collection: FirestoreCollections.studyCards,
+        documentId: cardId,
+        facet: facet,
+        // A card's text field is image-capable in the sense that matters
+        // here: pasting text and an image together types the text and hangs
+        // the picture off this same side.
+        fieldTakesBoth: true,
+        // …but only while the caret is actually in one of them. With a
+        // gallery per side there is no answer to "which side" without a
+        // focused field, so that paste is left alone.
+        requireFocusedField: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            VoyagerTextField(
+              controller: controller,
+              autofocus: autofocus,
+              maxLines: 4,
+              minLines: 2,
+              decoration: InputDecoration(
+                labelText: label,
+                hintText: hintText,
+              ),
+            ),
+            if (images.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              SizedBox(
+                height: _previewHeight,
+                child: StudyCardFace(
+                  text: controller.text,
+                  images: images,
+                  compact: true,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ] else if (hasLatex ||
+                stripStudyMediaTokens(controller.text) != controller.text) ...[
+              const SizedBox(height: 6),
+              StudyRichText(controller.text, style: theme.textTheme.bodySmall),
+            ],
+            const SizedBox(height: 8),
+            if (images.isEmpty)
+              _AddImageButton(cardId: cardId, facet: facet)
+            else
+              MediaGalleryStrip(
+                collection: FirestoreCollections.studyCards,
+                documentId: cardId,
+                facet: facet,
+                thumbnailSize: 56,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The attach affordance a side shows before it has any images, in place of
+/// the gallery strip — which only appears once there is an order to show.
+class _AddImageButton extends ConsumerStatefulWidget {
+  const _AddImageButton({required this.cardId, required this.facet});
+
+  final String cardId;
+  final MediaFacet facet;
+
+  @override
+  ConsumerState<_AddImageButton> createState() => _AddImageButtonState();
+}
+
+class _AddImageButtonState extends ConsumerState<_AddImageButton> {
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    if (_busy) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final images = await pickImageFiles();
+    if (images.isEmpty || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await attachImagesForOwner(
+        ref,
+        messenger: messenger,
+        overlay: overlay,
+        images: images,
+        collection: FirestoreCollections.studyCards,
+        documentId: widget.cardId,
+        facet: widget.facet,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GlassButton(
+        onPressed: _busy ? null : _pick,
+        // Dense: it sits under a text field as a secondary action, next to
+        // the sheet's full-width Save.
+        dense: true,
+        icon: const Icon(PhosphorIconsRegular.imageSquare),
+        label: _busy ? 'Adding…' : 'Add image',
       ),
     );
   }

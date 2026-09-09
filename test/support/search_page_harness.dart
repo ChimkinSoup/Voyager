@@ -20,6 +20,7 @@ const searchHarnessJournalId = 'harness-journal';
 Future<AppDatabase> pumpSearchPage(
   WidgetTester tester, {
   required List<JournalEntry> Function(DateTime now) entries,
+  List<Override> extraOverrides = const [],
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
@@ -45,6 +46,7 @@ Future<AppDatabase> pumpSearchPage(
       // remoteSyncServiceProvider reaches the weather service, whose real
       // client wants a Firebase app.
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      ...extraOverrides,
     ],
   );
   addTearDown(container.dispose);

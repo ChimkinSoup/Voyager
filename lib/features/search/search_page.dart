@@ -6,7 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
+import 'package:voyager/core/media/widgets/media_drop_target.dart';
+import 'package:voyager/core/media/widgets/media_fan_stack.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
@@ -33,6 +37,8 @@ import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/features/journal/journal_entry_delete.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
@@ -183,32 +189,28 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Future<void> _deleteEntry(JournalEntry entry) async {
+    // Captured while this widget is certainly mounted: the toast that offers
+    // the undo outlives the row it deleted, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete entry?',
       message: 'This entry will be moved to trash.',
     );
     if (!confirmed || !mounted) return;
-    final repo = ref.read(journalRepositoryProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final JournalEntryDeletion? deletion;
     try {
       // An in-flight save for this entry would otherwise land after the
       // tombstone and republish it as live, which is why journal_page._delete
       // flushes first too.
-      await remoteSync.flushDocument(
-        FirestoreCollections.journalEntries,
-        entry.id,
-      );
-      await repo.softDeleteEntry(entry.id);
-      // The pushed tombstone is read back rather than built from `entry`.
-      // `entry` comes from the _localUpdates-merged list, which lags disk
-      // whenever an in-flight save hasn't reported back, and softDeleteEntry
-      // bumps the version itself — so a tombstone built here went out at a
-      // version Firestore had already passed, the next device read it as the
-      // loser and pushed its own live document back, resurrecting the entry
-      // everywhere. See journal_page._softDeleteAndPushTombstone.
-      final tombstone = await repo.getEntry(entry.id);
-      if (tombstone != null) remoteSync.pushJournalEntryNow(tombstone);
+      await ref
+          .read(remoteSyncServiceProvider)
+          .flushDocument(FirestoreCollections.journalEntries, entry.id);
+      // Shared with the Journal page, which deletes the same rows — see
+      // [softDeleteJournalEntry].
+      deletion = await softDeleteJournalEntry(container, entry.id);
     } catch (error, stackTrace) {
       // Never hide a row that still exists: the confirm dialog has already
       // closed, and leaving the row in place with nothing said reads as "the
@@ -228,6 +230,40 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _localRevision++;
     });
     _invalidateEntryCaches();
+    if (deletion == null) return;
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(entry.title, fallback: 'entry'),
+      restore: () => _undoEntryDelete(container, deletion!),
+    );
+  }
+
+  /// Brings back an entry the toast's Undo was pressed for.
+  ///
+  /// The database restore is only half of it: this page hides a deleted row
+  /// through [_deletedIds] rather than waiting on a provider refresh, and that
+  /// hide would outlive the restore — leaving the entry back on disk but still
+  /// missing from the results.
+  Future<void> _undoEntryDelete(
+    ProviderContainer container,
+    JournalEntryDeletion deletion,
+  ) async {
+    // In a `finally` because the hide has to go however the restore ended —
+    // otherwise a throw part-way through leaves the entry back on disk and
+    // still missing from the results. Cleared unconditionally the list
+    // re-derives either way: back if the write landed, still gone if it did
+    // not.
+    try {
+      await restoreJournalEntry(container, deletion);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletedIds.remove(deletion.entry.id);
+          _localRevision++;
+        });
+        _invalidateEntryCaches();
+      }
+    }
   }
 
   Future<void> _changeEntryJournal(
@@ -357,6 +393,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     itemBuilder: (_, i) {
                       final entry = results[i];
                       final bodyStyle = theme.textTheme.bodyMedium!;
+                      // Results show stored prose, so the markers render the
+                      // same way they do in the editor (§10).
+                      final emphasisTheme = ProseEmphasisTheme.of(
+                        theme.colorScheme,
+                        theme.colorScheme.primary,
+                      );
                       return ContextMenuRegion(
                         items: [
                           ContextMenuItem(
@@ -390,6 +432,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             keywords: keywords,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            emphasisTheme: emphasisTheme,
                           ),
                           subtitle: searchHighlightedText(
                             searchSnippet(entry.body, keywords: keywords),
@@ -397,6 +440,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             keywords: keywords,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
+                            emphasisTheme: emphasisTheme,
                           ),
                           onTap: () async {
                             await showVoyagerDialog<void>(
@@ -581,6 +625,11 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
   bool _isDatePickerOpen = false;
 
+  /// Set by the two gestures that mean *throw this away*: the Close button and
+  /// Escape. Everything else that ends the dialog — Save, Enter, a click on
+  /// the backdrop, a lifecycle flush — still writes the buffer.
+  bool _discarded = false;
+
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
@@ -591,7 +640,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     // afterwards was silently dropped by Close and Escape alike. Dirtiness is
     // the real question, and _save answers it again on its own first line so
     // an unconditional close can't queue a duplicate write either.
-    if (_isDirty) {
+    if (_isDirty && !_discarded) {
       unawaited(_save());
     }
     _titleController.dispose();
@@ -697,6 +746,14 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     if (mounted) Navigator.pop(context);
   }
 
+  /// Leaves without writing: the buffer is dropped and the entry stays as it
+  /// was on disk. [dispose] is what would otherwise persist it, so the flag has
+  /// to be set before the pop rather than passed out of it.
+  void _discardAndClose() {
+    _discarded = true;
+    if (mounted) Navigator.pop(context);
+  }
+
   Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
     final journal = widget.journals.cast<Journal?>().firstWhere(
       (j) => j?.id == _entry.journalId,
@@ -763,148 +820,202 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       onSubmit: () async {
         if (context.mounted) Navigator.pop(context);
       },
-      child: AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        title: const Text('Journal entry'),
-        content: SizedBox(
-          width: dialogWidth,
-          child: VoyagerScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    LabeledTextField(
-                      label: 'Title',
-                      controller: _titleController,
-                      focusNode: _titleFocusNode,
-                      textInputAction: TextInputAction.done,
-                      accentColor: _accentColor,
-                      contentPadding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
-                      onSubmitted: (_) => _saveAndClose(),
-                    ),
-                    Positioned(
-                      top: 0,
-                      right: 10,
-                      child: JournalTitleCornerFlag(
-                        colorValue: _accentColor.toARGB32(),
-                        onSelected: _moveToJournal,
-                        menuEntries: (_) => [
-                          for (var i = 0; i < widget.journals.length; i++)
-                            VoyagerPopupMenuItem<String>(
-                              value: widget.journals[i].id,
-                              position: VoyagerMenuTheme.positionFor(
-                                i,
-                                widget.journals.length,
+      // Escape reads as Close, not as a second Save. The route installs its own
+      // DismissIntent action for the same key; this one sits below it, so the
+      // lookup that starts at the focused field finds it first. Nothing here
+      // touches the barrier, which keeps saving — a stray click outside is not
+      // a decision to discard.
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (_) {
+              _discardAndClose();
+              return null;
+            },
+          ),
+        },
+        child: AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          title: const Text('Journal entry'),
+          content: SizedBox(
+            width: dialogWidth,
+            child: VoyagerScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      LabeledTextField(
+                        label: 'Title',
+                        controller: _titleController,
+                        focusNode: _titleFocusNode,
+                        textInputAction: TextInputAction.done,
+                        accentColor: _accentColor,
+                        contentPadding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
+                        onSubmitted: (_) => _saveAndClose(),
+                      ),
+                      Positioned(
+                        top: 0,
+                        right: 10,
+                        child: JournalTitleCornerFlag(
+                          colorValue: _accentColor.toARGB32(),
+                          onSelected: _moveToJournal,
+                          menuEntries: (_) => [
+                            for (var i = 0; i < widget.journals.length; i++)
+                              VoyagerPopupMenuItem<String>(
+                                value: widget.journals[i].id,
+                                position: VoyagerMenuTheme.positionFor(
+                                  i,
+                                  widget.journals.length,
+                                ),
+                                child: Row(
+                                  children: [
+                                    JournalBookmarkFlag(
+                                      colorValue:
+                                          widget.journals[i].colorValue ??
+                                          _accentColor.toARGB32(),
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(widget.journals[i].name),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  JournalBookmarkFlag(
-                                    colorValue:
-                                        widget.journals[i].colorValue ??
-                                        _accentColor.toARGB32(),
-                                    size: 12,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(widget.journals[i].name),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text('Mood', style: TextStyle(color: _accentColor)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: MoodGradientSlider(
-                        value: _mood,
-                        accent: _accentColor,
-                        onChanged: (value) => setState(() => _mood = value),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Text('Mood', style: TextStyle(color: _accentColor)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: MoodGradientSlider(
+                          value: _mood,
+                          accent: _accentColor,
+                          onChanged: (value) => setState(() => _mood = value),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    PopupMenuButton<VoyagerMenuCatalogEntry>(
-                      tooltip: 'Weather',
-                      icon: Icon(
-                        weatherIconData(_weatherIcon),
-                        color: _accentColor,
+                      const SizedBox(width: 12),
+                      PopupMenuButton<VoyagerMenuCatalogEntry>(
+                        tooltip: 'Weather',
+                        icon: Icon(
+                          weatherIconData(_weatherIcon),
+                          color: _accentColor,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        onSelected: (entry) => setState(
+                          () => _weatherIcon = entry.weatherIconValue!,
+                        ),
+                        itemBuilder: (context) =>
+                            buildCatalogMenu(context, from: weatherMenuEntries),
                       ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 40,
+                      const SizedBox(width: 8),
+                      Builder(
+                        builder: (ctx) {
+                          final label =
+                              '${DateFormat.yMMMd().format(_entry.entryDate.toLocal())} at ${formatTime12Hour(_entry.entryDate.toLocal())}';
+                          return SelectorPill(
+                            dense: false,
+                            ellipsize: false,
+                            isActive: _isDatePickerOpen,
+                            label: label,
+                            accentColor: _accentColor,
+                            onTap: () => _changeEntryDateAndTime(ctx),
+                          );
+                        },
                       ),
-                      onSelected: (entry) => setState(
-                        () => _weatherIcon = entry.weatherIconValue!,
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 480,
+                    child: _withImages(
+                      TagHighlightedTextField(
+                        controller: _bodyController,
+                        focusNode: _bodyFocusNode,
+                        tagScope: TagScope.journal,
+                        onKeyEvent: _handleBodyKey,
+                        cursorColor: _accentColor,
+                        expands: true,
+                        hintText: 'Start writing...',
+                        decoration: const InputDecoration(
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
                       ),
-                      itemBuilder: (context) =>
-                          buildCatalogMenu(context, from: weatherMenuEntries),
-                    ),
-                    const SizedBox(width: 8),
-                    Builder(
-                      builder: (ctx) {
-                        final label =
-                            '${DateFormat.yMMMd().format(_entry.entryDate.toLocal())} at ${formatTime12Hour(_entry.entryDate.toLocal())}';
-                        return SelectorPill(
-                          dense: false,
-                          ellipsize: false,
-                          isActive: _isDatePickerOpen,
-                          label: label,
-                          accentColor: _accentColor,
-                          onTap: () => _changeEntryDateAndTime(ctx),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 480,
-                  child: TagHighlightedTextField(
-                    controller: _bodyController,
-                    focusNode: _bodyFocusNode,
-                    tagScope: TagScope.journal,
-                    onKeyEvent: _handleBodyKey,
-                    cursorColor: _accentColor,
-                    expands: true,
-                    hintText: 'Start writing...',
-                    decoration: const InputDecoration(
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+          actions: [
+            GlassButton(
+              onPressed: _discardAndClose,
+              label: 'Close',
+              dense: true,
+            ),
+            GlassButton(
+              onPressed: _saveAndClose,
+              label: 'Save',
+              color: _accentColor,
+              dense: true,
+            ),
+          ],
         ),
-        actions: [
-          GlassButton(
-            onPressed: () => Navigator.pop(context),
-            label: 'Close',
-            dense: true,
-          ),
-          GlassButton(
-            onPressed: () {
-              unawaited(_save());
-              if (context.mounted) Navigator.pop(context);
-            },
-            label: 'Save',
-            color: _accentColor,
-            dense: true,
-          ),
-        ],
+      ),
+    );
+  }
+
+  /// Wraps the dialog's writing area in this entry's images.
+  ///
+  /// The same three pieces the journal body carries (see `_withImages` in
+  /// journal_page.dart): the entry owns the images as reference rows, the
+  /// corner fan is where they are seen, and paste and drop are what puts them
+  /// there. An entry opened from search is the same entry, so it behaves the
+  /// same way here — otherwise the same picture could be attached on one page
+  /// and not the other.
+  Widget _withImages(Widget field) {
+    return MediaPasteScope(
+      collection: FirestoreCollections.journalEntries,
+      documentId: _entry.id,
+      // The body is image-capable, so a clipboard holding both a screenshot
+      // and its caption pastes both rather than dropping the picture.
+      fieldTakesBoth: true,
+      child: MediaDropTarget(
+        collection: FirestoreCollections.journalEntries,
+        documentId: _entry.id,
+        child: Stack(
+          children: [
+            Positioned.fill(child: field),
+            // Floating over the text rather than reserving a band under it:
+            // Flutter cannot wrap a paragraph around a corner, so the only
+            // alternative would be padding the full width of the field,
+            // images or not.
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: MediaFanStack(
+                collection: FirestoreCollections.journalEntries,
+                documentId: _entry.id,
+                accentColor: _accentColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

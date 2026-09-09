@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:highlight/highlight_core.dart' show Highlight, Node;
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/text/styled_runs.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
+import 'package:voyager/core/widgets/prose_highlight_underlay.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 
@@ -229,13 +232,31 @@ class LeetCodeProseText extends StatelessWidget {
     // [DefaultTextStyle] would be measured against a different one here.
     final prose = DefaultTextStyle.of(context).style.merge(style);
     final parsed = parseInlineCode(text);
+    final emphasisTheme = ProseEmphasisTheme.of(
+      theme.colorScheme,
+      theme.colorScheme.primary,
+    );
+    final emphasis = _emphasisRanges(parsed, emphasisTheme);
+    // `==highlight==` comes back marked, not filled — see
+    // [kProseHighlightMark].
+    final highlightFill = emphasisTheme.highlightColor!;
 
     if (!parsed.hasCode && !tagPills) {
-      return Text.rich(
-        TextSpan(children: keywordSpans(parsed.text, prose, keywords)),
-        maxLines: maxLines,
-        overflow: overflow,
-        textAlign: textAlign,
+      return ProseHighlightUnderlay(
+        color: highlightFill,
+        child: Text.rich(
+          TextSpan(
+            children: keywordSpans(
+              parsed.text,
+              prose,
+              keywords,
+              emphasis: emphasis,
+            ),
+          ),
+          maxLines: maxLines,
+          overflow: overflow,
+          textAlign: textAlign,
+        ),
       );
     }
 
@@ -250,14 +271,22 @@ class LeetCodeProseText extends StatelessWidget {
     for (final range in parsed.codeRanges) {
       if (range.start > cursor) {
         spans.addAll(
-          _proseSpans(parsed.text, cursor, range.start, prose, chips),
+          _proseSpans(parsed.text, cursor, range.start, prose, chips, emphasis),
         );
       }
       final code = parsed.text.substring(range.start, range.end);
+      var at = range.start;
       for (final (token, tokenStyle) in _tokenize(code, language, syntax)) {
         spans.addAll(
-          keywordSpans(token, codeStyle.merge(tokenStyle), keywords),
+          keywordSpans(
+            token,
+            codeStyle.merge(tokenStyle),
+            keywords,
+            emphasis: emphasis,
+            offset: at,
+          ),
         );
+        at += token.length;
       }
       chips.add(
         _Chip(
@@ -272,16 +301,26 @@ class LeetCodeProseText extends StatelessWidget {
     }
     if (cursor < parsed.text.length) {
       spans.addAll(
-        _proseSpans(parsed.text, cursor, parsed.text.length, prose, chips),
+        _proseSpans(
+          parsed.text,
+          cursor,
+          parsed.text.length,
+          prose,
+          chips,
+          emphasis,
+        ),
       );
     }
 
     final span = TextSpan(children: spans);
-    final paragraph = Text.rich(
-      span,
-      maxLines: maxLines,
-      overflow: overflow,
-      textAlign: textAlign,
+    final paragraph = ProseHighlightUnderlay(
+      color: highlightFill,
+      child: Text.rich(
+        span,
+        maxLines: maxLines,
+        overflow: overflow,
+        textAlign: textAlign,
+      ),
     );
     if (chips.isEmpty) return paragraph;
 
@@ -310,20 +349,41 @@ class LeetCodeProseText extends StatelessWidget {
     int end,
     TextStyle prose,
     List<_Chip> chips,
+    List<StyledRange> emphasis,
   ) {
     final slice = text.substring(start, end);
-    if (!tagPills) return keywordSpans(slice, prose, keywords);
+    if (!tagPills) {
+      return keywordSpans(
+        slice,
+        prose,
+        keywords,
+        emphasis: emphasis,
+        offset: start,
+      );
+    }
 
     final spans = <InlineSpan>[];
     var cursor = 0;
     for (final match in journalTagPattern.allMatches(slice)) {
       if (match.start > cursor) {
         spans.addAll(
-          keywordSpans(slice.substring(cursor, match.start), prose, keywords),
+          keywordSpans(
+            slice.substring(cursor, match.start),
+            prose,
+            keywords,
+            emphasis: emphasis,
+            offset: start + cursor,
+          ),
         );
       }
       spans.addAll(
-        keywordSpans(match.group(0)!, prose, keywords),
+        keywordSpans(
+          match.group(0)!,
+          prose,
+          keywords,
+          emphasis: emphasis,
+          offset: start + match.start,
+        ),
       );
       chips.add(
         _Chip(
@@ -337,9 +397,37 @@ class LeetCodeProseText extends StatelessWidget {
       cursor = match.end;
     }
     if (cursor < slice.length) {
-      spans.addAll(keywordSpans(slice.substring(cursor), prose, keywords));
+      spans.addAll(
+        keywordSpans(
+          slice.substring(cursor),
+          prose,
+          keywords,
+          emphasis: emphasis,
+          offset: start + cursor,
+        ),
+      );
     }
     return spans;
+  }
+
+  /// Emphasis over [parsed]'s *rendered* text (EMPHASIS_FORMATTING.md §10).
+  ///
+  /// The backticks are gone by this point, so the parser would read a `**`
+  /// inside a snippet as prose. It is handed a copy with every code character
+  /// replaced by a letter instead — same length, so every offset still lines
+  /// up, and nothing inside a snippet can open, close or exclude anything.
+  static List<StyledRange> _emphasisRanges(
+    ParsedInlineCode parsed,
+    ProseEmphasisTheme theme,
+  ) {
+    if (!parsed.hasCode) return proseReadRanges(parsed.text, theme);
+    final masked = parsed.text.split('');
+    for (final range in parsed.codeRanges) {
+      for (var i = range.start; i < range.end; i++) {
+        masked[i] = 'x';
+      }
+    }
+    return proseReadRanges(masked.join(), theme);
   }
 }
 

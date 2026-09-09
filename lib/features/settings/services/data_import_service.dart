@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/data/database/app_database.dart';
+import 'package:voyager/data/services/media_file_store.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
@@ -37,6 +40,7 @@ class BackupImportSummary {
     required this.restoredByCollection,
     required this.skipped,
     required this.settingsRestored,
+    this.mediaFilesRestored = 0,
   });
 
   /// Records written, per collection. Collections that needed no work are
@@ -47,6 +51,9 @@ class BackupImportSummary {
   final int skipped;
 
   final bool settingsRestored;
+
+  /// Image files copied out of the archive into the local cache.
+  final int mediaFilesRestored;
 
   int get restoredTotal =>
       restoredByCollection.values.fold(0, (sum, count) => sum + count);
@@ -59,17 +66,27 @@ class DataImportService {
     required SettingsRepository settingsRepository,
     required BackupRecordUploader pushRecords,
     required BackupSettingsUploader pushSettings,
+    MediaRepository? mediaRepository,
+    MediaFileStore? mediaFileStore,
   }) : _db = db,
        _collections = collections,
        _settingsRepository = settingsRepository,
        _pushRecords = pushRecords,
-       _pushSettings = pushSettings;
+       _pushSettings = pushSettings,
+       _mediaRepository = mediaRepository,
+       _mediaFileStore = mediaFileStore;
 
   final AppDatabase _db;
   final List<BackupCollection> _collections;
   final SettingsRepository _settingsRepository;
   final BackupRecordUploader _pushRecords;
   final BackupSettingsUploader _pushSettings;
+
+  /// Null in tests that restore only the JSON half. Without them an archive's
+  /// image bytes are ignored and the restored assets stay `missing`, which is
+  /// recoverable (they download) rather than wrong.
+  final MediaRepository? _mediaRepository;
+  final MediaFileStore? _mediaFileStore;
 
   Future<BackupImportSummary> importFromZip(File zipFile) async {
     final zipBytes = await zipFile.readAsBytes();
@@ -78,6 +95,7 @@ class DataImportService {
     final backupCollections =
         parsed['collections'] as Map<String, List<Map<String, dynamic>>>;
     final backupSettings = parsed['settings'] as Map<String, dynamic>?;
+    final backupBlobs = parsed['media'] as Map<String, Uint8List>? ?? const {};
 
     // Read the current state of every collection up front. Comparing the
     // backup against it is what keeps the restore — and the upload that
@@ -131,6 +149,12 @@ class DataImportService {
       }
     });
 
+    // Blobs are written after the transaction and before the uploads: the
+    // asset rows they belong to are committed by now, so a file landing on
+    // disk always has a row to describe it, and writing megabytes of images
+    // inside a write transaction would block every other write in the app.
+    final mediaFilesRestored = await _restoreMediaBlobs(backupBlobs);
+
     // Uploads run after the transaction commits — they are network calls, and
     // holding a write transaction open across them would block every other
     // write in the app for the duration.
@@ -152,7 +176,48 @@ class DataImportService {
       },
       skipped: skipped,
       settingsRestored: settings != null,
+      mediaFilesRestored: mediaFilesRestored,
     );
+  }
+
+  /// Writes an archive's image bytes into the local cache and marks the
+  /// assets they belong to as present.
+  ///
+  /// The download state is corrected from what is actually on disk rather
+  /// than trusted from the backup: an asset row restored from an archive says
+  /// nothing about whether *this* device has the bytes, and it is exactly the
+  /// devices that have just been restored onto that would otherwise sit
+  /// waiting for a download of a file already sitting next to them.
+  Future<int> _restoreMediaBlobs(Map<String, Uint8List> blobs) async {
+    final store = _mediaFileStore;
+    final repository = _mediaRepository;
+    if (store == null || repository == null || blobs.isEmpty) return 0;
+
+    final byContentHash = <String, Uint8List>{};
+    for (final entry in blobs.entries) {
+      final name = entry.key.substring(backupMediaDirectory.length);
+      final dot = name.lastIndexOf('.');
+      byContentHash[dot == -1 ? name : name.substring(0, dot)] = entry.value;
+    }
+
+    var written = 0;
+    for (final asset in await repository.getAllAssets()) {
+      final bytes = byContentHash[asset.contentHash];
+      if (bytes == null) continue;
+      final format = MediaImageFormat.fromMimeType(asset.mimeType);
+      if (format == null) continue;
+      await store.writeBytes(asset.contentHash, format, bytes);
+      written++;
+      if (asset.downloadState == MediaDownloadState.present) continue;
+      await repository.upsertAsset(
+        asset.copyWith(
+          downloadState: MediaDownloadState.present,
+          clearFailureReason: true,
+        ),
+        recordLocalActivity: false,
+      );
+    }
+    return written;
   }
 
   /// The backup payload with a version high enough for the restore to stick.
@@ -197,7 +262,9 @@ class DataImportService {
 
 /// Background isolate entry point — must be top-level.
 ///
-/// Returns `{'collections': {name: [record json]}, 'settings': payload?}`.
+/// Returns
+/// `{'collections': {name: [record json]}, 'settings': payload?, 'media':
+/// {member name: bytes}}`.
 Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
   final Archive archive;
   try {
@@ -232,6 +299,13 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
     );
   }
 
+  final media = <String, Uint8List>{};
+  for (final file in archive.files) {
+    if (!file.isFile) continue;
+    if (!file.name.startsWith(backupMediaDirectory)) continue;
+    media[file.name] = Uint8List.fromList(file.content as List<int>);
+  }
+
   final collections = <String, List<Map<String, dynamic>>>{};
   for (final entry in (manifest['collections'] as Map? ?? {}).entries) {
     final name = entry.key as String;
@@ -246,5 +320,6 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
   return {
     'collections': collections,
     'settings': settings is Map ? Map<String, dynamic>.from(settings) : null,
+    'media': media,
   };
 }

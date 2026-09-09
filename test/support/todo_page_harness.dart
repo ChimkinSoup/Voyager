@@ -25,6 +25,7 @@ Future<void> seedTodoTasks(
   AppDatabase db, {
   required int active,
   required int done,
+  Set<String> withNotes = const {},
 }) async {
   final repo = DriftTodoRepository(db);
   final now = DateTime.now().toUtc();
@@ -38,11 +39,13 @@ Future<void> seedTodoTasks(
     ),
   );
   for (var i = 0; i < active + done; i++) {
+    final id = 'task-${i.toString().padLeft(5, '0')}';
     await repo.upsertTask(
       TodoTask(
-        id: 'task-${i.toString().padLeft(5, '0')}',
+        id: id,
         listId: todoHarnessListId,
         title: 'Task $i',
+        notes: withNotes.contains(id) ? 'a note' : null,
         completed: i >= active,
         sortOrder: 1000000 + (i >= active ? i - active : i),
         createdAt: now.add(Duration(seconds: i)),
@@ -58,8 +61,10 @@ Future<void> seedTodoTasks(
 /// written. Pass [showAllTasks] to start the page in the "All tasks" view the
 /// way a restart into that view would, [seedSecondList] to add a second list
 /// holding one task, [configureList] to adjust the harness list's per-list
-/// settings before it is written, and [defaultTodoListId] to seed the setting
-/// that decides which list the page opens into.
+/// settings before it is written, [defaultTodoListId] to seed the setting
+/// that decides which list the page opens into, [hideCompleted] to seed the
+/// hide-completed setting, and [seedExtra] to write anything else — subtasks,
+/// differently titled tasks — before the page is pumped.
 Future<AppDatabase> pumpTodoPage(
   WidgetTester tester, {
   required int active,
@@ -69,10 +74,14 @@ Future<AppDatabase> pumpTodoPage(
   bool seedSecondList = false,
   TodoListModel Function(TodoListModel)? configureList,
   String? defaultTodoListId,
+  bool hideCompleted = false,
+  Future<void> Function(DriftTodoRepository repo)? seedExtra,
+  List<Override> extraOverrides = const [],
+  Set<String> withNotes = const {},
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
-  await seedTodoTasks(db, active: active, done: done);
+  await seedTodoTasks(db, active: active, done: done, withNotes: withNotes);
   final repo = DriftTodoRepository(db);
   final now = DateTime.now().toUtc();
   if (configureList != null) {
@@ -104,6 +113,7 @@ Future<AppDatabase> pumpTodoPage(
       ),
     );
   }
+  if (seedExtra != null) await seedExtra(repo);
   final settingsRepo = DriftSettingsRepository(db);
   await settingsRepo.saveSettings(
     (await settingsRepo.getSettings()).copyWith(
@@ -111,6 +121,7 @@ Future<AppDatabase> pumpTodoPage(
       lastViewedTodoListId: todoHarnessListId,
       todoShowAllTasks: showAllTasks,
       defaultTodoListId: defaultTodoListId,
+      hideCompletedTasks: hideCompleted,
     ),
   );
 
@@ -119,6 +130,7 @@ Future<AppDatabase> pumpTodoPage(
       databaseProvider.overrideWithValue(db),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      ...extraOverrides,
     ],
   );
   addTearDown(container.dispose);

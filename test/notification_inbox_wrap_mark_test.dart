@@ -2,11 +2,13 @@
 // runs out of room — and the two used to look identical. Flutter has no
 // text-indent and a TextField's wrapped line can only be moved by putting a
 // real newline in the note, so the distinction is painted instead: an elbow in
-// the gutter beside every line the text spilled onto by itself.
+// the gutter beside every line the text spilled onto by itself, under the
+// bullet that marks where the note itself starts.
 //
 // These read the pixels back, because a painter is the one thing the widget
-// tree cannot be asked about: that the mark is there for a wrap, absent for a
-// line the user broke, and on the same rows once the row becomes an editor.
+// tree cannot be asked about: that the note is bulleted, that the elbow is
+// there for a wrap and absent for a line the user broke, and that both stay on
+// the same rows once the row becomes an editor.
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -30,6 +32,7 @@ const double _kWindowWidth = 360;
 
 const _wrapped = 'one two three four five six seven eight nine ten eleven';
 const _broken = 'one two three\nfour five six';
+const _short = 'one two';
 
 final _boundary = GlobalKey();
 
@@ -80,8 +83,8 @@ Future<void> _pumpInbox(WidgetTester tester, String noteText) async {
   }
 }
 
-/// The rows of the gutter strip — the 4px column the elbow is drawn in — that
-/// hold something other than the row's own background.
+/// The rows of the gutter strip — the 4px column the bullet and the elbows are
+/// drawn in — that hold something other than the row's own background.
 ///
 /// Reading the y of each is what makes this a position test as well as a
 /// presence one: the marks have to stay on the same lines when the row turns
@@ -126,7 +129,27 @@ Future<Set<int>> _markedRows(WidgetTester tester, Rect textRect) async {
   return marked;
 }
 
+/// [_markedRows] grouped into the marks that made them: one band per run of
+/// adjacent rows, so a bullet and an elbow count as two things and not as
+/// however many pixels each of them is tall.
+Future<int> _markCount(WidgetTester tester, Rect textRect) async {
+  final rows = (await _markedRows(tester, textRect)).toList()..sort();
+  var bands = 0;
+  for (var i = 0; i < rows.length; i++) {
+    if (i == 0 || rows[i] != rows[i - 1] + 1) bands++;
+  }
+  return bands;
+}
+
 void main() {
+  testWidgets('every note carries a bullet, however short', (tester) async {
+    await _pumpInbox(tester, _short);
+
+    final rect = tester.getRect(find.text(_short));
+    expect(rect.height, lessThan(20), reason: 'the note has to be one line');
+    expect(await _markCount(tester, rect), 1);
+  });
+
   testWidgets('a line the text wrapped onto is marked in the gutter', (
     tester,
   ) async {
@@ -134,7 +157,10 @@ void main() {
 
     final rect = tester.getRect(find.text(_wrapped));
     expect(rect.height, greaterThan(20), reason: 'the note has to be wrapping');
-    expect(await _markedRows(tester, rect), isNotEmpty);
+    // The bullet, and an elbow beside each line it spilled onto — how many
+    // that is depends on the test font's glyph widths, so only that there is
+    // more in the gutter than the bullet alone.
+    expect(await _markCount(tester, rect), greaterThan(1));
   });
 
   testWidgets('a line the user broke themselves is not', (tester) async {
@@ -142,7 +168,8 @@ void main() {
 
     final rect = tester.getRect(find.text(_broken));
     expect(rect.height, greaterThan(20), reason: 'the note has to be two lines');
-    expect(await _markedRows(tester, rect), isEmpty);
+    // Only the bullet: the second line is the user's own, not a wrap.
+    expect(await _markCount(tester, rect), 1);
   });
 
   testWidgets('the marks do not move when the row becomes an editor', (

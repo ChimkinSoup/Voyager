@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -13,6 +11,7 @@ import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
+import 'package:voyager/features/leetcode/leetcode_scratch_host.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_grading_row.dart';
 import 'package:voyager/features/study/study_history_controls.dart';
@@ -61,8 +60,18 @@ class _GradeStep {
   final List<LeetCodeProblem> queueAfter;
 }
 
-class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage> {
+class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
+    with LeetCodeScratchHost {
   final _flipController = StudyFlipController();
+
+  @override
+  Set<String> get scratchProblemIds => widget.problemIds;
+
+  @override
+  LeetCodeProblem? get scratchCurrentProblem {
+    final queue = _queue;
+    return queue == null || queue.isEmpty ? null : queue.first;
+  }
 
   /// The card's on-screen rect, so the detail view can grow out of it the way
   /// it grows out of a tapped tile in the deck.
@@ -91,6 +100,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage> {
     // lands in the provider, so re-read the queue from there instead of
     // going on showing the pre-edit copy.
     _queue = refreshFromLive(queue, all);
+    retainScratch({for (final problem in all) problem.id});
   }
 
   void _handleFlip() => _flipController.flip();
@@ -157,6 +167,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage> {
     setState(() => _grading = true);
 
     final current = queue.first;
+    flushScratch();
     final graded = await gradeAndSaveLeetCodeProblem(ref, current, grade);
     if (!mounted) return;
 
@@ -241,6 +252,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage> {
 
   @override
   Widget build(BuildContext context) {
+    syncScratch();
     final problems = ref.watch(leetcodeProblemsProvider).valueOrNull;
     if (problems != null) _syncQueue(problems);
     final queue = _queue;
@@ -259,6 +271,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage> {
                 onGrade: queue.isEmpty ? null : _grade,
                 onUndo: _canUndo ? _undo : null,
                 onRedo: _canRedo ? _redo : null,
+                onFocusScratch: scratchEnabled ? focusScratch : null,
                 arrowsNavigateHistory: true,
                 child: queue.isEmpty
                     ? _SessionComplete(
@@ -288,48 +301,41 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage> {
                               ],
                             ),
                             Expanded(
-                              child: Center(
-                                child: LayoutBuilder(
-                                  // The card takes the whole space the session frees
-                                  // up, capped so a very large or very tall window
-                                  // does not stretch it out of card proportions.
-                                  builder: (context, constraints) => SizedBox(
-                                    key: _cardKey,
-                                    width: math.min(constraints.maxWidth, 760),
-                                    height: math.min(
-                                      constraints.maxHeight,
-                                      720,
-                                    ),
-                                    // The same menu a tile in the deck gives, so a
-                                    // problem is the same object here as it is
-                                    // there — only Reset progress differs, moving
-                                    // the session on as well.
-                                    child: ContextMenuRegion(
-                                      itemsBuilder: () =>
-                                          leetCodeProblemMenuItems(
-                                            context: context,
-                                            ref: ref,
-                                            problem: queue.first,
-                                            onOpenDetail: () =>
-                                                _openDetail(queue.first),
-                                            onResetProgress: _resetAndAdvance,
-                                            onDelete: _deleteAndAdvance,
-                                          ),
-                                      child: LeetCodeFlashcard(
-                                        // Keyed by problem so the next card comes up
-                                        // as its own card rather than the previous
-                                        // one's content swapped underneath.
-                                        key: ValueKey(queue.first.id),
-                                        problem: queue.first,
-                                        controller: _flipController,
-                                        // Grading is allowed the moment the card
-                                        // starts turning, so a key pressed during
-                                        // the flip animation still registers.
-                                        notifyFlipOnStart: true,
-                                        onFlipChanged: (back) =>
-                                            setState(() => _showingBack = back),
-                                      ),
-                                    ),
+                              // The card takes the whole space the session
+                              // frees up, capped so a very large or very tall
+                              // window does not stretch it out of card
+                              // proportions — and shares that space with the
+                              // scratch pad when the session has one.
+                              child: buildScratchArea(
+                                cardKey: _cardKey,
+                                // The same menu a tile in the deck gives, so a
+                                // problem is the same object here as it is
+                                // there — only Reset progress differs, moving
+                                // the session on as well.
+                                card: ContextMenuRegion(
+                                  itemsBuilder: () => leetCodeProblemMenuItems(
+                                    context: context,
+                                    ref: ref,
+                                    problem: queue.first,
+                                    onOpenDetail: () =>
+                                        _openDetail(queue.first),
+                                    onResetProgress: _resetAndAdvance,
+                                    onDelete: _deleteAndAdvance,
+                                  ),
+                                  child: LeetCodeFlashcard(
+                                    // Keyed by problem so the next card comes
+                                    // up as its own card rather than the
+                                    // previous card's content swapped
+                                    // underneath.
+                                    key: ValueKey(queue.first.id),
+                                    problem: queue.first,
+                                    controller: _flipController,
+                                    // Grading is allowed the moment the card
+                                    // starts turning, so a key pressed during
+                                    // the flip animation still registers.
+                                    notifyFlipOnStart: true,
+                                    onFlipChanged: (back) =>
+                                        setState(() => _showingBack = back),
                                   ),
                                 ),
                               ),
@@ -338,7 +344,10 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage> {
                             StudyGradingRow(
                               interval: queue.first.interval,
                               ease: queue.first.ease,
-                              enabled: _showingBack && !_grading,
+                              enabled:
+                                  _showingBack &&
+                                  !_grading &&
+                                  !scratchHasSessionInput,
                               // A graded card snaps to its front instead of
                               // turning, so the buttons snap dim with it; flipping
                               // back animates, so they fade out alongside it.

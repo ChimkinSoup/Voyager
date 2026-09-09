@@ -68,11 +68,13 @@ void main() {
       studyRepository: DriftStudyRepository(db),
       workoutRepository: DriftWorkoutRepository(db),
       jobRepository: DriftJobRepository(db),
+      rankingRepository: DriftRankingRepository(db),
       calendarRepository: DriftCalendarRepository(db),
       trackerRepository: DriftTrackerRepository(db),
       financeRepository: DriftFinanceRepository(db),
       notificationRepository: DriftNotificationRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
+      mediaRepository: DriftMediaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
       weatherService: WeatherService(
         settingsRepository: DriftSettingsRepository(db),

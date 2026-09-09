@@ -68,6 +68,25 @@ class SnippetIndex {
 
   bool get isEmpty => !hasAuto && !hasManual;
 
+  /// Whether [word] is one of the user's triggers, compared case-insensitively.
+  ///
+  /// Autocorrect's exemption (AUTOCORRECT.md §4.5): a trigger is deliberately
+  /// often not a word, and correcting it into one would make the snippet
+  /// unreachable by the shortcut the user chose for it. Asked whether or not
+  /// expansion fired on this keystroke, and whether or not snippets are
+  /// switched on — the list is the user's intent either way.
+  ///
+  /// A linear walk over a handful of entries, on a path already committed to
+  /// running the correction cascade. The trigger buckets are no help here:
+  /// they are keyed for "does a trigger *end* at this caret", not for whole-
+  /// token equality.
+  bool hasTrigger(String word) {
+    for (final snippet in snippets) {
+      if (snippet.trigger.toLowerCase() == word) return true;
+    }
+    return false;
+  }
+
   /// The auto-expand snippet whose trigger ends at [caret], or null.
   ///
   /// [caret] is the offset *after* the character just typed, so the trigger is

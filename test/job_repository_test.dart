@@ -22,7 +22,7 @@ void main() {
     String company = 'Datadog',
     String title = 'Software Engineer',
     String status = 'Applied',
-    String? seasonId,
+    List<String> seasonIds = const [],
   }) async {
     final now = utcNow();
     final application = JobApplication(
@@ -33,7 +33,7 @@ void main() {
       dateApplied: DateTime(2026, 8, 20),
       applicationUrl: 'https://example.com',
       notes: 'some notes',
-      seasonId: seasonId,
+      seasonIds: seasonIds,
       createdAt: now,
       updatedAt: now,
     );
@@ -65,9 +65,9 @@ void main() {
     });
   });
 
-  group('hard delete', () {
+  group('soft delete', () {
     test(
-      'leaves a content-wiped tombstone rather than removing the row',
+      'leaves a tombstone with its content intact rather than removing the row',
       () async {
         final application = await addApplication();
         final result = await repo.deleteApplication(application.id);
@@ -76,16 +76,53 @@ void main() {
         final all = await repo.listApplications(includeDeleted: true);
         expect(all, hasLength(1));
         expect(all.single.deletedAt, isNotNull);
-        expect(all.single.company, isEmpty);
-        expect(all.single.title, isEmpty);
-        expect(all.single.notes, isNull);
-        expect(all.single.applicationUrl, isNull);
+        // The content is what an undo restores from, so the delete must not
+        // blank it — this used to be a content wipe (§7.4).
+        expect(all.single.company, application.company);
+        expect(all.single.title, application.title);
+        expect(all.single.status, application.status);
         // The returned tombstone is what the caller pushes, so it has to carry
-        // the same wiped content the row does.
-        expect(result.application.company, isEmpty);
+        // the same content the row does.
+        expect(result.application.company, application.company);
         expect(result.application.deletedAt, isNotNull);
       },
     );
+
+    test('a restore round-trips at a version that outranks the tombstone',
+        () async {
+      final application = await addApplication();
+      final tombstone = (await repo.deleteApplication(application.id)).application;
+
+      // What JobsActions.restoreApplication writes: the pre-delete snapshot
+      // rebuilt with no deletedAt. Rebuilt rather than copyWith'd, which reads
+      // `deletedAt ?? this.deletedAt` and so cannot clear a tombstone.
+      await repo.upsertApplication(
+        JobApplication(
+          id: application.id,
+          createdAt: application.createdAt,
+          updatedAt: utcNow(),
+          version: application.version + 2,
+          company: application.company,
+          title: application.title,
+          status: application.status,
+          dateApplied: application.dateApplied,
+          applicationUrl: application.applicationUrl,
+          notes: application.notes,
+          seasonIds: application.seasonIds,
+        ),
+      );
+
+      final restored = await repo.getApplication(application.id);
+      expect(restored, isNotNull);
+      expect(restored!.deletedAt, isNull);
+      expect(restored.title, application.title);
+      expect(
+        restored.version,
+        greaterThan(tombstone.version),
+        reason: 'or the tombstone wins the next sync and deletes it again',
+      );
+      expect(await repo.listApplications(), hasLength(1));
+    });
 
     test('tombstones the status history with it', () async {
       final application = await addApplication();
@@ -182,15 +219,14 @@ void main() {
         updatedAt: now,
       );
       await repo.upsertSeason(season);
-      final archived = await addApplication(seasonId: season.id);
+      final archived = await addApplication(seasonIds: [season.id]);
 
       final released = await repo.softDeleteSeason(season.id);
 
       expect(await repo.listSeasons(), isEmpty);
       expect(released, hasLength(1));
       final stored = await repo.getApplication(archived.id);
-      expect(stored!.seasonId, isNull);
-      expect(stored.isArchived, isFalse);
+      expect(stored!.seasonIds, isEmpty);
     });
   });
 
@@ -216,6 +252,43 @@ void main() {
       await repo.ensureSeeded();
       final ids = [for (final stage in await repo.listStages()) stage.id];
       expect(await repo.reorderStages(ids), isEmpty);
+    });
+
+    test('a stage colour round-trips, and reordering keeps it', () async {
+      await repo.ensureSeeded();
+      final stages = await repo.listStages();
+      expect(
+        stages.map((stage) => stage.colorValue),
+        everyElement(isNull),
+        reason: 'a seeded stage has no colour until one is picked',
+      );
+
+      await repo.upsertStage(stages[1].copyWith(colorValue: 0xFF2E7D32));
+      expect(
+        (await repo.listStages())[1].colorValue,
+        0xFF2E7D32,
+      );
+
+      // sortOrder is written through a hand-built companion, which is exactly
+      // where a new column gets dropped.
+      final ids = [for (final stage in stages) stage.id];
+      await repo.reorderStages([ids.last, ...ids.take(ids.length - 1)]);
+      final moved = (await repo.listStages()).firstWhere(
+        (stage) => stage.id == ids[1],
+      );
+      expect(moved.colorValue, 0xFF2E7D32);
+    });
+
+    test('clearing a stage colour returns it to the derived one', () async {
+      await repo.ensureSeeded();
+      final stage = (await repo.listStages()).first;
+      await repo.upsertStage(stage.copyWith(colorValue: 0xFF2E7D32));
+
+      await repo.upsertStage(
+        (await repo.listStages()).first.copyWith(clearColorValue: true),
+      );
+
+      expect((await repo.listStages()).first.colorValue, isNull);
     });
 
     test('deleting a stage leaves its applications as orphans', () async {

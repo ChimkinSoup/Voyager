@@ -5,6 +5,11 @@
 // for the length of the write before snapping open again.
 //
 // This pins the frame that flash lived in: the first one after the commit.
+//
+// Emptying a reminder is the same bug wearing a delete: the row leaves the
+// editor with no text in it, then plays its exit animation — and for as long
+// as that runs the stored note is still there to be drawn, so the reminder the
+// user had just cleared came back in full before it collapsed.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -95,5 +100,38 @@ void main() {
       await tester.pump(const Duration(milliseconds: 80));
     }
     expect(find.text(_grown), findsOneWidget);
+  });
+
+  testWidgets('a reminder emptied and committed never comes back to go out', (
+    tester,
+  ) async {
+    await _pumpInbox(tester);
+
+    await tester.tap(find.text(_note));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.enterText(find.byType(TextField).last, '');
+    await tester.pump();
+    expect(find.text(_note), findsNothing, reason: 'the field is empty now');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+
+    // Every frame of the exit, not just the first: the row is on screen for
+    // all of them, and the stored note is what it used to fall back to.
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(
+        find.text(_note),
+        findsNothing,
+        reason: 'frame ${i + 1} of the row collapsing',
+      );
+    }
+
+    // And it is gone for good, not just held off.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 80));
+    }
+    expect(find.text(_note), findsNothing);
   });
 }

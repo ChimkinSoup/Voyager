@@ -15,12 +15,12 @@ import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
-import 'package:voyager/features/leetcode/leetcode_loading_toast.dart';
 import 'package:voyager/features/leetcode/leetcode_search_popover.dart';
 import 'package:voyager/features/leetcode/leetcode_track_draft.dart';
 import 'package:voyager/features/leetcode/leetcode_track_draft_store.dart';
@@ -166,7 +166,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   LeetCodeTrackDraft? _draftOffer;
 
   Timer? _draftTimer;
-  VoidCallback? _dismissDraftToast;
+  VoyagerToast? _dismissDraftToast;
 
   bool get _isCreate => widget.existing == null;
 
@@ -286,7 +286,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       // to an async write, so the disposal below can't race it.
       unawaited(_flushDraft());
     }
-    _dismissDraftToast?.call();
+    _dismissDraftToast?.dismiss();
     _titleController.dispose();
     _titleFocusNode.dispose();
     _questionFrontendIdController.dispose();
@@ -441,32 +441,32 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   }
 
   void _showDraftToast(LeetCodeTrackDraftOutcome outcome) {
-    _dismissDraftToast?.call();
+    _dismissDraftToast?.dismiss();
     _dismissDraftToast = null;
     switch (outcome) {
       case LeetCodeTrackDraftOutcome.none:
         return;
       case LeetCodeTrackDraftOutcome.resumed:
-        _dismissDraftToast = showLeetCodeToast(
+        _dismissDraftToast = showVoyagerToast(
           context,
           message: 'Picked up your draft',
           icon: PhosphorIconsRegular.arrowCounterClockwise,
           dwell: _draftToastDwell,
           actions: [
-            LeetCodeToastAction(
+            VoyagerToastAction(
               label: 'Clear draft',
               onPressed: () => unawaited(_clearDraftAndStartNew()),
             ),
           ],
         );
       case LeetCodeTrackDraftOutcome.resumedAfterFetchFailure:
-        _dismissDraftToast = showLeetCodeToast(
+        _dismissDraftToast = showVoyagerToast(
           context,
           message: "Couldn't refresh — showing your draft",
           icon: PhosphorIconsRegular.warning,
           dwell: _draftToastDwell,
           actions: [
-            LeetCodeToastAction(
+            VoyagerToastAction(
               label: 'Clear draft',
               onPressed: () => unawaited(_clearDraftAndStartNew()),
             ),
@@ -476,7 +476,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         final offer = _draftOffer;
         if (offer == null) return;
         final name = offer.title.trim();
-        _dismissDraftToast = showLeetCodeToast(
+        _dismissDraftToast = showVoyagerToast(
           context,
           message: name.isEmpty
               ? 'Unsaved draft available'
@@ -484,7 +484,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
           icon: PhosphorIconsRegular.pencilSimple,
           dwell: _draftToastDwell,
           actions: [
-            LeetCodeToastAction(
+            VoyagerToastAction(
               label: 'Continue with draft',
               onPressed: () => _continueWithDraft(offer),
             ),
@@ -694,7 +694,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       _reportRetrackFailure('Add your LeetCode username in Settings first');
       return null;
     }
-    final dismissToast = showLeetCodeToast(
+    final dismissToast = showVoyagerToast(
       context,
       message: 'Fetching your latest submission…',
     );
@@ -702,13 +702,13 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       final recent = await ref
           .read(leetCodeApiClientProvider)
           .fetchMostRecentAcceptedSubmission(username);
-      dismissToast();
+      dismissToast.dismiss();
       if (recent == null) {
         _reportRetrackFailure('No accepted submissions found for $username');
       }
       return recent;
     } catch (_) {
-      dismissToast();
+      dismissToast.dismiss();
       _reportRetrackFailure('Could not reach LeetCode');
       return null;
     }
@@ -722,7 +722,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       return null;
     }
 
-    final dismissToast = showLeetCodeToast(
+    final dismissToast = showVoyagerToast(
       context,
       message: 'Looking up "$title"…',
     );
@@ -739,9 +739,9 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       if (hit != null && hit.description == null && hit.titleSlug.isNotEmpty) {
         hit = await client.fetchBySlug(hit.titleSlug);
       }
-      dismissToast();
+      dismissToast.dismiss();
     } catch (_) {
-      dismissToast();
+      dismissToast.dismiss();
       _reportRetrackFailure('Could not reach LeetCode');
       return null;
     }
@@ -828,12 +828,12 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   /// used — a button that silently does nothing reads as a broken button.
   void _reportRetrackFailure(String message) {
     if (!mounted) return;
-    final dismissToast = showLeetCodeToast(
+    final dismissToast = showVoyagerToast(
       context,
       message: message,
       icon: PhosphorIconsRegular.warning,
     );
-    Future.delayed(const Duration(milliseconds: 2600), dismissToast);
+    Future.delayed(const Duration(milliseconds: 2600), dismissToast.dismiss);
   }
 
   Future<void> _save() async {
@@ -1111,7 +1111,11 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                         ],
                       ),
                       for (var i = 0; i < _solutionEditors.length; i++) ...[
-                        const SizedBox(height: 12),
+                        // The panels behind each solution used to carry the
+                        // separation; without them the gap has to say where
+                        // one group ends and the next begins, so it is wider
+                        // between two solutions than under the heading.
+                        SizedBox(height: i == 0 ? 12 : 24),
                         _SolutionFields(
                           // Keyed on the group rather than the index, so
                           // removing or reordering one carries each surviving
@@ -1316,7 +1320,7 @@ class _SolutionFields extends StatelessWidget {
               Text(
                 'Solution $number',
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: accentColor,
                 ),
               ),
               const Spacer(),
@@ -1340,6 +1344,11 @@ class _SolutionFields extends StatelessWidget {
               ),
             ],
           ),
+        // The heading's row is icon-button tall, so it already sits well clear
+        // of the box below it; this is the small extra breath the numbered
+        // form asked for, and it costs a lone solution nothing because that
+        // one has no heading to space away from.
+        if (number != null) const SizedBox(height: 8),
         VoyagerTextField(
           controller: editors.algorithm,
           accentColor: accentColor,
@@ -1407,23 +1416,11 @@ class _SolutionFields extends StatelessWidget {
       ],
     );
 
-    // A lone solution is already unambiguous, so it stays on the modal's own
-    // background. Once there are several, each gets a panel behind all of its
-    // boxes — alternating between two tints, so however many there are, no two
-    // touching groups share one and the seam between them is visible without
-    // having to read the headings. Editor-only: the flashcard and detail views
-    // build their own solution layout and are untouched by this.
-    if (number == null) return body;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withValues(
-          alpha: number!.isOdd ? 0.03 : 0.06,
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: body,
-    );
+    // Every solution sits on the modal's own background. The numbered heading
+    // in its accent colour is what separates one from the next; the tinted
+    // panels that used to stand behind each group boxed the form in and read
+    // as a second layer of chrome on top of the fields' own.
+    return body;
   }
 }
 

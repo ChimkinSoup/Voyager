@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/workout_models.dart';
@@ -190,6 +191,11 @@ class _DraggableExerciseCard extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    // Captured before the confirm: the delete unmounts this card, and the toast
+    // offering the undo has to outlive it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete ${exercise.name}?',
@@ -198,7 +204,15 @@ class _DraggableExerciseCard extends ConsumerWidget {
           'logged are kept, so its history stays intact.',
     );
     if (!confirmed) return;
-    await WorkoutActions(ref).deleteExercise(exercise.id);
+
+    late final ExerciseDeletion deletion;
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: deletedMessage(exercise.name, fallback: 'exercise'),
+      delete: () async =>
+          deletion = await softDeleteExercise(container, exercise.id),
+      restore: () => restoreExercise(container, deletion),
+    );
   }
 }
 

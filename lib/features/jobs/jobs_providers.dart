@@ -22,6 +22,7 @@ enum JobColumn {
   title('title', 'Title'),
   status('status', 'Status'),
   dateApplied('dateApplied', 'Date applied'),
+  season('season', 'Season'),
   notes('notes', 'Notes');
 
   const JobColumn(this.id, this.label);

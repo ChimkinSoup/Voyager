@@ -53,12 +53,18 @@ class _StudyPageState extends ConsumerState<StudyPage>
     // picks up from the controller's live value, so the Workbench fades back
     // in from wherever the close had reached, with no cut.
     if (_closing && deck.id == _openDeckId) {
+      // Both interrupt paths cancel the reverse, and a cancelled TickerFuture
+      // still completes — see _closeDeck.
+      _closeGeneration++;
       _zoom.forward();
       return;
     }
     // A *different* deck during a close is a new destination — finish the
     // close outright rather than crossfading between two unrelated pages.
-    if (_closing) _zoom.value = 0;
+    if (_closing) {
+      _closeGeneration++;
+      _zoom.value = 0;
+    }
 
     setState(() {
       _openDeckId = deck.id;
@@ -83,10 +89,23 @@ class _StudyPageState extends ConsumerState<StudyPage>
     _zoom.forward();
   }
 
+  /// Bumped by anything that interrupts a close, so the interrupted close's
+  /// completion callback can tell it is no longer the operation in flight.
+  int _closeGeneration = 0;
+
   void _closeDeck() {
+    final generation = ++_closeGeneration;
     // No `from:` — see _openDeck.
     _zoom.reverse().whenComplete(() {
-      if (!mounted) return;
+      // A cancelled reverse completes this future too: `TickerFuture._cancel`
+      // completes the *primary* future and only errors `orCancel`, and both of
+      // _openDeck's interrupt paths — forward() and a write to .value — call
+      // `stop(canceled: true)` first. Without this guard the teardown runs as a
+      // microtask *after* _openDeck has set _openDeckId, nulling it back out
+      // and leaving the page blank: the Workbench unmounted, the Hub faded to
+      // nothing and ignoring pointers because _zoom is still driving forward.
+      if (!mounted || generation != _closeGeneration) return;
+      if (_zoom.status != AnimationStatus.dismissed) return;
       setState(() {
         _openDeckId = null;
         _openDeckName = null;

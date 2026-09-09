@@ -6,16 +6,18 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_company_field.dart';
+import 'package:voyager/features/jobs/jobs_option_list.dart';
 
 const jobsEditPanelWidth = 420.0;
 
@@ -31,21 +33,25 @@ class JobsEditPanel extends ConsumerStatefulWidget {
     required this.stages,
     required this.companies,
     required this.seasons,
+    required this.recentCompanyKeys,
     required this.accentColor,
     required this.onClose,
-    required this.onDeleted,
-    required this.onDuplicated,
     this.categoryColorFor,
   });
 
   final JobApplication application;
   final List<JobStage> stages;
   final List<JobCompany> companies;
+
+  /// Every season, retired ones included: the picker only *offers* the ones
+  /// still running, but it has to be able to name the ones this application is
+  /// already filed under.
   final List<JobSeason> seasons;
+
+  /// Company keys most-recently-applied-to first, for the typeahead's ranking.
+  final List<String> recentCompanyKeys;
   final Color accentColor;
   final VoidCallback onClose;
-  final VoidCallback onDeleted;
-  final ValueChanged<JobApplication> onDuplicated;
   final Color? Function(JobCompany company)? categoryColorFor;
 
   @override
@@ -171,11 +177,7 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _PanelHeader(
-            onClose: widget.onClose,
-            onDuplicate: _handleDuplicate,
-            onDelete: _handleDelete,
-          ),
+          _PanelHeader(onClose: widget.onClose),
           Expanded(
             child: VoyagerScrollView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -185,8 +187,10 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
                   JobsCompanyField(
                     controller: _companyController,
                     companies: widget.companies,
+                    recentKeys: widget.recentCompanyKeys,
                     accentColor: accent,
                     categoryColorFor: widget.categoryColorFor,
+                    contentPadding: jobsFieldContentPadding,
                     onChanged: (_) => _scheduleSave(),
                   ),
                   const SizedBox(height: 12),
@@ -195,58 +199,73 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
                     controller: _titleController,
                     accentColor: accent,
                     dense: true,
+                    contentPadding: jobsFieldContentPadding,
                     onChanged: (_) => _scheduleSave(),
                   ),
                   const SizedBox(height: 12),
+                  // The two capsules that say what this application *is* —
+                  // where it stands and which run of applications it belongs
+                  // to — share the row, half each. The date it was sent is a
+                  // fact about its history, so it sits with the history.
                   Row(
                     children: [
                       Expanded(child: _statusPill(accent)),
                       const SizedBox(width: 8),
-                      Expanded(child: _datePill(accent)),
+                      Expanded(child: _seasonPill(accent)),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  _seasonPill(accent),
                   const SizedBox(height: 12),
                   LabeledTextField(
                     label: 'Application URL',
                     controller: _urlController,
                     accentColor: accent,
                     dense: true,
+                    contentPadding: jobsFieldContentPadding,
                     keyboardType: TextInputType.url,
                     onChanged: (_) => _scheduleSave(),
                   ),
                   if (_current.applicationUrl case final url?)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () => _openUrl(url),
-                        icon: const Icon(
-                          PhosphorIconsRegular.arrowSquareOut,
-                          size: 13,
-                        ),
-                        label: const Text('Open'),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          textStyle: theme.textTheme.labelSmall,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: GlassButton(
+                          dense: true,
+                          // No colour override and no icon-size override: the
+                          // panel's accent is the company's *category* colour,
+                          // which falls back to the theme's grey outline for
+                          // an uncategorised company and left this reading as
+                          // a flat grey button rather than a glass one. It
+                          // takes the app accent and the dense icon size every
+                          // other glass button in the app has.
+                          icon: const Icon(PhosphorIconsRegular.arrowSquareOut),
+                          label: 'Open',
+                          tooltip: 'Open the application URL in your browser',
+                          onPressed: () => _openUrl(url),
                         ),
                       ),
                     ),
                   const SizedBox(height: 12),
                   SizedBox(
-                    height: 180,
+                    // The todo panel's notes box is the canonical one, and
+                    // both editors now read at the same size.
+                    height: 120,
                     child: TagHighlightedTextField(
                       controller: _notesController,
                       focusNode: _notesFocusNode,
                       label: 'Notes',
                       accentColor: accent,
+                      style: theme.textTheme.bodySmall,
                       expands: true,
                       maxLines: null,
                       onChanged: (_) => _scheduleSave(),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _StatusTimeline(applicationId: _current.id),
+                  _StatusTimeline(
+                    applicationId: _current.id,
+                    trailing: _datePill(accent),
+                  ),
                 ],
               ),
             ),
@@ -283,7 +302,7 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
       context: context,
       buttonContext: pillContext,
       accentColor: widget.accentColor,
-      builder: (context) => _OptionList(
+      builder: (context) => JobsOptionList(
         options: [for (final name in names) (value: name, label: name)],
         selected: _current.status,
       ),
@@ -311,7 +330,11 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
     final picked = await showContextualPopover<DateTime>(
       context: context,
       buttonContext: pillContext,
-      width: 280,
+      // Both are needed: the calendar hangs its grid off an Expanded, so a
+      // popover left to size itself gives that grid no height at all and the
+      // sheet paints as an empty box.
+      width: 320,
+      height: 380,
       accentColor: widget.accentColor,
       builder: (context) => DateSelectorPopover(
         initialStartDate: initial,
@@ -335,68 +358,69 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
   }
 
   Widget _seasonPill(Color accent) {
-    final season = widget.seasons.cast<JobSeason?>().firstWhere(
-      (s) => s!.id == _current.seasonId,
-      orElse: () => null,
-    );
+    final names = _seasonNames();
     return Builder(
       builder: (pillContext) => SelectorPill(
-        label: season?.name ?? 'Active (not archived)',
-        icon: PhosphorIconsRegular.archive,
+        // The count once there is more than one to name: three season names
+        // do not fit the half-row the pill gets, and the picker is one tap
+        // away for the detail.
+        label: switch (names.length) {
+          0 => 'No season',
+          1 => names.single,
+          _ => '${names.length} seasons',
+        },
+        icon: PhosphorIconsRegular.calendarCheck,
         dense: true,
         accentColor: accent,
-        isActive: _current.isArchived,
-        onTap: () => _pickSeason(pillContext),
+        isActive: names.isNotEmpty,
+        onTap: () => _pickSeasons(pillContext),
       ),
     );
   }
 
-  Future<void> _pickSeason(BuildContext pillContext) async {
-    final picked = await showContextualPopover<String>(
+  /// The application's seasons as they read, in the user's own season order.
+  /// Retired ones carry the marker, because that — not the application's own
+  /// fields — is what has it hidden from the list.
+  List<String> _seasonNames() => [
+    for (final season in widget.seasons)
+      if (_current.seasonIds.contains(season.id))
+        season.isArchived ? '${season.name} (archived)' : season.name,
+  ];
+
+  Future<void> _pickSeasons(BuildContext pillContext) async {
+    await showContextualPopover<void>(
       context: context,
       buttonContext: pillContext,
       accentColor: widget.accentColor,
-      builder: (context) => _OptionList(
+      builder: (context) => JobsMultiOptionList(
+        emptyLabel: 'No season',
+        selected: _current.seasonIds.toSet(),
         options: [
-          (value: '', label: 'Active (not archived)'),
-          for (final season in widget.seasons)
+          for (final season in jobSelectableSeasons(widget.seasons))
             (value: season.id, label: season.name),
+          // A retired season is not offered for anything new, but one this
+          // application is already in has to stay visible — and removable, so
+          // the user can take it back out.
+          for (final season in widget.seasons)
+            if (season.isArchived && _current.seasonIds.contains(season.id))
+              (value: season.id, label: '${season.name} (archived)'),
         ],
-        selected: _current.seasonId ?? '',
+        // Saved on every toggle rather than when the list closes: the popover
+        // is dismissed by tapping away, which returns nothing to save from.
+        onChanged: (seasonIds) => unawaited(_saveSeasons(seasonIds)),
       ),
     );
-    if (picked == null) return;
-    final seasonId = picked.isEmpty ? null : picked;
-    if (seasonId == _current.seasonId) return;
-    final previous = _current;
-    _current = _current.copyWith(
-      seasonId: seasonId,
-      clearSeasonId: seasonId == null,
-    );
-    await JobsActions(ref).saveApplication(_current, previous: previous);
+  }
+
+  Future<void> _saveSeasons(Set<String> seasonIds) async {
+    // Stored in the user's season order, so the table's join and the pill's
+    // count both read off a list that matches the Seasons tab.
+    final ordered = [
+      for (final season in widget.seasons)
+        if (seasonIds.contains(season.id)) season.id,
+    ];
+    await _save(_current.copyWith(seasonIds: ordered));
     if (mounted) setState(() {});
-  }
-
-  Future<void> _handleDuplicate() async {
-    await _commit();
-    final copy = await JobsActions(ref).duplicateApplication(_current);
-    widget.onDuplicated(copy);
-  }
-
-  Future<void> _handleDelete() async {
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Delete application?',
-      message:
-          '${_current.title} at ${_current.company} and its status history '
-          'will be permanently deleted. This cannot be undone.',
-    );
-    if (!confirmed) return;
-    // Cancelled before the delete, not after: a debounced save landing on a
-    // tombstone would write the content straight back.
-    _saveTimer?.cancel();
-    await JobsActions(ref).deleteApplication(_current);
-    widget.onDeleted();
   }
 
   Future<void> _openUrl(String url) async {
@@ -406,24 +430,22 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
   }
 }
 
+/// Close, and nothing else, on the right. Duplicating and deleting are row
+/// actions on the table's right-click menu: the panel edits the one
+/// application it is showing, and a destructive button sitting beside the
+/// fields being typed into is not where either belongs.
 class _PanelHeader extends StatelessWidget {
-  const _PanelHeader({
-    required this.onClose,
-    required this.onDuplicate,
-    required this.onDelete,
-  });
+  const _PanelHeader({required this.onClose});
 
   final VoidCallback onClose;
-  final VoidCallback onDuplicate;
-  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       child: Row(
         children: [
+          const Spacer(),
           IconButton(
             tooltip: 'Close',
             iconSize: 16,
@@ -431,103 +453,47 @@ class _PanelHeader extends StatelessWidget {
             onPressed: onClose,
             icon: const Icon(PhosphorIconsRegular.x),
           ),
-          const Spacer(),
-          IconButton(
-            tooltip: 'Duplicate application',
-            iconSize: 16,
-            visualDensity: VisualDensity.compact,
-            onPressed: onDuplicate,
-            icon: const Icon(PhosphorIconsRegular.copy),
-          ),
-          IconButton(
-            tooltip: 'Delete application',
-            iconSize: 16,
-            visualDensity: VisualDensity.compact,
-            onPressed: onDelete,
-            icon: Icon(
-              PhosphorIconsRegular.trash,
-              color: theme.colorScheme.error,
-            ),
-          ),
         ],
       ),
     );
   }
 }
 
-typedef _Option = ({String value, String label});
-
-class _OptionList extends StatelessWidget {
-  const _OptionList({required this.options, required this.selected});
-
-  final List<_Option> options;
-  final String selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 280),
-      child: VoyagerScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final option in options)
-              InkWell(
-                onTap: () => Navigator.of(context).pop(option.value),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 9,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          option.label,
-                          style: theme.textTheme.bodySmall,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (option.value == selected)
-                        Icon(
-                          PhosphorIconsRegular.check,
-                          size: 13,
-                          color: theme.colorScheme.primary,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// The application's status history (§4.2), oldest first.
+///
+/// [trailing] rides on the heading row, right-aligned — the date-applied
+/// capsule, which belongs with the history rather than above it. It is shown
+/// whether or not there are any events to head, so the date is never missing
+/// from the form; the "History" word is what an empty log takes away.
 class _StatusTimeline extends ConsumerWidget {
-  const _StatusTimeline({required this.applicationId});
+  const _StatusTimeline({required this.applicationId, this.trailing});
 
   final String applicationId;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final eventsAsync = ref.watch(jobStatusEventsProvider(applicationId));
     final events = eventsAsync.valueOrNull ?? const <JobStatusEvent>[];
-    if (events.isEmpty) return const SizedBox.shrink();
+    if (events.isEmpty && trailing == null) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'History',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          children: [
+            if (events.isNotEmpty)
+              Text(
+                'History',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            const Spacer(),
+            ?trailing,
+          ],
         ),
         const SizedBox(height: 6),
         for (final event in events)

@@ -8,6 +8,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -664,39 +665,45 @@ class _TransactionRow extends ConsumerWidget {
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(financeRepositoryProvider);
     final container = ProviderScope.containerOf(ref.context, listen: false);
-    final messenger = ScaffoldMessenger.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
     final snapshot = transaction;
 
-    await repo.softDeleteTransaction(snapshot.id);
-    container.invalidate(transactionsProvider);
-
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Transaction deleted'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () async {
-            // Rebuilt rather than copyWith'd: copyWith reads
-            // `deletedAt ?? this.deletedAt`, so it cannot clear a tombstone.
-            // The delete itself wrote version + 1, so the restore has to be
-            // version + 2 to outrank it on the next sync.
-            await repo.upsertTransaction(
-              FinancialTransaction(
-                id: snapshot.id,
-                createdAt: snapshot.createdAt,
-                updatedAt: utcNow(),
-                version: snapshot.version + 2,
-                type: snapshot.type,
-                amountCents: snapshot.amountCents,
-                occurredAt: snapshot.occurredAt,
-                note: snapshot.note,
-                tags: snapshot.tags,
-              ),
-            );
-            container.invalidate(transactionsProvider);
-          },
-        ),
-      ),
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: deletedMessage(snapshot.note, fallback: 'transaction'),
+      delete: () async {
+        await repo.softDeleteTransaction(snapshot.id);
+        container.invalidate(transactionsProvider);
+      },
+      restore: () async {
+        // Rebuilt rather than copyWith'd: copyWith reads
+        // `deletedAt ?? this.deletedAt`, so it cannot clear a tombstone.
+        //
+        // The version is resolved against disk rather than against the
+        // snapshot — see [restoreVersionFrom].
+        final current = await repo.getTransaction(snapshot.id);
+        abortIfAlreadyRestored(
+          found: current != null,
+          deletedAt: current?.deletedAt,
+        );
+        await repo.upsertTransaction(
+          FinancialTransaction(
+            id: snapshot.id,
+            createdAt: snapshot.createdAt,
+            updatedAt: utcNow(),
+            version: restoreVersionFrom(
+              preDeleteVersion: snapshot.version,
+              currentVersion: current?.version,
+            ),
+            type: snapshot.type,
+            amountCents: snapshot.amountCents,
+            occurredAt: snapshot.occurredAt,
+            note: snapshot.note,
+            tags: snapshot.tags,
+          ),
+        );
+        container.invalidate(transactionsProvider);
+      },
     );
   }
 
@@ -778,66 +785,75 @@ class _TransactionRow extends ConsumerWidget {
           onTap: () => _delete(context, ref),
         ),
       ],
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () =>
-            showFinanceTransactionModal(context, ref, existing: transaction),
-        onLongPress: () => _delete(context, ref),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: amountColor.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
+      // The row's own ink surface. Without one the hover highlight is painted
+      // into whichever [Material] is furthest up the tree — the page's, which
+      // sits outside the ledger's viewport and so is not clipped by it. A row
+      // half-scrolled under the Ledger/Analytics/Goals bar had its grey wash
+      // drawn across that bar. Transparent, so nothing else about the row
+      // changes.
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () =>
+              showFinanceTransactionModal(context, ref, existing: transaction),
+          onLongPress: () => _delete(context, ref),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: amountColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isDeposit
+                        ? PhosphorIconsRegular.arrowDownLeft
+                        : PhosphorIconsRegular.arrowUpRight,
+                    size: 16,
+                    color: amountColor,
+                  ),
                 ),
-                child: Icon(
-                  isDeposit
-                      ? PhosphorIconsRegular.arrowDownLeft
-                      : PhosphorIconsRegular.arrowUpRight,
-                  size: 16,
-                  color: amountColor,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      transaction.note ?? (isDeposit ? 'Deposit' : 'Expense'),
-                      style: theme.textTheme.bodyMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (transaction.tags.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          for (final tag in transaction.tags)
-                            TagChip(tag: tag, colorValue: tagColors[tag]),
-                        ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        transaction.note ?? (isDeposit ? 'Deposit' : 'Expense'),
+                        style: theme.textTheme.bodyMedium,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      if (transaction.tags.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            for (final tag in transaction.tags)
+                              TagChip(tag: tag, colorValue: tagColors[tag]),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                formatCents(transaction.signedCents, signed: true),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: amountColor,
-                  fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Text(
+                  formatCents(transaction.signedCents, signed: true),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: amountColor,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

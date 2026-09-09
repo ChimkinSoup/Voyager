@@ -29,15 +29,17 @@ Small header at the top of the page containing:
 |--------|----------|
 | **Lifetime total** | Count of all applications ever (includes archived). Plain integer — not a composite score |
 | **Per-status counts** | Counts for **active (non-archived) only**, broken down by current status |
+| **Profile copy buttons** | One-tap clipboard copies of the user's own profile links (§3.4) |
 | **30-day sparkline** | New applications per day for the last 30 days (see §8) |
-| **Sankey** | Conversion visualization from current statuses (see §8) |
 
-An **Include archived** control (toggle/chip) affects sparkline, Sankey, and the main list filter set — not the lifetime total. When off (default), archived apps are hidden from the list and excluded from sparkline + Sankey. When on, they appear in the list and are included in sparkline + Sankey. Lifetime total always counts everything.
+An **Include archived** control (toggle/chip) affects the sparkline and the main list filter set — not the lifetime total. When off (default), archived apps are hidden from the list and excluded from the sparkline. When on, they appear in the list and are included in it. Lifetime total always counts everything.
 
 ### 3.2 Main surface — flat table
 
 - Flat list/table (not kanban)
-- Default columns: **color**, **company**, **title**, **status**, **date applied**, **notes**
+- Default columns: **color**, **company**, **title**, **status**, **date applied**, **season**, **notes**
+- The **status** capsule is drawn in that stage's colour (§4.3), so the pipeline reads the same in the table as it does in the header chips. The **color** gutter is a different axis: it carries the company's category colour (§4.5)
+- The **season** column names the season an application is filed under, or `—` for none. Whether that season is retired is carried by the archive marker at the end of the row, not repeated here
 - Column visibility is user-togglable via a small dropdown; preference should persist locally (and sync if other UI prefs for this page sync — follow existing shell/page preference patterns)
 - Notes column shows a truncated preview; full markdown lives in the editor panel
 - Rows with an exact duplicate (same company + same title as another row, case-insensitive company match for the pair identity — see §7.3) show a **soft visual warning** in the table only. Warning is informational; no block on create/edit
@@ -67,10 +69,23 @@ Create and edit use the same panel pattern as the todo edit panel:
 - Save / autosave per existing Voyager edit-panel conventions for similar entities
 - **Duplicate application** — creates a new application copying all fields; new id; user can then edit. Date applied may remain copied (user can change); do not auto-clear fields
 - **Archive / move to season** — assign to a user-named season bucket (§6)
-- **Delete** — hard delete with confirm dialog (§7.4)
+- **Delete** — soft delete with confirm dialog, then an undo toast (§7.4)
 
 **Status timeline**
 - Panel shows a chronological status-change history for that application (§4.2)
+
+### 3.4 Profile quick-copy
+
+Applying to a job means pasting the same three links over and over. The header carries them so they never have to be hunted for.
+
+- Three fixed slots — **LinkedIn**, **GitHub**, **Portfolio** — held in app settings (§4.7)
+- One icon button per slot, sitting between the status chips and the 30-day sparkline
+- Icon-only, with the slot name in a tooltip. The header row is a fixed height and the sparkline already claims half its width; labelled buttons would take that width off the status chips
+- Tap copies the URL to the clipboard and confirms with a snackbar naming the slot ("LinkedIn copied")
+- An unset slot has no button. With all three unset the group is not rendered at all — the Jobs page shows no empty state and no prompt to fill them in
+- The Jobs page never *edits* these. They are read-only here; Settings is the only place they are written (§4.7)
+
+Copy is the whole interaction. No long-press, no open-in-browser, no per-application or per-company overrides.
 
 ---
 
@@ -105,12 +120,14 @@ Create and edit use the same panel pattern as the todo edit panel:
 
 ### 4.3 Pipeline stages
 
-- User-managed list: **add**, **rename**, **reorder**
-- **No fixed order** for valid transitions; order is display/Sankey order only
+- User-managed list: **add**, **rename**, **reorder**, **recolour**
+- **No fixed order** for valid transitions; order is display order only
 - **Seed stages** on first use: `Applied`, `Online Assessment`, `Interview`, `Accepted`, `Rejected`
 - Withdrawn / Ghosted are **not** first-class stages — fold into Rejected and/or notes
 - Deleting a stage that still has applications: **allowed**; apps keep orphan status strings
 - Renaming does not rewrite history entries
+- **Colour** is optional and per-stage, set from the app palette in Manage jobs. A stage with no colour of its own falls back to a hue derived from its position in the list — which is what every stage showed before colours existed, so adding the field changes nothing on screen until one is picked. Two stages may share a colour; nothing depends on them being distinct
+- The stage's colour is what the header chips and the table's status capsules are drawn in. It is a display property of the pipeline: recolouring a stage writes nothing to the applications sitting on it, and an orphan status (no stage by that name any more) keeps the muted fallback that marks it apart
 
 ### 4.4 Company suggestions (global list)
 
@@ -136,6 +153,21 @@ Create and edit use the same panel pattern as the todo edit panel:
 - Archiving an application sets `seasonId`; un-archiving clears it (back to active list)
 - Default list view: archived hidden
 - Analytics rules: see §8
+
+### 4.7 Application profile links
+
+Not a Jobs entity — three optional strings on `AppSettings`, sitting beside the page's other Jobs prefs (column visibility, include-archived):
+
+| Field | Example |
+|-------|---------|
+| `jobProfileLinkedInUrl` | `https://linkedin.com/in/…` |
+| `jobProfileGitHubUrl` | `https://github.com/…` |
+| `jobProfilePortfolioUrl` | `https://…` |
+
+- All nullable, empty by default, and stored trimmed. No normalization beyond that — trailing slashes and `www` are left exactly as typed
+- Written only from Settings → **Jobs** → *Job application profile*, a single dialog holding all three fields. One save, so clearing a slot and setting another travel together
+- Persist locally like every other setting and sync through the settings document, which also carries them into import/export
+- Fixed three slots: no custom links, no résumé slot, no reordering
 
 ---
 
@@ -195,15 +227,16 @@ Create and edit use the same panel pattern as the todo edit panel:
 
 ### 7.4 Delete
 
-- **Hard delete** (immediate removal from local DB + sync deletion) — exception to the app-wide soft-delete default, per product choice for Jobs
-- Always show a **confirm dialog**
-- Deleting an application removes its status history with it
+- **Soft delete**, like every other entity in the app: `deletedAt` is stamped and the row is purged after the 30-day retention window
+- Always show a **confirm dialog** — "moved to trash", not "cannot be undone"
+- After the confirm, a `VoyagerToast` offers **Undo** for 8 seconds (see `SOFT_DELETE_TOAST.md`). Undo restores the application and its status history together
+- Deleting an application tombstones its status history with it; the events keep their `fromStatus` / `toStatus`, so a restore brings the timeline back intact
 - Does not remove the company from the suggestion list automatically
 
 ### 7.5 Stage orphaning
 
 - UI must not crash or hide apps whose `status` is not in the current stage list
-- Sankey: orphan statuses appear as their own node(s), ordered after the user’s ordered stages (or grouped under an “Other” node — prefer **show orphan label as its own node** for honesty)
+- Header chips: orphan statuses appear as their own chip, ordered after the user’s ordered stages, marked as orphaned and drawn in the muted fallback colour
 
 ---
 
@@ -227,13 +260,9 @@ Create and edit use the same panel pattern as the todo edit panel:
 - With **Include archived** on: include those applications in the daily counts
 - Visual: minimalistic (match existing Voyager sparkline language — e.g. finance / leetcode activity sparklines)
 
-### 8.4 Sankey
+### 8.4 Sankey — removed
 
-- Built from **current status only** (not full path history). An app that went OA → Accepted counts only as Accepted
-- Node order follows the user’s **custom stage order**; orphans after
-- Default: exclude archived; include when **Include archived** is on
-- Valid with a single populated stage (degenerate Sankey / single-node empty-flow state — still render a calm empty/minimal state rather than erroring)
-- Flows: interpret as distribution of applications across stages (source can be an implicit “Applications” node feeding into stage nodes, or stage-to-terminal grouping — implementation should favor a readable conversion picture: e.g. all apps → current stage buckets). Prefer a simple **Applications → {stages}** Sankey unless a clearer mid-pipeline encoding is trivial; do not invent fake multi-hop paths without history-based edges
+The header once carried a single-hop Sankey beside the sparkline. It was built from each application's *current* status with the timeline never consulted, so it had no real stage-to-stage edges to draw and said nothing the per-status chips did not already say more legibly. Removed; the sparkline has the width it freed. The per-status chips (§8.2) remain the pipeline breakdown.
 
 ---
 
@@ -245,7 +274,7 @@ Align with existing Voyager local-first stack:
 - **Remote**: Firestore documents via existing sync / CRDT / outbox patterns used by other features
 - **IDs**: UUIDs for all entities
 - **Company list & categories & stages & seasons**: user-scoped, sync across devices
-- **Jobs hard delete**: sync must propagate true deletes (tombstone or explicit delete op — follow whichever pattern the sync layer uses for hard removal if one exists; otherwise add a clear delete operation for this entity type). Document the choice at implementation time against `docs/adr/002-sync-protocol.md`
+- **Jobs delete**: a tombstone, the same as every other collection. `watchCollection` drops Firestore document removals, so an actually-deleted document would be invisible to the other devices and pushed back by the first one still holding it
 - **UI**: custom Voyager inputs (not stock Material fields) where the rest of the app already wraps fields; reuse confirm dialog, color picker, markdown notes patterns from journal/todo
 - **Feature module**: `lib/features/jobs/` plus domain models, Drift tables, repository wiring, providers — same layering as todo / finance / leetcode
 
@@ -275,7 +304,7 @@ JobPagePrefs      // column visibility, include-archived default, etc.
 - Calendar or todo integration
 - LeetCode / Study cross-links
 - Dedicated multi-interview recording UI
-- Soft-delete / recycle bin for applications (hard delete only)
+- A browsable recycle bin for applications (deletes are undoable for 8 seconds via the toast, not restorable afterwards)
 
 ---
 
@@ -288,8 +317,8 @@ JobPagePrefs      // column visibility, include-archived default, etc.
 5. Categories popup: one category per company, color on category, neutral default otherwise
 6. Flat table with toggleable columns; todo-like editor; duplicate action; soft duplicate warning in table
 7. Search contains-match on title/company/notes/status; status filter; seasons archive with include-archived toggle
-8. Hard delete with confirm
-9. Header: lifetime total (all), per-status counts (active), 30-day sparkline by `dateApplied`, Sankey by current status + stage order
+8. Soft delete with confirm, then an 8-second undo toast that restores the application and its timeline
+9. Header: lifetime total (all), per-status counts (active), 30-day sparkline by `dateApplied`
 10. New **Jobs** shell destination; no global search / calendar coupling
 
 ---
@@ -313,10 +342,10 @@ JobPagePrefs      // column visibility, include-archived default, etc.
 | Delete | Hard + confirm |
 | Lifetime metric | Total applications only |
 | Sparkline | New apps / day by `dateApplied` |
-| Sankey | Current status; user stage order |
+| Stage colour | Optional, per stage; falls back to a position-derived hue |
 | Header | Always visible, compact |
 | Nav | Jobs destination |
-| Archive | User-named seasons; hidden by default; in lifetime; not in Sankey/sparkline unless Include archived |
+| Archive | User-named seasons; hidden by default; in lifetime; not in the sparkline unless Include archived |
 | Categories | One per company; color on category; small popup |
 | Columns | Color, company, title, status, date applied, notes — user toggleable |
 | Multi-interview feature | Not added |

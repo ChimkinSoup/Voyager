@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/features/study/study_actions.dart';
 import 'package:voyager/features/study/study_breadcrumb.dart';
 import 'package:voyager/features/study/study_providers.dart';
 
@@ -42,20 +43,42 @@ class _StudyMoveModalState extends ConsumerState<_StudyMoveModal> {
   Future<void> _selectDeck(StudyDeck deck) async {
     if (_moving) return;
     setState(() => _moving = true);
-    final repo = ref.read(studyRepositoryProvider);
-    await repo.moveCards(widget.cardIds, deck.id);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    final movedCards = <StudyCard>[];
-    for (final id in widget.cardIds) {
-      final card = await repo.getCard(id);
-      if (card != null) movedCards.add(card);
+    try {
+      final repo = ref.read(studyRepositoryProvider);
+      await repo.moveCards(widget.cardIds, deck.id);
+      final remoteSync = ref.read(remoteSyncServiceProvider);
+      final movedCards = <StudyCard>[];
+      for (final id in widget.cardIds) {
+        final card = await repo.getCard(id);
+        if (card != null) movedCards.add(card);
+      }
+      await remoteSync.pushStudyCardsBatch(movedCards);
+      // Both card lists and both stat providers — a move changes which deck
+      // each card counts towards, and the Hub's flattened list holds the
+      // pre-move `deckId` until it is refetched.
+      invalidateStudyCards(ref);
+      ref.read(studySelectedCardIdsProvider.notifier).state = {};
+      ref.read(studyMultiSelectEnabledProvider.notifier).state = false;
+      if (mounted) Navigator.of(context).pop();
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'study move',
+          context: ErrorDescription('while moving into "${deck.name}"'),
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not move the cards.')),
+        );
+      }
+    } finally {
+      // Cleared however the write ended, or every deck row in the sheet stays
+      // disabled with nothing saying why.
+      if (mounted) setState(() => _moving = false);
     }
-    await remoteSync.pushStudyCardsBatch(movedCards);
-    ref.invalidate(studyCardsProvider);
-    ref.invalidate(studyDeckStatsProvider);
-    ref.read(studySelectedCardIdsProvider.notifier).state = {};
-    ref.read(studyMultiSelectEnabledProvider.notifier).state = false;
-    if (mounted) Navigator.of(context).pop();
   }
 
   @override

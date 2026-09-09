@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 
@@ -11,12 +12,23 @@ class ContextualPopover extends StatelessWidget {
     this.accentColor,
   });
 
-  static const _radius = 12.0;
-  static const _borderWidth = 2.0;
+  static const _radius = 18.0;
+  static const _accentBorderWidth = 2.0;
 
   /// Corner radius of the popover's clipped content area (inside the accent
   /// border), for descendants that need to round a full-bleed edge to match.
-  static const contentRadius = _radius - _borderWidth;
+  ///
+  /// Held at the accent border's inset even when the popover draws the
+  /// neutral hairline instead — a constant is what makes it usable as a
+  /// `const` corner radius, and one pixel of extra inset on a hairline
+  /// popover is not visible.
+  static const contentRadius = _radius - _accentBorderWidth;
+
+  /// Width at or above which a popover stops being a picker and starts being
+  /// a panel: the inbox, the event editor, the search list. Those carry
+  /// enough content to sit on the heavier material; a 220px date list under
+  /// the same blur reads as a second dialog rather than a menu.
+  static const _heavyGlassWidth = 320.0;
 
   final Widget child;
   final double width;
@@ -25,15 +37,19 @@ class ContextualPopover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accent = accentColor ?? theme.colorScheme.primary;
-
     return SizedBox(
       width: width,
       height: height,
       child: GlassSurface(
+        weight: width >= _heavyGlassWidth
+            ? GlassWeight.heavy
+            : GlassWeight.light,
         borderRadius: BorderRadius.circular(_radius),
-        accentBorder: accent,
+        // Passed through rather than defaulted to the theme's primary: a
+        // popover that belongs to a specific coloured thing says so with a
+        // 2px accent edge, and every other one takes [GlassSurface]'s
+        // blended hairline.
+        accentBorder: accentColor,
         child: Material(
           type: MaterialType.transparency,
           borderRadius: BorderRadius.circular(contentRadius),
@@ -52,6 +68,7 @@ Future<T?> showContextualPopover<T>({
   double width = 220,
   double? height,
   Color? accentColor,
+  BuildContext? tapThroughContext,
 }) async {
   final button = buttonContext.findRenderObject() as RenderBox?;
   if (button == null) return null;
@@ -69,10 +86,19 @@ Future<T?> showContextualPopover<T>({
       width: width,
       height: height,
       accentColor: accentColor,
+      tapThroughRect: _overlayRectOf(tapThroughContext, overlay),
       capturedThemes: InheritedTheme.capture(
           from: context, to: Navigator.of(context).context),
     ),
   );
+}
+
+/// The bounds of [target] in the overlay's coordinates, which is the space
+/// the popover route lays its barrier out in.
+Rect? _overlayRectOf(BuildContext? target, RenderBox overlay) {
+  final box = target?.findRenderObject() as RenderBox?;
+  if (box == null || !box.hasSize) return null;
+  return box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
 }
 
 /// Shows a contextual popover anchored to [targetRect] (in screen/global
@@ -207,6 +233,7 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
     required this.width,
     this.height,
     this.accentColor,
+    this.tapThroughRect,
     required this.capturedThemes,
   });
 
@@ -215,7 +242,31 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
   final double width;
   final double? height;
   final Color? accentColor;
+
+  /// Region, in overlay coordinates, where a click outside the popover both
+  /// closes it and reaches whatever is under it, instead of being spent on
+  /// the barrier. Null keeps the ordinary modal behaviour everywhere.
+  final Rect? tapThroughRect;
+
   final CapturedThemes capturedThemes;
+
+  @override
+  Widget buildModalBarrier() {
+    final region = tapThroughRect;
+    final barrier = super.buildModalBarrier();
+    if (region == null) return barrier;
+    return _TapThroughBarrier(
+      region: region,
+      // The trigger is cut out of the region: passing its click through would
+      // close the popover on the way down and reopen it on the way up, so
+      // clicking the pill again would never close the menu.
+      except: targetRect,
+      onTapThrough: () {
+        if (isCurrent) navigator?.pop();
+      },
+      child: barrier,
+    );
+  }
 
   @override
   Color? get barrierColor => Colors.transparent;
@@ -318,5 +369,82 @@ class _PopoverLayoutDelegate extends SingleChildLayoutDelegate {
     return targetRect != oldDelegate.targetRect ||
         width != oldDelegate.width ||
         height != oldDelegate.height;
+  }
+}
+
+/// Wraps the ordinary modal barrier so that clicks inside [region] (but
+/// outside [except]) fall through to the widgets below while still closing the
+/// popover — one click both dismisses the menu and presses what it landed on.
+class _TapThroughBarrier extends SingleChildRenderObjectWidget {
+  const _TapThroughBarrier({
+    required this.region,
+    required this.except,
+    required this.onTapThrough,
+    required Widget super.child,
+  });
+
+  final Rect region;
+  final Rect except;
+  final VoidCallback onTapThrough;
+
+  @override
+  _RenderTapThroughBarrier createRenderObject(BuildContext context) {
+    return _RenderTapThroughBarrier(
+      region: region,
+      except: except,
+      onTapThrough: onTapThrough,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderTapThroughBarrier renderObject,
+  ) {
+    renderObject
+      ..region = region
+      ..except = except
+      ..onTapThrough = onTapThrough;
+  }
+}
+
+class _RenderTapThroughBarrier extends RenderProxyBox {
+  _RenderTapThroughBarrier({
+    required this.region,
+    required this.except,
+    required this.onTapThrough,
+  });
+
+  /// Read afresh on every hit test, so none of these needs to mark anything
+  /// dirty when it changes: nothing about layout or painting depends on them.
+  Rect region;
+  Rect except;
+  VoidCallback onTapThrough;
+
+  bool _passesThrough(Offset position) =>
+      region.contains(position) && !except.contains(position);
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (_passesThrough(position)) {
+      // Listen without claiming: adding ourselves to the result routes the
+      // event here too, and returning false lets the hit test carry on into
+      // the route below, the way a translucent hit test behaves.
+      result.add(BoxHitTestEntry(this, position));
+      return false;
+    }
+    return super.hitTest(result, position: position);
+  }
+
+  @override
+  void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
+    // The position is re-read rather than remembered: a hit anywhere else on
+    // the barrier lands here too, because [RenderBox.hitTest] adds this box to
+    // the result on its way down to the barrier it wraps. Closing on those
+    // would double up with the barrier's own dismissal and take the dialog
+    // underneath with it.
+    if (event is PointerDownEvent && _passesThrough(entry.localPosition)) {
+      onTapThrough();
+    }
   }
 }

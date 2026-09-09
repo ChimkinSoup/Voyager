@@ -5,6 +5,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/snippets/snippet_settings_launcher.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/snippet_editor.dart';
 import 'package:voyager/domain/models/snippet.dart';
 
@@ -111,7 +112,6 @@ class _QuickAddSnippetPanelState extends ConsumerState<_QuickAddSnippetPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     // Watched, not read: the provider may still be loading when the popover
     // opens, and the form has nothing to validate against until it lands.
     final settings = ref.watch(settingsProvider).valueOrNull;
@@ -143,17 +143,13 @@ class _QuickAddSnippetPanelState extends ConsumerState<_QuickAddSnippetPanel> {
           padding: const EdgeInsets.only(left: 12, right: 12, bottom: 10),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: widget.canManage
-                  ? () => Navigator.of(context).pop(_QuickAddOutcome.manage)
-                  : null,
-              icon: const Icon(PhosphorIconsRegular.list, size: 14),
-              label: const Text('Manage all snippets…'),
-              style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.onSurfaceVariant,
-                textStyle: theme.textTheme.bodySmall,
-                visualDensity: VisualDensity.compact,
-              ),
+            child: GlassButton(
+              dense: true,
+              enabled: widget.canManage,
+              onPressed: () =>
+                  Navigator.of(context).pop(_QuickAddOutcome.manage),
+              icon: const Icon(PhosphorIconsRegular.list),
+              label: 'Manage all snippets…',
             ),
           ),
         ),

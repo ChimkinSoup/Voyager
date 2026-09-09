@@ -3,21 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/widgets/media_lightbox.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/features/study/study_actions.dart';
 import 'package:voyager/features/study/study_card_editor_modal.dart';
+import 'package:voyager/features/study/study_card_face.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_history_controls.dart';
 import 'package:voyager/features/study/study_keyboard_shortcuts.dart';
-import 'package:voyager/features/study/study_rich_text.dart';
 import 'dart:math' as math;
 import 'package:voyager/core/motion/motion.dart';
-import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 const _kBucketFailColor = Color(0xFFE0714A);
 const _kBucketMidColor = Color(0xFFE0A63A);
@@ -138,15 +139,32 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     return id == null ? null : _cardsById![id];
   }
 
+  /// Every card reached bucket 2. Distinct from having no cards at all: a deck
+  /// emptied while cram is open — from the card menu, or a sync pull — used to
+  /// satisfy this immediately and render the congratulatory screen.
   bool get _complete =>
-      _bucket0.isEmpty && _bucket1.isEmpty && _cardsById != null;
+      _cardsById != null &&
+      _cardsById!.isNotEmpty &&
+      _bucket0.isEmpty &&
+      _bucket1.isEmpty;
+
+  /// The deck has nothing left to cram, which is not the same as finishing it.
+  bool get _emptied => _cardsById != null && _cardsById!.isEmpty;
 
   bool _handleArrowKey(KeyEvent event) {
     if (!mounted) return false;
     final route = ModalRoute.of(context);
     if (route?.isCurrent != true) return false;
     if (isTextInputFocused() || !subtreeIsVisible(context)) return false;
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    // The viewer binds the arrows to its own pages, and grading a card blind
+    // from behind it would be the worse of the two readings anyway.
+    if (mediaLightboxIsOpen) return false;
+    // Presses only. A deliberate decision is a key press, not a stream of
+    // auto-repeats: `_decide` is gated on `_exiting`, which clears 220 ms later
+    // inside its own Future.delayed, so a held arrow used to pass one card
+    // every 220 ms until the deck was exhausted — unseen, faster than the exit
+    // animation could render them, and ending on "All cards mastered".
+    if (event is! KeyDownEvent) return false;
 
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       _decide(true);
@@ -159,10 +177,10 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     return false;
   }
 
-  void _applyDecision(bool passed) {
-    final card = _current;
-    if (card == null) return;
-    final id = card.id;
+  /// Takes the id rather than re-reading `_current`: the decision belongs to
+  /// the card the user acted on, which by the time this runs may no longer be
+  /// at the head of the buckets.
+  void _applyDecision(String id, bool passed) {
     if (_bucket0.remove(id)) {
       (passed ? _bucket1 : _bucket0).add(id);
     } else if (_bucket1.remove(id)) {
@@ -175,7 +193,9 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   /// instead of restarting from a standstill. Zero for the arrow keys and the
   /// pass/fail buttons, which carry no momentum of their own.
   void _decide(bool passed, {double velocity = 0}) {
-    if (_current == null || _exiting) return;
+    final card = _current;
+    if (card == null || _exiting) return;
+    final decidedId = card.id;
     setState(() => _exiting = true);
     if (VoyagerMotion.reduced(context)) {
       // A card flying the full width of the window is exactly the kind of
@@ -190,12 +210,20 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     Future.delayed(_exitDuration, () {
       if (!mounted) return;
       _cardX.jumpTo(0);
+      // The card may have gone while it was flying out — a sync pull dropping
+      // it through _syncCards, or _returnRestoredCard inserting a different
+      // card at the head of bucket 0. The decision belongs to the card the
+      // user swiped, not to whatever is at the head now.
+      if (_cardsById?.containsKey(decidedId) != true) {
+        setState(() => _exiting = false);
+        return;
+      }
       setState(() {
         _decided.add(_snapshot());
         // Deciding a card the user had stepped back to replaces whatever came
         // after it — there is no longer a forward to step into.
         _undone.clear();
-        _applyDecision(passed);
+        _applyDecision(decidedId, passed);
         _exiting = false;
         _showingBack = false;
       });
@@ -261,22 +289,16 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     _flipController.showFront();
   }
 
-  /// Cram never writes SRS state of its own, so resetting is purely a write
-  /// to the card's schedule — the card then moves on the way a failed one
-  /// does, back to the end of bucket 0.
-  Future<void> _resetAndAdvance() async {
-    final card = _current;
-    if (card == null || _exiting) return;
-    await resetStudyCardProgress(ref, card);
-    if (!mounted) return;
-    _decide(false);
-  }
-
   Future<void> _deleteCurrent() async {
     final card = _current;
     if (card == null || _exiting) return;
 
-    final deleted = await deleteStudyCard(context, ref, card);
+    final deleted = await deleteStudyCard(
+      context,
+      ref,
+      card,
+      onRestored: () => _returnRestoredCard(card.id),
+    );
     if (!mounted || !deleted) return;
 
     setState(() {
@@ -284,6 +306,31 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
       for (final bucket in [_bucket0, _bucket1, _bucket2]) {
         bucket.remove(card.id);
       }
+      _showingBack = false;
+    });
+    _flipController.showFront();
+  }
+
+  /// Puts a card the toast's Undo brought back at the front of bucket 0, so
+  /// cram returns to the card the delete took it off — unseen, which is where
+  /// bucket 0 means it stands.
+  ///
+  /// The wait on [studyCardsProvider] is what makes it stick. [_syncCards]
+  /// drops any held card the provider's list no longer has, and re-adding
+  /// before the restore has landed there would have the card dropped again on
+  /// the very next build — permanently, since the held map is only ever
+  /// refreshed *from* itself and so can never re-admit a card it has lost.
+  Future<void> _returnRestoredCard(String cardId) async {
+    final live = await ref.read(studyCardsProvider(widget.deckId).future);
+    if (!mounted) return;
+    final held = _cardsById;
+    if (held == null) return;
+    final restored = live.where((c) => c.id == cardId).firstOrNull;
+    if (restored == null) return;
+    setState(() {
+      held[restored.id] = restored;
+      _bucket0.remove(restored.id);
+      _bucket0.insert(0, restored.id);
       _showingBack = false;
     });
     _flipController.showFront();
@@ -308,7 +355,9 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
                 showingBack: _showingBack,
                 onUndo: _canUndo ? _undo : null,
                 onRedo: _canRedo ? _redo : null,
-                child: _complete
+                child: _emptied
+                    ? _CramEmpty(onDone: () => Navigator.of(context).pop())
+                    : _complete
                     ? _CramComplete(
                         onDone: () => Navigator.of(context).pop(),
                         onUndo: _canUndo ? _undo : null,
@@ -456,7 +505,14 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   Widget _cramCard(ThemeData theme) {
     final card = _current!;
     final vc = VoyagerColors.of(context);
-    Widget face(String text, {bool accent = false}) => Container(
+    // Rebuilt off the media module, so an image arriving mid-run lands on the
+    // card it belongs to.
+    final images = ref.watch(studyCardImagesProvider).valueOrNull?[card.id];
+    Widget face(
+      String text, {
+      List<MediaAsset> pictures = const [],
+      bool accent = false,
+    }) => Container(
       // Infinities collapse to whatever the page lays out for the card, so the
       // face fills its slot instead of shrink-wrapping short text.
       width: double.infinity,
@@ -468,19 +524,15 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
         border: Border.all(color: vc.strongHairline),
         boxShadow: vc.surfaceShadow(),
       ),
-      child: Center(
-        // The card no longer grows with its text, so long content scrolls
-        // inside the face rather than overflowing it.
-        child: VoyagerScrollView(
-          child: StudyRichText(
-            text,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              color: accent
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface,
-            ),
-          ),
+      // The card no longer grows with its text, so long content scrolls
+      // inside the face rather than overflowing it.
+      child: StudyCardFace(
+        text: text,
+        images: pictures,
+        style: theme.textTheme.headlineMedium?.copyWith(
+          color: accent
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface,
         ),
       ),
     );
@@ -492,14 +544,19 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
         card: card,
         onEdit: _editCurrent,
         onReverse: _reverseCurrent,
-        onResetProgress: _resetAndAdvance,
+        // No onResetProgress: cram must not touch persisted SRS metadata, so
+        // the item is not offered here — see studyCardMenuItems.
         onDelete: _deleteCurrent,
       ),
       child: StudyFlipCard(
         controller: _flipController,
         onFlipChanged: (back) => setState(() => _showingBack = back),
-        front: face(card.frontText),
-        back: face(card.backText, accent: true),
+        front: face(card.frontText, pictures: images?.front ?? const []),
+        back: face(
+          card.backText,
+          pictures: images?.back ?? const [],
+          accent: true,
+        ),
       ),
     );
   }
@@ -576,6 +633,35 @@ class _CramComplete extends StatelessWidget {
               GlassButton(onPressed: onDone, label: 'Back to deck'),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown when every card has been deleted out from under a running cram — the
+/// buckets are empty, but nothing was mastered.
+class _CramEmpty extends StatelessWidget {
+  const _CramEmpty({required this.onDone});
+
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            PhosphorIconsRegular.cardsThree,
+            size: 48,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 16),
+          Text('This deck has no cards left', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 20),
+          GlassButton(onPressed: onDone, label: 'Back to deck'),
         ],
       ),
     );

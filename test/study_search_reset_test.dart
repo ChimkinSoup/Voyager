@@ -64,7 +64,14 @@ class _FakeStudyRepository implements StudyRepository {
   Future<void> softDeleteCard(String id) async => deletedIds.add(id);
 
   @override
-  Future<StudyCard?> getCard(String id) async => null;
+  Future<StudyCard?> getCard(String id) async {
+    for (final deck in cardsByDeck.values) {
+      for (final card in deck) {
+        if (card.id == id) return card;
+      }
+    }
+    return null;
+  }
 
   @override
   Future<List<StudyFolder>> listFolders({
@@ -249,6 +256,11 @@ void main() {
     await _selectFirstCard(tester);
     expect(find.text('1 selected'), findsOneWidget);
     await tester.tap(find.text('Delete'));
+    await tester.pump();
+    // The bulk delete confirms first, like every other card-deletion path.
+    // Two 'Delete' labels are on screen at this point — the bar's button and
+    // the dialog's confirm — and the dialog's is the later one.
+    await tester.tap(find.text('Delete').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 

@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/text/prose_editing_controller.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
@@ -11,6 +13,8 @@ import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
+import 'package:voyager/core/widgets/prose_highlight_layer.dart';
 import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/tag_suggestion_overlay.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
@@ -98,6 +102,14 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   bool _hasText = false;
   bool _bringCursorScheduled = false;
 
+  ProseEditingController? _prose;
+
+  /// The controller the [TextField] and every overlay below are given: the
+  /// caller's, wrapped for emphasis wherever this field is eligible for it.
+  /// See [ProseEditingController] for why the wrapping happens here rather
+  /// than at the call sites.
+  TextEditingController get _controller => _prose ?? widget.controller;
+
   bool get _spellcheckOn => isMultilineField(
     expands: widget.expands,
     maxLines: widget.maxLines,
@@ -111,9 +123,19 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     _highlightedText = widget.controller.text;
     _hasText = widget.controller.text.isNotEmpty;
     widget.controller.addListener(_handleControllerChanged);
-    if (_spellcheckOn) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _forceSpellCheck());
-    }
+    _syncProseController();
+  }
+
+  /// Emphasis rides on the same multiline predicate as spellcheck: v1 leaves
+  /// single-line fields on plain text (EMPHASIS_FORMATTING.md §10).
+  void _syncProseController() {
+    _prose?.dispose();
+    _prose = _spellcheckOn
+        ? ProseEditingController(
+            source: widget.controller,
+            focusNode: widget.focusNode,
+          )
+        : null;
   }
 
   @override
@@ -127,23 +149,28 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     if (widget.controller.text != _highlightedText) {
       _highlightedText = widget.controller.text;
     }
+    // The shape too: `_emphasisOn` is derived from it, so a field rebuilt from
+    // `maxLines: 1` to `maxLines: null` would otherwise keep the stale
+    // decision — emphasis off in a field that is now multiline, or still on in
+    // one that is now single-line, where §10 says v1 renders plain text and
+    // where the overlay layers below are no longer mounted to match.
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.focusNode != widget.focusNode ||
+        oldWidget.expands != widget.expands ||
+        oldWidget.maxLines != widget.maxLines ||
+        oldWidget.minLines != widget.minLines) {
+      _syncProseController();
+    }
   }
 
   @override
   void dispose() {
     _highlightTimer?.cancel();
     widget.controller.removeListener(_handleControllerChanged);
+    // Never the caller's controller, only the wrapper around it.
+    _prose?.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _forceSpellCheck() {
-    if (!mounted || !_spellcheckOn) return;
-    forceSpellCheckDisplay(
-      context: context,
-      fieldKey: _fieldKey,
-      focusNode: widget.focusNode,
-    );
   }
 
   void _handleControllerChanged() {
@@ -154,7 +181,6 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       setState(() => _hasText = hasText);
     }
     _scheduleHighlightRepaint();
-    if (_spellcheckOn) _forceSpellCheck();
     if (widget.focusNode.hasFocus) _scheduleBringCursorIntoView();
   }
 
@@ -203,8 +229,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     return VimTextScope(
       enabled: VimEnabledScope.of(context) && suits,
       snippetsAllowed: suits,
+      autocorrectAllowed: suits,
       controller: widget.controller,
       multiline: _spellcheckOn,
+      proseEmphasis: _prose != null,
       accentColor: widget.accentColor ?? widget.cursorColor,
       builder: _buildField,
     );
@@ -212,11 +240,11 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
 
   Widget _buildField(BuildContext context, VimFieldBinding vim) {
     final theme = Theme.of(context);
-    final spellcheckOn = isMultilineField(
-      expands: widget.expands,
-      maxLines: widget.maxLines,
-      minLines: widget.minLines,
-    );
+    // The same getter the prose controller was built from, not a second
+    // reading of the same three properties: §5.2's invariant is that the
+    // paragraph and the layers stacked around it agree about whether emphasis
+    // applies, and two copies of one predicate is how they drift apart.
+    final spellcheckOn = _spellcheckOn;
     var baseStyle =
         widget.style ??
         theme.textTheme.bodyLarge ??
@@ -227,12 +255,33 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     final strutStyle = StrutStyle.fromTextStyle(baseStyle);
     final accent =
         widget.accentColor ?? widget.cursorColor ?? theme.colorScheme.primary;
+    final emphasisTheme = ProseEmphasisTheme.of(theme.colorScheme, accent);
+    _prose?.emphasis = emphasisTheme;
+    // A `==highlight==` run carries only a mark; [ProseHighlightLayer] is what
+    // fills it — see [kProseHighlightMark].
+    final highlightFill = emphasisTheme.highlightColor!;
+    // Null on a field with emphasis off, which is exactly the flat paragraph
+    // every layer built for itself before emphasis existed.
+    final spanBuilder = _prose?.overlaySpan;
     final hasLabel = (widget.label ?? '').isNotEmpty;
     // The floating label (drawn externally by NotchedFieldBorder) rests in the
     // same spot a hint would occupy, so suppress the hint to avoid
     // double-printed placeholder text.
     final effectiveHint = hasLabel ? null : widget.hintText;
     final decoration = widget.decoration.copyWith(
+      // Drops InputDecorator's [kMinInteractiveDimension] floor, which is not
+      // a padding but a *centering*: a field whose content is shorter than
+      // 48px is stretched to 48 and its text re-centred inside the slack
+      // (`interactiveAdjustment`, input_decorator.dart), past
+      // `textAlignVertical: top` and past everything the overlays below
+      // mirror. Every overlay here is a plain [Padding] around a paragraph,
+      // so that slack put the squiggles, the `#tag` pills and the Vim caret
+      // most of a line above the words they belong to — 11.5px on the
+      // rankings template notes box, the one field in the app small enough to
+      // hit the floor. Dense makes the box hug its own content instead, which
+      // is the geometry [overlayPadding] already describes. A no-op for every
+      // field taller than 48: their `interactiveAdjustment` was already zero.
+      isDense: true,
       hintText: effectiveHint,
       // Matched to the field's own text metrics — see [fieldHintStyle] for the
       // shrink-on-first-keystroke this avoids.
@@ -286,14 +335,15 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         contextMenuBuilder: voyagerTextContextMenuBuilder(
           context,
           snippetsAllowed: vim.snippetsAllowed,
+          spellcheckAllowed: spellcheckOn,
+          autocorrectSession: vim.autocorrectSession,
         ),
-        spellCheckConfiguration: spellcheckOn
-            ? buildVoyagerSpellCheckConfiguration(
-                context,
-                snippetsAllowed: vim.snippetsAllowed,
-              )
-            : const SpellCheckConfiguration.disabled(),
-        controller: widget.controller,
+        // Always disabled: the squiggles are [SpellCheckSquiggleLayer]'s, and
+        // giving EditableText results of its own would make it build the
+        // paragraph itself rather than through the controller — see
+        // [misspellingAtCursor].
+        spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+        controller: _controller,
         focusNode: widget.focusNode,
         readOnly: widget.readOnly,
         scrollController: _scrollController,
@@ -314,17 +364,47 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       ),
     );
 
+    final autocorrectSession = vim.autocorrectSession;
+
     final field = Stack(
       fit: widget.expands ? StackFit.expand : StackFit.loose,
       textDirection: textDirection,
       children: [
+        // Bottom of the stack, under the `#tag` pills and the squiggles: the
+        // tint is the background changing colour, not a mark of its own.
+        if (autocorrectSession != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Padding(
+                padding: overlayPadding,
+                child: AutocorrectFlashLayer(
+                  session: autocorrectSession,
+                  spanBuilder: spanBuilder,
+                  controller: _controller,
+                  style: baseStyle,
+                  color: accent,
+                  strutStyle: strutStyle,
+                  textHeightBehavior: textHeightBehavior,
+                  scrollController: _scrollController,
+                ),
+              ),
+            ),
+          ),
         Positioned.fill(
           child: IgnorePointer(
             child: DefaultTextHeightBehavior(
               textHeightBehavior: textHeightBehavior,
               child: ClipRect(
                 child: ListenableBuilder(
-                  listenable: _scrollController,
+                  // The controller as well as the scroll position: the pills
+                  // are measured from the same paragraph the field renders,
+                  // and revealing a `**` moves every glyph after it on the
+                  // line. The *text* stays debounced — that is what
+                  // [_highlightedText] is — but the reveal must not be.
+                  listenable: Listenable.merge([
+                    _scrollController,
+                    _controller,
+                  ]),
                   builder: (context, _) {
                     final scrollOffset = _scrollController.hasClients
                         ? _scrollController.offset
@@ -335,6 +415,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                         padding: overlayPadding,
                         child: _TagHighlightLayer(
                           text: _highlightedText,
+                          span: (spanBuilder ?? flatProseSpan)(
+                            _highlightedText,
+                            baseStyle,
+                          ),
                           style: baseStyle,
                           strutStyle: strutStyle,
                           textDirection: textDirection,
@@ -357,7 +441,8 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
               child: Padding(
                 padding: overlayPadding,
                 child: SpellCheckSquiggleLayer(
-                  controller: widget.controller,
+                  spanBuilder: spanBuilder,
+                  controller: _controller,
                   focusNode: widget.focusNode,
                   style: baseStyle,
                   strutStyle: strutStyle,
@@ -375,13 +460,35 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
               child: Padding(
                 padding: overlayPadding,
                 child: SelectionHighlightLayer(
-                  controller: widget.controller,
+                  spanBuilder: spanBuilder,
+                  controller: _controller,
                   focusNode: widget.focusNode,
                   style: baseStyle,
                   strutStyle: strutStyle,
                   textHeightBehavior: textHeightBehavior,
                   locale: locale,
                   color: selectionColor,
+                  scrollController: _scrollController,
+                ),
+              ),
+            ),
+          ),
+        // Above the selection and still beneath the field: this is where the
+        // paragraph itself used to fill a `==highlight==`, back when the fill
+        // was a `backgroundColor` and its corners were square.
+        if (spanBuilder != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Padding(
+                padding: overlayPadding,
+                child: ProseHighlightLayer(
+                  spanBuilder: spanBuilder,
+                  controller: _controller,
+                  style: baseStyle,
+                  strutStyle: strutStyle,
+                  textHeightBehavior: textHeightBehavior,
+                  locale: locale,
+                  color: highlightFill,
                   scrollController: _scrollController,
                 ),
               ),
@@ -396,7 +503,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                 )
               : textField,
         ),
-        // Above the field, not behind it — see [VimTextOverlay]. Mounted for a
+        // Topmost: above the field — see [VimTextOverlay]. Mounted for a
         // snippet session too, which is what puts dotted tabstop marks on a
         // field with Vim switched off.
         if (vim.session != null || vim.snippetSession != null)
@@ -407,7 +514,8 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                 child: VimTextOverlay(
                   session: vim.session,
                   snippetSession: vim.snippetSession,
-                  controller: widget.controller,
+                  spanBuilder: spanBuilder,
+                  controller: _controller,
                   focusNode: widget.focusNode,
                   style: baseStyle,
                   strutStyle: strutStyle,
@@ -469,6 +577,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
 class _TagHighlightLayer extends StatelessWidget {
   const _TagHighlightLayer({
     required this.text,
+    required this.span,
     required this.style,
     required this.strutStyle,
     required this.textDirection,
@@ -479,6 +588,13 @@ class _TagHighlightLayer extends StatelessWidget {
   });
 
   final String text;
+
+  /// [text] as the field itself renders it. Load-bearing for the pills: a
+  /// bolded `**#tag**` is wider than the same tag in regular weight, and a
+  /// pill measured off a flat paragraph drifts left of the letters it is
+  /// meant to wrap (EMPHASIS_FORMATTING.md §8).
+  final TextSpan span;
+
   final TextStyle style;
   final StrutStyle strutStyle;
   final TextDirection textDirection;
@@ -489,40 +605,47 @@ class _TagHighlightLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final textPainter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          textDirection: textDirection,
-          textScaler: textScaler,
-          strutStyle: strutStyle,
-          textHeightBehavior: textHeightBehavior,
-          locale: locale,
-          maxLines: null,
-        )..layout(maxWidth: constraints.maxWidth);
-
-        return CustomPaint(
-          size: Size(constraints.maxWidth, textPainter.height),
-          painter: _TagHighlightPainter(
-            textPainter: textPainter,
-            fontSize: style.fontSize ?? textPainter.preferredLineHeight,
-            tagColorFor: tagColorFor,
-          ),
-        );
-      },
+    // The paragraph is laid out inside `paint` and disposed there, exactly as
+    // `_ProseHighlightPainter` does. Built here and handed over, it was never
+    // disposed — and since §8 made this layer repaint with the caret rather
+    // than only on the 200ms text debounce, that abandoned a laid-out
+    // `ui.Paragraph` on every keystroke *and* every arrow press, for the full
+    // journal body. Sizing is unaffected: this sits in a `Positioned.fill`, so
+    // the constraints reaching it are already tight.
+    return CustomPaint(
+      painter: _TagHighlightPainter(
+        span: span,
+        style: style,
+        strutStyle: strutStyle,
+        textDirection: textDirection,
+        textScaler: textScaler,
+        textHeightBehavior: textHeightBehavior,
+        locale: locale,
+        tagColorFor: tagColorFor,
+      ),
     );
   }
 }
 
 class _TagHighlightPainter extends CustomPainter {
   _TagHighlightPainter({
-    required this.textPainter,
-    required this.fontSize,
+    required this.span,
+    required this.style,
+    required this.strutStyle,
+    required this.textDirection,
+    required this.textScaler,
+    required this.textHeightBehavior,
+    required this.locale,
     required this.tagColorFor,
   });
 
-  final TextPainter textPainter;
-  final double fontSize;
+  final TextSpan span;
+  final TextStyle style;
+  final StrutStyle strutStyle;
+  final TextDirection textDirection;
+  final TextScaler textScaler;
+  final TextHeightBehavior textHeightBehavior;
+  final Locale? locale;
   final int Function(String tag) tagColorFor;
 
   static const _tagHorizontalPadding = 3.0;
@@ -542,7 +665,12 @@ class _TagHighlightPainter extends CustomPainter {
   /// Anchored on the baseline rather than on the selection box: a box spans the
   /// whole line box, so its top and bottom move with the line height and the
   /// leading, not with the letters the pill is meant to wrap.
-  Rect _tagHighlightRect(TextBox box, double baseline, String tagName) {
+  Rect _tagHighlightRect(
+    TextBox box,
+    double baseline,
+    String tagName,
+    double fontSize,
+  ) {
     final descent = _tagDescenderPattern.hasMatch(tagName)
         ? fontSize * _descenderDepth
         : 0.0;
@@ -572,9 +700,19 @@ class _TagHighlightPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final text = textPainter.text?.toPlainText() ?? '';
-    if (text.isEmpty) return;
+    final text = span.toPlainText();
+    if (text.isEmpty || size.width <= 0) return;
 
+    final textPainter = TextPainter(
+      text: span,
+      textDirection: textDirection,
+      textScaler: textScaler,
+      strutStyle: strutStyle,
+      textHeightBehavior: textHeightBehavior,
+      locale: locale,
+      maxLines: null,
+    )..layout(maxWidth: size.width);
+    final fontSize = style.fontSize ?? textPainter.preferredLineHeight;
     final lines = textPainter.computeLineMetrics();
 
     for (final match in journalTagPattern.allMatches(text)) {
@@ -586,7 +724,12 @@ class _TagHighlightPainter extends CustomPainter {
         TextSelection(baseOffset: match.start, extentOffset: match.end),
       );
       for (final box in boxes) {
-        final rect = _tagHighlightRect(box, _baselineFor(box, lines), tagName);
+        final rect = _tagHighlightRect(
+          box,
+          _baselineFor(box, lines),
+          tagName,
+          fontSize,
+        );
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             rect,
@@ -596,14 +739,18 @@ class _TagHighlightPainter extends CustomPainter {
         );
       }
     }
+    textPainter.dispose();
   }
 
   @override
   bool shouldRepaint(covariant _TagHighlightPainter oldDelegate) {
-    return oldDelegate.textPainter.text != textPainter.text ||
-        oldDelegate.fontSize != fontSize ||
-        oldDelegate.textPainter.preferredLineHeight !=
-            textPainter.preferredLineHeight ||
+    return oldDelegate.span != span ||
+        oldDelegate.style != style ||
+        oldDelegate.strutStyle != strutStyle ||
+        oldDelegate.textDirection != textDirection ||
+        oldDelegate.textScaler != textScaler ||
+        oldDelegate.textHeightBehavior != textHeightBehavior ||
+        oldDelegate.locale != locale ||
         oldDelegate.tagColorFor != tagColorFor;
   }
 }

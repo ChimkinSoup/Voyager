@@ -50,6 +50,20 @@ bool _isWordChar(int codeUnit) =>
 /// part of the token rather than treated as the end of one.
 bool _isTagChar(int codeUnit) => _isWordChar(codeUnit) || codeUnit == 0x2D; // -
 
+/// Whether a run of two or more underscores starts at [index].
+///
+/// `\w` — and so [_isTagChar] — counts a single `_` as a tag character, but a
+/// run of two is an underline delimiter and ends the tag body rather than
+/// extending it (EMPHASIS_FORMATTING.md §4.4). `#tag_name` is one tag;
+/// `__#tag__` is the tag `#tag` inside an underline pair. The parser's zone
+/// scanner stops a tag at the same place, so the token a completion replaces
+/// and the zone the field paints are always the same characters.
+bool _isUnderlineRunAt(String text, int index) =>
+    index >= 0 &&
+    index + 1 < text.length &&
+    text.codeUnitAt(index) == 0x5F &&
+    text.codeUnitAt(index + 1) == 0x5F;
+
 /// Finds the tag token [cursor] sits inside, or null if the caret isn't in one.
 ///
 /// Returns null when the `#` is preceded by a word character (`C#`, `a#b`),
@@ -61,17 +75,37 @@ ActiveTagToken? activeTagToken(String text, int cursor) {
   while (wordStart > 0 && _isTagChar(text.codeUnitAt(wordStart - 1))) {
     wordStart--;
   }
+  // A `__` behind the caret means the caret is inside an underline span, not
+  // in a tag body — the tag stopped at the delimiter.
+  for (var at = wordStart; at < cursor; at++) {
+    if (_isUnderlineRunAt(text, at)) return null;
+  }
 
   final hashIndex = wordStart - 1;
   if (hashIndex < 0 || text.codeUnitAt(hashIndex) != _hashCodeUnit) return null;
   // A word character, not a tag character: a hyphen before the `#` belongs to
   // the prose around it ("well-#known"), so it doesn't make the `#` a sigil the
-  // way `C#` or `a#b` does.
-  if (hashIndex > 0 && _isWordChar(text.codeUnitAt(hashIndex - 1))) return null;
+  // way `C#` or `a#b` does. Nor does a `__` run — `_` is a word character, but
+  // there it is an underline opener wrapping the tag (§4.4), and rejecting it
+  // would leave `__#tag__` with no completion at all.
+  if (hashIndex > 0 &&
+      _isWordChar(text.codeUnitAt(hashIndex - 1)) &&
+      !_isUnderlineRunAt(text, hashIndex - 2)) {
+    return null;
+  }
 
   var end = cursor;
   while (end < text.length && _isTagChar(text.codeUnitAt(end))) {
     end++;
+  }
+  // The token stops at the first `__` ahead of the caret. Walking over it
+  // would let `_accept`'s `replaceRange(start, end, '#project')` delete the
+  // closing delimiter — and the `__y__` span behind it — along with the tag.
+  for (var at = cursor; at < end; at++) {
+    if (_isUnderlineRunAt(text, at)) {
+      end = at;
+      break;
+    }
   }
 
   return (

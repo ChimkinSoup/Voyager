@@ -4,8 +4,11 @@
 // the rating that was taken off rather than asking for a new one. Cram holds
 // no rating at all, so there the same keys only move between cards.
 //
-// The review log is deliberately left alone by an undo: it is append-only and
-// has no delete path through sync, so a redo must not write a second one.
+// The review log follows the undo: the row a grade wrote is tombstoned when
+// that grade is taken back, and a redo revives the same row rather than writing
+// a second one — otherwise a grade given, undone and then abandoned by leaving
+// the session stays in "reviewed today" forever with no schedule change to
+// match it.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,11 +31,23 @@ class _RecordingStudyRepository implements StudyRepository {
 
   /// Every card written back, in order.
   final saved = <StudyCard>[];
-  final logs = <StudyReviewLog>[];
+
+  /// Review-log rows by id, tombstones included — the undo path writes a
+  /// tombstone over the row rather than appending, so a list of writes could
+  /// not tell "one row, deleted" from "two rows".
+  final logRows = <String, StudyReviewLog>{};
+
+  /// The rows that still count towards "reviewed today".
+  List<StudyReviewLog> get liveLogs =>
+      logRows.values.where((log) => log.deletedAt == null).toList();
 
   @override
   Future<List<StudyCard>> getAllCards({bool includeDeleted = true}) async =>
       cards;
+
+  @override
+  Future<StudyCard?> getCard(String id) async =>
+      cards.where((c) => c.id == id).firstOrNull;
 
   @override
   Future<List<StudyCard>> listCards(
@@ -53,7 +68,20 @@ class _RecordingStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<void> logReview(StudyReviewLog log) async => logs.add(log);
+  Future<void> logReview(
+    StudyReviewLog log, {
+    bool recordLocalActivity = true,
+  }) async => logRows[log.id] = log;
+
+  @override
+  Future<StudyReviewLog?> getReviewLog(String id) async => logRows[id];
+
+  @override
+  Future<void> softDeleteReviewLog(String id) async {
+    final current = logRows[id];
+    if (current == null || current.deletedAt != null) return;
+    logRows[id] = current.deleted();
+  }
 
   @override
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -136,7 +164,8 @@ void main() {
     await _reveal(tester);
     await _grade(tester, 'Good');
     expect(find.text('Session complete'), findsOneWidget);
-    expect(repo.logs, hasLength(1));
+    expect(repo.liveLogs, hasLength(1));
+    final logId = repo.liveLogs.single.id;
 
     await _stepHistory(tester, LogicalKeyboardKey.arrowLeft);
 
@@ -146,6 +175,18 @@ void main() {
     expect(restored.interval, 0);
     expect(restored.reviewCount, 0);
     expect(restored.dueAt, DateTime.utc(2026, 8, 9, 12));
+    expect(
+      repo.liveLogs,
+      isEmpty,
+      reason: 'the grade was taken back, so the review it logged stops '
+          'counting towards "reviewed today"',
+    );
+    expect(
+      repo.logRows[logId]?.deletedAt,
+      isNotNull,
+      reason: 'tombstoned rather than dropped, so the removal reaches the '
+          'other devices',
+    );
 
     await _stepHistory(tester, LogicalKeyboardKey.arrowRight);
 
@@ -153,10 +194,16 @@ void main() {
     expect(repo.saved.last.reviewCount, 1);
     expect(find.text('Session complete'), findsOneWidget);
     expect(
-      repo.logs,
+      repo.logRows,
       hasLength(1),
-      reason: 'the log the grade wrote was never removed, so a redo must not '
-          'write a second one',
+      reason: 'a redo revives the row the grade originally wrote rather than '
+          'writing a second one',
+    );
+    expect(repo.liveLogs.single.id, logId);
+    expect(
+      repo.logRows[logId]!.version,
+      greaterThan(1),
+      reason: 'the restore has to outrank the tombstone it undoes',
     );
   });
 

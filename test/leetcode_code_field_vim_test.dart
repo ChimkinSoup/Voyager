@@ -59,6 +59,30 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets('the mode badge sits in the box, not on the last line', (
+    tester,
+  ) async {
+    // Forty lines in a box that caps at 320px. The badge hangs off the
+    // bottom-right of whatever VimTextScope calls "the field", and the editor
+    // column is as tall as the code it holds — so anchoring to it put the
+    // badge hundreds of pixels below the box, where the clip fit painted
+    // nothing at all.
+    // Focused while it is short and grown afterwards: a tap never lands on a
+    // field whose own box is taller than the window.
+    await pumpInput(tester, vimEnabled: true, text: 'x0 = 0');
+    controller.fullText = List.generate(40, (i) => 'x$i = $i').join('\n');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+
+    final box = tester.getRect(find.byType(LeetCodeCodeSurface));
+    final badge = tester.getRect(find.text('NORMAL'));
+    expect(box.contains(badge.center), isTrue, reason: 'badge left the box');
+    expect(box.bottom - badge.bottom, lessThan(24));
+    expect(box.right - badge.right, lessThan(24));
+    await finish(tester);
+  });
+
   testWidgets('Vim stays off in the code box when the setting is disabled',
       (tester) async {
     await pumpInput(tester, vimEnabled: false, text: 'abc');
