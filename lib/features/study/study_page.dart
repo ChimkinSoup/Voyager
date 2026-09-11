@@ -114,6 +114,45 @@ class _StudyPageState extends ConsumerState<StudyPage>
     });
   }
 
+  /// Leaves the open deck for [deck], which can live anywhere in the library —
+  /// a linked deck's "Visit", or a name under "Included in". The breadcrumb
+  /// moves to [deck]'s own folder, and the Workbench swaps to [deck] in place
+  /// rather than passing back through the library.
+  Future<void> _visitDeck(StudyDeck deck) async {
+    // Anything that interrupts — Back, a breadcrumb, another visit — bumps
+    // the generation, and then this visit is no longer the navigation in
+    // flight.
+    final generation = ++_closeGeneration;
+    final path = await _folderPathOf(deck);
+    // The cards and counts are loaded before the swap: with no fade to cover
+    // the first frames, the new deck would otherwise open on "No cards yet"
+    // and "0 due" until its queries landed. A failed load is the Workbench's
+    // to show, not a reason to stay on this deck.
+    await Future.wait<Object?>([
+      ref.read(studyCardsProvider(deck.id).future),
+      ref.read(studyDeckStatsProvider(deck.id).future),
+    ]).catchError((Object _) => const <Object?>[]);
+    if (!mounted || generation != _closeGeneration) return;
+    ref.read(studyBreadcrumbStackProvider.notifier).state = path;
+    _openDeck(deck);
+  }
+
+  /// The breadcrumb stack that shows [deck]: its folder chain from the root.
+  /// A chain broken by a deleted folder starts where the library renders the
+  /// orphan — at the root (STUDY.md's "Ghost Parent").
+  Future<List<String>> _folderPathOf(StudyDeck deck) async {
+    final repo = ref.read(studyRepositoryProvider);
+    final path = <String>[];
+    var cursor = deck.parentFolderId;
+    while (cursor != null && !path.contains(cursor)) {
+      final folder = await repo.getFolder(cursor);
+      if (folder == null || folder.deletedAt != null) break;
+      path.insert(0, folder.id);
+      cursor = folder.parentFolderId;
+    }
+    return path;
+  }
+
   void _jumpToRoot() {
     ref.read(studyBreadcrumbStackProvider.notifier).state = [];
     if (_openDeckId != null) _closeDeck();
@@ -218,12 +257,17 @@ class _StudyPageState extends ConsumerState<StudyPage>
                       child: IgnorePointer(
                         ignoring: t == 0,
                         child: StudyDeckWorkbenchPage(
+                          // A visit swaps decks without unmounting the page,
+                          // and the search field and grid scroll are its own
+                          // state — they must not carry over to the new deck.
+                          key: ValueKey(_openDeckId),
                           deckId: _openDeckId!,
                           folderStack: stack,
                           deckNameHint: _openDeckName,
                           onBack: _closeDeck,
                           onJumpToRoot: _jumpToRoot,
                           onJumpToFolder: _jumpToFolderIndex,
+                          onOpenDeck: _visitDeck,
                         ),
                       ),
                     );
@@ -389,9 +433,15 @@ class _HubContentState extends ConsumerState<_HubContent> {
                 switchInCurve: reducedMotion
                     ? Curves.easeOut
                     : VoyagerSpring.moveCurve,
+                // Flipped because the outgoing grid runs its animation from 1
+                // back to 0, and this curve is read along that reversed path.
+                // Unflipped, the spring's fast start lands at the *end* of
+                // the exit: the departing grid, stacked on top, held ~96%
+                // opacity in place for 60% of the switch and then vanished,
+                // so the folder just tapped sat over the incoming level.
                 switchOutCurve: reducedMotion
-                    ? Curves.easeOut
-                    : VoyagerSpring.moveCurve,
+                    ? Curves.easeOut.flipped
+                    : VoyagerSpring.moveCurve.flipped,
                 // Both grids occupy the full area while they cross, so the
                 // outgoing one does not collapse to the incoming one's size
                 // partway through the slide. The outgoing one is also the one
@@ -498,6 +548,7 @@ Future<void> createStudyFolderOrDeck(
     await repo.upsertDeck(deck);
     remoteSync.pushStudyDeck(deck);
     ref.invalidate(studyDecksProvider);
+    ref.invalidate(studyAllDecksProvider);
   }
 }
 
@@ -766,6 +817,15 @@ class _PressableTile extends StatefulWidget {
   State<_PressableTile> createState() => _PressableTileState();
 }
 
+/// How far the hover "⋯" sits in from the tile's outer edge — the [Card]'s own
+/// 4px margin plus 4px of slop, so the button's fill starts inside the card
+/// rather than on the page behind it.
+const double _kTileMenuInset = 8;
+
+/// Side of that button's hover fill. Small enough that a circle of this size,
+/// inset by [_kTileMenuInset], stays clear of the tile's 18px rounded corner.
+const double _kTileMenuSize = 26;
+
 class _PressableTileState extends State<_PressableTile>
     with SingleTickerProviderStateMixin {
   late final AnimationController _scale = AnimationController(
@@ -822,9 +882,13 @@ class _PressableTileState extends State<_PressableTile>
               ),
             ),
             if (widget.menuKey != null)
+              // Inset past the Card's own 4px margin, and the button's fill
+              // shrunk to fit inside the tile's 18px corner: at 2px with
+              // IconButton's default 40px hover circle the grey splash spilled
+              // out over the tile's rounded edge onto the page behind it.
               Positioned(
-                top: 2,
-                right: 2,
+                top: _kTileMenuInset,
+                right: _kTileMenuInset,
                 child: IgnorePointer(
                   // Invisible means untouchable: a disabled button still
                   // absorbs the hit, which would leave a dead corner on the
@@ -837,7 +901,18 @@ class _PressableTileState extends State<_PressableTile>
                       key: _moreKey,
                       onPressed: _openMenu,
                       visualDensity: VisualDensity.compact,
-                    iconSize: 16,
+                      iconSize: 16,
+                      // `constraints` alone would not shrink it: IconButton's
+                      // default padded tap target wraps the whole thing back
+                      // out to 48 whatever the constraints say.
+                      padding: EdgeInsets.zero,
+                      style: IconButton.styleFrom(
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      constraints: const BoxConstraints.tightFor(
+                        width: _kTileMenuSize,
+                        height: _kTileMenuSize,
+                      ),
                       tooltip: 'More actions',
                       icon: Icon(
                         PhosphorIconsRegular.dotsThree,

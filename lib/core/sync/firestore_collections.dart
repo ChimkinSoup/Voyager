@@ -10,6 +10,7 @@ abstract final class FirestoreCollections {
   static const studyDecks = 'study_decks';
   static const studyCards = 'study_cards';
   static const studyReviewLog = 'study_review_log';
+  static const studyDeckLinks = 'study_deck_links';
   static const exercises = 'exercises';
   static const workoutPlans = 'workout_plans';
   static const workoutPlanEntries = 'workout_plan_entries';
@@ -80,6 +81,7 @@ abstract final class FirestoreCollections {
     studyDecks,
     studyCards,
     studyReviewLog,
+    studyDeckLinks,
     exercises,
     workoutPlans,
     workoutPlanEntries,

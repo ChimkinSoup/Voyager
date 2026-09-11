@@ -299,6 +299,11 @@ class OutboxSyncWorker {
           (log) => log.id,
           studyReviewLogToFirestore,
         );
+      case FirestoreCollections.studyDeckLinks:
+        return byId(
+          DriftStudyRepository(_db).getDeckLink,
+          studyDeckLinkToFirestore,
+        );
       case FirestoreCollections.exercises:
         return byId(DriftWorkoutRepository(_db).getExercise, exerciseToFirestore);
       case FirestoreCollections.workoutPlans:

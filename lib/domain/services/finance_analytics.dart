@@ -216,7 +216,7 @@ class NetWorthPoint {
 
   final DateTime date;
 
-  /// Cumulative net of every ledger transaction on or before [date].
+  /// Cumulative ledger balance (deposits − expenses) on or before [date].
   final int cashCents;
 
   /// Sum of each asset's most recent valuation on or before [date].

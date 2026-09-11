@@ -109,6 +109,10 @@ class DataImportService {
     final localSettings = await _settingsRepository.getSettings();
 
     final restored = <String, List<Object>>{};
+    // What a collection's `afterRestore` wrote on top of its restored records.
+    // Uploaded with them but not counted as restored — nothing in the backup
+    // asked for these.
+    final followUps = <String, List<Object>>{};
     var skipped = 0;
     AppSettings? restoredSettings;
 
@@ -117,8 +121,12 @@ class DataImportService {
     await _db.transaction(() async {
       for (final collection in _collections) {
         final local = localByCollection[collection.name]!;
-        for (final json in backupCollections[collection.name] ?? const []) {
-          final record = BackupRecord.fromJson(json);
+        final records = [
+          for (final json in backupCollections[collection.name] ?? const [])
+            BackupRecord.fromJson(json),
+        ];
+        collection.prepare?.call(records);
+        for (final record in records) {
           final localData = local[record.id];
           if (localData != null && backupContentEquals(localData, record.data)) {
             skipped++;
@@ -129,6 +137,10 @@ class DataImportService {
             _withRestoredVersion(record.data, localData),
           );
           (restored[collection.name] ??= []).add(model);
+        }
+        if (restored.containsKey(collection.name)) {
+          final extra = await collection.afterRestore?.call() ?? const [];
+          if (extra.isNotEmpty) followUps[collection.name] = extra;
         }
       }
 
@@ -165,7 +177,11 @@ class DataImportService {
     // are restored locally but never announced, and stay that way until they
     // are edited again or the backup is imported a second time.
     for (final entry in restored.entries) {
-      await _pushRecords(entry.key, entry.value);
+      // Follow-ups last: one that rewrote a restored record uploads over it.
+      await _pushRecords(entry.key, [
+        ...entry.value,
+        ...?followUps[entry.key],
+      ]);
     }
     final settings = restoredSettings;
     if (settings != null) await _pushSettings(settings);

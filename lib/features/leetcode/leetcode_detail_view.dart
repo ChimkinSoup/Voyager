@@ -11,6 +11,7 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 import 'package:voyager/features/leetcode/leetcode_examples.dart';
+import 'package:voyager/features/leetcode/leetcode_inline_code.dart';
 import 'package:voyager/features/leetcode/leetcode_track_modal.dart';
 
 /// Opens the LeetCode problem's detail view with a small "camera zoom"
@@ -255,9 +256,10 @@ class _DetailCard extends StatelessWidget {
                       const SizedBox(height: 20),
                       Text('Description', style: theme.textTheme.labelLarge),
                       const SizedBox(height: 6),
-                      Text(
+                      LeetCodeProseText(
                         problem.description!,
                         style: theme.textTheme.bodyMedium,
+                        language: problem.codeLanguage,
                       ),
                     ],
                     if (problem.examples.isNotEmpty) ...[
@@ -266,11 +268,25 @@ class _DetailCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       LeetCodeExamplesView(examples: problem.examples),
                     ],
-                    for (var i = 0; i < problem.solutions.length; i++)
+                    for (var i = 0; i < problem.solutions.length; i++) ...[
+                      // The editor's rule, repeated on the read side: a faint
+                      // accent line *between* solutions only, never above the
+                      // first or below the last.
+                      if (i > 0) ...[
+                        const SizedBox(height: 24),
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.25,
+                          ),
+                        ),
+                      ],
                       _DetailSolution(
                         solution: problem.solutions[i],
                         number: problem.solutions.length > 1 ? i + 1 : null,
                       ),
+                    ],
                     if (problem.leetcodeUrl != null) ...[
                       const SizedBox(height: 20),
                       Align(
@@ -365,7 +381,11 @@ class _DetailSolution extends StatelessWidget {
           const SizedBox(height: 20),
           Text('Algorithm', style: theme.textTheme.labelLarge),
           const SizedBox(height: 6),
-          Text(solution.algorithm, style: theme.textTheme.bodyMedium),
+          LeetCodeProseText(
+            solution.algorithm,
+            style: theme.textTheme.bodyMedium,
+            language: solution.codeLanguage,
+          ),
         ],
         if (solution.timeComplexity != null ||
             solution.spaceComplexity != null) ...[
@@ -393,7 +413,11 @@ class _DetailSolution extends StatelessWidget {
           const SizedBox(height: 16),
           Text('Explanation', style: theme.textTheme.labelLarge),
           const SizedBox(height: 6),
-          Text(solution.explanation, style: theme.textTheme.bodyMedium),
+          LeetCodeProseText(
+            solution.explanation,
+            style: theme.textTheme.bodyMedium,
+            language: solution.codeLanguage,
+          ),
         ],
         if (solution.code.isNotEmpty) ...[
           const SizedBox(height: 16),
@@ -408,7 +432,11 @@ class _DetailSolution extends StatelessWidget {
           const SizedBox(height: 16),
           Text('Notes', style: theme.textTheme.labelLarge),
           const SizedBox(height: 6),
-          Text(solution.notes!, style: theme.textTheme.bodyMedium),
+          LeetCodeProseText(
+            solution.notes!,
+            style: theme.textTheme.bodyMedium,
+            language: solution.codeLanguage,
+          ),
         ],
       ],
     );

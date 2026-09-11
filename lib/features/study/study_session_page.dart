@@ -30,11 +30,16 @@ import 'package:voyager/features/study/study_keyboard_shortcuts.dart';
 /// can review everything due across the whole library in one sitting; a deck
 /// opens one by handing over its own roster.
 class StudySessionPage extends ConsumerStatefulWidget {
-  const StudySessionPage({super.key, required this.cardIds});
+  const StudySessionPage({super.key, required this.cardIds, this.frameDeckId});
 
   /// The cards in scope for this session. Which of them are actually due is
   /// decided when the queue is built.
   final Set<String> cardIds;
+
+  /// The deck the session is "of". A card whose home is another deck — one it
+  /// reached through a link — carries that deck's name on its face. Null for
+  /// the Hub's library-wide run, which shows no source at all.
+  final String? frameDeckId;
 
   @override
   ConsumerState<StudySessionPage> createState() => _StudySessionPageState();
@@ -394,6 +399,17 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     // Rebuilt whenever the media module changes, so an image that finishes
     // downloading mid-session appears on the card it belongs to.
     final images = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
+    final decksById = {
+      for (final deck in ref.watch(studyAllDecksProvider).valueOrNull ?? const <StudyDeck>[])
+        deck.id: deck,
+    };
+    final source = queue == null || queue.isEmpty
+        ? null
+        : studyCardSourceName(
+            queue.first,
+            frameDeckId: widget.frameDeckId,
+            decksById: decksById,
+          );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -474,6 +490,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
                                           images:
                                               images[queue.first.id]?.front ??
                                               const [],
+                                          source: source,
                                           onTap: _handleFlip,
                                         ),
                                         back: _SessionCardFace(
@@ -481,6 +498,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
                                           images:
                                               images[queue.first.id]?.back ??
                                               const [],
+                                          source: source,
                                           accent: true,
                                           onTap: _handleFlip,
                                         ),
@@ -515,12 +533,16 @@ class _SessionCardFace extends StatelessWidget {
     required this.text,
     required this.images,
     required this.onTap,
+    this.source,
     this.accent = false,
   });
 
   final String text;
   final List<MediaAsset> images;
   final VoidCallback onTap;
+
+  /// The home deck's name when the card came in through a link.
+  final String? source;
   final bool accent;
 
   @override
@@ -539,14 +561,28 @@ class _SessionCardFace extends StatelessWidget {
         border: Border.all(color: vc.strongHairline),
         boxShadow: vc.surfaceShadow(),
       ),
-      child: StudyCardFace(
-        text: text,
-        images: images,
-        style: theme.textTheme.headlineMedium?.copyWith(
-          color: accent
-              ? theme.colorScheme.primary
-              : theme.colorScheme.onSurface,
-        ),
+      child: Stack(
+        fit: StackFit.expand,
+        // The label sits out in the face's padding band, above the content.
+        clipBehavior: Clip.none,
+        children: [
+          StudyCardFace(
+            text: text,
+            images: images,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              color: accent
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+          if (source case final source?)
+            Positioned(
+              left: -20,
+              right: -20,
+              top: -24,
+              child: StudyCardSourceLabel(source),
+            ),
+        ],
       ),
     );
   }

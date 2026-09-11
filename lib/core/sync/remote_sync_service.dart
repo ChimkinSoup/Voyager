@@ -34,6 +34,7 @@ import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/domain/services/study_deck_graph.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
@@ -1022,6 +1023,7 @@ class RemoteSyncService {
     await pullStudyDecks();
     await pullStudyCards();
     await pullStudyReviewLog();
+    await pullStudyDeckLinks();
     await pullExercises();
     await pullWorkoutPlans();
     await pullWorkoutPlanEntries();
@@ -1100,6 +1102,11 @@ class RemoteSyncService {
         );
       case FirestoreCollections.studyReviewLog:
         return pullStudyReviewLog(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.studyDeckLinks:
+        return pullStudyDeckLinks(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -1728,6 +1735,43 @@ class RemoteSyncService {
     );
   }
 
+  Future<bool> pullStudyDeckLinks({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) async {
+    final applied = await _pullCollection(
+      FirestoreCollections.studyDeckLinks,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _studyRepository.getDeckLink(id);
+        final merged = mergeStudyDeckLinkFromRemote(data, id, local: local);
+        await _studyRepository.upsertDeckLink(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+    if (applied) await _breakStudyDeckLinkCycles();
+    return applied;
+  }
+
+  /// Linking refuses cycles locally, but two devices can each add half of one
+  /// while apart. Once both halves are here, the newest link in the loop is
+  /// tombstoned and pushed — the same one on every device, since
+  /// [studyDeckLinksClosingCycles] depends only on the rows.
+  Future<void> _breakStudyDeckLinkCycles() async {
+    final closing = studyDeckLinksClosingCycles(
+      await _studyRepository.listDeckLinks(),
+    );
+    for (final link in closing) {
+      await _studyRepository.softDeleteDeckLink(link.id);
+      final tombstone = await _studyRepository.getDeckLink(link.id);
+      if (tombstone != null) pushStudyDeckLink(tombstone);
+    }
+  }
+
   Future<bool> pullJournalEntries({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
@@ -2238,6 +2282,21 @@ class RemoteSyncService {
         FirestoreCollections.studyCards,
         card.id,
         () => _uploadStudyCardNow(card),
+      ),
+    );
+  }
+
+  void pushStudyDeckLink(StudyDeckLink link) {
+    cancelDocument(FirestoreCollections.studyDeckLinks, link.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.studyDeckLinks,
+        link.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.studyDeckLinks,
+          localId: link.id,
+          payload: studyDeckLinkToFirestore(link),
+        ),
       ),
     );
   }
@@ -3379,6 +3438,9 @@ class RemoteSyncService {
       case FirestoreCollections.studyReviewLog:
         if (record is! StudyReviewLog) return null;
         return (id: record.id, payload: studyReviewLogToFirestore(record));
+      case FirestoreCollections.studyDeckLinks:
+        if (record is! StudyDeckLink) return null;
+        return (id: record.id, payload: studyDeckLinkToFirestore(record));
       case FirestoreCollections.exercises:
         if (record is! Exercise) return null;
         return (id: record.id, payload: exerciseToFirestore(record));
@@ -4110,6 +4172,7 @@ class LiveSyncController {
     FirestoreCollections.studyDecks,
     FirestoreCollections.studyCards,
     FirestoreCollections.studyReviewLog,
+    FirestoreCollections.studyDeckLinks,
     FirestoreCollections.exercises,
     FirestoreCollections.workoutPlans,
     FirestoreCollections.workoutPlanEntries,

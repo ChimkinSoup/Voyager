@@ -29,9 +29,15 @@ const _kBucketDoneColor = Color(0xFF4CAF7D);
 /// once every card reaches bucket 2. Purely in-memory — never touches the
 /// cards' persisted SRS state (STUDY.md is explicit about this).
 class StudyCramPage extends ConsumerStatefulWidget {
-  const StudyCramPage({super.key, required this.deckId});
+  const StudyCramPage({super.key, required this.deckId, this.cardIds});
 
+  /// The deck the run is framed as. A card whose home is another deck — one
+  /// it reached through a link — carries that deck's name on its face.
   final String deckId;
+
+  /// The cards to cram, when they are not simply [deckId]'s own — a deck's
+  /// effective set with its links, or one linked deck's subset.
+  final Set<String>? cardIds;
 
   @override
   ConsumerState<StudyCramPage> createState() => _StudyCramPageState();
@@ -109,6 +115,16 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   SpringDescription get _snapBackSpring => VoyagerMotion.reduced(context)
       ? VoyagerSpring.dampen(VoyagerSpring.momentum)
       : VoyagerSpring.momentum;
+
+  /// This run's share of the library's cards.
+  List<StudyCard> _pool(List<StudyCard> all) {
+    final ids = widget.cardIds;
+    return [
+      for (final card in all)
+        if (ids == null ? card.deckId == widget.deckId : ids.contains(card.id))
+          card,
+    ];
+  }
 
   void _syncCards(List<StudyCard> cards) {
     final held = _cardsById;
@@ -315,13 +331,13 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   /// cram returns to the card the delete took it off — unseen, which is where
   /// bucket 0 means it stands.
   ///
-  /// The wait on [studyCardsProvider] is what makes it stick. [_syncCards]
+  /// The wait on [studyAllCardsProvider] is what makes it stick. [_syncCards]
   /// drops any held card the provider's list no longer has, and re-adding
   /// before the restore has landed there would have the card dropped again on
   /// the very next build — permanently, since the held map is only ever
   /// refreshed *from* itself and so can never re-admit a card it has lost.
   Future<void> _returnRestoredCard(String cardId) async {
-    final live = await ref.read(studyCardsProvider(widget.deckId).future);
+    final live = await ref.read(studyAllCardsProvider.future);
     if (!mounted) return;
     final held = _cardsById;
     if (held == null) return;
@@ -339,9 +355,9 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cardsAsync = ref.watch(studyCardsProvider(widget.deckId));
+    final cardsAsync = ref.watch(studyAllCardsProvider);
     final cards = cardsAsync.valueOrNull;
-    if (cards != null) _syncCards(cards);
+    if (cards != null) _syncCards(_pool(cards));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -508,6 +524,14 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     // Rebuilt off the media module, so an image arriving mid-run lands on the
     // card it belongs to.
     final images = ref.watch(studyCardImagesProvider).valueOrNull?[card.id];
+    final source = studyCardSourceName(
+      card,
+      frameDeckId: widget.deckId,
+      decksById: {
+        for (final deck in ref.watch(studyAllDecksProvider).valueOrNull ?? const <StudyDeck>[])
+          deck.id: deck,
+      },
+    );
     Widget face(
       String text, {
       List<MediaAsset> pictures = const [],
@@ -526,14 +550,28 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
       ),
       // The card no longer grows with its text, so long content scrolls
       // inside the face rather than overflowing it.
-      child: StudyCardFace(
-        text: text,
-        images: pictures,
-        style: theme.textTheme.headlineMedium?.copyWith(
-          color: accent
-              ? theme.colorScheme.primary
-              : theme.colorScheme.onSurface,
-        ),
+      child: Stack(
+        fit: StackFit.expand,
+        // The label sits out in the face's padding band, above the content.
+        clipBehavior: Clip.none,
+        children: [
+          StudyCardFace(
+            text: text,
+            images: pictures,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              color: accent
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+          if (source != null)
+            Positioned(
+              left: -20,
+              right: -20,
+              top: -24,
+              child: StudyCardSourceLabel(source),
+            ),
+        ],
       ),
     );
 

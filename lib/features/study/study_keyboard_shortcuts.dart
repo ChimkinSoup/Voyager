@@ -174,6 +174,15 @@ class _StudyKeyboardShortcutsState
     return false;
   }
 
+  /// Nothing in a session is reachable by Tab or the arrows. A key claimed by
+  /// [_handleKeyEvent] is still dispatched to the focus tree afterwards, so an
+  /// arrow that stepped a card also moved focus onto the header's × — and the
+  /// next Space both flipped the card and pressed it, closing the session.
+  /// A field still takes focus when clicked, or through
+  /// [StudyKeyboardShortcuts.onFocusScratch].
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) => FocusTraversalGroup(
+    descendantsAreTraversable: false,
+    child: widget.child,
+  );
 }

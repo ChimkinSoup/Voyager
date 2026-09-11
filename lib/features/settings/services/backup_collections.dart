@@ -1,8 +1,10 @@
 import 'package:collection/collection.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/domain/services/study_deck_graph.dart';
 
 /// One record in a backup file: the **local** document id plus the document
 /// payload in exactly the shape the sync layer writes to Firestore.
@@ -34,6 +36,8 @@ class BackupCollection {
     required this.name,
     required this.read,
     required this.restore,
+    this.prepare,
+    this.afterRestore,
   });
 
   /// The Firestore collection name, which is also the name of this
@@ -46,6 +50,18 @@ class BackupCollection {
   /// Writes [data] to the local database under [id], and returns the model it
   /// wrote so the caller can hand it to the sync layer.
   final Future<Object> Function(String id, Map<String, dynamic> data) restore;
+
+  /// Sees every record the backup holds for this collection before any of
+  /// them is restored, for a [restore] that has to check one record against
+  /// its siblings.
+  final void Function(List<BackupRecord> records)? prepare;
+
+  /// Runs once this collection's restored records are all written, inside
+  /// the same transaction — for a rule that holds across the collection, not
+  /// per record, and so has to see the backup and the local rows together.
+  /// Returns any further models it wrote, so they upload with the rest.
+  /// Skipped when nothing in the collection was restored.
+  final Future<List<Object>> Function()? afterRestore;
 }
 
 /// Fields that say *when* a record was written rather than *what* it holds.
@@ -94,6 +110,9 @@ List<BackupCollection> buildBackupCollections({
   required RankingRepository rankingRepository,
   required MediaRepository mediaRepository,
 }) {
+  // The live calendars in the backup being restored, so a restored calendar's
+  // overlay list keeps only ids that point at one of them.
+  var backupLiveCalendarIds = const <String>{};
   return [
     BackupCollection(
       name: FirestoreCollections.journals,
@@ -237,6 +256,38 @@ List<BackupCollection> buildBackupCollections({
         return log;
       },
     ),
+    // After decks, so a restored link never points at a deck not written yet.
+    BackupCollection(
+      name: FirestoreCollections.studyDeckLinks,
+      read: () async => [
+        for (final link in await studyRepository.listDeckLinks(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: link.id, data: studyDeckLinkToFirestore(link)),
+      ],
+      restore: (id, data) async {
+        final link = mergeStudyDeckLinkFromRemote(data, id);
+        await studyRepository.upsertDeckLink(link, recordLocalActivity: false);
+        return link;
+      },
+      // The backup's links and the ones already here can close a loop that
+      // neither held alone. Broken by the same rule a sync pull uses — the
+      // newest edge of each loop goes — so every device agrees on the result.
+      afterRestore: () async {
+        final tombstones = <Object>[];
+        for (final link in studyDeckLinksClosingCycles(
+          await studyRepository.listDeckLinks(),
+        )) {
+          final tombstone = link.copyWith(deletedAt: utcNow());
+          await studyRepository.upsertDeckLink(
+            tombstone,
+            recordLocalActivity: false,
+          );
+          tombstones.add(tombstone);
+        }
+        return tombstones;
+      },
+    ),
     BackupCollection(
       name: FirestoreCollections.exercises,
       read: () async => [
@@ -341,8 +392,19 @@ List<BackupCollection> buildBackupCollections({
         ))
           BackupRecord(id: calendar.id, data: calendarToFirestore(calendar)),
       ],
+      prepare: (records) => backupLiveCalendarIds = {
+        for (final record in records)
+          if (record.data['deletedAt'] == null) record.id,
+      },
       restore: (id, data) async {
-        final calendar = mergeCalendarFromRemote(data, id);
+        final calendar = mergeCalendarFromRemote({
+          ...data,
+          'overlayCalendarIds': [
+            for (final overlayId
+                in data['overlayCalendarIds'] as List? ?? const [])
+              if (backupLiveCalendarIds.contains(overlayId)) overlayId,
+          ],
+        }, id);
         await calendarRepository.upsertCalendar(
           calendar,
           recordLocalActivity: false,

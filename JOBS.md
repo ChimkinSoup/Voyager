@@ -30,6 +30,7 @@ Small header at the top of the page containing:
 | **Lifetime total** | Count of all applications ever (includes archived). Plain integer — not a composite score |
 | **Per-status counts** | Counts for **active (non-archived) only**, broken down by current status |
 | **Profile copy buttons** | One-tap clipboard copies of the user's own profile links (§3.4) |
+| **Experience copy chips** | One-tap clipboard copies of the user's role descriptions (§3.5) |
 | **30-day sparkline** | New applications per day for the last 30 days (see §8) |
 
 An **Include archived** control (toggle/chip) affects the sparkline and the main list filter set — not the lifetime total. When off (default), archived apps are hidden from the list and excluded from the sparkline. When on, they appear in the list and are included in it. Lifetime total always counts everything.
@@ -86,6 +87,17 @@ Applying to a job means pasting the same three links over and over. The header c
 - The Jobs page never *edits* these. They are read-only here; Settings is the only place they are written (§4.7)
 
 Copy is the whole interaction. No long-press, no open-in-browser, no per-application or per-company overrides.
+
+### 3.5 Experience quick-copy
+
+Forms ask for a description of each past role; the header carries those too. Full design: `JOBS_EXPERIENCE_SNIPPETS_HLD.md`.
+
+- An ordered list of named snippets held in app settings (§4.8). Only the **description** is copied; the name is the chip label and the toast ("Acme - SWE Intern copied")
+- Compact text chips, between the profile icons and the sparkline, 12px apart. Long names ellipsize on the chip (cap 160px); the tooltip carries the name only, never the body
+- The first **three** in Settings order are chips; the rest sit behind a **caret menu** that lists full names and copies on pick
+- When the header's half is too narrow, chips that cannot show at least ~90px move into the caret menu rather than squeezing the sparkline below **140px**. Order is still the priority: it is always the leading snippets that stay chips
+- An empty description still copies (as `""`) with the usual toast. Copy never rewrites the text
+- No snippets, no group — its spacing included. The Jobs page never edits these
 
 ---
 
@@ -168,6 +180,16 @@ Not a Jobs entity — three optional strings on `AppSettings`, sitting beside th
 - Written only from Settings → **Jobs** → *Job application profile*, a single dialog holding all three fields. One save, so clearing a slot and setting another travel together
 - Persist locally like every other setting and sync through the settings document, which also carries them into import/export
 - Fixed three slots: no custom links, no résumé slot, no reordering
+
+### 4.8 Experience snippets
+
+Also not a Jobs entity: `AppSettings.jobExperienceSnippets`, a list of `{ id, name, description }` whose order is the header's order (§3.5).
+
+- `name` is trimmed and required; duplicates allowed. `description` is stored exactly as saved — leading/trailing whitespace and blank lines included — and may be empty
+- Written only from Settings → **Jobs** → *Experience snippets*: add, edit, delete (always confirmed), drag to reorder. Every change persists immediately
+- The editor warns — never blocks — on double spaces, line-edge whitespace, tabs, odd or zero-width spaces, curly quotes, en/em dashes and ellipses, bullet glyphs, and any other non-ASCII. **Clean paste** is the only rewrite and runs only when pressed; Cancel still discards it. Autocorrect is off in the description field for the same reason
+- One JSON column locally (`job_experience_snippets_json`, schema 106); a native array in the settings document, so sync and import/export carry the whole ordered list. An absent field (older document) leaves the local list alone; an empty array clears it
+- Unlimited length and count
 
 ---
 

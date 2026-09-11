@@ -77,6 +77,7 @@ import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/domain/services/periodic_prompt_service.dart';
 import 'package:voyager/domain/services/quote_bank.dart';
 import 'package:voyager/domain/services/search_service.dart';
+import 'package:voyager/domain/services/study_deck_graph.dart';
 import 'package:voyager/domain/services/weather_service.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
@@ -909,6 +910,41 @@ final calendarEventsProvider =
       return repo.listEvents(calendarId: calendarId);
     });
 
+/// Every event the calendar page draws for the scope it has open.
+///
+/// `null` is the all-view, exactly [calendarEventsProvider]'s. A calendar id
+/// is the host: its own events plus those of every live calendar it overlays
+/// ([visibleOverlayCalendarIds]). Overlay events are borrowed, not copied, and
+/// the union is flat. [calendarEventsProvider] itself stays "owned by this
+/// calendar" for counts, deletes and backups.
+///
+/// Only the host's overlay ids are selected out of [calendarsProvider] — joined,
+/// since a fresh List never compares equal — so renaming or recolouring a
+/// calendar does not re-query every event.
+final calendarViewEventsProvider =
+    FutureProvider.family<List<CalendarEvent>, String?>((
+      ref,
+      calendarId,
+    ) async {
+      ref.keepAlive();
+      if (calendarId == null) {
+        return ref.watch(calendarEventsProvider(null).future);
+      }
+      final overlayIds = await ref.watch(
+        calendarsProvider.selectAsync(
+          (calendars) =>
+              visibleOverlayCalendarIds(calendarId, calendars).join(','),
+        ),
+      );
+      final lists = await Future.wait([
+        ref.watch(calendarEventsProvider(calendarId).future),
+        if (overlayIds.isNotEmpty)
+          for (final id in overlayIds.split(','))
+            ref.watch(calendarEventsProvider(id).future),
+      ]);
+      return [for (final list in lists) ...list];
+    });
+
 final calendarTodoMarkersProvider = FutureProvider<List<CalendarTodoMarker>>((
   ref,
 ) async {
@@ -999,6 +1035,28 @@ final studyAllCardsProvider = FutureProvider<List<StudyCard>>((ref) {
   return ref.watch(studyRepositoryProvider).getAllCards(includeDeleted: false);
 });
 
+/// Every live deck in the library, flattened across folders — the names a
+/// linked card's source label and a placeholder's title read live.
+final studyAllDecksProvider = FutureProvider<List<StudyDeck>>((ref) {
+  ref.keepAlive();
+  return ref.watch(studyRepositoryProvider).getAllDecks(includeDeleted: false);
+});
+
+/// Every live deck-in-deck link (STUDY_DECK_LINKS_HLD.md).
+final studyDeckLinksProvider = FutureProvider<List<StudyDeckLink>>((ref) {
+  ref.keepAlive();
+  return ref.watch(studyRepositoryProvider).listDeckLinks();
+});
+
+/// Decks, cards and links resolved together, so every surface that asks what
+/// a deck's effective card set is gets the same answer from one pass.
+final studyDeckGraphProvider = FutureProvider<StudyDeckGraph>((ref) async {
+  final decks = await ref.watch(studyAllDecksProvider.future);
+  final cards = await ref.watch(studyAllCardsProvider.future);
+  final links = await ref.watch(studyDeckLinksProvider.future);
+  return StudyDeckGraph(decks: decks, cards: cards, links: links);
+});
+
 /// The images attached to one study card, split by the face they sit on and
 /// ordered as the carousel shows them.
 typedef StudyCardImages = ({List<MediaAsset> front, List<MediaAsset> back});
@@ -1066,15 +1124,24 @@ final studyStatsProvider =
     });
 
 /// Per-deck tile stats shown in the library grid and Workbench header.
-final studyDeckStatsProvider = FutureProvider.family<({int total, int due}), String>((
-  ref,
-  deckId,
-) async {
-  final repo = ref.watch(studyRepositoryProvider);
-  final cards = await repo.listCards(deckId);
-  final due = await repo.countDueCardsInDeck(deckId);
-  return (total: cards.length, due: due);
-});
+///
+/// [total] and [due] count the deck's effective set — its own cards plus every
+/// enabled link's, recursively, each card once (STUDY_DECK_LINKS_HLD.md §8).
+/// [own] is the native share of [total].
+final studyDeckStatsProvider =
+    FutureProvider.family<({int own, int total, int due}), String>((
+      ref,
+      deckId,
+    ) async {
+      final graph = await ref.watch(studyDeckGraphProvider.future);
+      final cards = graph.effectiveCards(deckId);
+      final now = utcNow();
+      return (
+        own: graph.ownCards(deckId).length,
+        total: cards.length,
+        due: cards.where((c) => !c.dueAt.isAfter(now)).length,
+      );
+    });
 
 /// Creates the two plans and (once) the starter exercise library. Every
 /// workout provider below waits on this, so the planner can never render
@@ -1276,10 +1343,20 @@ final rankingChildrenByParentProvider =
     ) async {
       ref.keepAlive();
       final repository = ref.watch(rankingRepositoryProvider);
-      final parents = await ref.watch(rankingParentsProvider(categoryId).future);
+      // Which entries there are, not what they say: an edit to one entry
+      // leaves every child where it was, and re-listing them all for it — a
+      // query per entry — rebuilt the whole page a second time after each
+      // save. Joined because a selected value is compared with `==`, which a
+      // fresh List never passes.
+      final parentIds = await ref.watch(
+        rankingParentsProvider(categoryId).selectAsync(
+          (parents) => [for (final parent in parents) parent.id].join(','),
+        ),
+      );
       final byParent = <String, List<RankingChild>>{};
-      for (final parent in parents) {
-        byParent[parent.id] = await repository.listChildren(parent.id);
+      if (parentIds.isEmpty) return byParent;
+      for (final parentId in parentIds.split(',')) {
+        byParent[parentId] = await repository.listChildren(parentId);
       }
       return byParent;
     });
@@ -1385,6 +1462,8 @@ final _primaryDataProviders = <ProviderOrFamily>[
   studyDecksProvider,
   studyCardsProvider,
   studyAllCardsProvider,
+  studyAllDecksProvider,
+  studyDeckLinksProvider,
   studyStatsProvider,
   studyDeckStatsProvider,
   allDreamEntriesProvider,

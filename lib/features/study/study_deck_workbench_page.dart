@@ -9,13 +9,17 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/domain/services/study_deck_graph.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
 import 'package:voyager/features/study/study_actions.dart';
 import 'package:voyager/features/study/study_breadcrumb.dart';
 import 'package:voyager/features/study/study_card_editor_modal.dart';
 import 'package:voyager/features/study/study_card_tile.dart';
 import 'package:voyager/features/study/study_cram_page.dart';
+import 'package:voyager/features/study/study_deck_link_actions.dart';
 import 'package:voyager/features/study/study_import_text_modal.dart';
+import 'package:voyager/features/study/study_link_deck_modal.dart';
+import 'package:voyager/features/study/study_linked_deck.dart';
 import 'package:voyager/features/study/study_move_modal.dart';
 import 'package:voyager/features/study/study_providers.dart';
 import 'package:voyager/features/study/study_session_page.dart';
@@ -31,6 +35,7 @@ class StudyDeckWorkbenchPage extends ConsumerStatefulWidget {
     required this.onBack,
     required this.onJumpToRoot,
     required this.onJumpToFolder,
+    required this.onOpenDeck,
     this.deckNameHint,
   });
 
@@ -39,6 +44,10 @@ class StudyDeckWorkbenchPage extends ConsumerStatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onJumpToRoot;
   final ValueChanged<int> onJumpToFolder;
+
+  /// Leaves this deck for another — a linked deck's "Visit", or a name in
+  /// "Included in".
+  final ValueChanged<StudyDeck> onOpenDeck;
   final String? deckNameHint;
 
   @override
@@ -54,12 +63,6 @@ class _StudyDeckWorkbenchPageState
   /// up as the user works through the grid and are only dropped when the deck
   /// closes, since this state lives and dies with the page.
   final Set<String> _flipped = {};
-
-  @override
-  void didUpdateWidget(covariant StudyDeckWorkbenchPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.deckId != widget.deckId) _flipped.clear();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,8 +87,15 @@ class _StudyDeckWorkbenchPageState
     final query = ref.watch(studySearchQueryProvider);
     final cardImages = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
 
+    final graph =
+        ref.watch(studyDeckGraphProvider).valueOrNull ?? StudyDeckGraph.empty;
+
     final deckName = deckAsync.valueOrNull?.name ?? widget.deckNameHint ?? '';
     final cards = cardsAsync.valueOrNull ?? const <StudyCard>[];
+    final effectiveIds = {for (final c in graph.effectiveCards(deckId)) c.id};
+    final links = graph.linksFrom(deckId);
+    final parents = graph.parentsOf(deckId)
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     // Matched as one phrase, so the tiles highlight it as one phrase too.
     final keywords = query.trim().isEmpty ? const <String>[] : [query.trim()];
     final needle = query.trim().toLowerCase();
@@ -99,7 +109,18 @@ class _StudyDeckWorkbenchPageState
               )
               .toList();
     final ordered = sortStudyCardsByMastery(filtered);
-    final due = dueAsync.valueOrNull?.due ?? 0;
+    // Placeholders lead the grid, oldest link first; a search narrows them by
+    // the linked deck's name.
+    final shownLinks = [
+      for (final link in links)
+        if (needle.isEmpty ||
+            (graph.deck(link.childDeckId)?.name.toLowerCase().contains(needle) ??
+                false))
+          link,
+    ];
+    final stats = dueAsync.valueOrNull;
+    final due = stats?.due ?? 0;
+    final linkedCount = stats == null ? 0 : stats.total - stats.own;
 
     return Material(
       color: Colors.transparent,
@@ -121,11 +142,17 @@ class _StudyDeckWorkbenchPageState
                   Text(deckName, style: theme.textTheme.headlineMedium),
                   const SizedBox(height: 4),
                   Text(
-                    '${cards.length} card${cards.length == 1 ? '' : 's'} · $due due',
+                    '${cards.length} card${cards.length == 1 ? '' : 's'}'
+                    '${linkedCount > 0 ? ' · $linkedCount linked' : ''}'
+                    ' · $due due',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
+                  if (parents.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    _IncludedIn(parents: parents, onOpenDeck: widget.onOpenDeck),
+                  ],
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -139,13 +166,7 @@ class _StudyDeckWorkbenchPageState
                         child: GlassButton(
                           onPressed: due == 0
                               ? null
-                              : () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => StudySessionPage(
-                                      cardIds: {for (final c in cards) c.id},
-                                    ),
-                                  ),
-                                ),
+                              : () => _studySession(effectiveIds),
                           icon: const Icon(PhosphorIconsRegular.playCircle),
                           label: due == 0 ? 'Nothing due' : 'Study $due due',
                         ),
@@ -153,13 +174,9 @@ class _StudyDeckWorkbenchPageState
                       const SizedBox(width: 12),
                       Expanded(
                         child: GlassButton(
-                          onPressed: cards.isEmpty
+                          onPressed: effectiveIds.isEmpty
                               ? null
-                              : () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => StudyCramPage(deckId: deckId),
-                                  ),
-                                ),
+                              : () => _cramSession(effectiveIds),
                           icon: const Icon(PhosphorIconsRegular.lightning),
                           label: 'Cram',
                         ),
@@ -207,6 +224,14 @@ class _StudyDeckWorkbenchPageState
                       const SizedBox(width: 8),
                       GlassButton(
                         dense: true,
+                        tooltip: 'Link deck…',
+                        icon: const Icon(PhosphorIconsRegular.link),
+                        onPressed: () =>
+                            showStudyLinkDeckModal(context, parentDeckId: deckId),
+                      ),
+                      const SizedBox(width: 8),
+                      GlassButton(
+                        dense: true,
                         label: 'Add card',
                         icon: const Icon(PhosphorIconsRegular.plus),
                         onPressed: () => showStudyCardEditorModal(context, ref, deckId: deckId),
@@ -215,10 +240,10 @@ class _StudyDeckWorkbenchPageState
                   ),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: ordered.isEmpty
+                    child: ordered.isEmpty && shownLinks.isEmpty
                         ? Center(
                             child: Text(
-                              cards.isEmpty
+                              cards.isEmpty && links.isEmpty
                                   ? 'No cards yet — tap "Add card" to create one.'
                                   : 'No cards match "$query".',
                               style: theme.textTheme.bodyMedium?.copyWith(
@@ -234,9 +259,12 @@ class _StudyDeckWorkbenchPageState
                                   mainAxisSpacing: 12,
                                   crossAxisSpacing: 12,
                                 ),
-                            itemCount: ordered.length,
+                            itemCount: shownLinks.length + ordered.length,
                             itemBuilder: (context, index) {
-                              final card = ordered[index];
+                              if (index < shownLinks.length) {
+                                return _linkTile(shownLinks[index], graph, deckName);
+                              }
+                              final card = ordered[index - shownLinks.length];
                               // A back-only search hit turns its tile around,
                               // so _flipped records the difference from that
                               // baseline rather than the face itself —
@@ -300,6 +328,74 @@ class _StudyDeckWorkbenchPageState
     );
   }
 
+  /// A Study session framed as this deck. Its cards arrive from links as
+  /// well as from here, so the framing is what tells a linked card to show
+  /// where it lives.
+  void _studySession(Set<String> cardIds, {String? frameDeckId}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StudySessionPage(
+          cardIds: cardIds,
+          frameDeckId: frameDeckId ?? widget.deckId,
+        ),
+      ),
+    );
+  }
+
+  void _cramSession(Set<String> cardIds, {String? frameDeckId}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => StudyCramPage(
+          deckId: frameDeckId ?? widget.deckId,
+          cardIds: cardIds,
+        ),
+      ),
+    );
+  }
+
+  Widget _linkTile(StudyDeckLink link, StudyDeckGraph graph, String deckName) {
+    final child = graph.deck(link.childDeckId)!;
+    Set<String> childIds() => {
+      for (final c in graph.effectiveCards(child.id)) c.id,
+    };
+    return StudyLinkedDeckTile(
+      key: ValueKey(link.id),
+      link: link,
+      deckName: child.name,
+      onOpen: () async {
+        final action = await showStudyLinkedDeckSheet(context, deckId: child.id);
+        if (!mounted || action == null) return;
+        // The linked deck's own cards, framed as that deck — the set the
+        // sheet counted, so the session holds what its button said (§5.3).
+        final ids = {
+          for (final c
+              in (ref.read(studyDeckGraphProvider).valueOrNull ?? graph)
+                  .ownCards(child.id))
+            c.id,
+        };
+        switch (action) {
+          case StudyLinkedDeckAction.study:
+            _studySession(ids, frameDeckId: child.id);
+          case StudyLinkedDeckAction.cram:
+            _cramSession(ids, frameDeckId: child.id);
+        }
+      },
+      onToggle: (enabled) =>
+          setStudyDeckLinkEnabled(ref, link, enabled: enabled),
+      // Framed as this deck, drawing only on the linked one (§5.4).
+      onStudySubset: () => _studySession(childIds()),
+      onFork: () => forkStudyDeckLink(
+        context,
+        ref,
+        link,
+        parentName: deckName,
+        childName: child.name,
+      ),
+      onVisit: () => widget.onOpenDeck(child),
+      onUnlink: () => unlinkStudyDeck(context, link, childName: child.name),
+    );
+  }
+
   void _toggleSelected(String cardId, bool value) {
     final notifier = ref.read(studySelectedCardIdsProvider.notifier);
     final next = {...notifier.state};
@@ -315,6 +411,52 @@ class _StudyDeckWorkbenchPageState
     if (!value && next.isEmpty) {
       ref.read(studyMultiSelectEnabledProvider.notifier).state = false;
     }
+  }
+}
+
+/// Quiet "Included in: A, B" under the header — the decks that link this one
+/// (§5.6). Each name opens that deck.
+class _IncludedIn extends StatelessWidget {
+  const _IncludedIn({required this.parents, required this.onOpenDeck});
+
+  final List<StudyDeck> parents;
+  final ValueChanged<StudyDeck> onOpenDeck;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+    );
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text('Included in: ', style: style),
+        for (final (i, parent) in parents.indexed) ...[
+          if (i > 0) Text(', ', style: style),
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => onOpenDeck(parent),
+              // Flutter's TextDecoration.underline has no vertical offset;
+              // a bottom border with padding keeps the same look with 2px gap.
+              child: Container(
+                padding: const EdgeInsets.only(bottom: 1),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: style?.color ?? theme.colorScheme.onSurface,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Text(parent.name, style: style),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

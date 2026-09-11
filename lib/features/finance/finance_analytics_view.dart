@@ -1020,7 +1020,7 @@ class _NetWorthCard extends ConsumerWidget {
         children: [
           if (current != null) ...[
             Text(
-              formatCents(current.totalCents),
+              formatNetCents(current.totalCents),
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: current.totalCents >= 0
@@ -1030,8 +1030,8 @@ class _NetWorthCard extends ConsumerWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              '${formatCents(current.cashCents)} cash · '
-              '${formatCents(current.assetCents)} assets',
+              '${formatNetCents(current.cashCents)} ledger · '
+              '${formatNetCents(current.assetCents)} assets',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1050,7 +1050,11 @@ class _NetWorthCard extends ConsumerWidget {
                       ),
                     ),
                   )
-                : _NetWorthChart(series: series, color: accent),
+                : _NetWorthChart(
+                    series: series,
+                    color: accent,
+                    negativeColor: theme.colorScheme.error,
+                  ),
           ),
           if (assets.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -1075,10 +1079,15 @@ class _NetWorthCard extends ConsumerWidget {
 const double _kNetWorthBottomReserved = 18;
 
 class _NetWorthChart extends StatefulWidget {
-  const _NetWorthChart({required this.series, required this.color});
+  const _NetWorthChart({
+    required this.series,
+    required this.color,
+    required this.negativeColor,
+  });
 
   final List<NetWorthPoint> series;
   final Color color;
+  final Color negativeColor;
 
   @override
   State<_NetWorthChart> createState() => _NetWorthChartState();
@@ -1101,7 +1110,9 @@ class _NetWorthChartState extends State<_NetWorthChart> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final series = widget.series;
-    final color = widget.color;
+    final latestNegative =
+        series.isNotEmpty && series.last.totalCents < 0;
+    final color = latestNegative ? widget.negativeColor : widget.color;
     final spots = [
       for (var i = 0; i < series.length; i++)
         FlSpot(i.toDouble(), series[i].totalCents / 100),
@@ -1118,13 +1129,25 @@ class _NetWorthChartState extends State<_NetWorthChart> {
       maxValue += 1;
     }
     final pad = (maxValue - minValue) * 0.15;
-    final minY = minValue - pad;
-    final maxY = maxValue + pad;
+    var minY = minValue - pad;
+    var maxY = maxValue + pad;
+
+    // Zero is the wealth floor readers expect. Show it whenever the series
+    // touches or dips below it, and stretch the plot so an all-negative
+    // series still has room to draw that baseline above the curve.
+    final showZeroLine = floor <= 0;
+    if (showZeroLine) {
+      if (maxY < 0) maxY = 0;
+      if (minY > 0) minY = 0;
+    }
 
     final touched =
         _touchedIndex != null && _touchedIndex! >= 0 && _touchedIndex! < series.length
         ? _touchedIndex
         : null;
+    final touchedPoint = touched == null ? null : series[touched];
+    final touchedNegative =
+        touchedPoint != null && touchedPoint.totalCents < 0;
 
     final chart = LineChart(
       LineChartData(
@@ -1149,6 +1172,19 @@ class _NetWorthChartState extends State<_NetWorthChart> {
           // point at. Ending on the series' own floor makes that stub exactly
           // zero-length while every higher point keeps a line to read down.
           getTouchLineStart: (_, _) => floor,
+        ),
+        extraLinesData: ExtraLinesData(
+          horizontalLines: [
+            if (showZeroLine)
+              HorizontalLine(
+                y: 0,
+                color: theme.colorScheme.outline.withValues(alpha: 0.35),
+                // Same width as the series stroke so a flat-$0 run shares one
+                // vertical band with the dotted axis instead of sitting under it.
+                strokeWidth: 2,
+                dashArray: const [4, 4],
+              ),
+          ],
         ),
         gridData: const FlGridData(show: false),
         borderData: FlBorderData(show: false),
@@ -1231,13 +1267,13 @@ class _NetWorthChartState extends State<_NetWorthChart> {
           clipBehavior: Clip.none,
           children: [
             chart,
-            if (touched != null)
+            if (touchedPoint != null)
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomSingleChildLayout(
                     delegate: _ChartBubbleLayout(
                       anchor: Offset(
-                        spots[touched].x / spanX * plotWidth,
+                        spots[touched!].x / spanX * plotWidth,
                         spanY == 0
                             ? plotHeight
                             : plotHeight *
@@ -1247,9 +1283,14 @@ class _NetWorthChartState extends State<_NetWorthChart> {
                     child: ChartHoverBubble(
                       periodLabel: DateFormat(
                         'MMMM yyyy',
-                      ).format(series[touched].date),
-                      valueLabel: formatCents(series[touched].totalCents),
-                      valueColor: color,
+                      ).format(touchedPoint.date),
+                      valueLabel: formatNetCents(touchedPoint.totalCents),
+                      valueColor: touchedNegative
+                          ? widget.negativeColor
+                          : color,
+                      detailLabel:
+                          '${formatNetCents(touchedPoint.cashCents)} ledger · '
+                          '${formatNetCents(touchedPoint.assetCents)} assets',
                     ),
                   ),
                 ),

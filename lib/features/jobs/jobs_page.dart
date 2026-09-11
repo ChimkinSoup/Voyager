@@ -175,6 +175,8 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   profileLinkedInUrl: settings?.jobProfileLinkedInUrl,
                   profileGitHubUrl: settings?.jobProfileGitHubUrl,
                   profilePortfolioUrl: settings?.jobProfilePortfolioUrl,
+                  experienceSnippets:
+                      settings?.jobExperienceSnippets ?? const [],
                 ),
                 _Toolbar(
                   searchController: _searchController,

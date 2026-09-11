@@ -1,31 +1,32 @@
 # FEEDBACK
 Here is some feedback, implement fixes in the best way you see fit. If there is any unclarity, ask questions before proceeding. If the change is applicable to other parts of the app (Such as a universal change like changing a textbox or a repeated UI), apply the change to wherever necessary. If there are contradictory requests, ask before implementing.
-## Journal
-- [ ] When the user toggles off the mood bar, the body text box shifts slightly upwards, can you stop this from happening?
-- [ ] If the user is viewing a journal, then creates another journal, they are left viewing the same entry from the old journal even when they have entered their new journal. Instead make this behavior identical to if the user exits out of the new journal and enters it again (So create a new empty journal entry and show that instead when the user switches to their newly created journal)
-## Todo
-- [ ] Remove the "Image" text above the image gallery and the "Subtask" text above the subtask list
-- [ ] 
-## Search
-- [ ] If the user clicks "Close" when editing a journal entry can you instead make it discard all changes the user made in the search page? 
+## Global Inbox
+- [x] For logging stats at the very bottom, it looks like the notification badge is not properly spaced out so it starts off crooked (Not centered vertically) and then as you move down statistics, it gets even more crooked, fix this
+- [x] If the user marks a recurring task as complete from the global inbox, the task does not automatically uncomplete itself and mark it's due date for the next reoccurring period
 ## Calendar
-- [ ] Can you save the last calendar that was viewed and open that up automatically (This includes view all calendars)?
-- [x] If the user enters all calendar views, then the calendar dropdown menu should also switch
-- [ ] If the user clicks on a recurring event, then the small press-down animation plays out for every single recurring event, can you make it just the one they clicked on?
+- [x] Can you add a settings toggle for all calendars other than the default calendar, which when toggled will show that new calendar's events on the main calendar? So like if the user's default calendar is "Cal" then they make another calendar called "Holidays" then they can toggle "Show in default calendar" and now if they add an event in Holidays then they would see it in Cal too
+- [x] When the user switches to see all events, the dropdown menu does change to say "All calendars" but it's color still remains the same color as the last viewed calendar, not the main accent color, fix this
+  - Already correct on `main`; pinned with two regression tests in `calendar_last_viewed_page_test.dart` (switching live, and a cold start into the all-view) so it cannot come back.
+- [x] If the user tries to edit a todo task from the calendar page, the "X" to close the editor UI has too large of a grey hitbox that appears when the user hovers over it
+- [x] If I have a recurring event in calendar, then I delete one event only of that recurring event, then no matter which event you clicked on, it deletes the very first occurrence of that repeating event in your current month (When viewing a monthly calendar). Ensure this doesn't happen, and check to make sure this bug is not present in other calendar views too -- Note that this bug is also present in weekly view, it always deletes the very first recurring event in the week, not the one you clicked on
+- [x] If the user makes a recurring task then marks that task as completed from the calendar page, then that task does not reappear (Which it should since it is recurring), fix this
+- [x] If the user tries to edit an event that is not all day (Thus has a starting and ending time), then they focus on the left rollers (For the starting time), then they adjust the event duration which automatically shifts the right rollers (ending time) and also makes them focus on the right rollers, then the right rollers highlight the previous end time (Before the user adjusted the time period) and those stale numbers are lit up with the calendar color, instead of the current numbers being displayed. Ensure this doesn't happen elsewhere and also check for any other edge cases where this might happen and fix those too
+## Todo
+- [x] For subtask checkboxes, can you make their behavior identical to the main tasks, since for main tasks if you hover over an unchecked box, you see a faint check appear, and no grey hitbox around the box appears. I want subtask checkmarks to mimic this behavior
+- [x] If the user clicks on a subtask to edit it, the text shifts around as it turns from just displaying the text to the text box editor. Make sure this doesn't happen
 ## LeetCode
-- [ ] Can you remove the background that appears if the user selects multiple solutions when editing a question (Like the background that appears that separates each solution from each other)
-- [ ] If the user adds multiple solutions to a question, then can you make the "solution x" text that states the question's number be in the main accent color instead of being black? 
-- [ ] Add just a little bit of padding between the "Solution X" text and the algorithm text box when the user enters multiple solutions
-- [ ] When the user presses the "Strip" button above a code text box, currently it only gets rid of comments. But can you also make it check the very last line (Only the last line) of the code text box and if it is a newline (Completely empty newline) then delete that too? This should happen for all languages
-- [ ] If I open up the statistics and scroll down to the calendar view, then whenever the user's cursor hovers over a square it displays an informative popup next to user's cursor. Except if I scroll down a bit, then hover very close to the top of the calendar near the cutoff where it displays the year, the informative popup is covered by this header, instead of properly flipping and showing it below the cursor instead of above, fix this
-## Finance
-- [ ] If I hover over a transaction in the ledger page, while also scrolling down a little so that half of the transaction row is hidden underneath the top of the scrollable area (Like half of it is hidden under the Ledger/Analytics/Goal area), then the grey hitbox that appears from hovering over the transaction still appears on top of the Ledger/Analytics/Goal area, fix this
+- [x] If the user adds multiple solutions, can you also add a faint line between solutions (Only between solutions, not above the first solution or below the last solution) that is the main accent color to differentiate them
 ## Job Tracker
-- [ ] The "Clear" button next to the search bar is not a proper glass button. Same thing with the "Open" button under the application URL
-- [ ] If  the user copies their linked profiles to their clipboard, make the confirmation a toast notification instead the bar at the bottom of the page. Additionally make the buttons for copying the user's linked profiles larger
-- [ ] Move the application date capsule from where it is right now to next to the "History" text at the bottom, aligned to the right. Then replace the application date capsule with the season capsule so that the status and season capsules both take up half of the horizontal width of the editor
-- [ ] Make the search text bar slightly taller
-## Settings
-- [ ] If the user tries to add Job application profiles, the cancel and save buttons are not proper glass buttons
+- [x] When adding a new job, the format is not the same as the editor UI editing an already tracked job (The capsules in the middle go: Job status on the left, application date on the right, and the season below both, but with the editor UI editing an already tracked job it has job status on the left and season on the right, then date at the bottom). Update the new job UI so that the date appears at the very bottom and then the status and season appear on the same row
+  - Already the case on `main` (`jobs_track_modal.dart`): status and season share a row and the date pill sits at the foot of the form, matching `jobs_edit_panel.dart`. No change needed.
+## Study
+- [x] When the user hovers over the triple dots on top of a folder or a deck in the dashboard, the grey highlight around the triple dots extends and overflows past the white square for the deck or folder, ensure this doesn't happen
+- [x] If the user adds multiple images to one side of a flashcard, then it generates arrows that point left and right to swap between then when viewing the flashcard. Currently if the user reaches the end of the queue and presses the right arrow, or goes to the beginning of the queue and presses the left arrow, then that flips the card. Instead can you make it so that  even if the arrow click is invalid (Clicking to move past the last image or before the first image), it still doesn't flip the flash card since the user has clicked on the ARROW and not the card itself?
+## Ranking 
+- [x] For queued parents, can you make the "Queued" and "In progress" capsules fill in completely with color instead of just being bordered when selected
+- [x] In the text box for fields in the parent and child editor UI, if the user types in the text box when nothing is in the text box originally, then the text box shrinks a little vertically. Ensure this doesn't happen
+- [x] If there are no fields then there is no padding between the stars that show the overall ranking and the notes text box, fix this (In both the parent and child editor UI)
+- [x] If the user opens up the categories editor, then it defaults to opening the first category, but if the user has categories A, B, and C, and they are currently viewing category B, then it should by default have category B open
+- [x] Just like the overall score for the parent and child, for fields make it so that if the user clicks on the number of the score then it clears the score
 ## Miscellaneous
-- [ ] When the user right clicks a word and then chooses to add it as a snippet, the popup has a "Manage all snippets" button, but it is not a proper glass button, fix this
+- [x] The caps lock icon does not move if the user scrolls on a text box, so if the user is typing and then scrolls down, then presses caps lock, the caps lock icon is way above the caret (Exact distance corresponds to how much the user has scrolled down), fix this

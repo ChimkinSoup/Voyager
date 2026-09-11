@@ -4,6 +4,7 @@ import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/media/widgets/media_lightbox.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/media_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/features/study/study_rich_text.dart';
 
 /// One side of a card, as every surface that shows a whole card draws it —
@@ -103,6 +104,40 @@ class StudyCardFace extends StatelessWidget {
       },
     );
   }
+}
+
+/// The home deck's name on a card a session reached through a deck link
+/// (STUDY_DECK_LINKS_HLD.md §7) — plain muted text in the face's top-left
+/// corner, drawn on both faces so it survives the flip. Not a chip.
+class StudyCardSourceLabel extends StatelessWidget {
+  const StudyCardSourceLabel(this.deckName, {super.key});
+
+  final String deckName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      deckName,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+      ),
+    );
+  }
+}
+
+/// The name [StudyCardSourceLabel] should show for [card] in a session framed
+/// as [frameDeckId], or null when the card is at home there — or the session
+/// has no frame at all, like the Hub's study-everything-due run.
+String? studyCardSourceName(
+  StudyCard card, {
+  required String? frameDeckId,
+  required Map<String, StudyDeck> decksById,
+}) {
+  if (frameDeckId == null || card.deckId == frameDeckId) return null;
+  return decksById[card.deckId]?.name;
 }
 
 /// The image half of a [StudyCardFace].
@@ -240,7 +275,13 @@ class _CarouselArrow extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
-        onTap: onPressed,
+        // Opaque, and always carrying a tap handler even at the ends of the
+        // queue: with `onTap` null the arrow registered no recognizer at all
+        // and the press fell through to the card behind it, so clicking past
+        // the last image flipped the card. A dead arrow now swallows its own
+        // click and does nothing.
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed ?? () {},
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 4),
           padding: EdgeInsets.all(size * 0.3),

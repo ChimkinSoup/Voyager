@@ -1458,6 +1458,14 @@ class _PanelHeader extends StatelessWidget {
   }
 }
 
+/// The subtask row's text inset, shared by the box you type in and the line
+/// you read — see the [Padding] in `_SubtaskRowState.build` for why the two
+/// cannot both use it raw.
+const EdgeInsets _kSubtaskContentPadding = EdgeInsets.symmetric(
+  vertical: 12,
+  horizontal: 12,
+);
+
 class _SubtaskRow extends StatefulWidget {
   const _SubtaskRow({
     required this.subtask,
@@ -1631,12 +1639,15 @@ class _SubtaskRowState extends State<_SubtaskRow>
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(width: 8),
-          Checkbox(
+          // The task rows' own box, not Material's: hovering an unchecked one
+          // shows a faint preview check and it draws no grey hit target
+          // around itself. Ticking a subtask is not a completion in its own
+          // right, so it keeps the confetti off.
+          VoyagerCheckbox(
             value: _displayCompleted,
-            activeColor: widget.listColor,
+            accentColor: widget.listColor,
+            celebrateOnComplete: false,
             onChanged: _handleToggle,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
           ),
           Expanded(
             child: LayoutBuilder(
@@ -1655,10 +1666,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
                         builder: (context, vim) {
                           final theme = Theme.of(context);
                           final fieldStyle = textStyle ?? const TextStyle();
-                          const contentPadding = EdgeInsets.symmetric(
-                            vertical: 12,
-                            horizontal: 12,
-                          );
+                          const contentPadding = _kSubtaskContentPadding;
                           return VimOverlayHost(
                             session: vim.session,
               snippetSession: vim.snippetSession,
@@ -1708,15 +1716,34 @@ class _SubtaskRowState extends State<_SubtaskRow>
                           borderRadius: BorderRadius.circular(14),
                           hoverColor: hoverColor,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 12,
+                            // The field's geometry, not the raw content
+                            // padding: an InputDecorator insets its text by a
+                            // 4px input gap on each side and by half the
+                            // platform's density offset above it, so a plain
+                            // Padding of the same numbers put this line 4px
+                            // left of and 4px below the box that replaces it —
+                            // the jump on every click into a subtask.
+                            padding: vimOverlayPadding(
+                              contentPadding: _kSubtaskContentPadding,
+                              density: Theme.of(context).visualDensity,
+                              outlineGap: true,
+                              outlineCenter: true,
                             ),
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
                                 widget.subtask.title,
                                 style: textStyle,
+                                // The strut EditableText builds for itself
+                                // when it is handed none, so the line box is
+                                // the same height in both states and the row
+                                // does not resize either.
+                                strutStyle: textStyle == null
+                                    ? null
+                                    : StrutStyle.fromTextStyle(
+                                        textStyle,
+                                        forceStrutHeight: true,
+                                      ),
                               ),
                             ),
                           ),

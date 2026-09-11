@@ -1,7 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 import 'package:voyager/core/motion/motion.dart';
+
+/// The share of a fling's launch velocity a Voyager spinner keeps.
+const _flingDamping = 0.4;
 
 /// The scroll physics every Voyager spinner turns on.
 ///
@@ -20,7 +26,137 @@ class VoyagerHighFrictionScrollPhysics extends FixedExtentScrollPhysics {
   Simulation? createBallisticSimulation(
     ScrollMetrics position,
     double velocity,
-  ) => super.createBallisticSimulation(position, velocity * 0.4);
+  ) => super.createBallisticSimulation(position, velocity * _flingDamping);
+}
+
+/// The first and last rows a wheel may come to rest on.
+typedef VoyagerWheelLimits = ({int first, int last});
+
+/// [VoyagerHighFrictionScrollPhysics] for a wheel that may only rest between
+/// two of its rows — which, on an endless wheel, can move as the value it
+/// edits changes.
+///
+/// Past either limit the wheel stretches rather than stopping dead: a drag is
+/// resisted harder the further it goes, and letting go springs it back. That
+/// is the whole signal that the move is refused, so it has to be felt on every
+/// platform — the ambient parent physics would clamp on one and bounce on
+/// another.
+///
+/// The stretch never reaches half a row, so the row past a limit never becomes
+/// the selected one. On an endless wheel that row exists and would report
+/// itself through `onSelectedItemChanged`.
+class VoyagerLimitedWheelPhysics extends VoyagerHighFrictionScrollPhysics {
+  const VoyagerLimitedWheelPhysics({
+    super.parent,
+    required this.itemExtent,
+    required this.limits,
+  });
+
+  /// How far past a limit the wheel can be pulled, as a share of one row.
+  static const stretchShare = 0.4;
+
+  final double itemExtent;
+
+  /// Read on every use rather than fixed here: a [Scrollable] keeps the
+  /// physics it built its position with until the physics' *type* changes, so
+  /// a new instance with new limits would never reach it.
+  final VoyagerWheelLimits Function() limits;
+
+  @override
+  VoyagerLimitedWheelPhysics applyTo(ScrollPhysics? ancestor) =>
+      VoyagerLimitedWheelPhysics(
+        parent: buildParent(ancestor),
+        itemExtent: itemExtent,
+        limits: limits,
+      );
+
+  double get _reach => itemExtent * stretchShare;
+
+  ({double min, double max}) get _range {
+    final l = limits();
+    return (min: l.first * itemExtent, max: l.last * itemExtent);
+  }
+
+  /// The stretch a pull of [pull] pixels past a limit shows: half the pull at
+  /// first, less the further it goes, never quite [_reach].
+  double _stretch(double pull) => _reach * pull / (pull + 2 * _reach);
+
+  /// The pull that shows [stretch] — [_stretch] run backwards.
+  double _pull(double stretch) {
+    final shown = math.min(stretch, _reach * 0.99);
+    return 2 * _reach * shown / (_reach - shown);
+  }
+
+  @override
+  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
+    final (:min, :max) = _range;
+    final pixels = position.pixels;
+    // Undo the stretch, move by the whole drag, and stretch again: the
+    // resistance then depends only on how far past the limit the pull has
+    // gone, so the wheel eases back out along the curve it went in on. A drag
+    // moves the wheel by -offset.
+    var free = pixels;
+    if (pixels > max) free = max + _pull(pixels - max);
+    if (pixels < min) free = min - _pull(min - pixels);
+    free -= offset;
+    var to = free;
+    if (free > max) to = max + _stretch(free - max);
+    if (free < min) to = min - _stretch(min - free);
+    return pixels - to;
+  }
+
+  /// Nothing clamps: a finite wheel's own ends are limits like any other and
+  /// stretch the same way.
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) => 0;
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    final (:min, :max) = _range;
+    final pixels = position.pixels;
+    final tolerance = toleranceFor(position);
+
+    // Let go past a limit: spring back onto it. Velocity carried outward
+    // would stretch the wheel further than a drag can, so it is dropped.
+    if (pixels < min || pixels > max) {
+      return ScrollSpringSimulation(
+        spring,
+        pixels,
+        pixels.clamp(min, max),
+        0,
+        tolerance: tolerance,
+      );
+    }
+
+    final settle = super.createBallisticSimulation(position, velocity);
+    final end = settle?.x(double.infinity);
+    if (end == null || (end >= min && end <= max)) return settle;
+
+    // A fling that would sail past a limit comes to rest on it instead.
+    final limit = end.clamp(min, max);
+    final damped = velocity * _flingDamping;
+    // Within half a row of it there is no room to decelerate into: a
+    // friction curve that short runs off the end of a double.
+    if ((limit - pixels).abs() < itemExtent / 2 ||
+        damped.abs() <= tolerance.velocity) {
+      return ScrollSpringSimulation(
+        spring,
+        pixels,
+        limit,
+        0,
+        tolerance: tolerance,
+      );
+    }
+    return FrictionSimulation.through(
+      pixels,
+      limit,
+      damped,
+      tolerance.velocity * damped.sign,
+    );
+  }
 }
 
 /// The ambient scroll behavior a picker wheel runs under, with the mouse added
@@ -60,6 +196,8 @@ class VoyagerWheelNotch extends StatefulWidget {
     required this.controller,
     required this.child,
     this.itemCount,
+    this.limits,
+    this.itemExtent,
     this.onEdgeNotch,
   });
 
@@ -68,6 +206,14 @@ class VoyagerWheelNotch extends StatefulWidget {
   /// Null is an endless wheel, which has no end to clamp against and so never
   /// raises [onEdgeNotch].
   final int? itemCount;
+
+  /// The rows a notch may land on. A notch refused at one bumps the wheel a
+  /// little way past it and leaves [VoyagerLimitedWheelPhysics] to spring it
+  /// back, so the refusal is seen rather than just nothing happening. The
+  /// bump is measured in rows, hence [itemExtent].
+  final VoyagerWheelLimits Function()? limits;
+
+  final double? itemExtent;
 
   /// A notch that could not move the wheel because it is already at that end:
   /// -1 for the top, 1 for the bottom.
@@ -111,10 +257,12 @@ class _VoyagerWheelNotchState extends State<VoyagerWheelNotch> {
     if (!controller.hasClients) return;
     final from = _target ?? controller.selectedItem;
     final count = widget.itemCount;
-    final target = count == null
-        ? from + direction
-        : (from + direction).clamp(0, count - 1);
+    final limits = widget.limits?.call();
+    var target = from + direction;
+    if (count != null) target = target.clamp(0, count - 1);
+    if (limits != null) target = target.clamp(limits.first, limits.last);
     if (target == from) {
+      if (limits != null) _bump(from, direction);
       widget.onEdgeNotch?.call(direction);
       return;
     }
@@ -125,18 +273,39 @@ class _VoyagerWheelNotchState extends State<VoyagerWheelNotch> {
       _target = null;
       return;
     }
+    _track(
+      controller.animateToItem(
+        target,
+        duration: const Duration(milliseconds: 150),
+        curve: VoyagerSpring.snappyCurve,
+      ),
+    );
+  }
+
+  /// Nudges the wheel past the [limit] it is resting on. The nudge ends as a
+  /// ballistic scroll, which the limited physics turns into the spring back.
+  void _bump(int limit, int direction) {
+    if (VoyagerMotion.reduced(context)) return;
+    final extent = widget.itemExtent!;
+    // Still where the wheel comes to rest, so a notch back the other way
+    // mid-bump steps off the limit rather than off whatever row it is over.
+    _target = limit;
+    _track(
+      widget.controller.animateTo(
+        (limit + direction * 0.3) * extent,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+      ),
+    );
+  }
+
+  void _track(Future<void> motion) {
     final generation = ++_generation;
-    controller
-        .animateToItem(
-          target,
-          duration: const Duration(milliseconds: 150),
-          curve: VoyagerSpring.snappyCurve,
-        )
-        .whenComplete(() {
-          // Interrupted or arrived, both end the hop. Only the newest one may
-          // drop the target; an older future completing must not.
-          if (mounted && generation == _generation) _target = null;
-        });
+    motion.whenComplete(() {
+      // Interrupted or arrived, both end the hop. Only the newest one may
+      // drop the target; an older future completing must not.
+      if (mounted && generation == _generation) _target = null;
+    });
   }
 
   @override
@@ -173,6 +342,7 @@ class VoyagerSpinnerWheel extends StatelessWidget {
     required this.onSelectedItemChanged,
     this.itemCount,
     this.width = 40,
+    this.limits,
     this.onNotification,
     this.onEdgeNotch,
   });
@@ -183,6 +353,12 @@ class VoyagerSpinnerWheel extends StatelessWidget {
   /// Null makes the wheel endless, which is what carrying past the last digit
   /// into the column beside it needs.
   final int? itemCount;
+
+  /// The rows the wheel may rest on, read afresh on every gesture. Past them
+  /// it stretches and springs back — see [VoyagerLimitedWheelPhysics]. Null
+  /// leaves it to the platform, which on Windows stops a finite wheel dead at
+  /// its ends and never stops an endless one.
+  final VoyagerWheelLimits Function()? limits;
 
   final double width;
   final IndexedWidgetBuilder itemBuilder;
@@ -207,11 +383,18 @@ class VoyagerSpinnerWheel extends StatelessWidget {
           child: VoyagerWheelNotch(
             controller: controller,
             itemCount: itemCount,
+            limits: limits,
+            itemExtent: itemExtent,
             onEdgeNotch: onEdgeNotch,
             child: ListWheelScrollView.useDelegate(
               controller: controller,
               itemExtent: itemExtent,
-              physics: const VoyagerHighFrictionScrollPhysics(),
+              physics: limits == null
+                  ? const VoyagerHighFrictionScrollPhysics()
+                  : VoyagerLimitedWheelPhysics(
+                      itemExtent: itemExtent,
+                      limits: limits!,
+                    ),
               perspective: 0.005,
               onSelectedItemChanged: onSelectedItemChanged,
               childDelegate: ListWheelChildBuilderDelegate(

@@ -166,7 +166,10 @@ Future<T?> showVoyagerSheet<T>({
     builder: (ctx) => GlassSurface(
       weight: GlassWeight.heavy,
       borderRadius: borderRadius,
-      child: builder(ctx),
+      // The frosted fill sits between the BottomSheet's Material and the
+      // sheet's content, so ink (ListTile rows, InkWells) would paint under
+      // it. A Material of its own above the fill brings the ink back on top.
+      child: Material(type: MaterialType.transparency, child: builder(ctx)),
     ),
   );
 }

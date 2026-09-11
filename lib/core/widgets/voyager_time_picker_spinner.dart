@@ -98,29 +98,45 @@ class _VoyagerTimePickerSpinnerState extends State<VoyagerTimePickerSpinner> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _isProgrammaticScroll = true;
+          int? nextHour;
+          int? nextMinute;
+          int? nextAmPm;
           if (_hourController.hasClients) {
             int current = _hourController.selectedItem;
             int diff = targetHourIndex - (current % 12);
             if (diff > 6) diff -= 12;
             if (diff < -6) diff += 12;
-            final next = current + diff;
-            _hourController.jumpToItem(next);
-            _displayHourItem = next;
+            nextHour = current + diff;
+            _hourController.jumpToItem(nextHour);
           }
           if (_minuteController.hasClients) {
             int current = _minuteController.selectedItem;
             int diff = targetMinuteIndex - (current % _minuteItemsCount);
             if (diff > (_minuteItemsCount ~/ 2)) diff -= _minuteItemsCount;
             if (diff < -(_minuteItemsCount ~/ 2)) diff += _minuteItemsCount;
-            final next = current + diff;
-            _minuteController.jumpToItem(next);
-            _displayMinuteItem = next;
+            nextMinute = current + diff;
+            _minuteController.jumpToItem(nextMinute);
           }
           if (_amPmController.hasClients && _amPmController.selectedItem != targetAmPmIndex) {
             _amPmController.jumpToItem(targetAmPmIndex);
-            _displayAmPmItem = targetAmPmIndex;
+            nextAmPm = targetAmPmIndex;
           }
           _isProgrammaticScroll = false;
+          // The highlight is a rebuild, not a scroll: the items compare their
+          // own index against `_display*Item`, and `jumpToItem` under
+          // `_isProgrammaticScroll` deliberately suppresses the setState in
+          // `onSelectedItemChanged`. Writing the new indices without one left
+          // the *old* numbers lit in the accent colour while the wheel showed
+          // the new ones — which is what a duration change did to the end
+          // time's rollers.
+          if (nextHour == null && nextMinute == null && nextAmPm == null) {
+            return;
+          }
+          setState(() {
+            if (nextHour != null) _displayHourItem = nextHour;
+            if (nextMinute != null) _displayMinuteItem = nextMinute;
+            if (nextAmPm != null) _displayAmPmItem = nextAmPm;
+          });
         });
       }
     }

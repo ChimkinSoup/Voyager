@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -118,6 +120,7 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
   var _selectAllNextTap = false;
   var _syncingText = false;
   var _syncingRight = false;
+  var _settlePending = false;
   var _canPop = false;
 
   int _lastRightIndex = _rightOrigin;
@@ -147,6 +150,20 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
 
   int get _digitIndex =>
       ((_value - _value.floorToDouble()) * _unitsPerPoint).round();
+
+  /// The right-roller rows the draft can reach: the one that reads `0.0` and
+  /// the one that reads `scoreMax.0`.
+  ///
+  /// The roller is endless so it can carry, so these move with it — measured
+  /// back from wherever it sits now, and shifted whenever the left roller
+  /// changes the whole part underneath it. Rows past them print nothing: they
+  /// are scores off the scale, and the roller refuses to rest on them.
+  VoyagerWheelLimits _rightLimits() {
+    final zero = _lastRightIndex - (_value * _unitsPerPoint).round();
+    return (first: zero, last: zero + widget.scoreMax * _unitsPerPoint);
+  }
+
+  VoyagerWheelLimits _leftLimits() => (first: 0, last: widget.scoreMax);
 
   @override
   void initState() {
@@ -265,7 +282,9 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
     }
     final target = current + delta;
     if (target == current) return;
-    _lastRightIndex = target;
+    // A rebuild, because the limits are measured from this: the blank rows
+    // past them have to follow the roller to where it is going.
+    setState(() => _lastRightIndex = target);
     _syncingRight = true;
     if (animate && delta.abs() == 1) {
       right
@@ -293,13 +312,19 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
   /// The right roller reads as a delta, which is what lets it carry: rolling
   /// past the last digit is one more step, and the step is what crosses the
   /// integer boundary.
+  ///
+  /// A row past a limit is read as the limit. The physics keeps the roller
+  /// from resting there, but a step onto it counted here would come back off
+  /// it as a step the other way — and 10.0 would spring back as 9.9.
   void _onRightChanged(int index) {
     if (_syncingRight) {
       _lastRightIndex = index;
       return;
     }
-    final delta = index - _lastRightIndex;
-    _lastRightIndex = index;
+    final limits = _rightLimits();
+    final reached = index.clamp(limits.first, limits.last);
+    final delta = reached - _lastRightIndex;
+    _lastRightIndex = reached;
     if (delta == 0) return;
     final before = _value;
     _setValue(_value + delta * _unit);
@@ -318,7 +343,20 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
   /// `scoreMax`, where rolling the whole part up from `scoreMax - 1.5` lands
   /// on `scoreMax.0` and leaves the digit roller showing the fraction that
   /// was dropped.
-  void _settle() => _syncWheels(animate: true);
+  ///
+  /// Deferred, because the end notification is sent from inside
+  /// [ScrollPosition.beginActivity] before the roller has left the scroll
+  /// that ended. A jump from there ends that same scroll again, and so on
+  /// until the stack overflows; an animation started from there is disposed
+  /// as soon as the notification returns.
+  void _settle() {
+    if (_settlePending) return;
+    _settlePending = true;
+    scheduleMicrotask(() {
+      _settlePending = false;
+      if (mounted) _syncWheels(animate: true);
+    });
+  }
 
   // ------------------------------------------------------------------ closing
 
@@ -410,6 +448,7 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
                         controller: _leftController,
                         itemExtent: _itemExtent,
                         itemCount: widget.scoreMax + 1,
+                        limits: _leftLimits,
                         onSelectedItemChanged: _onLeftChanged,
                         onNotification: _onWheelNotification,
                         itemBuilder: (ctx, index) => _wheelItem(
@@ -431,14 +470,21 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
                           width: 40,
                           controller: _rightController!,
                           itemExtent: _itemExtent,
+                          limits: _rightLimits,
                           onSelectedItemChanged: _onRightChanged,
                           onNotification: _onWheelNotification,
-                          itemBuilder: (ctx, index) => _wheelItem(
-                            theme,
-                            accent,
-                            '${_digitAt(index)}',
-                            selected: _digitIndexOf(index) == _digitIndex,
-                          ),
+                          itemBuilder: (ctx, index) {
+                            final limits = _rightLimits();
+                            if (index < limits.first || index > limits.last) {
+                              return const SizedBox.shrink();
+                            }
+                            return _wheelItem(
+                              theme,
+                              accent,
+                              '${_digitAt(index)}',
+                              selected: _digitIndexOf(index) == _digitIndex,
+                            );
+                          },
                         ),
                       ],
                     ],
@@ -520,8 +566,8 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
   }
 }
 
-/// The number every score surface is set from: click to open the popover,
-/// wheel to nudge, long-press to clear.
+/// The number every score surface is set from: click to open the popover, wheel
+/// to nudge, long-press to clear.
 ///
 /// The stars beside it are decoration — this is the whole control, and it is
 /// the same one on a list row, an overall row and a template field.
@@ -554,12 +600,11 @@ class RankingScoreNumber extends StatelessWidget {
   final ValueChanged<double?>? onChanged;
 
   /// The score the open popover is currently sitting on, reported on every
-  /// tick of a roller, and null once the popover has closed and there is no
-  /// draft any more.
+  /// tick of a roller, and null once the popover has closed without writing.
   ///
-  /// The caller owns what to do with it: the surfaces pass the draft straight
-  /// back down as [value] so the number and the stars beside it track the
-  /// roller. Nothing is saved until [onChanged] fires.
+  /// A popover that writes reports the score through [onChanged] instead, and
+  /// sends no null after it: the surface keeps showing what was written until
+  /// the save lands. [RankingScoreHold] is the surfaces' side of this.
   final ValueChanged<double?>? onDraftChanged;
 
   final TextStyle? style;
@@ -581,11 +626,14 @@ class RankingScoreNumber extends StatelessWidget {
       accentColor: accentColor,
       onDraftChanged: onDraftChanged?.call,
     );
-    // Committed first, dropped second: the surface hands the draft back only
-    // once the score that replaces it has been written, so the number never
-    // falls through to its old value for a frame on the way.
-    if (outcome != null && !outcome.cancelled) onChanged!(outcome.score);
-    onDraftChanged?.call(null);
+    // A write keeps the draft on screen: the save lands a few frames after the
+    // popover closes, and dropping the draft here showed the old score for
+    // those frames.
+    if (outcome == null || outcome.cancelled) {
+      onDraftChanged?.call(null);
+    } else {
+      onChanged!(outcome.score);
+    }
   }
 
   /// One step in the direction of the wheel, committed on the spot (§6.2). An
@@ -650,7 +698,7 @@ class RankingScoreNumber extends StatelessWidget {
             onTap: () => _open(context),
             onLongPress: scored ? () => onChanged!(null) : null,
             child: Tooltip(
-              message: scored ? 'Score — long-press to clear' : 'Set score',
+              message: scored ? 'Edit score' : 'Set score',
               waitDuration: const Duration(milliseconds: 600),
               // Hover still raises it; long-press must not. Tooltip's default
               // long-press trigger is a gesture recognizer *inside* this
@@ -662,5 +710,60 @@ class RankingScoreNumber extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// The score a surface draws in place of its stored one: the popover's draft
+/// while it is open, then whatever the number wrote until the save carries it
+/// back.
+///
+/// Every save here is async, and the stored score only moves once it lands —
+/// a few frames after the popover closes. Showing the stored score in between
+/// flashed the old one: a blank between the draft and the saved number.
+///
+/// Wire [holdDraft] to [RankingScoreNumber.onDraftChanged] and pass the save
+/// through [holdingWrites], then draw [shownScore].
+mixin RankingScoreHold<T extends StatefulWidget> on State<T> {
+  /// The score as stored, which the held one gives way to once they match.
+  double? get storedScore;
+
+  /// A record so a written clear — a null score — can be held too.
+  ({double? score})? _held;
+
+  double? get shownScore {
+    final held = _held;
+    return held == null ? storedScore : held.score;
+  }
+
+  /// A null draft is a popover closed without writing, which drops straight
+  /// back to the stored score.
+  void holdDraft(double? draft) {
+    if (draft == null) {
+      if (_held != null) setState(() => _held = null);
+    } else {
+      _hold(draft);
+    }
+  }
+
+  /// [write], holding each score it is handed until the store catches up.
+  ValueChanged<double?>? holdingWrites(ValueChanged<double?>? write) {
+    if (write == null) return null;
+    return (score) {
+      _hold(score);
+      write(score);
+    };
+  }
+
+  void _hold(double? score) =>
+      setState(() => _held = score == storedScore ? null : (score: score));
+
+  /// Released on a match rather than on any change: two quick wheel notches
+  /// land one after the other, and the first landing must not pull the number
+  /// back under the second.
+  @override
+  void didUpdateWidget(covariant T oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final held = _held;
+    if (held != null && held.score == storedScore) _held = null;
   }
 }

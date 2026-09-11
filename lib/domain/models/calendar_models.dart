@@ -15,14 +15,25 @@ class Calendar extends SoftDeletable {
     super.deletedAt,
     required this.name,
     this.colorValue,
+    this.overlayCalendarIds = const [],
   });
 
   final String name;
   final int? colorValue;
 
+  /// Other calendars whose events are drawn while this one is open.
+  ///
+  /// A display union, not a copy: the events keep their own `calendarId` and
+  /// colour, and opening one of those calendars still shows only its own
+  /// events. Flat — an overlay's own overlays are never followed. Ids that are
+  /// this calendar, unknown or soft-deleted are ignored when read; see
+  /// [visibleOverlayCalendarIds].
+  final List<String> overlayCalendarIds;
+
   Calendar copyWith({
     String? name,
     int? colorValue,
+    List<String>? overlayCalendarIds,
     DateTime? deletedAt,
     bool bumpVersion = true,
   }) {
@@ -34,8 +45,41 @@ class Calendar extends SoftDeletable {
       deletedAt: deletedAt ?? this.deletedAt,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
+      overlayCalendarIds: overlayCalendarIds ?? this.overlayCalendarIds,
     );
   }
+}
+
+/// [ids] as they are stored on the calendar [hostId]: without the host itself
+/// and without repeats, first occurrence kept.
+List<String> normalizeOverlayCalendarIds(String hostId, Iterable<String> ids) {
+  final seen = <String>{hostId};
+  return [
+    for (final id in ids)
+      if (seen.add(id)) id,
+  ];
+}
+
+/// The calendars [hostId] actually overlays, out of the live [calendars]: its
+/// overlay list minus itself and any id that is not a live calendar. Empty
+/// when the host is not among [calendars].
+List<String> visibleOverlayCalendarIds(
+  String hostId,
+  List<Calendar> calendars,
+) {
+  final host = calendars.where((c) => c.id == hostId).firstOrNull;
+  if (host == null) return const [];
+  final live = {
+    for (final calendar in calendars)
+      if (calendar.deletedAt == null) calendar.id,
+  };
+  return [
+    for (final id in normalizeOverlayCalendarIds(
+      hostId,
+      host.overlayCalendarIds,
+    ))
+      if (live.contains(id)) id,
+  ];
 }
 
 class CalendarEvent extends SoftDeletable {

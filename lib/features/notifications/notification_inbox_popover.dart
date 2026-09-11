@@ -26,6 +26,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
+import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
@@ -278,7 +279,7 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
 
     await softDeleteWithUndo(
       overlay: overlay,
-      message: deletedMessage(note.text, fallback: 'note'),
+      message: deletedMessage(note.text, fallback: 'note', prose: true),
       delete: () => _deleteNote(note.id),
       restore: () async {
         final repository = container.read(notificationRepositoryProvider);
@@ -1086,9 +1087,15 @@ class _FeedRowState extends ConsumerState<_FeedRow>
     await _exit.forward();
     if (!mounted) return;
     final task = widget.item.task!;
-    final updated = task.copyWith(completed: true);
-    await ref.read(todoRepositoryProvider).upsertTask(updated);
-    unawaited(ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated));
+    // Through the shared path rather than a lone `completed: true` here: a
+    // repeating task ticked from the inbox has to roll on to its next
+    // occurrence and stay live, exactly as it does on the To-Do page. Written
+    // flat it simply vanished into the completed section and never came back.
+    await completeTodoTask(
+      repo: ref.read(todoRepositoryProvider),
+      sync: ref.read(remoteSyncServiceProvider),
+      taskId: task.id,
+    );
     ref.invalidate(todoTasksProvider(task.listId));
     ref.invalidate(allTodoTasksProvider);
   }

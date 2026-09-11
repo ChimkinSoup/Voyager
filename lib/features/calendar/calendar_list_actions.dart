@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -8,6 +9,7 @@ import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/features/calendar/calendar_overlay_dialog.dart';
 
 Future<String?> promptCalendarName(
   BuildContext context,
@@ -58,6 +60,30 @@ Future<void> changeCalendarListColor(
   );
   if (color == null) return;
   final updated = calendar.copyWith(colorValue: color);
+  await ref.read(calendarRepositoryProvider).upsertCalendar(updated);
+  ref.invalidate(calendarsProvider);
+  await ref.read(calendarsProvider.future);
+}
+
+/// "Also show": picks the calendars [calendar] draws alongside its own events,
+/// and writes the list onto it. Unchecking drops the link only; the events
+/// stay where they are.
+Future<void> editCalendarOverlays(
+  BuildContext context,
+  WidgetRef ref,
+  Calendar calendar,
+  List<Calendar> allCalendars,
+) async {
+  final ids = await showCalendarOverlayDialog(
+    context,
+    host: calendar,
+    calendars: allCalendars,
+  );
+  if (ids == null ||
+      listEquals(ids, visibleOverlayCalendarIds(calendar.id, allCalendars))) {
+    return;
+  }
+  final updated = calendar.copyWith(overlayCalendarIds: ids);
   await ref.read(calendarRepositoryProvider).upsertCalendar(updated);
   ref.invalidate(calendarsProvider);
   await ref.read(calendarsProvider.future);

@@ -1,7 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
+import 'package:voyager/domain/models/job_experience_snippet.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_charts.dart';
 
@@ -22,6 +27,7 @@ class JobsHeader extends StatelessWidget {
     this.profileLinkedInUrl,
     this.profileGitHubUrl,
     this.profilePortfolioUrl,
+    this.experienceSnippets = const [],
   });
 
   /// Every application ever, archived and tombstoned-excluded alike (§8.1).
@@ -54,6 +60,14 @@ class JobsHeader extends StatelessWidget {
   final String? profileLinkedInUrl;
   final String? profileGitHubUrl;
   final String? profilePortfolioUrl;
+
+  /// The user's experience snippets, in Settings order. Each copies its
+  /// description; the first few that fit are chips and the rest sit behind an
+  /// overflow menu. Empty hides the group, spacing included.
+  final List<JobExperienceSnippet> experienceSnippets;
+
+  /// Between the profile icons, the experience chips and the chart.
+  static const double _groupGap = 12;
 
   @override
   Widget build(BuildContext context) {
@@ -118,25 +132,48 @@ class JobsHeader extends StatelessWidget {
               // slack in this half is to its left — which is exactly where the
               // copy buttons belong (§3.4). Sharing the half keeps them beside
               // the chart at any width instead of stranded mid-row.
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (profileLinks.isNotEmpty) ...[
-                    _ProfileCopyButtons(links: profileLinks),
-                    const SizedBox(width: 12),
-                  ],
-                  // Flexible so the chart gives ground first when the half
-                  // is narrow. It caps itself at 260px and its Align keeps it
-                  // right of whatever it is given, so it only ever shrinks —
-                  // and the copy buttons, which cannot, stay whole.
-                  Flexible(
-                    child: _LabelledChart(
-                      label: 'Last 30 days',
-                      child: JobsSparkline(counts: dailyCounts),
-                    ),
-                  ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Everything in this half but the chips has a known width,
+                  // so what is left for them is settled before they lay out.
+                  // The chart's floor comes off too: chips that would squeeze
+                  // it below that move into the overflow menu instead.
+                  final chipBudget =
+                      constraints.maxWidth -
+                      (profileLinks.isEmpty
+                          ? 0
+                          : profileLinks.length * _ProfileCopyButton.extent +
+                                _groupGap) -
+                      _groupGap -
+                      _LabelledChart.minWidth;
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (profileLinks.isNotEmpty) ...[
+                        _ProfileCopyButtons(links: profileLinks),
+                        const SizedBox(width: _groupGap),
+                      ],
+                      if (experienceSnippets.isNotEmpty) ...[
+                        _ExperienceCopyButtons(
+                          snippets: experienceSnippets,
+                          budget: chipBudget,
+                        ),
+                        const SizedBox(width: _groupGap),
+                      ],
+                      // Flexible so the chart gives ground first when the
+                      // half is narrow. It caps itself at 260px and takes no
+                      // more than that, so it only ever shrinks — and the
+                      // copy buttons, which cannot, stay whole.
+                      Flexible(
+                        child: _LabelledChart(
+                          label: 'Last 30 days',
+                          child: JobsSparkline(counts: dailyCounts),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -401,6 +438,12 @@ class _ProfileCopyButton extends StatelessWidget {
   final IconData icon;
   final String url;
 
+  static const double _padding = 10;
+  static const double _iconSize = 24;
+
+  /// The button's width, which the header budgets the experience chips from.
+  static const double extent = _padding * 2 + _iconSize;
+
   Future<void> _copy(BuildContext context) async {
     // Read the overlay before the await: the header rebuilds on every settings
     // change, so this context may be gone once the copy resolves.
@@ -426,13 +469,323 @@ class _ProfileCopyButton extends StatelessWidget {
           onTap: () => _copy(context),
           borderRadius: BorderRadius.circular(10),
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(_padding),
             child: Icon(
               icon,
-              size: 24,
+              size: _iconSize,
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+const int _kMaxExperienceChips = 3;
+const double _kExperienceChipMinWidth = 90;
+const double _kExperienceChipMaxWidth = 160;
+const double _kExperienceChipGap = 6;
+const double _kExperienceOverflowWidth = 28;
+
+/// How many experience chips fit in [budget], and the widest any may be.
+///
+/// [naturalWidths] are the untruncated widths of the leading chips, in the
+/// user's order; [total] counts every snippet, so whatever is not shown can
+/// reserve room for the overflow button. Chips fill from the front, up to
+/// [maxVisible] — a chip fits if it can show at least [minChipWidth] of itself
+/// (all of itself, when shorter). Among those that fit, space is shared
+/// water-level style: short names keep their full width and only the longest
+/// are truncated to the returned cap.
+@visibleForTesting
+({int visible, double maxChipWidth}) layoutExperienceChips({
+  required List<double> naturalWidths,
+  required int total,
+  required double budget,
+  int maxVisible = _kMaxExperienceChips,
+  double minChipWidth = _kExperienceChipMinWidth,
+  double maxChipWidth = _kExperienceChipMaxWidth,
+  double gap = _kExperienceChipGap,
+  double overflowWidth = _kExperienceOverflowWidth,
+}) {
+  for (var k = math.min(maxVisible, naturalWidths.length); k > 0; k--) {
+    final widths = [
+      for (final width in naturalWidths.take(k)) math.min(width, maxChipWidth),
+    ];
+    final space =
+        budget - gap * (k - 1) - (k < total ? gap + overflowWidth : 0);
+    final floor = widths.fold<double>(
+      0,
+      (sum, width) => sum + math.min(width, minChipWidth),
+    );
+    if (floor > space) continue;
+    return (
+      visible: k,
+      maxChipWidth: _waterLevel(widths, space, maxChipWidth),
+    );
+  }
+  return (visible: 0, maxChipWidth: maxChipWidth);
+}
+
+/// The largest cap, up to [ceiling], at which [widths] — each clipped to the
+/// cap — still sum to no more than [space].
+double _waterLevel(List<double> widths, double space, double ceiling) {
+  final sorted = [...widths]..sort();
+  var remaining = space;
+  for (var i = 0; i < sorted.length; i++) {
+    final share = remaining / (sorted.length - i);
+    if (sorted[i] > share) return share;
+    remaining -= sorted[i];
+  }
+  return ceiling;
+}
+
+/// Copies [snippet]'s description exactly as stored — an empty one included —
+/// and names it in the toast. [overlay] is read by the caller before anything
+/// async, for the same reason [_ProfileCopyButton] reads its own.
+Future<void> _copyExperience(
+  OverlayState overlay,
+  JobExperienceSnippet snippet,
+) async {
+  await Clipboard.setData(ClipboardData(text: snippet.description));
+  showVoyagerToastIn(
+    overlay,
+    message: '${snippet.name} copied',
+    icon: PhosphorIconsRegular.check,
+    dwell: const Duration(seconds: 2),
+  );
+}
+
+/// One-tap copies of the user's experience snippets
+/// (`JOBS_EXPERIENCE_SNIPPETS_HLD.md` §7).
+///
+/// Text chips rather than icons: a role has no glyph. Up to three, in the
+/// user's order — as many as [budget] fits at a readable width — and the rest
+/// behind a caret menu, so a narrow window loses chips rather than the chart.
+class _ExperienceCopyButtons extends StatelessWidget {
+  const _ExperienceCopyButtons({required this.snippets, required this.budget});
+
+  final List<JobExperienceSnippet> snippets;
+  final double budget;
+
+  static double _textWidth(String text, TextStyle style, TextScaler scaler) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    // Rounded up so a chip given exactly its natural width never ellipsizes
+    // over a fraction of a pixel.
+    final width = painter.width.ceilToDouble();
+    painter.dispose();
+    return width;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Merged the way [Text] merges it, so the measured width is the drawn one.
+    final style = DefaultTextStyle.of(
+      context,
+    ).style.merge(_ExperienceChip.labelStyle(Theme.of(context)));
+    final scaler = MediaQuery.textScalerOf(context);
+    final layout = layoutExperienceChips(
+      naturalWidths: [
+        for (final snippet in snippets.take(_kMaxExperienceChips))
+          _ExperienceChip.chrome + _textWidth(snippet.name, style, scaler),
+      ],
+      total: snippets.length,
+      budget: budget,
+    );
+    final shown = snippets.take(layout.visible).toList();
+    final hidden = snippets.skip(layout.visible).toList();
+
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < shown.length; i++) ...[
+            if (i > 0) const SizedBox(width: _kExperienceChipGap),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: layout.maxChipWidth),
+              child: _ExperienceChip(snippet: shown[i]),
+            ),
+          ],
+          if (hidden.isNotEmpty) ...[
+            if (shown.isNotEmpty) const SizedBox(width: _kExperienceChipGap),
+            _ExperienceOverflowButton(
+              snippets: hidden,
+              allHidden: shown.isEmpty,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ExperienceChip extends StatelessWidget {
+  const _ExperienceChip({required this.snippet});
+
+  final JobExperienceSnippet snippet;
+
+  static const double _horizontalPadding = 10;
+  static const double _border = 1;
+  static const double _iconSize = 12;
+  static const double _iconGap = 5;
+
+  /// Everything in a chip but its label, for measuring it before layout.
+  static const double chrome =
+      (_horizontalPadding + _border) * 2 + _iconSize + _iconGap;
+
+  static TextStyle? labelStyle(ThemeData theme) => theme.textTheme.labelSmall;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // The name only: the description never appears on the Jobs page.
+    return Tooltip(
+      message: 'Copy ${snippet.name}',
+      waitDuration: const Duration(milliseconds: 500),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: () =>
+              _copyExperience(Overlay.of(context, rootOverlay: true), snippet),
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _horizontalPadding,
+              vertical: 5,
+            ),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.4,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant,
+                width: _border,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  PhosphorIconsRegular.copy,
+                  size: _iconSize,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: _iconGap),
+                Flexible(
+                  child: Text(
+                    snippet.name,
+                    style: labelStyle(theme),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExperienceOverflowButton extends StatelessWidget {
+  const _ExperienceOverflowButton({
+    required this.snippets,
+    required this.allHidden,
+  });
+
+  final List<JobExperienceSnippet> snippets;
+
+  /// No chip made it onto the row, so this button is the whole group.
+  final bool allHidden;
+
+  Future<void> _open(BuildContext context) async {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final picked = await showContextualPopover<JobExperienceSnippet>(
+      context: context,
+      buttonContext: context,
+      width: 280,
+      builder: (_) => _ExperienceMenu(snippets: snippets),
+    );
+    if (picked != null) await _copyExperience(overlay, picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: allHidden ? 'Copy an experience' : 'More experiences',
+      waitDuration: const Duration(milliseconds: 500),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: () => _open(context),
+          borderRadius: BorderRadius.circular(20),
+          child: SizedBox(
+            width: _kExperienceOverflowWidth,
+            height: _kExperienceOverflowWidth,
+            child: Icon(
+              PhosphorIconsRegular.caretDown,
+              size: 16,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The overflow list. Names wrap rather than ellipsize: this is where a name
+/// too long for its chip is read in full.
+class _ExperienceMenu extends StatelessWidget {
+  const _ExperienceMenu({required this.snippets});
+
+  final List<JobExperienceSnippet> snippets;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 280),
+      child: VoyagerScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final snippet in snippets)
+              InkWell(
+                onTap: () => Navigator.of(context).pop(snippet),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        PhosphorIconsRegular.copy,
+                        size: 13,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          snippet.name,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -447,6 +800,11 @@ class _LabelledChart extends StatelessWidget {
   /// day-to-day swings are steep enough to read.
   static const double _maxWidth = 260;
 
+  /// The least the experience chips may leave the chart. Below this the
+  /// 30 days stop reading as a trend, so chips give way to the overflow menu
+  /// first. Profile icons alone can still push it narrower.
+  static const double minWidth = 140;
+
   final String label;
   final Widget child;
 
@@ -455,6 +813,10 @@ class _LabelledChart extends StatelessWidget {
     final theme = Theme.of(context);
     return Align(
       alignment: Alignment.centerRight,
+      // Shrink-wrap: an Align handed a bounded width otherwise fills it, and
+      // the header's copy buttons, packed in just before this, would sit at
+      // the far side of that slack instead of against the chart.
+      widthFactor: 1,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: _maxWidth),
         child: Column(

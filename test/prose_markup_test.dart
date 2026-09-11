@@ -306,4 +306,18 @@ void main() {
           isEmpty);
     });
   });
+
+  group('proseStrip', () {
+    test('takes out every paired delimiter, nested ones included', () {
+      expect(proseStrip('**Dinner** with *friends*'), 'Dinner with friends');
+      expect(proseStrip('**bold *both* bold**'), 'bold both bold');
+      expect(proseStrip('__u__ and ==h=='), 'u and h');
+    });
+
+    test('leaves anything that never paired exactly as typed', () {
+      expect(proseStrip('2*3 and a__b__c'), '2*3 and a__b__c');
+      expect(proseStrip('**unclosed'), '**unclosed');
+      expect(proseStrip(r'sum $x * y$ holds'), r'sum $x * y$ holds');
+    });
+  });
 }

@@ -7,7 +7,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -18,6 +17,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_edit_panel.dart';
+import 'package:voyager/features/rankings/rankings_field_editor.dart';
 import 'package:voyager/features/rankings/rankings_header.dart';
 import 'package:voyager/features/rankings/rankings_page.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
@@ -74,6 +74,7 @@ Finder chipText(String label) => find.descendant(
 Future<({AppDatabase db, ProviderContainer container})> pumpRankingsPage(
   WidgetTester tester, {
   required Future<void> Function(DriftRankingRepository repo) seed,
+  DriftRankingRepository Function(AppDatabase db)? repository,
 }) async {
   // Wide and tall: the band is a long row, and the list sits beside a 420px
   // panel once one is open.
@@ -88,6 +89,8 @@ Future<({AppDatabase db, ProviderContainer container})> pumpRankingsPage(
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
+      if (repository != null)
+        rankingRepositoryProvider.overrideWithValue(repository(db)),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
     ],
@@ -126,6 +129,58 @@ RankingChild makeChild({
   createdAt: _now,
   updatedAt: _now,
 );
+
+/// Notes every list the page reads, so a test can say which ones an edit
+/// makes it fetch again.
+class _CountingRankingRepository extends DriftRankingRepository {
+  _CountingRankingRepository(super.db);
+
+  final reads = <String>[];
+
+  @override
+  Future<List<RankingCategory>> listCategories({bool includeDeleted = false}) {
+    reads.add('categories');
+    return super.listCategories(includeDeleted: includeDeleted);
+  }
+
+  @override
+  Future<List<RankingParent>> listParents(
+    String categoryId, {
+    bool includeDeleted = false,
+  }) {
+    reads.add('parents');
+    return super.listParents(categoryId, includeDeleted: includeDeleted);
+  }
+
+  @override
+  Future<List<RankingChild>> listChildren(
+    String parentId, {
+    bool includeDeleted = false,
+  }) {
+    reads.add('children');
+    return super.listChildren(parentId, includeDeleted: includeDeleted);
+  }
+}
+
+/// Holds every entry write back, the way the disk does in the app: the page
+/// only hears of a save some frames after the control that made it has closed.
+class _SlowRankingRepository extends DriftRankingRepository {
+  _SlowRankingRepository(super.db);
+
+  static const delay = Duration(milliseconds: 100);
+
+  @override
+  Future<void> upsertParent(
+    RankingParent parent, {
+    bool recordLocalActivity = true,
+  }) async {
+    await Future<void>.delayed(delay);
+    return super.upsertParent(
+      parent,
+      recordLocalActivity: recordLocalActivity,
+    );
+  }
+}
 
 void main() {
   testWidgets('with no categories, offers to make the first one', (
@@ -451,6 +506,69 @@ void main() {
     );
     expect(find.text('Ranked'), findsOneWidget);
     expect(find.text('Queue'), findsNothing);
+  });
+
+  testWidgets('a score set in the panel never falls back to blank while it '
+      'saves', (tester) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      repository: _SlowRankingRepository.new,
+      seed: (repo) async {
+        final category = makeCategory().copyWith(
+          parentTemplate: const [
+            RankingTemplateField(id: 'plot', label: 'Plot', sortOrder: 0),
+          ],
+        );
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(categoryId: category.id, title: 'Andor'),
+        );
+      },
+    );
+
+    await tester.tap(find.text('Andor'));
+    await tester.pumpAndSettle();
+
+    Finder numberIn(Finder surface) => find.descendant(
+      of: find.descendant(
+        of: surface,
+        matching: find.byType(RankingScoreNumber),
+      ),
+      matching: find.byType(Text),
+    );
+
+    for (final surface in [
+      find.byType(RankingOverallRow),
+      find.byType(RankingFieldEditor),
+    ]) {
+      await tester.tap(numberIn(surface));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(RankingScorePopover),
+          matching: find.byType(TextField),
+        ),
+        '4',
+      );
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+
+      // One frame at a time from the close to well past the landing: the
+      // draft used to drop to the stored dash for the frames in between.
+      final frames = <String?>[];
+      for (var i = 0; i < 15; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        frames.add(tester.widget<Text>(numberIn(surface)).data);
+      }
+      expect(frames, everyElement('4'), reason: '$surface');
+      await tester.pumpAndSettle();
+    }
+
+    final repo = DriftRankingRepository(harness.db);
+    final categories = await repo.listCategories();
+    final saved = (await repo.listParents(categories.single.id)).single;
+    expect(saved.overallScore, 4);
+    expect(saved.fieldValues['plot']?.score, 4);
   });
 
   testWidgets('the star strip is decoration and sets nothing', (tester) async {
@@ -823,7 +941,136 @@ void main() {
     expect(saved.single.status, RankingStatus.queued);
   });
 
-  testWidgets('the × takes a tag off the entry', (tester) async {
+  testWidgets('a tag save re-reads the entries alone, and rebuilds only its own row', (
+    tester,
+  ) async {
+    late _CountingRankingRepository repository;
+    await pumpRankingsPage(
+      tester,
+      repository: (db) => repository = _CountingRankingRepository(db),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        for (final title in ['Andor', 'Severance', 'Dark']) {
+          final parent = makeParent(categoryId: category.id, title: title);
+          await repo.upsertParent(parent);
+          await repo.upsertChild(makeChild(parentId: parent.id, name: 'Pilot'));
+        }
+      },
+    );
+
+    await tester.tap(find.text('Andor'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(RankingTagsField), 'spy');
+    await tester.pumpAndSettle();
+
+    repository.reads.clear();
+    final rowBuilds = <String>[];
+    var panelBuilds = 0;
+    debugOnRebuildDirtyWidget = (element, _) {
+      final widget = element.widget;
+      if (widget is RankingsRow) rowBuilds.add(widget.parent.title);
+      if (widget is RankingsEditPanel) panelBuilds++;
+    };
+    try {
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+    } finally {
+      debugOnRebuildDirtyWidget = null;
+    }
+
+    // A tag cannot change a category or a child, so neither is fetched again.
+    // The page takes the new list in one pass, redrawing the one row whose
+    // entry changed, and the panel is drawn once, by that pass — the tag field
+    // already showed the chip without it.
+    expect(repository.reads, ['parents']);
+    expect(rowBuilds, ['Andor']);
+    expect(panelBuilds, 1);
+    expect(
+      find.descendant(
+        of: find.byType(RankingsRow),
+        matching: find.text('spy'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a reused row still takes a later edit to its own entry', (
+    tester,
+  ) async {
+    await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        for (final title in ['Andor', 'Severance']) {
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: title),
+          );
+        }
+      },
+    );
+
+    // Andor's row is rebuilt for its tag; Severance's is handed back as it
+    // was. The next edit lands on Severance, and its row has to see it.
+    await tester.tap(find.text('Andor'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(RankingTagsField), 'spy');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Severance'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(RankingTagsField), 'drama');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    Finder rowTag(String title, String tag) => find.descendant(
+      of: find.widgetWithText(RankingsRow, title),
+      matching: find.text(tag),
+    );
+    expect(rowTag('Andor', 'spy'), findsOneWidget);
+    expect(rowTag('Severance', 'drama'), findsOneWidget);
+    expect(rowTag('Severance', 'spy'), findsNothing);
+  });
+
+  testWidgets('a tag too long for its chip is cut short, not overflowed', (
+    tester,
+  ) async {
+    final long = 'a' * 120;
+    await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Severance',
+            tags: [long, 'scifi'],
+          ),
+        );
+      },
+    );
+
+    // An overflowing Row reports itself as a test failure, so reaching the
+    // expectations at all is most of the check: the row's strip and the
+    // panel's chip both hold a tag far wider than either.
+    await tester.tap(find.text('Severance'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final chipText = find.descendant(
+      of: find.byType(RankingTagsField),
+      matching: find.text(long),
+    );
+    expect(tester.widget<Text>(chipText).overflow, TextOverflow.ellipsis);
+    // Cut, so it says the rest on hover; the short one beside it does not.
+    expect(find.byTooltip(long), findsOneWidget);
+    expect(find.byTooltip('scifi'), findsNothing);
+  });
+
+  testWidgets('tapping a chip takes the tag off the entry', (tester) async {
     await pumpRankingsPage(
       tester,
       seed: (repo) async {
@@ -846,12 +1093,121 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(RankingTagsField),
-        matching: find.byIcon(PhosphorIconsRegular.x),
+        matching: find.text('scifi'),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('scifi'), findsNothing);
+    expect(find.text('Undo'), findsOneWidget);
+
+    // Left unanswered, the offer goes and the tag stays off.
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pumpAndSettle();
+    expect(find.text('Undo'), findsNothing);
+    expect(find.text('scifi'), findsNothing);
+  });
+
+  testWidgets('undo puts a tapped-off tag back where it was', (tester) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Severance',
+            score: 5,
+            tags: ['scifi', 'drama'],
+          ),
+        );
+      },
+    );
+
+    await tester.tap(find.text('Severance'));
+    await tester.pumpAndSettle();
+
+    final field = find.byType(RankingTagsField);
+    await tester.tap(find.descendant(of: field, matching: find.text('scifi')));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: field, matching: find.text('scifi')), findsNothing);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.descendant(of: field, matching: find.text('scifi')), findsOne);
+    expect(
+      find.descendant(
+        of: find.byType(RankingsRow),
+        matching: find.text('scifi'),
+      ),
+      findsOne,
+    );
+    // In front of `drama` again, not appended after it.
+    final repo = DriftRankingRepository(harness.db);
+    final categories = await repo.listCategories();
+    final parents = await repo.listParents(categories.single.id);
+    expect(parents.single.tags, ['scifi', 'drama']);
+  });
+
+  testWidgets('undo lands on the entry the tag came off, not the open one', (
+    tester,
+  ) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Severance',
+            score: 5,
+            tags: ['scifi'],
+          ),
+        );
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Andor',
+            score: 4,
+            tags: ['spy'],
+          ),
+        );
+      },
+    );
+
+    await tester.tap(find.text('Severance'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(RankingTagsField),
+        matching: find.text('scifi'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The panel moves to another entry while the offer stands.
+    await tester.tap(find.text('Andor'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.descendant(
+        of: find.byType(RankingTagsField),
+        matching: find.text('scifi'),
+      ),
+      findsNothing,
+    );
+    final repo = DriftRankingRepository(harness.db);
+    final categories = await repo.listCategories();
+    final parents = await repo.listParents(categories.single.id);
+    expect(parents.firstWhere((p) => p.title == 'Severance').tags, ['scifi']);
+    expect(parents.firstWhere((p) => p.title == 'Andor').tags, ['spy']);
   });
 
   testWidgets('clicking a row chip filters, and clicking it again keeps it', (

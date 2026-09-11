@@ -2969,7 +2969,7 @@ class _EntryQuote extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
-              child: Text(
+              child: VoyagerProseText(
                 text,
                 textAlign: TextAlign.right,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(

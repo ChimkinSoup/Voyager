@@ -569,12 +569,12 @@ class _RenderCapsLockCaret extends RenderProxyBox {
     final caretOffset = (normal ? session.caretOffset : selection.baseOffset)
         .clamp(0, text.length);
 
-    // `getLocalRectForCaret` answers in the paragraph's own space;
-    // `getBoxesForSelection` has already had the field's scroll folded in. Only
-    // the first needs shifting.
-    var caret = render
-        .getLocalRectForCaret(TextPosition(offset: caretOffset))
-        .shift(_scrollShift(render));
+    // Both `getLocalRectForCaret` and `getBoxesForSelection` have already had
+    // the field's scroll (`RenderEditable`'s own paint offset) folded in, so
+    // neither is shifted again here. Subtracting it a second time moved the
+    // mark by twice the scroll: in a box scrolled down by N the chip landed N
+    // above the caret it is supposed to sit beside.
+    var caret = render.getLocalRectForCaret(TextPosition(offset: caretOffset));
 
     if (normal) {
       // Normal mode's caret is the block `VimTextOverlay` paints — as wide as
@@ -606,14 +606,6 @@ class _RenderCapsLockCaret extends RenderProxyBox {
       TextSelection(baseOffset: offset, extentOffset: offset + 1),
     );
     return boxes.isEmpty ? null : boxes.first.toRect();
-  }
-
-  static Offset _scrollShift(RenderEditable render) {
-    final offset = render.offset;
-    if (!offset.hasPixels) return Offset.zero;
-    return render.maxLines == 1
-        ? Offset(-offset.pixels, 0)
-        : Offset(0, -offset.pixels);
   }
 
   static double _iconSize(RenderEditable render) {

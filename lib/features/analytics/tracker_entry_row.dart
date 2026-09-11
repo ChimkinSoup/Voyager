@@ -46,6 +46,17 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   // row's width — only what's centered inside this slot changes.
   static const _trailingSlotWidth = 18.0;
 
+  /// The "0-10" range line under a capped integer field: the gap above it and
+  /// its own line height. Read by [_buildEditor] to reserve the same strip
+  /// *above* the field, so the editor's midline stays the field's midline —
+  /// which is what the name beside it and the badge after it are centred on.
+  /// Without the mirror a capped row hung its badge 4px below the box it
+  /// belongs to while an uncapped one sat true, and a column of mixed
+  /// trackers read as drifting further out of line the further down it went.
+  static const _capLabelFontSize = 7.0;
+  static const _capLabelGap = 1.0;
+  static const _capLabelExtent = _capLabelGap + _capLabelFontSize;
+
   final _intController = TextEditingController();
   final _intFocusNode = FocusNode();
   String? _enumValue;
@@ -247,47 +258,54 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            // See [_capLabelExtent]: the range line below is balanced above.
+            if (cap != null) const SizedBox(height: _capLabelExtent),
+            // Centred, not stretched: on desktop's compact density the field
+            // draws only 24px of border, and handed the full slot it pins that
+            // to the top — hanging its midline 4px above the name and badge.
             SizedBox(
               height: _editorHeight,
-              child: TextField(
-                controller: _intController,
-                focusNode: _intFocusNode,
-                autofocus: false,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.left,
-                textAlignVertical: TextAlignVertical.center,
-                scrollPadding: kVoyagerFieldScrollPadding,
-                style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
-                decoration: InputDecoration(
-                  isDense: true,
-                  isCollapsed: true,
-                  filled: true,
-                  fillColor:
-                      theme.inputDecorationTheme.fillColor ??
-                      theme.colorScheme.surface,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 9,
+              child: Align(
+                child: TextField(
+                  controller: _intController,
+                  focusNode: _intFocusNode,
+                  autofocus: false,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.left,
+                  textAlignVertical: TextAlignVertical.center,
+                  scrollPadding: kVoyagerFieldScrollPadding,
+                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    isCollapsed: true,
+                    filled: true,
+                    fillColor:
+                        theme.inputDecorationTheme.fillColor ??
+                        theme.colorScheme.surface,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 9,
+                    ),
+                    border: _editorBorder(accent, width: 1.3),
+                    enabledBorder: _editorBorder(accent, width: 1.3),
+                    focusedBorder: _editorBorder(accent, width: 1.8),
                   ),
-                  border: _editorBorder(accent, width: 1.3),
-                  enabledBorder: _editorBorder(accent, width: 1.3),
-                  focusedBorder: _editorBorder(accent, width: 1.8),
+                  onChanged: (_) {
+                    if (!_dirty) {
+                      setState(() => _dirty = true);
+                      widget.onDirtyChanged?.call(true);
+                    }
+                  },
+                  onSubmitted: (_) => _saveInt(existing),
                 ),
-                onChanged: (_) {
-                  if (!_dirty) {
-                    setState(() => _dirty = true);
-                    widget.onDirtyChanged?.call(true);
-                  }
-                },
-                onSubmitted: (_) => _saveInt(existing),
               ),
             ),
             if (cap != null) ...[
-              const SizedBox(height: 1),
+              const SizedBox(height: _capLabelGap),
               Text(
                 '$minVal-$cap',
                 style: theme.textTheme.labelSmall?.copyWith(
-                  fontSize: 7,
+                  fontSize: _capLabelFontSize,
                   height: 1,
                   color: theme.colorScheme.onSurfaceVariant.withValues(
                     alpha: 0.6,

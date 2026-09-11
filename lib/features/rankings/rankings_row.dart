@@ -266,10 +266,14 @@ class _Subtitle extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final tag in shown) ...[
-          _RowTagChip(
-            tag: tag,
-            accent: accent,
-            onTap: () => onTagTapped(tag),
+          // Flexible, so a tag wider than its share of the line is cut short
+          // instead of pushing the strip past the row's edge.
+          Flexible(
+            child: _RowTagChip(
+              tag: tag,
+              accent: accent,
+              onTap: () => onTagTapped(tag),
+            ),
           ),
           const SizedBox(width: 4),
         ],
@@ -332,6 +336,8 @@ class _RowTagChip extends StatelessWidget {
           ),
           child: Text(
             tag,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(color: accent),
           ),
         ),

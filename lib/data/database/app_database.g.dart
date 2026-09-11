@@ -3829,6 +3829,18 @@ class $CalendarsTableTable extends CalendarsTable
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _overlayCalendarIdsMeta =
+      const VerificationMeta('overlayCalendarIds');
+  @override
+  late final GeneratedColumn<String> overlayCalendarIds =
+      GeneratedColumn<String>(
+        'overlay_calendar_ids',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3879,6 +3891,7 @@ class $CalendarsTableTable extends CalendarsTable
     id,
     name,
     colorValue,
+    overlayCalendarIds,
     createdAt,
     updatedAt,
     version,
@@ -3913,6 +3926,15 @@ class $CalendarsTableTable extends CalendarsTable
       context.handle(
         _colorValueMeta,
         colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    }
+    if (data.containsKey('overlay_calendar_ids')) {
+      context.handle(
+        _overlayCalendarIdsMeta,
+        overlayCalendarIds.isAcceptableOrUnknown(
+          data['overlay_calendar_ids']!,
+          _overlayCalendarIdsMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -3964,6 +3986,10 @@ class $CalendarsTableTable extends CalendarsTable
         DriftSqlType.int,
         data['${effectivePrefix}color_value'],
       ),
+      overlayCalendarIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}overlay_calendar_ids'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3994,6 +4020,10 @@ class CalendarsTableData extends DataClass
   final String id;
   final String name;
   final int? colorValue;
+
+  /// JSON array of the calendar ids drawn alongside this one. See
+  /// [Calendar.overlayCalendarIds].
+  final String overlayCalendarIds;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -4002,6 +4032,7 @@ class CalendarsTableData extends DataClass
     required this.id,
     required this.name,
     this.colorValue,
+    required this.overlayCalendarIds,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -4015,6 +4046,7 @@ class CalendarsTableData extends DataClass
     if (!nullToAbsent || colorValue != null) {
       map['color_value'] = Variable<int>(colorValue);
     }
+    map['overlay_calendar_ids'] = Variable<String>(overlayCalendarIds);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -4031,6 +4063,7 @@ class CalendarsTableData extends DataClass
       colorValue: colorValue == null && nullToAbsent
           ? const Value.absent()
           : Value(colorValue),
+      overlayCalendarIds: Value(overlayCalendarIds),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -4049,6 +4082,9 @@ class CalendarsTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       colorValue: serializer.fromJson<int?>(json['colorValue']),
+      overlayCalendarIds: serializer.fromJson<String>(
+        json['overlayCalendarIds'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -4062,6 +4098,7 @@ class CalendarsTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'colorValue': serializer.toJson<int?>(colorValue),
+      'overlayCalendarIds': serializer.toJson<String>(overlayCalendarIds),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -4073,6 +4110,7 @@ class CalendarsTableData extends DataClass
     String? id,
     String? name,
     Value<int?> colorValue = const Value.absent(),
+    String? overlayCalendarIds,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -4081,6 +4119,7 @@ class CalendarsTableData extends DataClass
     id: id ?? this.id,
     name: name ?? this.name,
     colorValue: colorValue.present ? colorValue.value : this.colorValue,
+    overlayCalendarIds: overlayCalendarIds ?? this.overlayCalendarIds,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -4093,6 +4132,9 @@ class CalendarsTableData extends DataClass
       colorValue: data.colorValue.present
           ? data.colorValue.value
           : this.colorValue,
+      overlayCalendarIds: data.overlayCalendarIds.present
+          ? data.overlayCalendarIds.value
+          : this.overlayCalendarIds,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -4106,6 +4148,7 @@ class CalendarsTableData extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
+          ..write('overlayCalendarIds: $overlayCalendarIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -4119,6 +4162,7 @@ class CalendarsTableData extends DataClass
     id,
     name,
     colorValue,
+    overlayCalendarIds,
     createdAt,
     updatedAt,
     version,
@@ -4131,6 +4175,7 @@ class CalendarsTableData extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.colorValue == this.colorValue &&
+          other.overlayCalendarIds == this.overlayCalendarIds &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -4141,6 +4186,7 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
   final Value<String> id;
   final Value<String> name;
   final Value<int?> colorValue;
+  final Value<String> overlayCalendarIds;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -4150,6 +4196,7 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.colorValue = const Value.absent(),
+    this.overlayCalendarIds = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -4160,6 +4207,7 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
     required String id,
     required String name,
     this.colorValue = const Value.absent(),
+    this.overlayCalendarIds = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -4173,6 +4221,7 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<int>? colorValue,
+    Expression<String>? overlayCalendarIds,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -4183,6 +4232,8 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (colorValue != null) 'color_value': colorValue,
+      if (overlayCalendarIds != null)
+        'overlay_calendar_ids': overlayCalendarIds,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -4195,6 +4246,7 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
     Value<String>? id,
     Value<String>? name,
     Value<int?>? colorValue,
+    Value<String>? overlayCalendarIds,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -4205,6 +4257,7 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
       id: id ?? this.id,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
+      overlayCalendarIds: overlayCalendarIds ?? this.overlayCalendarIds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -4224,6 +4277,9 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
     }
     if (colorValue.present) {
       map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (overlayCalendarIds.present) {
+      map['overlay_calendar_ids'] = Variable<String>(overlayCalendarIds.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -4249,6 +4305,7 @@ class CalendarsTableCompanion extends UpdateCompanion<CalendarsTableData> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
+          ..write('overlayCalendarIds: $overlayCalendarIds, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -8396,6 +8453,17 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _jobExperienceSnippetsJsonMeta =
+      const VerificationMeta('jobExperienceSnippetsJson');
+  @override
+  late final GeneratedColumn<String> jobExperienceSnippetsJson =
+      GeneratedColumn<String>(
+        'job_experience_snippets_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _dreamSplitWidthMeta = const VerificationMeta(
     'dreamSplitWidth',
   );
@@ -8833,6 +8901,7 @@ class $SettingsTableTable extends SettingsTable
     jobProfileLinkedInUrl,
     jobProfileGitHubUrl,
     jobProfilePortfolioUrl,
+    jobExperienceSnippetsJson,
     dreamSplitWidth,
     showDreamStatistics,
     dreamNotesPinned,
@@ -9845,6 +9914,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('job_experience_snippets_json')) {
+      context.handle(
+        _jobExperienceSnippetsJsonMeta,
+        jobExperienceSnippetsJson.isAcceptableOrUnknown(
+          data['job_experience_snippets_json']!,
+          _jobExperienceSnippetsJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('dream_split_width')) {
       context.handle(
         _dreamSplitWidthMeta,
@@ -10512,6 +10590,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}job_profile_portfolio_url'],
       ),
+      jobExperienceSnippetsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}job_experience_snippets_json'],
+      ),
       dreamSplitWidth: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}dream_split_width'],
@@ -10781,6 +10863,12 @@ class SettingsTableData extends DataClass
   final String? jobProfileLinkedInUrl;
   final String? jobProfileGitHubUrl;
   final String? jobProfilePortfolioUrl;
+
+  /// The Jobs header's experience snippets, as a JSON array of
+  /// [JobExperienceSnippet.toJson] maps in display order. One column for the
+  /// same reason as [snippetsJson]: small, always read whole, synced as one
+  /// settings field.
+  final String? jobExperienceSnippetsJson;
   final double? dreamSplitWidth;
   final bool showDreamStatistics;
   final bool dreamNotesPinned;
@@ -10940,6 +11028,7 @@ class SettingsTableData extends DataClass
     this.jobProfileLinkedInUrl,
     this.jobProfileGitHubUrl,
     this.jobProfilePortfolioUrl,
+    this.jobExperienceSnippetsJson,
     this.dreamSplitWidth,
     required this.showDreamStatistics,
     required this.dreamNotesPinned,
@@ -11232,6 +11321,11 @@ class SettingsTableData extends DataClass
         jobProfilePortfolioUrl,
       );
     }
+    if (!nullToAbsent || jobExperienceSnippetsJson != null) {
+      map['job_experience_snippets_json'] = Variable<String>(
+        jobExperienceSnippetsJson,
+      );
+    }
     if (!nullToAbsent || dreamSplitWidth != null) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth);
     }
@@ -11450,6 +11544,10 @@ class SettingsTableData extends DataClass
       jobProfilePortfolioUrl: jobProfilePortfolioUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(jobProfilePortfolioUrl),
+      jobExperienceSnippetsJson:
+          jobExperienceSnippetsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jobExperienceSnippetsJson),
       dreamSplitWidth: dreamSplitWidth == null && nullToAbsent
           ? const Value.absent()
           : Value(dreamSplitWidth),
@@ -11751,6 +11849,9 @@ class SettingsTableData extends DataClass
       jobProfilePortfolioUrl: serializer.fromJson<String?>(
         json['jobProfilePortfolioUrl'],
       ),
+      jobExperienceSnippetsJson: serializer.fromJson<String?>(
+        json['jobExperienceSnippetsJson'],
+      ),
       dreamSplitWidth: serializer.fromJson<double?>(json['dreamSplitWidth']),
       showDreamStatistics: serializer.fromJson<bool>(
         json['showDreamStatistics'],
@@ -12007,6 +12108,9 @@ class SettingsTableData extends DataClass
       'jobProfilePortfolioUrl': serializer.toJson<String?>(
         jobProfilePortfolioUrl,
       ),
+      'jobExperienceSnippetsJson': serializer.toJson<String?>(
+        jobExperienceSnippetsJson,
+      ),
       'dreamSplitWidth': serializer.toJson<double?>(dreamSplitWidth),
       'showDreamStatistics': serializer.toJson<bool>(showDreamStatistics),
       'dreamNotesPinned': serializer.toJson<bool>(dreamNotesPinned),
@@ -12155,6 +12259,7 @@ class SettingsTableData extends DataClass
     Value<String?> jobProfileLinkedInUrl = const Value.absent(),
     Value<String?> jobProfileGitHubUrl = const Value.absent(),
     Value<String?> jobProfilePortfolioUrl = const Value.absent(),
+    Value<String?> jobExperienceSnippetsJson = const Value.absent(),
     Value<double?> dreamSplitWidth = const Value.absent(),
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
@@ -12384,6 +12489,9 @@ class SettingsTableData extends DataClass
     jobProfilePortfolioUrl: jobProfilePortfolioUrl.present
         ? jobProfilePortfolioUrl.value
         : this.jobProfilePortfolioUrl,
+    jobExperienceSnippetsJson: jobExperienceSnippetsJson.present
+        ? jobExperienceSnippetsJson.value
+        : this.jobExperienceSnippetsJson,
     dreamSplitWidth: dreamSplitWidth.present
         ? dreamSplitWidth.value
         : this.dreamSplitWidth,
@@ -12756,6 +12864,9 @@ class SettingsTableData extends DataClass
       jobProfilePortfolioUrl: data.jobProfilePortfolioUrl.present
           ? data.jobProfilePortfolioUrl.value
           : this.jobProfilePortfolioUrl,
+      jobExperienceSnippetsJson: data.jobExperienceSnippetsJson.present
+          ? data.jobExperienceSnippetsJson.value
+          : this.jobExperienceSnippetsJson,
       dreamSplitWidth: data.dreamSplitWidth.present
           ? data.dreamSplitWidth.value
           : this.dreamSplitWidth,
@@ -12972,6 +13083,7 @@ class SettingsTableData extends DataClass
           ..write('jobProfileLinkedInUrl: $jobProfileLinkedInUrl, ')
           ..write('jobProfileGitHubUrl: $jobProfileGitHubUrl, ')
           ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
+          ..write('jobExperienceSnippetsJson: $jobExperienceSnippetsJson, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
@@ -13114,6 +13226,7 @@ class SettingsTableData extends DataClass
     jobProfileLinkedInUrl,
     jobProfileGitHubUrl,
     jobProfilePortfolioUrl,
+    jobExperienceSnippetsJson,
     dreamSplitWidth,
     showDreamStatistics,
     dreamNotesPinned,
@@ -13277,6 +13390,7 @@ class SettingsTableData extends DataClass
           other.jobProfileLinkedInUrl == this.jobProfileLinkedInUrl &&
           other.jobProfileGitHubUrl == this.jobProfileGitHubUrl &&
           other.jobProfilePortfolioUrl == this.jobProfilePortfolioUrl &&
+          other.jobExperienceSnippetsJson == this.jobExperienceSnippetsJson &&
           other.dreamSplitWidth == this.dreamSplitWidth &&
           other.showDreamStatistics == this.showDreamStatistics &&
           other.dreamNotesPinned == this.dreamNotesPinned &&
@@ -13416,6 +13530,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> jobProfileLinkedInUrl;
   final Value<String?> jobProfileGitHubUrl;
   final Value<String?> jobProfilePortfolioUrl;
+  final Value<String?> jobExperienceSnippetsJson;
   final Value<double?> dreamSplitWidth;
   final Value<bool> showDreamStatistics;
   final Value<bool> dreamNotesPinned;
@@ -13553,6 +13668,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.jobProfileLinkedInUrl = const Value.absent(),
     this.jobProfileGitHubUrl = const Value.absent(),
     this.jobProfilePortfolioUrl = const Value.absent(),
+    this.jobExperienceSnippetsJson = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
@@ -13691,6 +13807,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.jobProfileLinkedInUrl = const Value.absent(),
     this.jobProfileGitHubUrl = const Value.absent(),
     this.jobProfilePortfolioUrl = const Value.absent(),
+    this.jobExperienceSnippetsJson = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
@@ -13829,6 +13946,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? jobProfileLinkedInUrl,
     Expression<String>? jobProfileGitHubUrl,
     Expression<String>? jobProfilePortfolioUrl,
+    Expression<String>? jobExperienceSnippetsJson,
     Expression<double>? dreamSplitWidth,
     Expression<bool>? showDreamStatistics,
     Expression<bool>? dreamNotesPinned,
@@ -14048,6 +14166,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'job_profile_git_hub_url': jobProfileGitHubUrl,
       if (jobProfilePortfolioUrl != null)
         'job_profile_portfolio_url': jobProfilePortfolioUrl,
+      if (jobExperienceSnippetsJson != null)
+        'job_experience_snippets_json': jobExperienceSnippetsJson,
       if (dreamSplitWidth != null) 'dream_split_width': dreamSplitWidth,
       if (showDreamStatistics != null)
         'show_dream_statistics': showDreamStatistics,
@@ -14200,6 +14320,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? jobProfileLinkedInUrl,
     Value<String?>? jobProfileGitHubUrl,
     Value<String?>? jobProfilePortfolioUrl,
+    Value<String?>? jobExperienceSnippetsJson,
     Value<double?>? dreamSplitWidth,
     Value<bool>? showDreamStatistics,
     Value<bool>? dreamNotesPinned,
@@ -14395,6 +14516,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       jobProfileGitHubUrl: jobProfileGitHubUrl ?? this.jobProfileGitHubUrl,
       jobProfilePortfolioUrl:
           jobProfilePortfolioUrl ?? this.jobProfilePortfolioUrl,
+      jobExperienceSnippetsJson:
+          jobExperienceSnippetsJson ?? this.jobExperienceSnippetsJson,
       dreamSplitWidth: dreamSplitWidth ?? this.dreamSplitWidth,
       showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
       dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
@@ -14901,6 +15024,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         jobProfilePortfolioUrl.value,
       );
     }
+    if (jobExperienceSnippetsJson.present) {
+      map['job_experience_snippets_json'] = Variable<String>(
+        jobExperienceSnippetsJson.value,
+      );
+    }
     if (dreamSplitWidth.present) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth.value);
     }
@@ -15137,6 +15265,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('jobProfileLinkedInUrl: $jobProfileLinkedInUrl, ')
           ..write('jobProfileGitHubUrl: $jobProfileGitHubUrl, ')
           ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
+          ..write('jobExperienceSnippetsJson: $jobExperienceSnippetsJson, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
@@ -27228,6 +27357,533 @@ class StudyReviewLogTableCompanion
   }
 }
 
+class $StudyDeckLinksTableTable extends StudyDeckLinksTable
+    with TableInfo<$StudyDeckLinksTableTable, StudyDeckLinksTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StudyDeckLinksTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentDeckIdMeta = const VerificationMeta(
+    'parentDeckId',
+  );
+  @override
+  late final GeneratedColumn<String> parentDeckId = GeneratedColumn<String>(
+    'parent_deck_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _childDeckIdMeta = const VerificationMeta(
+    'childDeckId',
+  );
+  @override
+  late final GeneratedColumn<String> childDeckId = GeneratedColumn<String>(
+    'child_deck_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _enabledMeta = const VerificationMeta(
+    'enabled',
+  );
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+    'enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    parentDeckId,
+    childDeckId,
+    enabled,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'study_deck_links_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StudyDeckLinksTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('parent_deck_id')) {
+      context.handle(
+        _parentDeckIdMeta,
+        parentDeckId.isAcceptableOrUnknown(
+          data['parent_deck_id']!,
+          _parentDeckIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_parentDeckIdMeta);
+    }
+    if (data.containsKey('child_deck_id')) {
+      context.handle(
+        _childDeckIdMeta,
+        childDeckId.isAcceptableOrUnknown(
+          data['child_deck_id']!,
+          _childDeckIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_childDeckIdMeta);
+    }
+    if (data.containsKey('enabled')) {
+      context.handle(
+        _enabledMeta,
+        enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StudyDeckLinksTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StudyDeckLinksTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      parentDeckId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_deck_id'],
+      )!,
+      childDeckId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}child_deck_id'],
+      )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $StudyDeckLinksTableTable createAlias(String alias) {
+    return $StudyDeckLinksTableTable(attachedDatabase, alias);
+  }
+}
+
+class StudyDeckLinksTableData extends DataClass
+    implements Insertable<StudyDeckLinksTableData> {
+  final String id;
+  final String parentDeckId;
+  final String childDeckId;
+  final bool enabled;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const StudyDeckLinksTableData({
+    required this.id,
+    required this.parentDeckId,
+    required this.childDeckId,
+    required this.enabled,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['parent_deck_id'] = Variable<String>(parentDeckId);
+    map['child_deck_id'] = Variable<String>(childDeckId);
+    map['enabled'] = Variable<bool>(enabled);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  StudyDeckLinksTableCompanion toCompanion(bool nullToAbsent) {
+    return StudyDeckLinksTableCompanion(
+      id: Value(id),
+      parentDeckId: Value(parentDeckId),
+      childDeckId: Value(childDeckId),
+      enabled: Value(enabled),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory StudyDeckLinksTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StudyDeckLinksTableData(
+      id: serializer.fromJson<String>(json['id']),
+      parentDeckId: serializer.fromJson<String>(json['parentDeckId']),
+      childDeckId: serializer.fromJson<String>(json['childDeckId']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'parentDeckId': serializer.toJson<String>(parentDeckId),
+      'childDeckId': serializer.toJson<String>(childDeckId),
+      'enabled': serializer.toJson<bool>(enabled),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  StudyDeckLinksTableData copyWith({
+    String? id,
+    String? parentDeckId,
+    String? childDeckId,
+    bool? enabled,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => StudyDeckLinksTableData(
+    id: id ?? this.id,
+    parentDeckId: parentDeckId ?? this.parentDeckId,
+    childDeckId: childDeckId ?? this.childDeckId,
+    enabled: enabled ?? this.enabled,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  StudyDeckLinksTableData copyWithCompanion(StudyDeckLinksTableCompanion data) {
+    return StudyDeckLinksTableData(
+      id: data.id.present ? data.id.value : this.id,
+      parentDeckId: data.parentDeckId.present
+          ? data.parentDeckId.value
+          : this.parentDeckId,
+      childDeckId: data.childDeckId.present
+          ? data.childDeckId.value
+          : this.childDeckId,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StudyDeckLinksTableData(')
+          ..write('id: $id, ')
+          ..write('parentDeckId: $parentDeckId, ')
+          ..write('childDeckId: $childDeckId, ')
+          ..write('enabled: $enabled, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    parentDeckId,
+    childDeckId,
+    enabled,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StudyDeckLinksTableData &&
+          other.id == this.id &&
+          other.parentDeckId == this.parentDeckId &&
+          other.childDeckId == this.childDeckId &&
+          other.enabled == this.enabled &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class StudyDeckLinksTableCompanion
+    extends UpdateCompanion<StudyDeckLinksTableData> {
+  final Value<String> id;
+  final Value<String> parentDeckId;
+  final Value<String> childDeckId;
+  final Value<bool> enabled;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const StudyDeckLinksTableCompanion({
+    this.id = const Value.absent(),
+    this.parentDeckId = const Value.absent(),
+    this.childDeckId = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StudyDeckLinksTableCompanion.insert({
+    required String id,
+    required String parentDeckId,
+    required String childDeckId,
+    this.enabled = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       parentDeckId = Value(parentDeckId),
+       childDeckId = Value(childDeckId),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<StudyDeckLinksTableData> custom({
+    Expression<String>? id,
+    Expression<String>? parentDeckId,
+    Expression<String>? childDeckId,
+    Expression<bool>? enabled,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (parentDeckId != null) 'parent_deck_id': parentDeckId,
+      if (childDeckId != null) 'child_deck_id': childDeckId,
+      if (enabled != null) 'enabled': enabled,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StudyDeckLinksTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? parentDeckId,
+    Value<String>? childDeckId,
+    Value<bool>? enabled,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return StudyDeckLinksTableCompanion(
+      id: id ?? this.id,
+      parentDeckId: parentDeckId ?? this.parentDeckId,
+      childDeckId: childDeckId ?? this.childDeckId,
+      enabled: enabled ?? this.enabled,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (parentDeckId.present) {
+      map['parent_deck_id'] = Variable<String>(parentDeckId.value);
+    }
+    if (childDeckId.present) {
+      map['child_deck_id'] = Variable<String>(childDeckId.value);
+    }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StudyDeckLinksTableCompanion(')
+          ..write('id: $id, ')
+          ..write('parentDeckId: $parentDeckId, ')
+          ..write('childDeckId: $childDeckId, ')
+          ..write('enabled: $enabled, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ExercisesTableTable extends ExercisesTable
     with TableInfo<$ExercisesTableTable, ExercisesTableData> {
   @override
@@ -38251,6 +38907,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $StudyReviewLogTableTable studyReviewLogTable =
       $StudyReviewLogTableTable(this);
+  late final $StudyDeckLinksTableTable studyDeckLinksTable =
+      $StudyDeckLinksTableTable(this);
   late final $ExercisesTableTable exercisesTable = $ExercisesTableTable(this);
   late final $WorkoutPlansTableTable workoutPlansTable =
       $WorkoutPlansTableTable(this);
@@ -38348,6 +39006,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     studyDecksTable,
     studyCardsTable,
     studyReviewLogTable,
+    studyDeckLinksTable,
     exercisesTable,
     workoutPlansTable,
     workoutPlanEntriesTable,
@@ -40200,6 +40859,7 @@ typedef $$CalendarsTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<int?> colorValue,
+      Value<String> overlayCalendarIds,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -40211,6 +40871,7 @@ typedef $$CalendarsTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<int?> colorValue,
+      Value<String> overlayCalendarIds,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -40239,6 +40900,11 @@ class $$CalendarsTableTableFilterComposer
 
   ColumnFilters<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get overlayCalendarIds => $composableBuilder(
+    column: $table.overlayCalendarIds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -40287,6 +40953,11 @@ class $$CalendarsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get overlayCalendarIds => $composableBuilder(
+    column: $table.overlayCalendarIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -40325,6 +40996,11 @@ class $$CalendarsTableTableAnnotationComposer
 
   GeneratedColumn<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get overlayCalendarIds => $composableBuilder(
+    column: $table.overlayCalendarIds,
     builder: (column) => column,
   );
 
@@ -40381,6 +41057,7 @@ class $$CalendarsTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<int?> colorValue = const Value.absent(),
+                Value<String> overlayCalendarIds = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -40390,6 +41067,7 @@ class $$CalendarsTableTableTableManager
                 id: id,
                 name: name,
                 colorValue: colorValue,
+                overlayCalendarIds: overlayCalendarIds,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -40401,6 +41079,7 @@ class $$CalendarsTableTableTableManager
                 required String id,
                 required String name,
                 Value<int?> colorValue = const Value.absent(),
+                Value<String> overlayCalendarIds = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -40410,6 +41089,7 @@ class $$CalendarsTableTableTableManager
                 id: id,
                 name: name,
                 colorValue: colorValue,
+                overlayCalendarIds: overlayCalendarIds,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -41830,6 +42510,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> jobProfileLinkedInUrl,
       Value<String?> jobProfileGitHubUrl,
       Value<String?> jobProfilePortfolioUrl,
+      Value<String?> jobExperienceSnippetsJson,
       Value<double?> dreamSplitWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
@@ -41969,6 +42650,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> jobProfileLinkedInUrl,
       Value<String?> jobProfileGitHubUrl,
       Value<String?> jobProfilePortfolioUrl,
+      Value<String?> jobExperienceSnippetsJson,
       Value<double?> dreamSplitWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
@@ -42566,6 +43248,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get jobProfilePortfolioUrl => $composableBuilder(
     column: $table.jobProfilePortfolioUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get jobExperienceSnippetsJson => $composableBuilder(
+    column: $table.jobExperienceSnippetsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -43271,6 +43958,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get jobExperienceSnippetsJson => $composableBuilder(
+    column: $table.jobExperienceSnippetsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
     builder: (column) => ColumnOrderings(column),
@@ -43963,6 +44655,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get jobExperienceSnippetsJson => $composableBuilder(
+    column: $table.jobExperienceSnippetsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
     builder: (column) => column,
@@ -44250,6 +44947,7 @@ class $$SettingsTableTableTableManager
                 Value<String?> jobProfileLinkedInUrl = const Value.absent(),
                 Value<String?> jobProfileGitHubUrl = const Value.absent(),
                 Value<String?> jobProfilePortfolioUrl = const Value.absent(),
+                Value<String?> jobExperienceSnippetsJson = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
@@ -44391,6 +45089,7 @@ class $$SettingsTableTableTableManager
                 jobProfileLinkedInUrl: jobProfileLinkedInUrl,
                 jobProfileGitHubUrl: jobProfileGitHubUrl,
                 jobProfilePortfolioUrl: jobProfilePortfolioUrl,
+                jobExperienceSnippetsJson: jobExperienceSnippetsJson,
                 dreamSplitWidth: dreamSplitWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
@@ -44551,6 +45250,7 @@ class $$SettingsTableTableTableManager
                 Value<String?> jobProfileLinkedInUrl = const Value.absent(),
                 Value<String?> jobProfileGitHubUrl = const Value.absent(),
                 Value<String?> jobProfilePortfolioUrl = const Value.absent(),
+                Value<String?> jobExperienceSnippetsJson = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
@@ -44692,6 +45392,7 @@ class $$SettingsTableTableTableManager
                 jobProfileLinkedInUrl: jobProfileLinkedInUrl,
                 jobProfileGitHubUrl: jobProfileGitHubUrl,
                 jobProfilePortfolioUrl: jobProfilePortfolioUrl,
+                jobExperienceSnippetsJson: jobExperienceSnippetsJson,
                 dreamSplitWidth: dreamSplitWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
@@ -51011,6 +51712,283 @@ typedef $$StudyReviewLogTableTableProcessedTableManager =
       StudyReviewLogTableData,
       PrefetchHooks Function()
     >;
+typedef $$StudyDeckLinksTableTableCreateCompanionBuilder =
+    StudyDeckLinksTableCompanion Function({
+      required String id,
+      required String parentDeckId,
+      required String childDeckId,
+      Value<bool> enabled,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$StudyDeckLinksTableTableUpdateCompanionBuilder =
+    StudyDeckLinksTableCompanion Function({
+      Value<String> id,
+      Value<String> parentDeckId,
+      Value<String> childDeckId,
+      Value<bool> enabled,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$StudyDeckLinksTableTableFilterComposer
+    extends Composer<_$AppDatabase, $StudyDeckLinksTableTable> {
+  $$StudyDeckLinksTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentDeckId => $composableBuilder(
+    column: $table.parentDeckId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get childDeckId => $composableBuilder(
+    column: $table.childDeckId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StudyDeckLinksTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $StudyDeckLinksTableTable> {
+  $$StudyDeckLinksTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get parentDeckId => $composableBuilder(
+    column: $table.parentDeckId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get childDeckId => $composableBuilder(
+    column: $table.childDeckId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StudyDeckLinksTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StudyDeckLinksTableTable> {
+  $$StudyDeckLinksTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get parentDeckId => $composableBuilder(
+    column: $table.parentDeckId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get childDeckId => $composableBuilder(
+    column: $table.childDeckId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$StudyDeckLinksTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StudyDeckLinksTableTable,
+          StudyDeckLinksTableData,
+          $$StudyDeckLinksTableTableFilterComposer,
+          $$StudyDeckLinksTableTableOrderingComposer,
+          $$StudyDeckLinksTableTableAnnotationComposer,
+          $$StudyDeckLinksTableTableCreateCompanionBuilder,
+          $$StudyDeckLinksTableTableUpdateCompanionBuilder,
+          (
+            StudyDeckLinksTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $StudyDeckLinksTableTable,
+              StudyDeckLinksTableData
+            >,
+          ),
+          StudyDeckLinksTableData,
+          PrefetchHooks Function()
+        > {
+  $$StudyDeckLinksTableTableTableManager(
+    _$AppDatabase db,
+    $StudyDeckLinksTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StudyDeckLinksTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StudyDeckLinksTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StudyDeckLinksTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> parentDeckId = const Value.absent(),
+                Value<String> childDeckId = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StudyDeckLinksTableCompanion(
+                id: id,
+                parentDeckId: parentDeckId,
+                childDeckId: childDeckId,
+                enabled: enabled,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String parentDeckId,
+                required String childDeckId,
+                Value<bool> enabled = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StudyDeckLinksTableCompanion.insert(
+                id: id,
+                parentDeckId: parentDeckId,
+                childDeckId: childDeckId,
+                enabled: enabled,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StudyDeckLinksTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StudyDeckLinksTableTable,
+      StudyDeckLinksTableData,
+      $$StudyDeckLinksTableTableFilterComposer,
+      $$StudyDeckLinksTableTableOrderingComposer,
+      $$StudyDeckLinksTableTableAnnotationComposer,
+      $$StudyDeckLinksTableTableCreateCompanionBuilder,
+      $$StudyDeckLinksTableTableUpdateCompanionBuilder,
+      (
+        StudyDeckLinksTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $StudyDeckLinksTableTable,
+          StudyDeckLinksTableData
+        >,
+      ),
+      StudyDeckLinksTableData,
+      PrefetchHooks Function()
+    >;
 typedef $$ExercisesTableTableCreateCompanionBuilder =
     ExercisesTableCompanion Function({
       required String id,
@@ -56524,6 +57502,8 @@ class $AppDatabaseManager {
       $$StudyCardsTableTableTableManager(_db, _db.studyCardsTable);
   $$StudyReviewLogTableTableTableManager get studyReviewLogTable =>
       $$StudyReviewLogTableTableTableManager(_db, _db.studyReviewLogTable);
+  $$StudyDeckLinksTableTableTableManager get studyDeckLinksTable =>
+      $$StudyDeckLinksTableTableTableManager(_db, _db.studyDeckLinksTable);
   $$ExercisesTableTableTableManager get exercisesTable =>
       $$ExercisesTableTableTableManager(_db, _db.exercisesTable);
   $$WorkoutPlansTableTableTableManager get workoutPlansTable =>

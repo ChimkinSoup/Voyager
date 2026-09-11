@@ -873,6 +873,14 @@ class DriftCalendarRepository implements CalendarRepository {
             id: Value(calendar.id),
             name: Value(calendar.name),
             colorValue: Value(calendar.colorValue),
+            overlayCalendarIds: Value(
+              jsonEncode(
+                normalizeOverlayCalendarIds(
+                  calendar.id,
+                  calendar.overlayCalendarIds,
+                ),
+              ),
+            ),
             createdAt: Value(calendar.createdAt),
             updatedAt: Value(calendar.updatedAt),
             version: Value(calendar.version),
@@ -888,11 +896,26 @@ class DriftCalendarRepository implements CalendarRepository {
   // bare UPDATE, so the row's version advances with the tombstone. A delete
   // that left version behind would lose to any concurrent edit from another
   // device under version-first conflict resolution.
+  //
+  // Every calendar that overlaid this one drops it too, each through its own
+  // versioned write so the cleanup syncs. A restore does not bring the links
+  // back.
   @override
   Future<void> softDeleteCalendar(String id) async {
     final calendar = await getCalendar(id);
     if (calendar == null) return;
     await upsertCalendar(calendar.copyWith(deletedAt: utcNow()));
+    for (final host in await listCalendars()) {
+      if (!host.overlayCalendarIds.contains(id)) continue;
+      await upsertCalendar(
+        host.copyWith(
+          overlayCalendarIds: [
+            for (final overlayId in host.overlayCalendarIds)
+              if (overlayId != id) overlayId,
+          ],
+        ),
+      );
+    }
   }
 
   @override
@@ -1027,6 +1050,9 @@ class DriftCalendarRepository implements CalendarRepository {
     id: row.id,
     name: row.name,
     colorValue: row.colorValue,
+    overlayCalendarIds: List<String>.from(
+      jsonDecode(row.overlayCalendarIds) as List,
+    ),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -2633,6 +2659,11 @@ class DriftSettingsRepository implements SettingsRepository {
       jobProfileLinkedInUrl: row.jobProfileLinkedInUrl,
       jobProfileGitHubUrl: row.jobProfileGitHubUrl,
       jobProfilePortfolioUrl: row.jobProfilePortfolioUrl,
+      jobExperienceSnippets: row.jobExperienceSnippetsJson == null
+          ? const []
+          : JobExperienceSnippet.listFromJson(
+              jsonDecode(row.jobExperienceSnippetsJson!),
+            ),
       startupPageMode: StartupPageMode.values.byName(row.startupPageMode),
       customStartupPage: row.customStartupPage,
       lastSeenNavPage: row.lastSeenNavPage,
@@ -2889,6 +2920,14 @@ class DriftSettingsRepository implements SettingsRepository {
             jobProfileLinkedInUrl: Value(settings.jobProfileLinkedInUrl),
             jobProfileGitHubUrl: Value(settings.jobProfileGitHubUrl),
             jobProfilePortfolioUrl: Value(settings.jobProfilePortfolioUrl),
+            jobExperienceSnippetsJson: Value(
+              settings.jobExperienceSnippets.isEmpty
+                  ? null
+                  : jsonEncode([
+                      for (final s in settings.jobExperienceSnippets)
+                        s.toJson(),
+                    ]),
+            ),
             leetcodeUsername: Value(settings.leetcodeUsername),
             showNeetCode150: Value(settings.showNeetCode150),
             leetCodeHideDifficulty: Value(settings.leetCodeHideDifficulty),
@@ -3713,6 +3752,57 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<List<StudyDeckLink>> listDeckLinks({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.studyDeckLinksTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapDeckLink)
+        .toList();
+  }
+
+  @override
+  Future<StudyDeckLink?> getDeckLink(String id) async {
+    final row = await (_db.select(
+      _db.studyDeckLinksTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapDeckLink(row);
+  }
+
+  @override
+  Future<void> upsertDeckLink(
+    StudyDeckLink link, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.studyDeckLinksTable)
+        .insertOnConflictUpdate(
+          StudyDeckLinksTableCompanion(
+            id: Value(link.id),
+            parentDeckId: Value(link.parentDeckId),
+            childDeckId: Value(link.childDeckId),
+            enabled: Value(link.enabled),
+            createdAt: Value(link.createdAt),
+            updatedAt: Value(link.updatedAt),
+            version: Value(link.version),
+            deletedAt: Value(link.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.studyDeckLinks);
+    }
+  }
+
+  @override
+  Future<void> softDeleteDeckLink(String id) async {
+    // Version-bumped — see softDeleteFolder.
+    final current = await getDeckLink(id);
+    if (current == null || current.deletedAt != null) return;
+    await upsertDeckLink(current.copyWith(deletedAt: utcNow()));
+  }
+
+  @override
   Future<void> logReview(
     StudyReviewLog log, {
     bool recordLocalActivity = true,
@@ -3783,20 +3873,6 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<int> countDueCardsInDeck(String deckId, {DateTime? now}) async {
-    final n = now ?? utcNow();
-    final rows = await (_db.select(_db.studyCardsTable)
-          ..where(
-            (t) =>
-                t.deckId.equals(deckId) &
-                t.deletedAt.isNull() &
-                t.dueAt.isSmallerOrEqualValue(n),
-          ))
-        .get();
-    return rows.length;
-  }
-
-  @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     // Cards, then decks, then folders — children before their parents, as the
     // row-by-row version did.
@@ -3811,6 +3887,9 @@ class DriftStudyRepository implements StudyRepository {
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
         .go();
     await (_db.delete(_db.studyReviewLogTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.studyDeckLinksTable)
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
         .go();
   }
@@ -3853,6 +3932,17 @@ class DriftStudyRepository implements StudyRepository {
     cardId: row.cardId,
     grade: StudyGrade.values.byName(row.grade),
     reviewedAt: row.reviewedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  StudyDeckLink _mapDeckLink(StudyDeckLinksTableData row) => StudyDeckLink(
+    id: row.id,
+    parentDeckId: row.parentDeckId,
+    childDeckId: row.childDeckId,
+    enabled: row.enabled,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     version: row.version,
     deletedAt: row.deletedAt,
   );

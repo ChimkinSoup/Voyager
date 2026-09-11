@@ -229,6 +229,7 @@ Future<void> populateDebugStudyDeck(
   }
 
   ref.invalidate(studyDecksProvider);
+  ref.invalidate(studyAllDecksProvider);
   ref.invalidate(studyFoldersProvider);
   // Both card lists: the generated cards are invisible to the Hub's
   // "Study N due" button until the flattened one is refetched too.

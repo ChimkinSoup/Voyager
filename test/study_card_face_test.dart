@@ -246,6 +246,53 @@ void main() {
       expect(shown().id, images[1].id);
     });
 
+    testWidgets('an arrow at the end of the queue swallows its own tap', (
+      tester,
+    ) async {
+      // The face sits inside a card that flips when tapped. A disabled arrow
+      // used to register no recognizer at all, so a click on it fell through
+      // and flipped the card — the one thing the user was plainly not aiming
+      // at.
+      final images = await ingest(tester, 2);
+      var flips = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mediaServiceProvider.overrideWith((ref) => service),
+            mediaFileStoreProvider.overrideWithValue(fileStore),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: GestureDetector(
+                  onTap: () => flips++,
+                  child: SizedBox.fromSize(
+                    size: _faceSize,
+                    child: StudyCardFace(text: '', images: images),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+
+      // On the first image, so Previous is the dead one.
+      await tester.tap(find.byTooltip('Previous image'));
+      await tester.pump();
+      expect(flips, 0);
+
+      // And the live arrow still browses without flipping either.
+      await tester.tap(find.byTooltip('Next image'));
+      await tester.pump();
+      expect(flips, 0);
+
+      await tester.tap(find.byTooltip('Next image'));
+      await tester.pump();
+      expect(flips, 0);
+    });
+
     testWidgets('a horizontal drag does not change the image', (tester) async {
       // Cram grades by swiping the whole card sideways. If the carousel took
       // that gesture too, every image on a cram card would be a coin toss.

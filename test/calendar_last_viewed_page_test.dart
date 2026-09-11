@@ -45,7 +45,15 @@ Future<AppDatabase> _pumpCalendar(
     ),
   );
   await calendars.upsertCalendar(
-    Calendar(id: 'work', name: 'Work', createdAt: now, updatedAt: now),
+    Calendar(
+      // Coloured, so the trigger's own colour is distinguishable from the
+      // app accent the all-view falls back to.
+      id: 'work',
+      name: 'Work',
+      colorValue: 0xFF00FF00,
+      createdAt: now,
+      updatedAt: now,
+    ),
   );
   if (configureSettings != null) {
     final settings = DriftSettingsRepository(db);
@@ -123,5 +131,48 @@ void main() {
     // created from the all-view is filed.
     expect(saved.lastViewedCalendarId, 'work');
     expect(find.text('All calendars'), findsOneWidget);
+  });
+
+  // The name is only half of what the trigger says: it is drawn in the scope's
+  // own colour, and the all-view has none of its own. Leaving the last
+  // calendar's colour on it read as if that calendar were still the filter.
+  testWidgets('the all-view trigger takes the app accent, not the last '
+      "calendar's colour", (tester) async {
+    await _pumpCalendar(
+      tester,
+      configureSettings: (s) => s.copyWith(lastViewedCalendarId: 'work'),
+    );
+    final accent = Theme.of(
+      tester.element(find.byType(CalendarPage)),
+    ).colorScheme.primary;
+    Color? triggerColor(String label) =>
+        tester.widget<Text>(find.text(label)).style?.color;
+
+    expect(triggerColor('Work'), const Color(0xFF00FF00));
+
+    await tester.tap(find.text('Work'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All calendars'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(triggerColor('All calendars'), accent);
+  });
+
+  testWidgets('and does on a cold start into the all-view too', (tester) async {
+    await _pumpCalendar(
+      tester,
+      configureSettings: (s) => s.copyWith(
+        lastViewedCalendarId: 'work',
+        calendarShowAllCalendars: true,
+      ),
+    );
+    final accent = Theme.of(
+      tester.element(find.byType(CalendarPage)),
+    ).colorScheme.primary;
+    expect(
+      tester.widget<Text>(find.text('All calendars')).style?.color,
+      accent,
+    );
   });
 }

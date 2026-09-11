@@ -20,7 +20,6 @@ import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/core/utils/time_format.dart';
-import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class CalendarTodoPanel extends ConsumerStatefulWidget {
@@ -495,7 +494,16 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
             icon: const Icon(Icons.close, size: 16),
             tooltip: 'Close',
             padding: EdgeInsets.zero,
-            constraints: kMinTouchTarget,
+            // The event panel's ✕ already carries this: a floating close
+            // over the top of a form must not claim a 48px hover fill, which
+            // spilled a grey patch across the controls beneath it.
+            // `constraints` alone would not shrink it — IconButton's default
+            // padded tap target wraps the whole thing back out to 48 whatever
+            // the constraints say.
+            style: IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
           ),
         ),
       ],

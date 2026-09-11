@@ -310,12 +310,14 @@ class _ChildRow extends ConsumerStatefulWidget {
   ConsumerState<_ChildRow> createState() => _ChildRowState();
 }
 
-class _ChildRowState extends ConsumerState<_ChildRow> {
+class _ChildRowState extends ConsumerState<_ChildRow>
+    with RankingScoreHold<_ChildRow> {
   var _hovered = false;
 
-  /// The score the open score popover is sitting on, so the number on the row
-  /// tracks the roller instead of waiting for the commit.
-  double? _draftScore;
+  /// Held, so the number on the row tracks the roller instead of waiting for
+  /// the commit, and keeps the commit until the save lands.
+  @override
+  double? get storedScore => widget.child.overallScore;
 
   /// Wide enough for the longest score a scale prints, so the numbers down the
   /// list stay in a column whether or not a unit has been scored.
@@ -325,7 +327,7 @@ class _ChildRowState extends ConsumerState<_ChildRow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final child = widget.child;
-    final score = _draftScore ?? child.overallScore;
+    final score = shownScore;
     final scored = score != null;
 
     return ContextMenuRegion(
@@ -421,21 +423,24 @@ class _ChildRowState extends ConsumerState<_ChildRow> {
                           precision: widget.category.childScorePrecision,
                           label: child.name,
                           accentColor: widget.accent,
-                          onDraftChanged: (draft) =>
-                              setState(() => _draftScore = draft),
+                          onDraftChanged: holdDraft,
                           width: _scoreWidth,
                           textAlign: TextAlign.right,
                           style: theme.textTheme.labelMedium?.copyWith(
                             fontWeight: scored ? FontWeight.w700 : null,
                           ),
-                          onChanged: widget.readOnly
-                              ? null
-                              : (score) => RankingsActions(ref).saveChild(
-                                  score == null
-                                      ? child.copyWith(clearOverallScore: true)
-                                      : child.copyWith(overallScore: score),
-                                  parent: widget.parent,
-                                ),
+                          onChanged: holdingWrites(
+                            widget.readOnly
+                                ? null
+                                : (score) => RankingsActions(ref).saveChild(
+                                    score == null
+                                        ? child.copyWith(
+                                            clearOverallScore: true,
+                                          )
+                                        : child.copyWith(overallScore: score),
+                                    parent: widget.parent,
+                                  ),
+                          ),
                         ),
                       ],
                     ),
@@ -652,7 +657,11 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
                 ),
               ),
               const SizedBox(height: 20),
-            ],
+            ] else
+              // With no template the band that carried this gap is not built,
+              // and the notes box ended up flush against the overall row's
+              // stars. Keep the same breathing room either way.
+              const SizedBox(height: 20),
             TagHighlightedTextField(
               controller: _notesController,
               focusNode: _notesFocusNode,

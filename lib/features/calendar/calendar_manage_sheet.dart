@@ -9,7 +9,8 @@ import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/features/calendar/calendar_list_actions.dart';
 
-/// Create, rename, recolour and delete calendars, behind the header gear.
+/// Create, rename, recolour, overlay and delete calendars, behind the header
+/// gear.
 ///
 /// The journal and todo twins carry a Settings row; a calendar has no
 /// per-entity settings sheet to open, so this one does not.
@@ -48,8 +49,9 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
     _reload();
   }
 
+  /// Only the first load shows the spinner; later reloads keep the rows on
+  /// screen until the fresh ones land.
   Future<void> _reload() async {
-    setState(() => _loading = true);
     final repo = ref.read(calendarRepositoryProvider);
     final calendars = await repo.listCalendars();
     final counts = <String, int>{};
@@ -84,6 +86,12 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
     await _reload();
   }
 
+  Future<void> _editOverlays(Calendar calendar) async {
+    await editCalendarOverlays(context, ref, calendar, _calendars);
+    if (!mounted) return;
+    await _reload();
+  }
+
   Future<void> _deleteCalendar(Calendar calendar) async {
     final deleted = await deleteCalendarList(
       context,
@@ -94,6 +102,15 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
     );
     if (!deleted || !mounted) return;
     await _reload();
+  }
+
+  /// The names of the calendars [calendar] also shows, in its list's order.
+  List<String> _overlayNames(Calendar calendar) {
+    final names = {for (final item in _calendars) item.id: item.name};
+    return [
+      for (final id in visibleOverlayCalendarIds(calendar.id, _calendars))
+        names[id]!,
+    ];
   }
 
   @override
@@ -114,6 +131,10 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                 itemBuilder: (context, index) {
                   final calendar = _calendars[index];
                   final count = _counts[calendar.id] ?? 0;
+                  final overlayNames = _overlayNames(calendar);
+                  final countLabel = Text(
+                    count == 1 ? '1 event' : '$count events',
+                  );
                   return ListTile(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -126,7 +147,28 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                       ),
                     ),
                     title: Text(calendar.name),
-                    subtitle: Text(count == 1 ? '1 event' : '$count events'),
+                    // The count stays the calendar's own events; what it
+                    // also shows is a quieter line under it.
+                    subtitle: overlayNames.isEmpty
+                        ? countLabel
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              countLabel,
+                              Text(
+                                'Also shows ${overlayNames.join(', ')}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ],
+                          ),
                     trailing: PopupMenuButton<VoyagerMenuCatalogEntry>(
                       onSelected: (action) async {
                         switch (action) {
@@ -134,6 +176,8 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                             await _renameCalendar(calendar);
                           case VoyagerMenuCatalogEntry.changeColor:
                             await _pickColor(calendar);
+                          case VoyagerMenuCatalogEntry.alsoShow:
+                            await _editOverlays(calendar);
                           case VoyagerMenuCatalogEntry.delete:
                             await _deleteCalendar(calendar);
                           default:
@@ -143,8 +187,8 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
                       itemBuilder: (context) => buildCatalogMenu(
                         context,
                         from: calendar.id == legacyCalendarId
-                            ? defaultEntityManageMenuEntries
-                            : entityManageMenuEntries,
+                            ? defaultCalendarManageMenuEntries
+                            : calendarManageMenuEntries,
                       ),
                     ),
                   );

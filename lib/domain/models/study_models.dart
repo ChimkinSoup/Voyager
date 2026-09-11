@@ -137,6 +137,56 @@ class StudyDeck extends SoftDeletable {
   }
 }
 
+/// Membership edge: [parentDeckId] live-includes every card [childDeckId]
+/// resolves to (STUDY_DECK_LINKS_HLD.md). Cards are never copied — a link is
+/// only this row, and a card keeps its one home `deckId` and its one SRS state
+/// however many decks reach it.
+///
+/// The id is derived from the two deck ids (see [idFor]) rather than random,
+/// so "one live link per pair" holds across devices by construction: two
+/// devices linking the same pair write the same document, and linking again
+/// after an unlink revives the tombstone instead of adding a second row.
+class StudyDeckLink extends SoftDeletable {
+  const StudyDeckLink({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.parentDeckId,
+    required this.childDeckId,
+    this.enabled = true,
+  });
+
+  static String idFor(String parentDeckId, String childDeckId) =>
+      '${parentDeckId}__$childDeckId';
+
+  final String parentDeckId;
+  final String childDeckId;
+
+  /// Persistent on the parent. Off keeps the placeholder in the parent's
+  /// workbench but takes the child's cards out of its stats and sessions.
+  final bool enabled;
+
+  StudyDeckLink copyWith({
+    bool? enabled,
+    DateTime? deletedAt,
+    int? version,
+    bool bumpVersion = true,
+  }) {
+    return StudyDeckLink(
+      id: id,
+      createdAt: createdAt,
+      updatedAt: DateTime.now().toUtc(),
+      version: version ?? (bumpVersion ? this.version + 1 : this.version),
+      deletedAt: deletedAt ?? this.deletedAt,
+      parentDeckId: parentDeckId,
+      childDeckId: childDeckId,
+      enabled: enabled ?? this.enabled,
+    );
+  }
+}
+
 /// A single flashcard with its permanent SM-2-style SRS state. [interval] is
 /// in days; `interval <= 0` means the card has never had a successful review
 /// (see `applyStudyGrade` in study_srs_engine.dart for why that base case
