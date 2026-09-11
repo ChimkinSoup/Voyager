@@ -150,10 +150,10 @@ class RankingQuickRate extends StatefulWidget {
   State<RankingQuickRate> createState() => _RankingQuickRateState();
 }
 
-class _RankingQuickRateState extends State<RankingQuickRate> {
-  double? _draft;
-
-  double? get _shown => _draft ?? widget.value;
+class _RankingQuickRateState extends State<RankingQuickRate>
+    with RankingScoreHold<RankingQuickRate> {
+  @override
+  double? get storedScore => widget.value;
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +161,7 @@ class _RankingQuickRateState extends State<RankingQuickRate> {
     // A ten-point strip has twice the stars in the same run of pixels, so they
     // are drawn smaller and lean on the number beside them.
     final starSize = widget.scoreMax > 5 ? 12.0 : 15.0;
-    final shown = _shown;
+    final shown = shownScore;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -171,8 +171,8 @@ class _RankingQuickRateState extends State<RankingQuickRate> {
           scoreMax: widget.scoreMax,
           precision: widget.precision,
           label: widget.label,
-          onChanged: widget.onChanged,
-          onDraftChanged: (score) => setState(() => _draft = score),
+          onChanged: holdingWrites(widget.onChanged),
+          onDraftChanged: holdDraft,
           accentColor: widget.accentColor,
           width: RankingQuickRate._numberWidth,
           textAlign: TextAlign.right,
@@ -202,8 +202,8 @@ class _RankingQuickRateState extends State<RankingQuickRate> {
 /// scale simply leaves whitespace after it. A star that grew with the scale it
 /// belongs to would make the same picture mean two different things.
 ///
-/// The number is the control: clicking it opens the popover, long-pressing it
-/// clears. A scored row and an unscored one are the same size, so scoring
+/// The number is the control: clicking it opens the popover, and long-press
+/// clears it. A scored row and an unscored one are the same size, so scoring
 /// never moves the stars.
 class RankingOverallRow extends StatefulWidget {
   const RankingOverallRow({
@@ -238,16 +238,18 @@ class RankingOverallRow extends StatefulWidget {
   State<RankingOverallRow> createState() => _RankingOverallRowState();
 }
 
-class _RankingOverallRowState extends State<RankingOverallRow> {
-  /// The score the open popover is sitting on, or null when none is open. It
-  /// drives the number and the strip alike, so a roller being scrolled is read
-  /// off the stars behind it rather than only off the popover.
-  double? _draft;
+class _RankingOverallRowState extends State<RankingOverallRow>
+    with RankingScoreHold<RankingOverallRow> {
+  @override
+  double? get storedScore => widget.value;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final shown = _draft ?? widget.value;
+    // The held score drives the number and the strip alike, so a roller being
+    // scrolled is read off the stars behind it rather than only off the
+    // popover.
+    final shown = shownScore;
 
     return Row(
       children: [
@@ -256,8 +258,8 @@ class _RankingOverallRowState extends State<RankingOverallRow> {
           scoreMax: widget.scoreMax,
           precision: widget.precision,
           label: widget.label,
-          onChanged: widget.onChanged,
-          onDraftChanged: (score) => setState(() => _draft = score),
+          onChanged: holdingWrites(widget.onChanged),
+          onDraftChanged: holdDraft,
           accentColor: widget.accentColor,
           width: RankingOverallRow._numberWidth,
           // Right-aligned inside a fixed slot: the strip stays in the same

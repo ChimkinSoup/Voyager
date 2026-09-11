@@ -14,6 +14,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 
 /// Height one bucket list row occupies (a note pushes it taller, nothing makes
@@ -492,7 +493,7 @@ class _BucketListRow extends StatelessWidget {
                           top: 2,
                           left: _kTitleEditorPadding.left,
                         ),
-                        child: Text(
+                        child: VoyagerProseText(
                           item.note!,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurface.withValues(

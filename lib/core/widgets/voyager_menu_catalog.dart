@@ -7,6 +7,7 @@ enum VoyagerMenuCatalogEntry {
   rename,
   changeColor,
   settings,
+  alsoShow,
   delete,
   weatherSunny,
   weatherCloudy,
@@ -44,6 +45,23 @@ const defaultConfigurableManageMenuEntries = [
   VoyagerMenuCatalogEntry.settings,
 ];
 
+/// Calendar manage menus: a calendar has no settings sheet, but it can show
+/// other calendars' events alongside its own.
+const calendarManageMenuEntries = [
+  VoyagerMenuCatalogEntry.rename,
+  VoyagerMenuCatalogEntry.changeColor,
+  VoyagerMenuCatalogEntry.alsoShow,
+  VoyagerMenuCatalogEntry.delete,
+];
+
+/// [calendarManageMenuEntries] for the default calendar, which cannot be
+/// deleted.
+const defaultCalendarManageMenuEntries = [
+  VoyagerMenuCatalogEntry.rename,
+  VoyagerMenuCatalogEntry.changeColor,
+  VoyagerMenuCatalogEntry.alsoShow,
+];
+
 /// Default entries and order for journal entry weather picker.
 const weatherMenuEntries = [
   VoyagerMenuCatalogEntry.weatherSunny,
@@ -60,6 +78,7 @@ extension VoyagerMenuCatalogEntryLabels on VoyagerMenuCatalogEntry {
     VoyagerMenuCatalogEntry.rename => 'Rename',
     VoyagerMenuCatalogEntry.changeColor => 'Change color',
     VoyagerMenuCatalogEntry.settings => 'Settings',
+    VoyagerMenuCatalogEntry.alsoShow => 'Also show',
     VoyagerMenuCatalogEntry.delete => 'Delete',
     VoyagerMenuCatalogEntry.weatherSunny => 'Sunny',
     VoyagerMenuCatalogEntry.weatherCloudy => 'Cloudy',
@@ -71,6 +90,7 @@ extension VoyagerMenuCatalogEntryLabels on VoyagerMenuCatalogEntry {
     VoyagerMenuCatalogEntry.rename => PhosphorIconsRegular.pencilSimple,
     VoyagerMenuCatalogEntry.changeColor => PhosphorIconsRegular.palette,
     VoyagerMenuCatalogEntry.settings => PhosphorIconsRegular.slidersHorizontal,
+    VoyagerMenuCatalogEntry.alsoShow => PhosphorIconsRegular.stack,
     VoyagerMenuCatalogEntry.delete => PhosphorIconsRegular.trash,
     VoyagerMenuCatalogEntry.weatherSunny => weatherIconData('sunny'),
     VoyagerMenuCatalogEntry.weatherCloudy => weatherIconData('cloudy'),

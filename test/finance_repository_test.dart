@@ -133,6 +133,9 @@ void main() {
     expect(formatCents(1250, signed: true), r'+$12.50');
     expect(formatCents(-1250, signed: true), r'-$12.50');
     expect(formatCents(0, signed: true), r'+$0.00');
+    expect(formatNetCents(1250), r'$12.50');
+    expect(formatNetCents(-1250), r'-$12.50');
+    expect(formatNetCents(0), r'$0.00');
   });
 
   // -- Subscriptions -------------------------------------------------------

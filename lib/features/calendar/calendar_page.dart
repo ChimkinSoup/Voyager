@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' show max;
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,7 @@ import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/domain/services/calendar_recurrence_editing.dart';
@@ -49,6 +51,40 @@ const double _calendarScopeSlotWidth = 170;
 
 /// Shared [DateFormat] instance — avoids repeated allocation on every build.
 final _mmmmFormat = DateFormat.MMMM();
+
+/// What `.when(skipLoadingOnReload: true)` would draw from [value], as a value
+/// that holds still while a reload is in flight.
+///
+/// Watched through a select, the page rebuilds when the fresh value lands but
+/// not also when the reload starts — and a rebuild here is every grid cell.
+AsyncValue<T> _heldThroughReload<T>(AsyncValue<T> value) =>
+    value.isLoading && value.hasValue && !value.hasError
+    ? AsyncData(value.requireValue)
+    : value;
+
+/// The part of the calendar list the page draws — each calendar's id, name and
+/// colour, in order.
+///
+/// Watched through a select, so a write that changes none of those (an "Also
+/// show" edit in the manage dialog) does not rebuild the page and, with it,
+/// every grid cell.
+class _DrawnCalendars {
+  const _DrawnCalendars(this.calendars);
+
+  final List<Calendar> calendars;
+
+  List<(String, String, int?)> get _drawn => [
+    for (final calendar in calendars)
+      (calendar.id, calendar.name, calendar.colorValue),
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is _DrawnCalendars && listEquals(other._drawn, _drawn);
+
+  @override
+  int get hashCode => Object.hashAll(_drawn);
+}
 
 enum _CalendarSidebarKind { none, event, todo }
 
@@ -630,6 +666,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     await remoteSync.pushTodoTasksBatch(
       writes.where((t) => t.id != next.id).toList(),
     );
+
+    // Ticking a repeating task here means the same thing it means on the
+    // To-Do page and in the inbox: it moves on to its next occurrence rather
+    // than being finished. Run after the edit is on disk, so the roll-forward
+    // re-reads whatever title, notes and due date were saved with the tick.
+    if (!before.completed && next.completed && next.repeats) {
+      final outcome = await completeTodoTask(
+        repo: repo,
+        sync: remoteSync,
+        taskId: next.id,
+      );
+      if (outcome != null) _invalidateTodoProviders({outcome.listId});
+    }
     _invalidateTodoProviders({before.listId, next.listId});
   }
 
@@ -863,7 +912,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         label: 'Delete',
         icon: PhosphorIconsRegular.trash,
         isDestructive: true,
-        onTap: () => unawaited(_deleteEvent(event)),
+        // [entry.day] and not the page's focused day: a repeating event is
+        // one row drawn on many days, and the scope prompt resolves the
+        // occurrence from whatever day it is handed. Without it every
+        // "this event only" delete fell back to the series anchor and
+        // dropped the first occurrence, whichever one was right-clicked.
+        onTap: () => unawaited(_deleteEvent(event, day: entry.day)),
       ),
     ];
   }
@@ -1039,12 +1093,20 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   /// Handles "Show in Calendar" from the notification popover: snaps the
-  /// view to the event's month (switching to whatever calendar shows it, if
-  /// it isn't the one currently selected) and opens its edit sidebar.
+  /// view to the event's month (switching to the all-view if the open
+  /// calendar neither owns nor overlays it) and opens its edit sidebar.
   void _revealCalendarEvent(CalendarEvent event, {DateTime? day}) {
     // The occurrence the caller was looking at, not the series anchor: a
     // weekly event surfaced by the inbox for tonight must not open January.
     final target = day ?? event.start;
+    final host = _selectedCalendarId;
+    final shownHere =
+        host == null ||
+        host == event.calendarId ||
+        visibleOverlayCalendarIds(
+          host,
+          ref.read(calendarsProvider).valueOrNull ?? const [],
+        ).contains(event.calendarId);
     _abortMorphAnimation();
     setState(() {
       _isZooming = false;
@@ -1053,10 +1115,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _isWeekMorphing = false;
       _weekMorphForward = true;
       _clearWeekMorphCache();
-      if (_selectedCalendarId != null &&
-          _selectedCalendarId != event.calendarId) {
-        _selectedCalendarId = null;
-      }
+      if (!shownHere) _selectedCalendarId = null;
       _dayViewDate = null;
       _mode = CalendarViewMode.month;
       _focused = DateTime(target.year, target.month, 1);
@@ -2570,8 +2629,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         '[jank] CalendarPage.build() ran (preloaded shell branch, '
         'active=$active)',
       );
-      ref.listen(calendarEventsProvider(_selectedCalendarId), (_, _) {
-        debugPrint('[jank] CalendarPage: calendarEventsProvider changed');
+      ref.listen(calendarViewEventsProvider(_selectedCalendarId), (_, _) {
+        debugPrint('[jank] CalendarPage: calendarViewEventsProvider changed');
       });
       ref.listen(calendarsProvider, (_, _) {
         debugPrint('[jank] CalendarPage: calendarsProvider changed');
@@ -2597,7 +2656,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _revealCalendarEvent(event, day: next.day);
     });
 
-    final eventsAsync = ref.watch(calendarEventsProvider(_selectedCalendarId));
+    // Editing the open calendar's overlay list, or any event write, reloads
+    // these; keep drawing the old set meanwhile, and rebuild once, when the
+    // new set lands.
+    final eventsAsync = ref.watch(
+      calendarViewEventsProvider(
+        _selectedCalendarId,
+      ).select(_heldThroughReload),
+    );
     // This page is preloaded at app startup (see _preloadedShellPaths in
     // app_router.dart) and stays mounted in every other branch too — so an
     // unconditional watch here means every todo completion invalidating
@@ -2610,8 +2676,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final todosAsync = TickerMode.valuesOf(context).enabled
         ? ref.watch(calendarTodoMarkersProvider)
         : ref.read(calendarTodoMarkersProvider);
-    final calendarsAsync = ref.watch(calendarsProvider);
-    final calendars = calendarsAsync.valueOrNull ?? const <Calendar>[];
+    final calendars = ref
+        .watch(
+          calendarsProvider.select(
+            (async) => _DrawnCalendars(async.valueOrNull ?? const []),
+          ),
+        )
+        .calendars;
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
     _applySavedCalendarPreferences(ref.watch(settingsProvider).valueOrNull);
     final weekStartsMonday = settings.weekStartsOnMonday;

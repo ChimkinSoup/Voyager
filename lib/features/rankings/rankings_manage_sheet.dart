@@ -23,13 +23,17 @@ import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
 ///
 /// One sheet rather than a settings page because all of it is per-category —
 /// there is no app-level rankings setting to put anywhere else.
+/// [initialCategoryId] is the category the page is showing, so the sheet opens
+/// on the one being looked at rather than always on the first in the list.
 Future<void> showRankingsManageSheet(
   BuildContext context,
-  WidgetRef ref,
-) async {
+  WidgetRef ref, {
+  String? initialCategoryId,
+}) async {
   await showVoyagerDialog<void>(
     context: context,
-    builder: (context) => const _RankingsManageDialog(),
+    builder: (context) =>
+        _RankingsManageDialog(initialCategoryId: initialCategoryId),
   );
   invalidateRankingProvidersFrom(ref);
 }
@@ -37,7 +41,9 @@ Future<void> showRankingsManageSheet(
 enum _ManageTab { settings, parentTemplate, childTemplate }
 
 class _RankingsManageDialog extends ConsumerStatefulWidget {
-  const _RankingsManageDialog();
+  const _RankingsManageDialog({this.initialCategoryId});
+
+  final String? initialCategoryId;
 
   @override
   ConsumerState<_RankingsManageDialog> createState() =>
@@ -45,7 +51,7 @@ class _RankingsManageDialog extends ConsumerStatefulWidget {
 }
 
 class _RankingsManageDialogState extends ConsumerState<_RankingsManageDialog> {
-  String? _selectedId;
+  late String? _selectedId = widget.initialCategoryId;
   var _tab = _ManageTab.settings;
 
   RankingsActions get _actions => RankingsActions(ref);

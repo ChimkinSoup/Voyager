@@ -492,6 +492,49 @@ StudyDeck mergeStudyDeckFromRemote(
   );
 }
 
+Map<String, dynamic> studyDeckLinkToFirestore(StudyDeckLink link) => {
+  'id': link.id,
+  'parentDeckId': link.parentDeckId,
+  'childDeckId': link.childDeckId,
+  'enabled': link.enabled,
+  'createdAt': _dateToFirestoreRequired(link.createdAt),
+  'updatedAt': _dateToFirestoreRequired(link.updatedAt),
+  'version': link.version,
+  'deletedAt': _dateToFirestore(link.deletedAt),
+};
+
+StudyDeckLink mergeStudyDeckLinkFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  StudyDeckLink? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return StudyDeckLink(
+    id: id,
+    parentDeckId:
+        data['parentDeckId'] as String? ?? local?.parentDeckId ?? '',
+    childDeckId: data['childDeckId'] as String? ?? local?.childDeckId ?? '',
+    enabled: data['enabled'] as bool? ?? local?.enabled ?? true,
+    createdAt: parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
 Map<String, dynamic> studyCardToFirestore(StudyCard card) => {
   'id': card.id,
   'deckId': card.deckId,
@@ -1736,6 +1779,7 @@ Map<String, dynamic> calendarToFirestore(Calendar calendar) => {
   'id': calendar.id,
   'name': calendar.name,
   'colorValue': calendar.colorValue,
+  'overlayCalendarIds': calendar.overlayCalendarIds,
   'createdAt': _dateToFirestoreRequired(calendar.createdAt),
   'updatedAt': _dateToFirestoreRequired(calendar.updatedAt),
   'version': calendar.version,
@@ -1759,6 +1803,13 @@ Calendar mergeCalendarFromRemote(
     id: id,
     name: data['name'] as String? ?? local?.name ?? '',
     colorValue: (data['colorValue'] as num?)?.toInt() ?? local?.colorValue,
+    // Falls back to what is already here rather than to empty, so a document
+    // written before the field existed does not wipe the overlays on the next
+    // pull. An explicit empty list still clears them.
+    overlayCalendarIds: _stringListFromRemote(
+      data['overlayCalendarIds'],
+      local?.overlayCalendarIds ?? const [],
+    ),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2686,6 +2737,9 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'jobProfileLinkedInUrl': s.jobProfileLinkedInUrl,
   'jobProfileGitHubUrl': s.jobProfileGitHubUrl,
   'jobProfilePortfolioUrl': s.jobProfilePortfolioUrl,
+  'jobExperienceSnippets': [
+    for (final snippet in s.jobExperienceSnippets) snippet.toJson(),
+  ],
   'startupPageMode': s.startupPageMode.name,
   'customStartupPage': s.customStartupPage,
   'lastSeenNavPage': s.lastSeenNavPage,
@@ -2918,6 +2972,11 @@ AppSettings mergeSettingsFromRemote(
     clearJobProfileGitHubUrl: _remoteClears(data, 'jobProfileGitHubUrl'),
     jobProfilePortfolioUrl: data['jobProfilePortfolioUrl'] as String?,
     clearJobProfilePortfolioUrl: _remoteClears(data, 'jobProfilePortfolioUrl'),
+    // Same absent-vs-empty rule as `snippets` above: a document predating the
+    // feature leaves the local list alone, an empty array deletes them all.
+    jobExperienceSnippets: data.containsKey('jobExperienceSnippets')
+        ? JobExperienceSnippet.listFromJson(data['jobExperienceSnippets'])
+        : null,
     leetcodeUsername: data['leetcodeUsername'] as String?,
     clearLeetcodeUsername: _remoteClears(data, 'leetcodeUsername'),
     showNeetCode150: data['showNeetCode150'] as bool?,

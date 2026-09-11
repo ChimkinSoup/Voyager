@@ -7,6 +7,7 @@ import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/line_break_mark_layer.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
 import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
 import 'package:voyager/core/widgets/prose_highlight_layer.dart';
@@ -40,6 +41,7 @@ class LabeledTextField extends StatefulWidget {
     this.alignLabelToTop,
     this.snippetsAllowed = true,
     this.autocorrectAllowed = true,
+    this.showLineBreaks = false,
   });
 
   final String label;
@@ -88,6 +90,10 @@ class LabeledTextField extends StatefulWidget {
   /// the multiline rule. Set false for the fields whose text is a literal —
   /// a snippet trigger, a dictionary word (AUTOCORRECT.md §4.1).
   final bool autocorrectAllowed;
+
+  /// Marks every line ended with Enter with a faint ↵, for multi-line fields
+  /// whose text is pasted somewhere verbatim — see [LineBreakMarkLayer].
+  final bool showLineBreaks;
 
   @override
   State<LabeledTextField> createState() => _LabeledTextFieldState();
@@ -336,6 +342,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     final snippetSession = vim.snippetSession;
     final autocorrectSession = vim.autocorrectSession;
     final needsTextOverlay = vimSession != null || snippetSession != null;
+    final showLineBreaks = widget.showLineBreaks && spellcheckOn;
 
     // Same predicate as [spellcheckOn]: only a wrapped paragraph can show the
     // ragged block and the seam that [SelectionHighlightLayer] exists to fix,
@@ -431,6 +438,27 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
                       forceStrutHeight: true,
                     ),
                     color: highlightFill,
+                    scrollController: _scrollController,
+                  ),
+                ),
+              ),
+            ),
+          if (showLineBreaks)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Padding(
+                  padding: overlayPadding,
+                  child: LineBreakMarkLayer(
+                    spanBuilder: spanBuilder,
+                    controller: _controller,
+                    style: textStyle ?? const TextStyle(),
+                    strutStyle: StrutStyle.fromTextStyle(
+                      textStyle ?? const TextStyle(),
+                      forceStrutHeight: true,
+                    ),
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: 0.55,
+                    ),
                     scrollController: _scrollController,
                   ),
                 ),

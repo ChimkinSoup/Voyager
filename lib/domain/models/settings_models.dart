@@ -1,10 +1,13 @@
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/job_experience_snippet.dart';
 import 'package:voyager/domain/models/snippet.dart';
 
 export 'package:voyager/domain/models/enums.dart'
     show GeometricWaveShape, AppThemeMode, WeightUnit, SnippetExpandKey;
+export 'package:voyager/domain/models/job_experience_snippet.dart'
+    show JobExperienceSnippet;
 export 'package:voyager/domain/models/snippet.dart' show Snippet;
 
 /// Default petal tint for the light theme — a dusty watercolor rose, kept
@@ -128,6 +131,7 @@ class AppSettings {
     this.jobProfileLinkedInUrl,
     this.jobProfileGitHubUrl,
     this.jobProfilePortfolioUrl,
+    this.jobExperienceSnippets = const [],
     this.dreamSplitWidth,
     this.showDreamStatistics = false,
     this.dreamNotesPinned = false,
@@ -376,6 +380,12 @@ class AppSettings {
   final String? jobProfileLinkedInUrl;
   final String? jobProfileGitHubUrl;
   final String? jobProfilePortfolioUrl;
+
+  /// Named role descriptions the Jobs header copies to the clipboard
+  /// (`JOBS_EXPERIENCE_SNIPPETS_HLD.md`), in the order Settings shows them.
+  /// The first three are the header's chips; the rest sit in its overflow
+  /// menu. Written only from Settings, like the profile links above.
+  final List<JobExperienceSnippet> jobExperienceSnippets;
   final List<int> colorPalette;
 
   /// Adjustable width of the Dream Journal's entry-list pane, mirroring
@@ -569,6 +579,7 @@ class AppSettings {
     String? jobProfileLinkedInUrl,
     String? jobProfileGitHubUrl,
     String? jobProfilePortfolioUrl,
+    List<JobExperienceSnippet>? jobExperienceSnippets,
     double? dreamSplitWidth,
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
@@ -823,6 +834,8 @@ class AppSettings {
       jobProfilePortfolioUrl: clearJobProfilePortfolioUrl
           ? null
           : (jobProfilePortfolioUrl ?? this.jobProfilePortfolioUrl),
+      jobExperienceSnippets:
+          jobExperienceSnippets ?? this.jobExperienceSnippets,
       colorPalette: colorPalette ?? this.colorPalette,
       dreamSplitWidth: clearDreamSplitWidth
           ? null

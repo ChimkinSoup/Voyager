@@ -38,6 +38,7 @@ import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
+import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
@@ -1208,68 +1209,21 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   Future<void> _applyRecurringRollForward(String taskId) async {
     _rollForwardTimers.remove(taskId);
-    // Read through the container, not `ref`: a flush from dispose() outlives
-    // the widget.
-    final repo = _container.read(todoRepositoryProvider);
-    // Re-read rather than trusting the snapshot from tap time: a rename or a
-    // due-date change made while the animation played is already on disk.
-    final latest = await repo.getTask(taskId);
-    if (latest == null) return;
-    final due = latest.dueDate;
-    final anchor = latest.effectiveRecurrenceAnchor;
-    if (due == null || anchor == null || !latest.recurrence.repeats) {
-      // The repeat was cleared mid-animation, so honour the plain completion
-      // the user actually saw rather than silently dropping the write.
-      final completed = latest.copyWith(completed: true);
-      await repo.upsertTask(completed);
-      _container.read(remoteSyncServiceProvider).pushTodoTaskNow(completed);
-      _finishRollForward(taskId, listId: latest.listId, stayedActive: false);
-      return;
-    }
-
-    final next = nextTaskDueDate(
-      dueDate: due,
-      anchor: anchor,
-      rule: latest.recurrence,
-      now: DateTime.now(),
+    // Through [completeTodoTask], which is the same write the calendar's task
+    // panel and the notification inbox make: a repeat ticked anywhere comes
+    // back at its next due date. Read through the container, not `ref`: a
+    // flush from dispose() outlives the widget.
+    final outcome = await completeTodoTask(
+      repo: _container.read(todoRepositoryProvider),
+      sync: _container.read(remoteSyncServiceProvider),
+      taskId: taskId,
     );
-    if (next == null) {
-      // The pattern has no further occurrence (or the bounded scan in
-      // nextTaskDueDate missed). Returning here would strand the task: its
-      // completion override is still set, nothing was written, and
-      // _reconcileCompletionOverrides only clears an override that disk agrees
-      // with. Honour the completion the user actually saw, same as the
-      // cleared-repeat branch above.
-      final completed = latest.copyWith(completed: true);
-      await repo.upsertTask(completed);
-      _container.read(remoteSyncServiceProvider).pushTodoTaskNow(completed);
-      _finishRollForward(taskId, listId: latest.listId, stayedActive: false);
-      return;
-    }
-
-    // Route the new due date through the same placement path every other
-    // due-date change uses. Writing dueDate alone leaves sortOrder at the value
-    // the task held for its *old* date, so a task that just moved from today to
-    // next month still renders at the top of its list's dated run —
-    // _maybeNormalizeListSort won't fix it, since it only checks that dated
-    // tasks precede undated ones, never the order within the dated run.
-    final siblings = await repo.listTasks(latest.listId);
-    final active = activeTopLevelTasks(siblings);
-    final batch = applyDueDateChange(
-      latest.copyWith(completed: false),
-      active,
-      dueDate: next.toUtc(),
-      clearDueDate: false,
+    if (outcome == null) return;
+    _finishRollForward(
+      taskId,
+      listId: outcome.listId,
+      stayedActive: outcome.rolledForward,
     );
-    await repo.upsertTasksBatch(batch.tasks);
-    final rolled = batch.tasks.firstWhere(
-      (t) => t.id == taskId,
-      orElse: () => latest.copyWith(completed: false, dueDate: next.toUtc()),
-    );
-    unawaited(
-      _container.read(remoteSyncServiceProvider).pushTodoTasksBatch(batch.tasks),
-    );
-    _finishRollForward(taskId, listId: rolled.listId, stayedActive: true);
   }
 
   /// Drops the optimistic completion so the refreshed row renders live again.

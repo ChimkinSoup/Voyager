@@ -215,11 +215,22 @@ class _CategoryBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The lists alone, not the load state around them: a refresh first
+    // announces itself carrying the old list, and watching the whole value
+    // rebuilt every row for that, then again a frame later for the new one.
     final parents =
-        ref.watch(rankingParentsProvider(category.id)).valueOrNull ??
+        ref.watch(
+          rankingParentsProvider(
+            category.id,
+          ).select((parents) => parents.valueOrNull),
+        ) ??
         const <RankingParent>[];
     final childrenByParent =
-        ref.watch(rankingChildrenByParentProvider(category.id)).valueOrNull ??
+        ref.watch(
+          rankingChildrenByParentProvider(
+            category.id,
+          ).select((children) => children.valueOrNull),
+        ) ??
         const <String, List<RankingChild>>{};
     final withImages =
         ref.watch(rankingDocumentIdsWithImagesProvider).valueOrNull ??
@@ -295,7 +306,11 @@ class _CategoryBody extends ConsumerWidget {
                 ),
               ),
           tags: rankingTags(parents),
-          onManage: () => showRankingsManageSheet(context, ref),
+          onManage: () => showRankingsManageSheet(
+            context,
+            ref,
+            initialCategoryId: category.id,
+          ),
         ),
         if (category.isArchived) const _ArchivedBanner(),
         Expanded(
@@ -401,7 +416,7 @@ class _CategoryBody extends ConsumerWidget {
   }
 }
 
-class _Sections extends ConsumerWidget {
+class _Sections extends StatefulWidget {
   const _Sections({
     required this.category,
     required this.unranked,
@@ -425,7 +440,59 @@ class _Sections extends ConsumerWidget {
   final ValueChanged<String> onOpen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  State<_Sections> createState() => _SectionsState();
+}
+
+class _SectionsState extends State<_Sections> {
+  /// The row last built for each entry, handed back as the same object while
+  /// nothing it was built from has changed.
+  ///
+  /// Flutter skips an element whose new widget is the very one it already
+  /// has, and nothing short of that stops a rebuild. An edit re-reads the
+  /// whole list, so every entry arrives as a new object; without this, adding
+  /// one tag rebuilt every row on the page.
+  final _rows = <String, _Row>{};
+
+  _Row _row(RankingParent parent, {int? rank, bool showRankSlot = false}) {
+    final children =
+        widget.childrenByParent[parent.id] ?? const <RankingChild>[];
+    final isSelected = parent.id == widget.selectedId;
+    final cached = _rows[parent.id];
+    if (cached != null &&
+        identical(cached.category, widget.category) &&
+        identical(cached.children, children) &&
+        cached.isSelected == isSelected &&
+        cached.rank == rank &&
+        cached.showRankSlot == showRankSlot &&
+        cached.onOpen == widget.onOpen &&
+        rankingParentsMatch(cached.parent, parent)) {
+      return cached;
+    }
+    return _rows[parent.id] = _Row(
+      key: ValueKey(parent.id),
+      parent: parent,
+      category: widget.category,
+      children: children,
+      isSelected: isSelected,
+      onOpen: widget.onOpen,
+      rank: rank,
+      showRankSlot: showRankSlot,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final category = widget.category;
+    final unranked = widget.unranked;
+    final ranked = widget.ranked;
+    final showQueue = widget.showQueue;
+    final queueCollapsed = widget.queueCollapsed;
+    final live = {
+      for (final parent in unranked) parent.id,
+      for (final parent in ranked) parent.id,
+    };
+    _rows.removeWhere((id, _) => !live.contains(id));
+
     // Ranks are a fact about the score order, so they only mean anything while
     // the list is *in* score order (§6.3).
     final showRanks = category.sortMode == RankingSortMode.overallScore;
@@ -452,30 +519,19 @@ class _Sections extends ConsumerWidget {
               label: 'Queue',
               count: unranked.length,
               collapsed: queueCollapsed,
-              onToggleCollapsed: onToggleQueue,
+              onToggleCollapsed: widget.onToggleQueue,
             ),
             if (!queueCollapsed)
               _UnrankedList(
                 category: category,
                 parents: unranked,
-                childrenByParent: childrenByParent,
-                selectedId: selectedId,
-                onOpen: onOpen,
+                rowFor: _row,
               ),
           ],
           if (ranked.isNotEmpty) ...[
             _SectionHeader(label: 'Ranked', count: ranked.length),
             for (var i = 0; i < ranked.length; i++)
-              _Row(
-                key: ValueKey(ranked[i].id),
-                parent: ranked[i],
-                category: category,
-                childrenByParent: childrenByParent,
-                selectedId: selectedId,
-                onOpen: onOpen,
-                rank: ranks[i],
-                showRankSlot: showRanks,
-              ),
+              _row(ranked[i], rank: ranks[i], showRankSlot: showRanks),
           ] else if (showQueue && !queueCollapsed)
             Padding(
               padding: const EdgeInsets.fromLTRB(26, 26, 26, 8),
@@ -502,16 +558,15 @@ class _UnrankedList extends ConsumerWidget {
   const _UnrankedList({
     required this.category,
     required this.parents,
-    required this.childrenByParent,
-    required this.selectedId,
-    required this.onOpen,
+    required this.rowFor,
   });
 
   final RankingCategory category;
   final List<RankingParent> parents;
-  final Map<String, List<RankingChild>> childrenByParent;
-  final String? selectedId;
-  final ValueChanged<String> onOpen;
+
+  /// [_SectionsState._row], so a queued row is reused the same way a ranked
+  /// one is.
+  final Widget Function(RankingParent parent) rowFor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -534,13 +589,7 @@ class _UnrankedList extends ConsumerWidget {
         },
         itemBuilder: (context, index) {
           final parent = parents[index];
-          final row = _Row(
-            parent: parent,
-            category: category,
-            childrenByParent: childrenByParent,
-            selectedId: selectedId,
-            onOpen: onOpen,
-          );
+          final row = rowFor(parent);
           return rankingIsQueueDraggable(parent) && !category.isArchived
               ? ReorderableDelayedDragStartListener(
                   key: ValueKey(parent.id),
@@ -559,8 +608,8 @@ class _Row extends ConsumerWidget {
     super.key,
     required this.parent,
     required this.category,
-    required this.childrenByParent,
-    required this.selectedId,
+    required this.children,
+    required this.isSelected,
     required this.onOpen,
     this.rank,
     this.showRankSlot = false,
@@ -568,20 +617,23 @@ class _Row extends ConsumerWidget {
 
   final RankingParent parent;
   final RankingCategory category;
-  final Map<String, List<RankingChild>> childrenByParent;
-  final String? selectedId;
+
+  /// This entry's own list, not the category's map: [_SectionsState._row]
+  /// compares it by identity, and the map is replaced whenever any entry's
+  /// children are re-read.
+  final List<RankingChild> children;
+  final bool isSelected;
   final ValueChanged<String> onOpen;
   final int? rank;
   final bool showRankSlot;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final children = childrenByParent[parent.id] ?? const <RankingChild>[];
     return RankingsRow(
       parent: parent,
       category: category,
       children: children,
-      isSelected: parent.id == selectedId,
+      isSelected: isSelected,
       readOnly: category.isArchived,
       rank: rank,
       showRankSlot: showRankSlot,

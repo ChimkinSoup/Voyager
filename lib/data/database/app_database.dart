@@ -186,6 +186,11 @@ class CalendarsTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   IntColumn get colorValue => integer().nullable()();
+
+  /// JSON array of the calendar ids drawn alongside this one. See
+  /// [Calendar.overlayCalendarIds].
+  TextColumn get overlayCalendarIds =>
+      text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -682,6 +687,12 @@ class SettingsTable extends Table {
   TextColumn get jobProfileLinkedInUrl => text().nullable()();
   TextColumn get jobProfileGitHubUrl => text().nullable()();
   TextColumn get jobProfilePortfolioUrl => text().nullable()();
+
+  /// The Jobs header's experience snippets, as a JSON array of
+  /// [JobExperienceSnippet.toJson] maps in display order. One column for the
+  /// same reason as [snippetsJson]: small, always read whole, synced as one
+  /// settings field.
+  TextColumn get jobExperienceSnippetsJson => text().nullable()();
   RealColumn get dreamSplitWidth => real().nullable()();
   BoolColumn get showDreamStatistics =>
       boolean().withDefault(const Constant(false))();
@@ -1067,6 +1078,22 @@ class WorkoutSetLogsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Deck-in-deck membership edges — see [StudyDeckLink]. No card rows are
+/// touched by linking, so this is the whole of the feature's storage.
+class StudyDeckLinksTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get parentDeckId => text()();
+  TextColumn get childDeckId => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class StudyReviewLogTable extends Table {
   TextColumn get id => text()();
   TextColumn get cardId => text()();
@@ -1399,6 +1426,7 @@ class RankingChildrenTable extends Table {
     StudyDecksTable,
     StudyCardsTable,
     StudyReviewLogTable,
+    StudyDeckLinksTable,
     ExercisesTable,
     WorkoutPlansTable,
     WorkoutPlanEntriesTable,
@@ -1421,7 +1449,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 103;
+  int get schemaVersion => 107;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2582,6 +2610,35 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 103) {
         await migrator.createTable(flaggedWordsTable);
+      }
+      // 104 added a calendars_table.show_in_default flag that was replaced by
+      // overlay lists before it shipped; only development databases reached
+      // it, and this step takes the column back out of them.
+      if (from < 105) {
+        await _addColumnIfNotExists(
+          migrator,
+          'calendars_table',
+          calendarsTable,
+          calendarsTable.overlayCalendarIds,
+        );
+        final staleFlag = await customSelect(
+          "SELECT 1 FROM pragma_table_info('calendars_table') "
+          "WHERE name = 'show_in_default'",
+        ).get();
+        if (staleFlag.isNotEmpty) {
+          await customStatement(
+            'ALTER TABLE calendars_table DROP COLUMN show_in_default',
+          );
+        }
+      }
+      if (from < 106) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.jobExperienceSnippetsJson,
+        );
+      }
+      if (from < 107) {
+        await migrator.createTable(studyDeckLinksTable);
       }
     },
   );

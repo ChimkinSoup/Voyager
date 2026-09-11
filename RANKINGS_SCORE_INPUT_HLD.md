@@ -116,7 +116,7 @@ Surfaces: ranked/unranked list rows (overall), editor overall rows, custom field
 
 ### 6.3 Context menus
 
-Keep **Clear score** on parent/child context menus (unchanged placement from `RANKINGS_UI.md`). Popover also exposes Clear. Clicking the number never clears (number only opens / focuses the popover).
+Keep **Clear score** on parent/child context menus (unchanged placement from `RANKINGS_UI.md`). Popover also exposes Clear. Clicking a number, scored or not, opens the popover (§6.1).
 
 ---
 
@@ -333,7 +333,7 @@ Scores remain `double?`. Valid committed values are always on the effective step
 | Live persist while rolling | No |
 | Text on open | Focus + select-all |
 | Blur text | Clamp/snap into rollers; stay open |
-| Clear | Popover + context menu + long-press; not via number tap |
+| Clear | Popover + context menu + long-press |
 | Wheel (closed) | Immediate commit; unscored starts at midpoint±step |
 | Display | Strip trailing zeros; `-` only for null |
 | Mode tighten | Warn + re-round |

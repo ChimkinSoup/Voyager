@@ -52,7 +52,8 @@ Future<void> _pumpCramPage(
 }) async {
   final container = ProviderContainer(
     overrides: [
-      studyCardsProvider(_deckId).overrideWith((ref) async => _cards(cards)),
+      studyAllCardsProvider.overrideWith((ref) async => _cards(cards)),
+      studyAllDecksProvider.overrideWith((ref) async => const []),
     ],
   );
   addTearDown(container.dispose);

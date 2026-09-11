@@ -1116,6 +1116,18 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                         // one group ends and the next begins, so it is wider
                         // between two solutions than under the heading.
                         SizedBox(height: i == 0 ? 12 : 24),
+                        // A faint accent rule *between* solutions — never
+                        // above the first or below the last — so a long form
+                        // says where one alternative ends and the next
+                        // begins without boxing either of them.
+                        if (i > 0) ...[
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: accent.withValues(alpha: 0.25),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
                         _SolutionFields(
                           // Keyed on the group rather than the index, so
                           // removing or reordering one carries each surviving

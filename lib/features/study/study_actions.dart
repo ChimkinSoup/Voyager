@@ -12,13 +12,39 @@ import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
+import 'package:voyager/features/study/study_deck_link_actions.dart';
 import 'package:voyager/features/study/study_move_destination_modal.dart';
 import 'package:voyager/features/study/study_name_modal.dart';
 
 void _invalidateStudyLibrary(WidgetRef ref) {
   ref.invalidate(studyFoldersProvider);
   ref.invalidate(studyDecksProvider);
+  ref.invalidate(studyAllDecksProvider);
 }
+
+/// The names of live decks outside [deckIds] that link one of them — what a
+/// delete has to warn about, since those decks lose the cards too (§4.6).
+Future<List<String>> _linkingParentNames(
+  StudyRepository repo,
+  Set<String> deckIds,
+) async {
+  final decks = {
+    for (final deck in await repo.getAllDecks(includeDeleted: false))
+      deck.id: deck,
+  };
+  final names = {
+    for (final link in await repo.listDeckLinks())
+      if (deckIds.contains(link.childDeckId) &&
+          !deckIds.contains(link.parentDeckId))
+        if (decks[link.parentDeckId] case final parent?) parent.name,
+  }.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return names;
+}
+
+String _includedInWarning(List<String> parents) => parents.isEmpty
+    ? ''
+    : '\n\nAlso included in: ${parents.join(', ')}. Its cards will leave '
+          '${parents.length == 1 ? 'that deck' : 'those decks'} too.';
 
 Future<void> renameStudyFolder(
   BuildContext context,
@@ -395,7 +421,7 @@ Future<bool> deleteStudyCard(
     overlay: overlay,
     // A card has no title — its front text is what the user would recognise
     // it by, and an untitled one is rare enough to name generically.
-    message: deletedMessage(card.frontText, fallback: 'card'),
+    message: deletedMessage(card.frontText, fallback: 'card', prose: true),
     delete: () async => deletion = await softDeleteStudyCard(container, card),
     restore: () async {
       await restoreStudyCard(container, deletion);
@@ -431,14 +457,19 @@ Future<void> deleteStudyDeck(
   WidgetRef ref,
   StudyDeck deck,
 ) async {
+  final container = ProviderScope.containerOf(context, listen: false);
   final repo = ref.read(studyRepositoryProvider);
   final cards = await repo.listCards(deck.id);
+  final parents = await _linkingParentNames(repo, {deck.id});
+  if (!context.mounted) return;
   final confirmed = await showConfirmDialog(
     context,
     title: 'Delete "${deck.name}"?',
-    message: cards.isEmpty
-        ? 'This deck has no cards and will be removed.'
-        : 'This deck and its ${cards.length} card${cards.length == 1 ? '' : 's'} will be deleted.',
+    message:
+        (cards.isEmpty
+            ? 'This deck has no cards and will be removed.'
+            : 'This deck and its ${cards.length} card${cards.length == 1 ? '' : 's'} will be deleted.') +
+        _includedInWarning(parents),
   );
   if (!confirmed) return;
 
@@ -450,6 +481,7 @@ Future<void> deleteStudyDeck(
   await repo.softDeleteDeck(deck.id);
   final deleted = await repo.getDeck(deck.id);
   if (deleted != null) remoteSync.pushStudyDeck(deleted);
+  await softDeleteStudyDeckLinksTouching(container, {deck.id});
   final deletedCards = <StudyCard>[];
   for (final card in cards) {
     final c = await repo.getCard(card.id);
@@ -487,15 +519,21 @@ Future<void> deleteStudyFolder(
   WidgetRef ref,
   StudyFolder folder,
 ) async {
+  final container = ProviderScope.containerOf(context, listen: false);
   final repo = ref.read(studyRepositoryProvider);
   final contents = await _collectFolderContents(repo, folder.id);
+  final deckIds = {for (final deck in contents.decks) deck.id};
+  final parents = await _linkingParentNames(repo, deckIds);
+  if (!context.mounted) return;
   final itemCount = contents.folders.length + contents.decks.length;
   final confirmed = await showConfirmDialog(
     context,
     title: 'Delete "${folder.name}"?',
-    message: itemCount == 0
-        ? 'This folder is empty and will be removed.'
-        : 'This folder and everything inside it (${contents.folders.length} subfolder${contents.folders.length == 1 ? '' : 's'}, ${contents.decks.length} deck${contents.decks.length == 1 ? '' : 's'}) will be deleted.',
+    message:
+        (itemCount == 0
+            ? 'This folder is empty and will be removed.'
+            : 'This folder and everything inside it (${contents.folders.length} subfolder${contents.folders.length == 1 ? '' : 's'}, ${contents.decks.length} deck${contents.decks.length == 1 ? '' : 's'}) will be deleted.') +
+        _includedInWarning(parents),
   );
   if (!confirmed) return;
 
@@ -525,6 +563,7 @@ Future<void> deleteStudyFolder(
   await repo.softDeleteFolder(folder.id);
   final deletedFolder = await repo.getFolder(folder.id);
   if (deletedFolder != null) remoteSync.pushStudyFolder(deletedFolder);
+  await softDeleteStudyDeckLinksTouching(container, deckIds);
 
   invalidateStudyCards(ref);
   _invalidateStudyLibrary(ref);

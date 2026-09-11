@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_providers.dart';
 
@@ -357,7 +358,7 @@ class JobsTableRow extends StatelessWidget {
         final preview = (application.notes ?? '')
             .replaceAll(RegExp(r'\s+'), ' ')
             .trim();
-        return Text(
+        return VoyagerProseText(
           preview,
           style: muted,
           maxLines: 1,

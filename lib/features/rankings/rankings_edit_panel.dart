@@ -133,13 +133,21 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
     );
   }
 
-  Future<void> _save(RankingParent next) async {
+  /// [rebuild] is off for a save whose control already shows what it wrote —
+  /// the tag field holds its own list until the page's re-read brings the
+  /// entry back, and that re-read rebuilds this panel anyway. Rebuilding for
+  /// the save as well drew the whole panel twice for one chip.
+  Future<void> _save(RankingParent next, {bool rebuild = true}) async {
     final previous = _current;
     _current = next;
     final saved = await RankingsActions(
       ref,
     ).saveParent(next, previous: previous);
     if (!mounted) return;
+    if (!rebuild) {
+      _current = saved;
+      return;
+    }
     setState(() => _current = saved);
   }
 
@@ -250,7 +258,14 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                     accentColor: accent,
                     enabled: !widget.readOnly,
                     onChanged: (tags) =>
-                        _save(_current.copyWith(tags: tags)),
+                        _save(_current.copyWith(tags: tags), rebuild: false),
+                    onChipRemoved: (tag, index) => offerRankingTagUndo(
+                      context,
+                      ref,
+                      parentId: _current.id,
+                      tag: tag,
+                      index: index,
+                    ),
                   ),
                   if (!_current.isRanked) ...[
                     const SizedBox(height: 12),
@@ -264,6 +279,10 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                             dense: true,
                             accentColor: accent,
                             isActive: _current.status == status,
+                            // Filled rather than outlined: these two are a
+                            // one-of-two choice, and a border alone read as
+                            // "focused" more than as "picked".
+                            fillWhenActive: true,
                             onTap: widget.readOnly
                                 ? () {}
                                 : () async {
@@ -318,7 +337,12 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                  ],
+                  ] else
+                    // With no template the band that carried this gap is not
+                    // built, and the notes box ended up flush against the
+                    // overall row's stars. Keep the same breathing room
+                    // either way.
+                    const SizedBox(height: 20),
                   TagHighlightedTextField(
                     controller: _notesController,
                     focusNode: _notesFocusNode,

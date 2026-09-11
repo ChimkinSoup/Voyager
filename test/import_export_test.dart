@@ -304,6 +304,19 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       reviewedAt: now,
     ),
   );
+  await studyRepo.upsertDeck(
+    StudyDeck(id: 'deck-2', name: 'Biology hub', createdAt: now, updatedAt: now),
+  );
+  await studyRepo.upsertDeckLink(
+    StudyDeckLink(
+      id: StudyDeckLink.idFor('deck-2', 'deck-1'),
+      parentDeckId: 'deck-2',
+      childDeckId: 'deck-1',
+      enabled: false,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await workoutRepo.upsertExercise(
     Exercise(
       id: 'exercise-1',
@@ -849,6 +862,10 @@ void main() {
         FirestoreCollections.studyReviewLog,
       );
       expectBefore(
+        FirestoreCollections.studyDecks,
+        FirestoreCollections.studyDeckLinks,
+      );
+      expectBefore(
         FirestoreCollections.workoutPlans,
         FirestoreCollections.workoutPlanEntries,
       );
@@ -881,6 +898,7 @@ void main() {
         'study_decks_table',
         'study_cards_table',
         'study_review_log_table',
+        'study_deck_links_table',
         'exercises_table',
         'workout_plans_table',
         'workout_plan_entries_table',

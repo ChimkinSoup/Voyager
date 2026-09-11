@@ -25,6 +25,7 @@ import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
 import 'package:voyager/features/settings/dictionary_dialog.dart';
+import 'package:voyager/features/settings/job_experience_snippets_dialog.dart';
 import 'package:voyager/features/settings/media_storage_dialog.dart';
 import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
@@ -290,6 +291,12 @@ class SettingsPage extends ConsumerWidget {
             subtitle: Text(_jobProfileSummary(settings)),
             trailing: const Icon(PhosphorIconsRegular.caretRight),
             onTap: () => _showJobProfileDialog(context, ref, settings),
+          ),
+          ListTile(
+            title: const Text('Experience snippets'),
+            subtitle: Text(jobExperienceSnippetsSummary(settings)),
+            trailing: const Icon(PhosphorIconsRegular.caretRight),
+            onTap: () => showJobExperienceSnippetsDialog(context),
           ),
           const SizedBox(height: 16),
           Text('LeetCode', style: Theme.of(context).textTheme.titleMedium),

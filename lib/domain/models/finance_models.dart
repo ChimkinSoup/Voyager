@@ -625,3 +625,9 @@ String formatCents(int cents, {bool signed = false}) {
   final sign = cents < 0 ? '-' : '+';
   return '$sign$magnitude';
 }
+
+/// Formats a net figure for wealth totals: `$12.50` when non-negative, `-$12.50`
+/// when negative. Unlike [formatCents] with `signed: true`, positives are not
+/// prefixed with `+`, so net-worth readouts don't look like ledger deltas.
+String formatNetCents(int cents) =>
+    cents < 0 ? formatCents(cents, signed: true) : formatCents(cents);

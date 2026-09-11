@@ -39,8 +39,11 @@ Future<void> showStudyCardEditorModal(
 }) {
   return showVoyagerSheet<void>(
     context: context,
-    builder: (ctx) => ProviderScope(
-      parent: ProviderScope.containerOf(context),
+    // The opener's own container, not a child one: a scope that owned its
+    // container would dispose it as the sheet closes — which the trash button
+    // does straight after deleting — and the toast's Undo reads through it.
+    builder: (ctx) => UncontrolledProviderScope(
+      container: ProviderScope.containerOf(context),
       child: _StudyCardEditorModal(deckId: deckId, existing: existing),
     ),
   );
@@ -196,7 +199,11 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
     late final StudyCardDeletion deletion;
     await softDeleteWithUndo(
       overlay: overlay,
-      message: deletedMessage(existing.frontText, fallback: 'card'),
+      message: deletedMessage(
+        existing.frontText,
+        fallback: 'card',
+        prose: true,
+      ),
       delete: () async =>
           deletion = await softDeleteStudyCard(container, existing),
       restore: () => restoreStudyCard(container, deletion),

@@ -261,6 +261,39 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     _pageController.position.context.setIgnorePointer(false);
   }
 
+  /// How far an arrow key pushes the pages past the first or last image.
+  static const _edgeNudge = 40.0;
+
+  /// Turns one page in [direction] (-1 back, 1 on) from the arrow keys.
+  ///
+  /// Past either end there is no page to animate to, and `nextPage` /
+  /// `previousPage` would animate to one anyway: the rubber-band physics let
+  /// the position run a whole page into the empty space before springing
+  /// back. Instead the pages lean [_edgeNudge] past the edge, and the same
+  /// spring brings them home — the key still answers, just not with a page's
+  /// worth of nothing.
+  void _step(int direction) {
+    if (!_pageController.hasClients) return;
+    final target = (_pageController.page ?? _index).round() + direction;
+    if (target < 0 || target >= _assets.length) {
+      final position = _pageController.position;
+      _pageController.animateTo(
+        direction < 0
+            ? position.minScrollExtent - _edgeNudge
+            : position.maxScrollExtent + _edgeNudge,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _pageController.animateToPage(
+        target,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    }
+    _keepPagesTouchable();
+  }
+
   Future<Uint8List?> _currentBytes() {
     return ref.read(mediaServiceProvider).bytesFor(_current);
   }
@@ -361,20 +394,8 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
             Navigator.of(context).maybePop(),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
-          _pageController.previousPage(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-          );
-          _keepPagesTouchable();
-        },
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () {
-          _pageController.nextPage(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-          );
-          _keepPagesTouchable();
-        },
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _step(-1),
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () => _step(1),
       },
       child: Focus(
         autofocus: true,

@@ -1,8 +1,9 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -124,7 +125,11 @@ void main() {
     return assets;
   }
 
-  Future<void> openMany(WidgetTester tester, List<MediaAsset> assets) async {
+  Future<void> openMany(
+    WidgetTester tester,
+    List<MediaAsset> assets, {
+    ScrollBehavior? scrollBehavior,
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -132,6 +137,7 @@ void main() {
           mediaFileStoreProvider.overrideWithValue(fileStore),
         ],
         child: MaterialApp(
+          scrollBehavior: scrollBehavior,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(
@@ -358,6 +364,64 @@ void main() {
     );
   });
 
+  testWidgets('an arrow key past either end nudges the pages, not a page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final assets = await attachMany(tester, 3);
+    // The app's rubber-band physics rather than the test platform's clamping
+    // ones: only an edge that gives can show the overshoot at all.
+    await openMany(tester, assets, scrollBehavior: const _RubberBandBehavior());
+
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(PageView),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+
+    /// Presses [key] and follows the pages until they are back at rest,
+    /// returning the furthest they travelled past either end.
+    Future<double> pressAtEdge(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      var furthest = 0.0;
+      for (var i = 0; i < 90; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        furthest = math.max(
+          furthest,
+          math.max(
+            position.minScrollExtent - position.pixels,
+            position.pixels - position.maxScrollExtent,
+          ),
+        );
+      }
+      return furthest;
+    }
+
+    final beforeFirst = await pressAtEdge(LogicalKeyboardKey.arrowLeft);
+    expect(beforeFirst, greaterThan(0), reason: 'the edge still answers');
+    expect(beforeFirst, lessThanOrEqualTo(48), reason: 'but only a nudge');
+    expect(position.pixels, moreOrLessEquals(position.minScrollExtent));
+    expect(find.text('1 / 3'), findsOneWidget);
+
+    for (var i = 0; i < 2; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await settle(tester);
+    }
+    expect(find.text('3 / 3'), findsOneWidget);
+
+    final pastLast = await pressAtEdge(LogicalKeyboardKey.arrowRight);
+    expect(pastLast, greaterThan(0), reason: 'the edge still answers');
+    expect(pastLast, lessThanOrEqualTo(48), reason: 'but only a nudge');
+    expect(position.pixels, moreOrLessEquals(position.maxScrollExtent));
+    expect(find.text('3 / 3'), findsOneWidget);
+  });
+
   testWidgets('a drag on a zoomed image pans it instead of turning the page', (
     tester,
   ) async {
@@ -402,4 +466,18 @@ void main() {
 
     expect(find.byType(InteractiveViewer), findsOneWidget);
   });
+}
+
+/// The overscroll the app itself runs on every platform — see
+/// `_NoScrollbarScrollBehavior` in voyager_app.dart.
+class _RubberBandBehavior extends MaterialScrollBehavior {
+  const _RubberBandBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const BouncingScrollPhysics(
+      decelerationRate: ScrollDecelerationRate.fast,
+      parent: RangeMaintainingScrollPhysics(),
+    );
+  }
 }

@@ -206,6 +206,35 @@ String proseSlice(String source, int start, int end) {
   return buffer.toString();
 }
 
+/// [source] with every paired delimiter taken out, for the places that can
+/// only show a plain string — an undo toast's `Deleted "…"` — where a raw
+/// `**` would otherwise reach the reader.
+///
+/// Like [proseSlice], only delimiters that actually paired are removed; a
+/// `2*3` the author typed is left exactly as it is.
+String proseStrip(String source) {
+  if (!source.contains('*') && !source.contains('_') && !source.contains('=')) {
+    return source;
+  }
+  final spans = ProseMarkup.parse(source).spans;
+  if (spans.isEmpty) return source;
+
+  final drop = <int>{};
+  for (final span in spans) {
+    for (var i = span.start; i < span.contentStart; i++) {
+      drop.add(i);
+    }
+    for (var i = span.contentEnd; i < span.end; i++) {
+      drop.add(i);
+    }
+  }
+  final buffer = StringBuffer();
+  for (var i = 0; i < source.length; i++) {
+    if (!drop.contains(i)) buffer.writeCharCode(source.codeUnitAt(i));
+  }
+  return buffer.toString();
+}
+
 /// How many times [ProseMarkup.parse] has been called, counted in debug builds
 /// only.
 ///

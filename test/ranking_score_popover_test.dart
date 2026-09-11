@@ -42,20 +42,47 @@ class _HostState extends State<_Host> {
     _value = widget.initial;
   }
 
+  void _save(double? score) {
+    widget.saved.add(score);
+    setState(() => _value = score);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
         body: Center(
-          child: RankingScoreNumber(
-            value: _value,
-            scoreMax: widget.scoreMax,
-            precision: widget.precision,
-            label: 'Overall',
-            onChanged: (score) {
-              widget.saved.add(score);
-              setState(() => _value = score);
-            },
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              RankingScoreNumber(
+                value: _value,
+                scoreMax: widget.scoreMax,
+                precision: widget.precision,
+                label: 'Overall',
+                onChanged: _save,
+              ),
+              // The popover tests reach the popover through the same call the
+              // number makes rather than through the number itself.
+              Builder(
+                builder: (anchorContext) => TextButton(
+                  onPressed: () async {
+                    final outcome = await showRankingScorePopover(
+                      context: anchorContext,
+                      anchorContext: anchorContext,
+                      value: _value,
+                      scoreMax: widget.scoreMax,
+                      precision: widget.precision,
+                      label: 'Overall',
+                    );
+                    if (outcome != null && !outcome.cancelled) {
+                      _save(outcome.score);
+                    }
+                  },
+                  child: const Text('open'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -78,7 +105,7 @@ Future<List<double?>> _open(
       precision: precision,
     ),
   );
-  await tester.tap(find.byType(RankingScoreNumber));
+  await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
   expect(find.byType(RankingScorePopover), findsOneWidget);
   return saved;
@@ -271,7 +298,7 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              for (final value in [8.4, 2.0]) ...[
+              for (final value in <double?>[null, null]) ...[
                 RankingScoreNumber(
                   value: value,
                   scoreMax: 10,
@@ -392,6 +419,19 @@ void main() {
 
       // Down from the midpoint of a ten-point tenths scale.
       expect(saved, [4.9]);
+    });
+
+    testWidgets('a tap on a scored number opens it, and clears nothing', (
+      tester,
+    ) async {
+      final saved = <double?>[];
+      await tester.pumpWidget(_Host(initial: 8.4, saved: saved));
+
+      await tester.tap(find.byType(RankingScoreNumber));
+      await tester.pumpAndSettle();
+      expect(find.byType(RankingScorePopover), findsOneWidget);
+      expect(tester.widget<TextField>(_scoreField).controller!.text, '8.4');
+      expect(saved, isEmpty);
     });
 
     testWidgets('a long press clears, and does nothing when already clear', (

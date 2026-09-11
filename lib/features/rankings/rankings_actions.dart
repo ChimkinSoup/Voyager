@@ -48,6 +48,19 @@ class RankingsActions {
     }
   }
 
+  /// [_refresh] for a write that changed entries in [categoryId] and nothing
+  /// else — no category, no child. Re-reading those as well rebuilt the whole
+  /// page two or three times over for what shows as a one-row change.
+  void _refreshParents(String categoryId) {
+    final ref = _ref;
+    final provider = rankingParentsProvider(categoryId);
+    if (ref == null) {
+      _container!.invalidate(provider);
+    } else {
+      ref.invalidate(provider);
+    }
+  }
+
   // ---------------------------------------------------------------- categories
 
   Future<RankingCategory> createCategory({
@@ -473,8 +486,25 @@ class RankingsActions {
     final next = applyRankingEditRules(previous, parent);
     await _repository.upsertParent(next);
     _sync.pushRankingParent(next);
-    _refresh();
+    _refreshParents(next.categoryId);
     return next;
+  }
+
+  /// Puts back a tag the editor took off [parentId], at the [index] it held.
+  ///
+  /// Reads the entry fresh rather than restoring a snapshot: it may have been
+  /// edited while the offer stood, and the undo is for the one tag, not a
+  /// rollback of everything since. A tag already back on the entry — re-added
+  /// by hand, or by another device — throws [RestoreSuperseded] so the toast
+  /// says so instead of doing nothing.
+  Future<void> restoreTag(String parentId, String tag, int index) async {
+    final parent = await _repository.getParent(parentId);
+    if (parent == null || parent.isDeleted) return;
+    if (parent.tags.contains(tag)) throw const RestoreSuperseded();
+    if (parent.tags.length >= maxRankingParentTags) return;
+    final tags = [...parent.tags]
+      ..insert(index.clamp(0, parent.tags.length), tag);
+    await saveParent(parent.copyWith(tags: tags), previous: parent);
   }
 
   /// Marks an entry started because something was added to it that is not one
@@ -735,6 +765,29 @@ Future<bool> confirmDeleteRankingCategory(
     restore: () => actions.restoreCategory(category, mediaStamps),
   );
   return true;
+}
+
+/// Offers back a tag a chip tap in the editor just took off [parentId].
+///
+/// No confirm first — the chip is a one-click remove on purpose — so this is
+/// the way back from a stray one. Both are captured up front for the reason
+/// [confirmDeleteRankingParent] gives: by the time Undo is pressed the panel
+/// may be closed, or showing another entry.
+void offerRankingTagUndo(
+  BuildContext context,
+  WidgetRef ref, {
+  required String parentId,
+  required String tag,
+  required int index,
+}) {
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
+  showSoftDeleteUndoToast(
+    overlay: overlay,
+    message: deletedMessage(tag, fallback: 'tag'),
+    restore: () =>
+        RankingsActions.detached(container).restoreTag(parentId, tag, index),
+  );
 }
 
 String _plural(int count, String singular, {String? plural}) => count == 1

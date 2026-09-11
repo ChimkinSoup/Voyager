@@ -528,6 +528,47 @@ class RankingParent extends SoftDeletable {
   );
 }
 
+/// Whether [a] and [b] are the same version of the same entry, field for
+/// field.
+///
+/// A re-read hands back a fresh object for every entry, edited or not, and the
+/// list reuses a row only for an entry this says is unchanged. Every field is
+/// compared — the row's menu and star act on the entry it was built with, so
+/// "draws the same" is not enough. A field added to [RankingParent] belongs
+/// here too; until then [updatedAt] and [version], which every [copyWith]
+/// moves, still tell a local edit apart.
+bool rankingParentsMatch(RankingParent a, RankingParent b) {
+  if (identical(a, b)) return true;
+  if (a.id != b.id ||
+      a.createdAt != b.createdAt ||
+      a.updatedAt != b.updatedAt ||
+      a.version != b.version ||
+      a.deletedAt != b.deletedAt ||
+      a.categoryId != b.categoryId ||
+      a.title != b.title ||
+      a.overallScore != b.overallScore ||
+      a.notes != b.notes ||
+      a.status != b.status ||
+      a.starred != b.starred ||
+      a.queueSortOrder != b.queueSortOrder ||
+      a.tags.length != b.tags.length ||
+      a.fieldValues.length != b.fieldValues.length) {
+    return false;
+  }
+  for (var i = 0; i < a.tags.length; i++) {
+    if (a.tags[i] != b.tags[i]) return false;
+  }
+  for (final entry in a.fieldValues.entries) {
+    final other = b.fieldValues[entry.key];
+    if (other == null ||
+        other.score != entry.value.score ||
+        other.notes != entry.value.notes) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /// One unit under a parent: an episode, a dish.
 ///
 /// Flat — there are no seasons in v1 — and ordered by [sortOrder] alone, which

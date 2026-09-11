@@ -301,6 +301,16 @@ abstract class StudyRepository {
   /// references to the originals' images.
   Future<Map<String, String>> duplicateCards(List<String> cardIds);
 
+  /// Every deck-in-deck link, both directions, for resolving effective card
+  /// sets — see STUDY_DECK_LINKS_HLD.md.
+  Future<List<StudyDeckLink>> listDeckLinks({bool includeDeleted = false});
+  Future<StudyDeckLink?> getDeckLink(String id);
+  Future<void> upsertDeckLink(
+    StudyDeckLink link, {
+    bool recordLocalActivity = true,
+  });
+  Future<void> softDeleteDeckLink(String id);
+
   Future<void> logReview(StudyReviewLog log, {bool recordLocalActivity = true});
 
   Future<StudyReviewLog?> getReviewLog(String id);
@@ -312,7 +322,6 @@ abstract class StudyRepository {
   Future<int> countCardsReviewedToday({DateTime? now});
   Future<int> countCardsReviewedTotal();
   Future<int> countDueCards({DateTime? now});
-  Future<int> countDueCardsInDeck(String deckId, {DateTime? now});
 
   Future<void> purgeExpiredDeleted(DateTime now);
   Future<List<StudyFolder>> getAllFolders({bool includeDeleted = true});

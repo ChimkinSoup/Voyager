@@ -14,6 +14,7 @@ import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
+import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_analytics_view.dart';
@@ -670,7 +671,11 @@ class _TransactionRow extends ConsumerWidget {
 
     await softDeleteWithUndo(
       overlay: overlay,
-      message: deletedMessage(snapshot.note, fallback: 'transaction'),
+      message: deletedMessage(
+        snapshot.note,
+        fallback: 'transaction',
+        prose: true,
+      ),
       delete: () async {
         await repo.softDeleteTransaction(snapshot.id);
         container.invalidate(transactionsProvider);
@@ -824,7 +829,7 @@ class _TransactionRow extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      VoyagerProseText(
                         transaction.note ?? (isDeposit ? 'Deposit' : 'Expense'),
                         style: theme.textTheme.bodyMedium,
                         maxLines: 1,

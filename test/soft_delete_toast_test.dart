@@ -124,5 +124,28 @@ void main() {
       final message = deletedMessage('🇦🇺' * 50, fallback: 'card');
       expect(message, 'Deleted "${'🇦🇺' * 48}…"');
     });
+
+    test('strips formatting markers from prose a toast cannot render', () {
+      expect(
+        deletedMessage('**Dinner** out', fallback: 'transaction', prose: true),
+        'Deleted "Dinner out"',
+      );
+    });
+
+    test('leaves a title literal, since titles never format', () {
+      expect(
+        deletedMessage('**Dinner** out', fallback: 'task'),
+        'Deleted "**Dinner** out"',
+      );
+    });
+
+    test('strips before the cut, so it never leaves half a pair', () {
+      // Unstripped, the 48-cluster cut would land inside the closing `**`.
+      final name = '**${'w' * 45}**';
+      expect(
+        deletedMessage(name, fallback: 'note', prose: true),
+        'Deleted "${'w' * 45}"',
+      );
+    });
   });
 }

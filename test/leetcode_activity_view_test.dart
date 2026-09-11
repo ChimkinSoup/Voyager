@@ -18,8 +18,6 @@ import 'package:voyager/features/leetcode/leetcode_activity_calendar.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_card.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_chart.dart';
 
-final _now = DateTime.utc(2026, 8, 15, 12);
-
 class _FixedSettings extends SettingsNotifier {
   @override
   Future<AppSettings> build() async => const AppSettings();
@@ -30,7 +28,11 @@ LeetCodeProblem _problem(
   LeetCodeDifficulty difficulty,
   int daysAgo,
 ) {
-  final solved = _now.subtract(Duration(days: daysAgo));
+  // Off the real clock: the card windows "Last 30 days" from DateTime.now(),
+  // so a pinned date ages every fixture out of the legend within weeks. Local
+  // noon, by calendar day, so neither DST nor the UTC round-trip moves it.
+  final now = DateTime.now();
+  final solved = DateTime(now.year, now.month, now.day - daysAgo, 12).toUtc();
   return LeetCodeProblem(
     id: id,
     createdAt: solved,

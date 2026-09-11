@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
@@ -24,6 +28,7 @@ class RankingTagsField extends StatefulWidget {
     required this.onChanged,
     required this.accentColor,
     this.enabled = true,
+    this.onChipRemoved,
   });
 
   final List<String> tags;
@@ -32,6 +37,12 @@ class RankingTagsField extends StatefulWidget {
   final List<String> suggestions;
 
   final ValueChanged<List<String>> onChanged;
+
+  /// Called after a tap on a chip takes its tag off, with the position the tag
+  /// held, so the host can offer it back. The whole chip is the remove button,
+  /// which makes a stray click cheap to make. Backspace does not call it: that
+  /// one is only reachable from the box, on purpose.
+  final void Function(String tag, int index)? onChipRemoved;
   final Color accentColor;
   final bool enabled;
 
@@ -52,11 +63,31 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
   List<String> _suggestions = const [];
   var _selected = 0;
 
+  /// The list last handed to [RankingTagsField.onChanged], shown until
+  /// [widget.tags] reads the same.
+  ///
+  /// The panel does not rebuild for a tag save of its own; the new list comes
+  /// back with the page's re-read a frame or two later. Drawing [widget.tags]
+  /// until then would leave a just-added chip missing, and a second Enter in
+  /// that gap would build on the list without it.
+  List<String>? _pending;
+
+  List<String> get _tags => _pending ?? widget.tags;
+
   @override
   void initState() {
     super.initState();
     _focusNode.onKeyEvent = _handleKey;
     _focusNode.addListener(_handleFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(RankingTagsField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Held until the saved list arrives rather than dropped on the first new
+    // one: two quick adds come back one at a time, and the first alone would
+    // take the second chip off for a frame.
+    if (_pending != null && listEquals(_pending, widget.tags)) _pending = null;
   }
 
   @override
@@ -78,22 +109,28 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
     _commit(_controller.text);
   }
 
-  bool get _full => widget.tags.length >= maxRankingParentTags;
+  bool get _full => _tags.length >= maxRankingParentTags;
 
   /// The category's tags the parent does not already carry, narrowed by what
-  /// has been typed so far.
+  /// has been typed so far — by prefix, the way `#` completes in the journal
+  /// body.
   void _refreshSuggestions() {
-    final query = _controller.text.trim().toLowerCase();
-    final taken = widget.tags.toSet();
-    final matches = [
-      for (final tag in widget.suggestions)
-        if (!taken.contains(tag) && tag.contains(query)) tag,
-    ];
-    _suggestions = matches.length > _maxSuggestions
-        ? matches.sublist(0, _maxSuggestions)
-        : matches;
+    final current = _tags;
+    // Commit strips a leading `#`, so the prefix is whatever follows it.
+    final query = _controller.text.trim().replaceFirst(RegExp(r'^#+'), '');
+    final taken = current.toSet();
+    _suggestions = filterTagSuggestions(
+      [
+        for (final tag in widget.suggestions)
+          if (!taken.contains(tag)) tag,
+      ],
+      query,
+      limit: _maxSuggestions,
+    );
     _selected = 0;
-    if (_suggestions.isEmpty || _full || !_focusNode.hasFocus) {
+    if (_suggestions.isEmpty ||
+        current.length >= maxRankingParentTags ||
+        !_focusNode.hasFocus) {
       _portal.hide();
     } else {
       _portal.show();
@@ -106,18 +143,33 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
       if (_controller.text.isNotEmpty) _controller.clear();
       return;
     }
-    final wanted = normalizeRankingTags([...widget.tags, ...raw.split(',')]);
+    final current = _tags;
+    final wanted = normalizeRankingTags([...current, ...raw.split(',')]);
     _controller.clear();
-    setState(_refreshSuggestions);
-    if (wanted.length != widget.tags.length) widget.onChanged(wanted);
+    final changed = wanted.length != current.length;
+    setState(() {
+      if (changed) _pending = wanted;
+      _refreshSuggestions();
+    });
+    if (changed) widget.onChanged(wanted);
   }
 
   void _remove(String tag) {
-    widget.onChanged([
-      for (final value in widget.tags)
+    final kept = [
+      for (final value in _tags)
         if (value != tag) value,
-    ]);
-    setState(_refreshSuggestions);
+    ];
+    widget.onChanged(kept);
+    setState(() {
+      _pending = kept;
+      _refreshSuggestions();
+    });
+  }
+
+  void _removeByTap(String tag) {
+    final index = _tags.indexOf(tag);
+    _remove(tag);
+    widget.onChipRemoved?.call(tag, index);
   }
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
@@ -149,8 +201,8 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
     // chip while there is still typing in front of it to delete.
     if (key == LogicalKeyboardKey.backspace &&
         _controller.text.isEmpty &&
-        widget.tags.isNotEmpty) {
-      _remove(widget.tags.last);
+        _tags.isNotEmpty) {
+      _remove(_tags.last);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -184,9 +236,9 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
       onChanged: _handleChanged,
       decoration: InputDecoration(
         isDense: true,
-        // The box only asks for something while there are no chips: beside
-        // them a placeholder is one more thing competing for the same row.
-        hintText: widget.tags.isEmpty ? 'Add a tag' : null,
+        // Always asked for, now that the box is its own bordered thing beside
+        // the chips: an empty box with nothing in it reads as broken.
+        hintText: 'Add a tag',
         hintStyle: fieldHintStyle(context, textStyle),
         contentPadding: EdgeInsets.zero,
         filled: false,
@@ -197,54 +249,49 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
       ),
     );
 
-    final content = Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (final tag in widget.tags)
-          _EditableTagChip(
-            tag: tag,
-            accent: accent,
-            onRemove: widget.enabled ? () => _remove(tag) : null,
-          ),
-        // A floor rather than a fixed width, so the box keeps a target big
-        // enough to click into once the chips have taken most of the row.
-        ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 96),
-          child: IntrinsicWidth(child: field),
+    // The border wraps the box alone: the chips are what the entry already
+    // carries, and sitting inside the box they read as text that had been
+    // typed there rather than as things already committed.
+    final box = CompositedTransformTarget(
+      link: _layerLink,
+      child: OverlayPortal(
+        controller: _portal,
+        overlayChildBuilder: _buildSuggestions,
+        // The border paints around the content and never moves it, so the
+        // padding the text sits on is given to the child as well.
+        child: NotchedFieldBorder(
+          focusNode: _focusNode,
+          accentColor: accent,
+          enabled: widget.enabled,
+          borderRadius: 12,
+          contentPadding: _contentPadding,
+          child: Padding(padding: _contentPadding, child: field),
         ),
-      ],
+      ),
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CompositedTransformTarget(
-          link: _layerLink,
-          child: OverlayPortal(
-            controller: _portal,
-            overlayChildBuilder: _buildSuggestions,
-            // The border paints around the content and never moves it, so the
-            // padding the chips sit on is given to the child as well.
-            child: NotchedFieldBorder(
-              focusNode: _focusNode,
-              accentColor: accent,
-              label: 'Tags',
-              labelStyle: textStyle,
-              hasContent: widget.tags.isNotEmpty || _controller.text.isNotEmpty,
-              enabled: widget.enabled,
-              borderRadius: 12,
-              contentPadding: _contentPadding,
-              child: Padding(padding: _contentPadding, child: content),
-            ),
-          ),
+        _TagFlow(
+          spacing: 6,
+          runSpacing: 6,
+          minFieldWidth: 110,
+          children: [
+            for (final tag in _tags)
+              _EditableTagChip(
+                tag: tag,
+                accent: accent,
+                onRemove: widget.enabled ? () => _removeByTap(tag) : null,
+              ),
+            box,
+          ],
         ),
         // Standing, not fired after a refused keystroke: the box is closed at
         // the cap, so the line under it is what says why nothing types.
         if (_full)
           Padding(
-            padding: const EdgeInsets.only(left: 14, top: 4),
+            padding: const EdgeInsets.only(left: 2, top: 4),
             child: Text(
               'Maximum $maxRankingParentTags tags',
               style: theme.textTheme.labelSmall?.copyWith(
@@ -295,7 +342,7 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
   }
 }
 
-/// A tag inside the editor, with the × that takes it off.
+/// A tag inside the editor; tapping it takes it off.
 class _EditableTagChip extends StatelessWidget {
   const _EditableTagChip({
     required this.tag,
@@ -310,33 +357,41 @@ class _EditableTagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.only(left: 8, right: 3, top: 2, bottom: 2),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.14),
+    final style = theme.textTheme.labelSmall?.copyWith(color: accent);
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onRemove,
         borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            tag,
-            style: theme.textTheme.labelSmall?.copyWith(color: accent),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(999),
           ),
-          if (onRemove != null)
-            InkWell(
-              onTap: onRemove,
-              borderRadius: BorderRadius.circular(999),
-              child: Padding(
-                padding: const EdgeInsets.all(3),
-                child: Icon(
-                  PhosphorIconsRegular.x,
-                  size: 11,
-                  color: accent,
-                ),
-              ),
-            ),
-        ],
+          // A tag has no length limit, so one wider than the panel is cut
+          // short, and only a cut one says the rest on hover — a tooltip
+          // repeating a chip that already reads in full is noise.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final text = Text(
+                tag,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style,
+              );
+              final painter = TextPainter(
+                text: TextSpan(text: tag, style: style),
+                maxLines: 1,
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              )..layout(maxWidth: constraints.maxWidth);
+              final cut = painter.didExceedMaxLines;
+              painter.dispose();
+              return cut ? Tooltip(message: tag, child: text) : text;
+            },
+          ),
+        ),
       ),
     );
   }
@@ -384,4 +439,156 @@ class _SuggestionRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Lays the chips out in wrapping lines and gives the last child — the text
+/// box — whatever is left of the line the chips ended on.
+///
+/// A [Wrap] cannot do this: it sizes every child to its intrinsic width, so
+/// the box would either jitter with each keystroke or sit at a fixed width
+/// with the tail of the row wasted. Here the box is measured last, against
+/// the space the chips did not take, and falls to a full-width line of its
+/// own when what is left is narrower than [minFieldWidth].
+class _TagFlow extends MultiChildRenderObjectWidget {
+  const _TagFlow({
+    required super.children,
+    required this.spacing,
+    required this.runSpacing,
+    required this.minFieldWidth,
+  });
+
+  final double spacing;
+  final double runSpacing;
+  final double minFieldWidth;
+
+  @override
+  _RenderTagFlow createRenderObject(BuildContext context) => _RenderTagFlow(
+    spacing: spacing,
+    runSpacing: runSpacing,
+    minFieldWidth: minFieldWidth,
+  );
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderTagFlow renderObject) {
+    renderObject
+      ..spacing = spacing
+      ..runSpacing = runSpacing
+      ..minFieldWidth = minFieldWidth;
+  }
+}
+
+class _TagFlowParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderTagFlow extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _TagFlowParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _TagFlowParentData> {
+  _RenderTagFlow({
+    required double spacing,
+    required double runSpacing,
+    required double minFieldWidth,
+  }) : _spacing = spacing,
+       _runSpacing = runSpacing,
+       _minFieldWidth = minFieldWidth;
+
+  double _spacing;
+  set spacing(double value) {
+    if (value == _spacing) return;
+    _spacing = value;
+    markNeedsLayout();
+  }
+
+  double _runSpacing;
+  set runSpacing(double value) {
+    if (value == _runSpacing) return;
+    _runSpacing = value;
+    markNeedsLayout();
+  }
+
+  double _minFieldWidth;
+  set minFieldWidth(double value) {
+    if (value == _minFieldWidth) return;
+    _minFieldWidth = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _TagFlowParentData) {
+      child.parentData = _TagFlowParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    assert(
+      constraints.hasBoundedWidth,
+      'The tag row measures the box against the width left over, so it needs '
+      'a bounded one to divide up.',
+    );
+    final width = constraints.maxWidth;
+    final children = getChildrenAsList();
+    // The box is always the last child; everything before it is a chip.
+    final field = children.removeLast();
+
+    // Pass one: the chips, packed into lines at their own widths.
+    final lines = <List<RenderBox>>[<RenderBox>[]];
+    var lineWidth = 0.0;
+    for (final chip in children) {
+      chip.layout(BoxConstraints(maxWidth: width), parentUsesSize: true);
+      if (lines.last.isNotEmpty && lineWidth + _spacing + chip.size.width > width) {
+        lines.add(<RenderBox>[]);
+        lineWidth = 0;
+      }
+      if (lines.last.isNotEmpty) lineWidth += _spacing;
+      lines.last.add(chip);
+      lineWidth += chip.size.width;
+    }
+
+    // Pass two: the box takes the rest of that line, or a line of its own.
+    final leading = lines.last.isEmpty ? 0.0 : lineWidth + _spacing;
+    final remaining = width - leading;
+    if (remaining >= _minFieldWidth) {
+      field.layout(
+        BoxConstraints(minWidth: remaining, maxWidth: remaining),
+        parentUsesSize: true,
+      );
+      lines.last.add(field);
+    } else {
+      field.layout(
+        BoxConstraints(minWidth: width, maxWidth: width),
+        parentUsesSize: true,
+      );
+      lines.add(<RenderBox>[field]);
+    }
+
+    // Pass three: place them, each line's children centred on its tallest —
+    // the chips are shorter than the box and would otherwise sit on its top
+    // edge.
+    var y = 0.0;
+    for (final line in lines) {
+      var height = 0.0;
+      for (final child in line) {
+        height = math.max(height, child.size.height);
+      }
+      var x = 0.0;
+      for (final child in line) {
+        (child.parentData! as _TagFlowParentData).offset = Offset(
+          x,
+          y + (height - child.size.height) / 2,
+        );
+        x += child.size.width + _spacing;
+      }
+      y += height + _runSpacing;
+    }
+    size = constraints.constrain(Size(width, y - _runSpacing));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
 }

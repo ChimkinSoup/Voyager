@@ -126,11 +126,15 @@ class ChartHoverBubble extends StatelessWidget {
     required this.periodLabel,
     required this.valueLabel,
     this.valueColor,
+    this.detailLabel,
   });
 
   final String periodLabel;
   final String? valueLabel;
   final Color? valueColor;
+
+  /// Optional quieter third line under the value (e.g. a ledger/assets split).
+  final String? detailLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -144,11 +148,28 @@ class ChartHoverBubble extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: VoyagerColors.of(context).hairline),
         ),
-        child: chartTooltipDateValueColumn(
-          periodLabel: periodLabel,
-          valueLabel: valueLabel,
-          valueColor: valueColor,
-          theme: theme,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            chartTooltipDateValueColumn(
+              periodLabel: periodLabel,
+              valueLabel: valueLabel,
+              valueColor: valueColor,
+              theme: theme,
+            ),
+            if (detailLabel != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                detailLabel!,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: chartTooltipDateStyle(theme).copyWith(fontSize: 9),
+              ),
+            ],
+          ],
         ),
       ),
     );

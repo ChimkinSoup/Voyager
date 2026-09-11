@@ -252,7 +252,16 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     if (spellcheckOn) baseStyle = withSquiggleRoom(baseStyle);
     // Derived after the squiggle-room floor, so the strut the field and both
     // overlays lay out against stays the one the text actually uses.
-    final strutStyle = StrutStyle.fromTextStyle(baseStyle);
+    // `forceStrutHeight`, matching the strut [EditableText] builds for itself
+    // when it is handed none (`strutStyle` getter, editable_text.dart) — and
+    // which the overlays here are laid out against either way. Without it an
+    // *empty* paragraph is measured from the font's own metrics rather than
+    // the strut, so a `minLines: 1` box stood ~6px taller with nothing in it
+    // and visibly shrank on the first keystroke.
+    final strutStyle = StrutStyle.fromTextStyle(
+      baseStyle,
+      forceStrutHeight: true,
+    );
     final accent =
         widget.accentColor ?? widget.cursorColor ?? theme.colorScheme.primary;
     final emphasisTheme = ProseEmphasisTheme.of(theme.colorScheme, accent);

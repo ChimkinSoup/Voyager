@@ -327,6 +327,66 @@ void main() {
     );
 
     testWidgets(
+      'follows the caret when the field itself is scrolled',
+      (tester) async {
+        // Twenty lines in a three-line box: enough to scroll it.
+        controller.text = List.generate(20, (i) => 'line $i').join('\n');
+        final scrollController = ScrollController();
+        addTearDown(scrollController.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: _wideField,
+                  child: CapsLockIndicatorScope(
+                    enabled: true,
+                    child: CapsLockCaretIndicator(
+                      child: TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        scrollController: scrollController,
+                        maxLines: 3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await focusCaretAt(tester, controller.text.length);
+        scrollController.jumpTo(scrollController.position.maxScrollExtent);
+        await tester.pump();
+
+        final render = tester
+            .state<EditableTextState>(find.byType(EditableText))
+            .renderEditable;
+        expect(
+          render.offset.pixels,
+          greaterThan(0),
+          reason: 'the box has actually scrolled',
+        );
+
+        final mark = debugCapsLockMarkRect;
+        expect(mark, isNotNull);
+        // The mark's vertical centre is the caret's. `getLocalRectForCaret`
+        // already carries the field's scroll, so subtracting it a second time
+        // — which is what the indicator used to do — put the chip a whole
+        // scroll extent above the caret it is meant to sit beside.
+        final caret = render.getLocalRectForCaret(
+          TextPosition(offset: controller.selection.baseOffset),
+        );
+        final inset =
+            tester.getTopLeft(find.byType(EditableText)).dy -
+            tester.getTopLeft(find.byType(CapsLockCaretIndicator)).dy;
+        expect(mark!.center.dy, closeTo(inset + caret.center.dy, 0.51));
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    );
+
+    testWidgets(
       'the code-field opt-out never draws',
       (tester) async {
         await tester.pumpWidget(

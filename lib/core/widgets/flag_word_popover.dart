@@ -273,7 +273,10 @@ class _FlagWordPanelState extends ConsumerState<_FlagWordPanel> {
         // next to the one being flagged.
         snippetsAllowed: false,
         autocorrectAllowed: false,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 15,
+          vertical: 12,
+        ),
         onSubmitted: (_) => _flag(known, flagged),
       ),
       if (_error != null)

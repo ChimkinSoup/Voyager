@@ -45,7 +45,8 @@ class RankingFieldEditor extends StatefulWidget {
   State<RankingFieldEditor> createState() => _RankingFieldEditorState();
 }
 
-class _RankingFieldEditorState extends State<RankingFieldEditor> {
+class _RankingFieldEditorState extends State<RankingFieldEditor>
+    with RankingScoreHold<RankingFieldEditor> {
   static const _saveDebounce = Duration(milliseconds: 400);
 
   /// How much of the category accent field scores keep (stars and number).
@@ -55,10 +56,8 @@ class _RankingFieldEditorState extends State<RankingFieldEditor> {
   late final FocusNode _notesFocusNode;
   Timer? _saveTimer;
 
-  /// The score the open score popover is sitting on, or null when none is
-  /// open. It stands in for the stored score everywhere the row draws itself,
-  /// so scrolling a roller fills the stars beside it as it goes.
-  double? _draftScore;
+  @override
+  double? get storedScore => widget.value.score;
 
   @override
   void initState() {
@@ -97,7 +96,9 @@ class _RankingFieldEditorState extends State<RankingFieldEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final score = _draftScore ?? widget.value.score;
+    // The held score stands in for the stored one everywhere the row draws
+    // itself, so scrolling a roller fills the stars beside it as it goes.
+    final score = shownScore;
     final scored = score != null;
     // Criterion scores sit below the headline overall row: same accent family,
     // softened so they read secondary. highlightWash is slate on cream (it
@@ -146,18 +147,19 @@ class _RankingFieldEditorState extends State<RankingFieldEditor> {
                     precision: widget.precision,
                     label: widget.field.label,
                     accentColor: fieldScoreAccent,
-                    onDraftChanged: (draft) =>
-                        setState(() => _draftScore = draft),
+                    onDraftChanged: holdDraft,
                     style: theme.textTheme.labelSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
-                    onChanged: widget.readOnly
-                        ? null
-                        : (score) => widget.onChanged(
-                            score == null
-                                ? widget.value.copyWith(clearScore: true)
-                                : widget.value.copyWith(score: score),
-                          ),
+                    onChanged: holdingWrites(
+                      widget.readOnly
+                          ? null
+                          : (score) => widget.onChanged(
+                              score == null
+                                  ? widget.value.copyWith(clearScore: true)
+                                  : widget.value.copyWith(score: score),
+                            ),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Opacity(

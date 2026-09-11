@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
+import 'package:voyager/core/text/prose_markup.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 
 export 'package:voyager/core/soft_delete/restore_contract.dart';
@@ -30,8 +31,17 @@ const _kQuotedNameLimit = 48;
 /// untitled row reads as a sentence rather than as a pair of empty quotes.
 ///
 /// A name longer than [_kQuotedNameLimit] is cut down to it and ellipsised.
-String deletedMessage(String? name, {required String fallback}) {
-  final trimmed = name?.trim();
+///
+/// Set [prose] when [name] comes from a multiline field, which stores
+/// formatting markers the toast can't render: they are stripped before the
+/// cut, so it can never leave half a `**` behind. Titles never format, and
+/// a `**` in one is literal.
+String deletedMessage(
+  String? name, {
+  required String fallback,
+  bool prose = false,
+}) {
+  final trimmed = (prose && name != null ? proseStrip(name) : name)?.trim();
   if (trimmed == null || trimmed.isEmpty) return 'Deleted $fallback';
   return 'Deleted "${_capName(trimmed)}"';
 }
