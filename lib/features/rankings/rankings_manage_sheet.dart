@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
@@ -67,7 +68,7 @@ class _RankingsManageDialogState extends ConsumerState<_RankingsManageDialog> {
             .firstOrNull ??
         categories.firstOrNull;
 
-    return AlertDialog(
+    final dialog = AlertDialog(
       title: const Text('Manage rankings'),
       content: SizedBox(
         width: 720,
@@ -105,6 +106,10 @@ class _RankingsManageDialogState extends ConsumerState<_RankingsManageDialog> {
           dense: true,
         ),
       ],
+    );
+    return CtrlEnterToSubmitScope(
+      onSubmit: () => Navigator.pop(context),
+      child: dialog,
     );
   }
 
@@ -492,7 +497,7 @@ class _UnitLabelFieldState extends ConsumerState<_UnitLabelField> {
 
   @override
   Widget build(BuildContext context) {
-    return LabeledTextField(
+    final field = LabeledTextField(
       label: 'Unit name',
       controller: _controller,
       dense: true,
@@ -503,6 +508,16 @@ class _UnitLabelFieldState extends ConsumerState<_UnitLabelField> {
       accentColor: Color(widget.category.colorValue),
       onSubmitted: _commit,
       onChanged: (_) {},
+    );
+    // Ctrl+Enter is Done, flushed: this box only commits on Enter, so closing
+    // straight from it would drop the label being typed. Nearer than the
+    // dialog's own scope, so it wins while the box has focus.
+    return CtrlEnterToSubmitScope(
+      onSubmit: () {
+        _commit(_controller.text);
+        Navigator.pop(context);
+      },
+      child: field,
     );
   }
 

@@ -6,6 +6,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -51,6 +52,7 @@ class _AllocateModal extends ConsumerStatefulWidget {
 class _AllocateModalState extends ConsumerState<_AllocateModal> {
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
+  final _noteFocusNode = FocusNode();
   late DateTime _date;
   bool _withdrawing = false;
   bool _datePopoverOpen = false;
@@ -72,6 +74,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
+    _noteFocusNode.dispose();
     super.dispose();
   }
 
@@ -162,7 +165,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
     final remaining = widget.goal.targetCents - allocated;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -257,16 +260,18 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                   prefixText: r'$ ',
                   errorText: _amountError,
                 ),
-                onSubmitted: (_) => _save(),
+                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _noteController,
+                focusNode: _noteFocusNode,
                 accentColor: accent,
                 decoration: const InputDecoration(
                   labelText: 'Note',
                   hintText: 'From October paycheck',
                 ),
+                onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 16),
               Row(
@@ -310,5 +315,6 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 }

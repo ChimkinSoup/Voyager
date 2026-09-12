@@ -7,6 +7,7 @@ import 'package:voyager/core/spellcheck/flagged_word_rules.dart';
 import 'package:voyager/core/spellcheck/spell_check_suggestions.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
@@ -224,7 +225,7 @@ class _FlagWordPanelState extends ConsumerState<_FlagWordPanel> {
     _prefill(known);
 
     final saved = _savedReplacement;
-    return Padding(
+    final popover = Padding(
       padding: const EdgeInsets.all(14),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -253,6 +254,12 @@ class _FlagWordPanelState extends ConsumerState<_FlagWordPanel> {
             _buildOffer(),
         ],
       ),
+    );
+    // Flag only: once the flag is saved, the offer's two answers are a choice
+    // rather than one affirmative action.
+    return CtrlEnterToSubmitScope(
+      onSubmit: saved == null ? () => _flag(known, flagged) : null,
+      child: popover,
     );
   }
 

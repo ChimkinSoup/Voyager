@@ -1440,8 +1440,8 @@
     "semantic_hash": "c1e5e3f10673ee50288a1bf599b7a967"
   },
   "lib/features/finance/finance_analytics_view.dart": {
-    "mtime": 1789158030.353627,
-    "ast_hash": "ca47f0380d70de5e4810a28ec67cb570",
+    "mtime": 1789159300.839283,
+    "ast_hash": "04cbb4d2cf973593c2e1721698b52264",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_asset_modal.dart": {
@@ -3390,9 +3390,9 @@
     "semantic_hash": "f03be9c1e1987c95785eec747ebec32c"
   },
   "test/leetcode_activity_view_test.dart": {
-    "mtime": 1786905043.5994651,
-    "ast_hash": "9f9a7ff2d16295f810f0d072a307ba1f",
-    "semantic_hash": "9f9a7ff2d16295f810f0d072a307ba1f"
+    "mtime": 1789158413.9219656,
+    "ast_hash": "73f1f34c528b646cd75161d2f9bcff92",
+    "semantic_hash": ""
   },
   "test/sync_conflict_stale_snapshot_test.dart": {
     "mtime": 1788385370.7784865,
@@ -4897,6 +4897,11 @@
   "CTRL_ENTER_SUBMIT_HLD.md": {
     "mtime": 1789157256.7621195,
     "ast_hash": "cb9f4a569631a38aaa2fc362ca5ce391",
+    "semantic_hash": ""
+  },
+  "FINANCE_BREAKDOWN_AND_LEDGER_UX_HLD.md": {
+    "mtime": 1789161082.815164,
+    "ast_hash": "e90a736fe6acff6ae58b5ff97381b03d",
     "semantic_hash": ""
   }
 }

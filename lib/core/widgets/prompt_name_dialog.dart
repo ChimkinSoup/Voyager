@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -85,7 +86,8 @@ class _PromptNameDialogState extends State<_PromptNameDialog> {
       ],
     );
 
-    if (!widget.enterToSubmit) return dialog;
-    return EnterToSubmitScope(onSubmit: _submit, child: dialog);
+    final chord = CtrlEnterToSubmitScope(onSubmit: _submit, child: dialog);
+    if (!widget.enterToSubmit) return chord;
+    return EnterToSubmitScope(onSubmit: _submit, child: chord);
   }
 }

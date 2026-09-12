@@ -45,6 +45,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -2909,7 +2910,7 @@ class _EditQuoteDialogState extends State<_EditQuoteDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope<String?>(
+    final dialog = PopScope<String?>(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
@@ -2945,6 +2946,7 @@ class _EditQuoteDialogState extends State<_EditQuoteDialog> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: dialog);
   }
 }
 

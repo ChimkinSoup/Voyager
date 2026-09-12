@@ -10,6 +10,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -703,7 +704,7 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
       ),
     );
 
-    return AlertDialog(
+    final dialog = AlertDialog(
       contentPadding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
       // Ctrl+V anywhere in this editor attaches to this unit's gallery — the
       // name and notes fields have nothing to take from an image-only
@@ -736,6 +737,11 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
           dense: true,
         ),
       ],
+    );
+    // Done, like the button: the pop is the flush, via dispose's _commitText.
+    return CtrlEnterToSubmitScope(
+      onSubmit: () => Navigator.pop(context),
+      child: dialog,
     );
   }
 }

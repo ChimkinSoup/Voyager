@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -236,9 +237,12 @@ class _JobsCompanyFieldState extends State<JobsCompanyField> {
       _move(-1);
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter ||
-        key == LogicalKeyboardKey.tab) {
+    // Ctrl/Cmd+Enter bubbles on to the form's submit scope with the name as
+    // typed, the same as it does past the tag popup.
+    if ((key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.numpadEnter ||
+            key == LogicalKeyboardKey.tab) &&
+        !isSubmitChord(event)) {
       _select(_matches[_selected]);
       return KeyEventResult.handled;
     }

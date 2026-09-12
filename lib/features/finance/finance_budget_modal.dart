@@ -5,6 +5,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -49,6 +50,7 @@ class _BudgetModal extends ConsumerStatefulWidget {
 class _BudgetModalState extends ConsumerState<_BudgetModal> {
   late final TextEditingController _tagController;
   late final TextEditingController _limitController;
+  final _limitFocusNode = FocusNode();
   bool _saving = false;
 
   /// Set when a write throws, so the sheet says what went wrong instead of
@@ -72,6 +74,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   void dispose() {
     _tagController.dispose();
     _limitController.dispose();
+    _limitFocusNode.dispose();
     super.dispose();
   }
 
@@ -195,7 +198,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
     final suggestions = _suggestedTags();
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -254,6 +257,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                   labelText: 'Tag',
                   hintText: 'dining_out',
                 ),
+                onSubmitted: (_) => _limitFocusNode.requestFocus(),
               ),
               if (widget.existing == null && suggestions.isNotEmpty) ...[
                 const SizedBox(height: 10),
@@ -279,6 +283,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _limitController,
+                focusNode: _limitFocusNode,
                 accentColor: accent,
                 cursorColor: accent,
                 keyboardType:
@@ -325,5 +330,6 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 }

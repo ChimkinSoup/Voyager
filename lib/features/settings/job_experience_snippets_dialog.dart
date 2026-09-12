@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
@@ -343,7 +344,7 @@ class _ExperienceEditorDialogState extends State<_ExperienceEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
+    final dialog = AlertDialog(
       title: Text(
         widget.original == null ? 'Add experience' : 'Edit experience',
       ),
@@ -427,6 +428,7 @@ class _ExperienceEditorDialogState extends State<_ExperienceEditorDialog> {
         GlassButton(dense: true, onPressed: _save, label: 'Save'),
       ],
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: dialog);
   }
 }
 

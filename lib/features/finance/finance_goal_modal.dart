@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -52,6 +53,8 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
   late final TextEditingController _nameController;
   late final TextEditingController _targetController;
   late final TextEditingController _noteController;
+  final _targetFocusNode = FocusNode();
+  final _noteFocusNode = FocusNode();
   DateTime? _targetDate;
   late int _colorValue;
   bool _datePopoverOpen = false;
@@ -83,6 +86,8 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
     _nameController.dispose();
     _targetController.dispose();
     _noteController.dispose();
+    _targetFocusNode.dispose();
+    _noteFocusNode.dispose();
     super.dispose();
   }
 
@@ -202,7 +207,7 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
     final accent = Color(_colorValue);
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -260,10 +265,12 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                   labelText: 'Goal',
                   hintText: 'Japan trip',
                 ),
+                onSubmitted: (_) => _targetFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _targetController,
+                focusNode: _targetFocusNode,
                 accentColor: accent,
                 cursorColor: accent,
                 keyboardType:
@@ -279,15 +286,18 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                   prefixText: r'$ ',
                   errorText: _targetError,
                 ),
+                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _noteController,
+                focusNode: _noteFocusNode,
                 accentColor: accent,
                 decoration: const InputDecoration(
                   labelText: 'Note',
                   hintText: 'Flights and hotel',
                 ),
+                onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 16),
               Row(
@@ -347,5 +357,6 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 }

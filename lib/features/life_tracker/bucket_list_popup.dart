@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -689,9 +690,11 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
     super.dispose();
   }
 
+  void _save() => Navigator.of(context).pop(_controller.text.trim());
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    final dialog = AlertDialog(
       title: const Text('Add a note?'),
       // Room to actually write in: the note is prose about how the thing
       // went, and the old four-line box in a shrink-wrapped dialog gave it
@@ -765,10 +768,11 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
         ),
         GlassButton(
           dense: true,
-          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
+          onPressed: _save,
           label: 'Save',
         ),
       ],
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: dialog);
   }
 }

@@ -7,6 +7,7 @@ import 'package:voyager/core/motion/motion_prefs.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 
 /// Wraps a text field so typing `#` opens a completion list of tags already
@@ -361,9 +362,12 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
         _move(-1);
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.enter ||
-          key == LogicalKeyboardKey.numpadEnter ||
-          key == LogicalKeyboardKey.tab) {
+      // Ctrl/Cmd+Enter is left to bubble: it commits the form around the
+      // field with the text as typed, not with the highlighted suggestion.
+      if ((key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter ||
+              key == LogicalKeyboardKey.tab) &&
+          !isSubmitChord(event)) {
         _accept(_suggestions[_selected]);
         return KeyEventResult.handled;
       }

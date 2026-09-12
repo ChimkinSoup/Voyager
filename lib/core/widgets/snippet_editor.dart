@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_checkbox.dart';
@@ -238,10 +239,11 @@ class _SnippetEditorState extends State<SnippetEditor> {
         ],
       ),
     );
-    if (!widget.card) return body;
+    final form = CtrlEnterToSubmitScope(onSubmit: _save, child: body);
+    if (!widget.card) return form;
     // The settings list draws each row on its own card; the quick-add popover
     // is already a surface, so it takes the bare form.
-    return Card(margin: const EdgeInsets.symmetric(vertical: 6), child: body);
+    return Card(margin: const EdgeInsets.symmetric(vertical: 6), child: form);
   }
 }
 

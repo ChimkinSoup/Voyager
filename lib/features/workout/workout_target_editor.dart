@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -67,7 +68,7 @@ class _ExerciseTargetEditorState extends State<_ExerciseTargetEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(
         left: VoyagerSpacing.xl,
         right: VoyagerSpacing.xl,
@@ -137,5 +138,6 @@ class _ExerciseTargetEditorState extends State<_ExerciseTargetEditor> {
         ],
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _submit, child: sheet);
   }
 }

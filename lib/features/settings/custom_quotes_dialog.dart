@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -347,7 +348,7 @@ class _QuoteEditorState extends State<_QuoteEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
+    final row = Padding(
       // Six, not four: the field inside is 28px tall and the [ListTile] this
       // row replaces is 40, so 4px of padding left the list jumping 4px
       // shorter the moment a quote was opened for editing.
@@ -403,6 +404,10 @@ class _QuoteEditorState extends State<_QuoteEditor> {
             ),
         ],
       ),
+    );
+    return CtrlEnterToSubmitScope(
+      onSubmit: () => widget.onSave(_controller.text),
+      child: row,
     );
   }
 }

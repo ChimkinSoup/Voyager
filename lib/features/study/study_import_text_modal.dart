@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -150,7 +151,7 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final previewCards = _parsed.cards.take(6).toList();
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -260,6 +261,7 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _import, child: sheet);
   }
 
   String _previewSummary() {

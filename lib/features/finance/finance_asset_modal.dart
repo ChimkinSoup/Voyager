@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -54,6 +55,8 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   late final TextEditingController _nameController;
   late final TextEditingController _valueController;
   late final TextEditingController _noteController;
+  final _valueFocusNode = FocusNode();
+  final _noteFocusNode = FocusNode();
   late DateTime _asOf;
   late int _colorValue;
   bool _datePopoverOpen = false;
@@ -83,6 +86,8 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     _nameController.dispose();
     _valueController.dispose();
     _noteController.dispose();
+    _valueFocusNode.dispose();
+    _noteFocusNode.dispose();
     super.dispose();
   }
 
@@ -256,7 +261,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
       }
     }
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -314,10 +319,12 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                   labelText: 'Asset name',
                   hintText: 'Index fund',
                 ),
+                onSubmitted: (_) => _valueFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _valueController,
+                focusNode: _valueFocusNode,
                 accentColor: accent,
                 cursorColor: accent,
                 keyboardType: const TextInputType.numberWithOptions(
@@ -336,15 +343,18 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                   hintText: 'Use a minus sign for a debt',
                   errorText: _valueError,
                 ),
+                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _noteController,
+                focusNode: _noteFocusNode,
                 accentColor: accent,
                 decoration: const InputDecoration(
                   labelText: 'Note',
                   hintText: 'Brokerage account',
                 ),
+                onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 16),
               Row(
@@ -408,5 +418,6 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 }

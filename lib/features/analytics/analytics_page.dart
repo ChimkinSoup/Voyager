@@ -18,6 +18,7 @@ import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -3487,7 +3488,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   /// [_measure] gets an accurate size regardless of the frame's current
   /// animated size.
   Widget _buildEditorContent(ThemeData theme, Color accent) {
-    return Material(
+    final content = Material(
       type: MaterialType.transparency,
       child: SizedBox(
         key: _cardKey,
@@ -3564,6 +3565,13 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           ),
         ),
       ),
+    );
+    return CtrlEnterToSubmitScope(
+      onSubmit: _save,
+      // The integer editor's field autofocuses and holds focus itself; the
+      // switch and option editors have nothing that would.
+      autofocus: widget.tracker.type != TrackerType.integer,
+      child: content,
     );
   }
 
@@ -5787,7 +5795,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   Widget build(BuildContext context) {
     final enumOptions = _enumOptions;
     final accent = Color(_colorValue);
-    return AlertDialog(
+    final dialog = AlertDialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: accent, width: 3),
@@ -6165,6 +6173,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         ),
       ],
     );
+    return CtrlEnterToSubmitScope(onSubmit: _submit, child: dialog);
   }
 
   List<String> get _enumOptions => _optionControllers
