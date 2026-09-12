@@ -16747,6 +16747,15 @@ class $TransactionsTableTable extends TransactionsTable
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _originMeta = const VerificationMeta('origin');
+  @override
+  late final GeneratedColumn<String> origin = GeneratedColumn<String>(
+    'origin',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _noteMeta = const VerificationMeta('note');
   @override
   late final GeneratedColumn<String> note = GeneratedColumn<String>(
@@ -16829,6 +16838,7 @@ class $TransactionsTableTable extends TransactionsTable
     id,
     type,
     amountCents,
+    origin,
     note,
     tagsJson,
     occurredAt,
@@ -16872,6 +16882,12 @@ class $TransactionsTableTable extends TransactionsTable
       );
     } else if (isInserting) {
       context.missing(_amountCentsMeta);
+    }
+    if (data.containsKey('origin')) {
+      context.handle(
+        _originMeta,
+        origin.isAcceptableOrUnknown(data['origin']!, _originMeta),
+      );
     }
     if (data.containsKey('note')) {
       context.handle(
@@ -16942,6 +16958,10 @@ class $TransactionsTableTable extends TransactionsTable
         DriftSqlType.int,
         data['${effectivePrefix}amount_cents'],
       )!,
+      origin: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin'],
+      ),
       note: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}note'],
@@ -16984,6 +17004,7 @@ class TransactionsTableData extends DataClass
   final String id;
   final String type;
   final int amountCents;
+  final String? origin;
   final String? note;
   final String tagsJson;
   final DateTime occurredAt;
@@ -16995,6 +17016,7 @@ class TransactionsTableData extends DataClass
     required this.id,
     required this.type,
     required this.amountCents,
+    this.origin,
     this.note,
     required this.tagsJson,
     required this.occurredAt,
@@ -17009,6 +17031,9 @@ class TransactionsTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['type'] = Variable<String>(type);
     map['amount_cents'] = Variable<int>(amountCents);
+    if (!nullToAbsent || origin != null) {
+      map['origin'] = Variable<String>(origin);
+    }
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
@@ -17028,6 +17053,9 @@ class TransactionsTableData extends DataClass
       id: Value(id),
       type: Value(type),
       amountCents: Value(amountCents),
+      origin: origin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(origin),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
       tagsJson: Value(tagsJson),
       occurredAt: Value(occurredAt),
@@ -17049,6 +17077,7 @@ class TransactionsTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       type: serializer.fromJson<String>(json['type']),
       amountCents: serializer.fromJson<int>(json['amountCents']),
+      origin: serializer.fromJson<String?>(json['origin']),
       note: serializer.fromJson<String?>(json['note']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
@@ -17065,6 +17094,7 @@ class TransactionsTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'type': serializer.toJson<String>(type),
       'amountCents': serializer.toJson<int>(amountCents),
+      'origin': serializer.toJson<String?>(origin),
       'note': serializer.toJson<String?>(note),
       'tagsJson': serializer.toJson<String>(tagsJson),
       'occurredAt': serializer.toJson<DateTime>(occurredAt),
@@ -17079,6 +17109,7 @@ class TransactionsTableData extends DataClass
     String? id,
     String? type,
     int? amountCents,
+    Value<String?> origin = const Value.absent(),
     Value<String?> note = const Value.absent(),
     String? tagsJson,
     DateTime? occurredAt,
@@ -17090,6 +17121,7 @@ class TransactionsTableData extends DataClass
     id: id ?? this.id,
     type: type ?? this.type,
     amountCents: amountCents ?? this.amountCents,
+    origin: origin.present ? origin.value : this.origin,
     note: note.present ? note.value : this.note,
     tagsJson: tagsJson ?? this.tagsJson,
     occurredAt: occurredAt ?? this.occurredAt,
@@ -17105,6 +17137,7 @@ class TransactionsTableData extends DataClass
       amountCents: data.amountCents.present
           ? data.amountCents.value
           : this.amountCents,
+      origin: data.origin.present ? data.origin.value : this.origin,
       note: data.note.present ? data.note.value : this.note,
       tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
       occurredAt: data.occurredAt.present
@@ -17123,6 +17156,7 @@ class TransactionsTableData extends DataClass
           ..write('id: $id, ')
           ..write('type: $type, ')
           ..write('amountCents: $amountCents, ')
+          ..write('origin: $origin, ')
           ..write('note: $note, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
@@ -17139,6 +17173,7 @@ class TransactionsTableData extends DataClass
     id,
     type,
     amountCents,
+    origin,
     note,
     tagsJson,
     occurredAt,
@@ -17154,6 +17189,7 @@ class TransactionsTableData extends DataClass
           other.id == this.id &&
           other.type == this.type &&
           other.amountCents == this.amountCents &&
+          other.origin == this.origin &&
           other.note == this.note &&
           other.tagsJson == this.tagsJson &&
           other.occurredAt == this.occurredAt &&
@@ -17168,6 +17204,7 @@ class TransactionsTableCompanion
   final Value<String> id;
   final Value<String> type;
   final Value<int> amountCents;
+  final Value<String?> origin;
   final Value<String?> note;
   final Value<String> tagsJson;
   final Value<DateTime> occurredAt;
@@ -17180,6 +17217,7 @@ class TransactionsTableCompanion
     this.id = const Value.absent(),
     this.type = const Value.absent(),
     this.amountCents = const Value.absent(),
+    this.origin = const Value.absent(),
     this.note = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.occurredAt = const Value.absent(),
@@ -17193,6 +17231,7 @@ class TransactionsTableCompanion
     required String id,
     required String type,
     required int amountCents,
+    this.origin = const Value.absent(),
     this.note = const Value.absent(),
     this.tagsJson = const Value.absent(),
     required DateTime occurredAt,
@@ -17211,6 +17250,7 @@ class TransactionsTableCompanion
     Expression<String>? id,
     Expression<String>? type,
     Expression<int>? amountCents,
+    Expression<String>? origin,
     Expression<String>? note,
     Expression<String>? tagsJson,
     Expression<DateTime>? occurredAt,
@@ -17224,6 +17264,7 @@ class TransactionsTableCompanion
       if (id != null) 'id': id,
       if (type != null) 'type': type,
       if (amountCents != null) 'amount_cents': amountCents,
+      if (origin != null) 'origin': origin,
       if (note != null) 'note': note,
       if (tagsJson != null) 'tags_json': tagsJson,
       if (occurredAt != null) 'occurred_at': occurredAt,
@@ -17239,6 +17280,7 @@ class TransactionsTableCompanion
     Value<String>? id,
     Value<String>? type,
     Value<int>? amountCents,
+    Value<String?>? origin,
     Value<String?>? note,
     Value<String>? tagsJson,
     Value<DateTime>? occurredAt,
@@ -17252,6 +17294,7 @@ class TransactionsTableCompanion
       id: id ?? this.id,
       type: type ?? this.type,
       amountCents: amountCents ?? this.amountCents,
+      origin: origin ?? this.origin,
       note: note ?? this.note,
       tagsJson: tagsJson ?? this.tagsJson,
       occurredAt: occurredAt ?? this.occurredAt,
@@ -17274,6 +17317,9 @@ class TransactionsTableCompanion
     }
     if (amountCents.present) {
       map['amount_cents'] = Variable<int>(amountCents.value);
+    }
+    if (origin.present) {
+      map['origin'] = Variable<String>(origin.value);
     }
     if (note.present) {
       map['note'] = Variable<String>(note.value);
@@ -17308,6 +17354,7 @@ class TransactionsTableCompanion
           ..write('id: $id, ')
           ..write('type: $type, ')
           ..write('amountCents: $amountCents, ')
+          ..write('origin: $origin, ')
           ..write('note: $note, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
@@ -46261,6 +46308,7 @@ typedef $$TransactionsTableTableCreateCompanionBuilder =
       required String id,
       required String type,
       required int amountCents,
+      Value<String?> origin,
       Value<String?> note,
       Value<String> tagsJson,
       required DateTime occurredAt,
@@ -46275,6 +46323,7 @@ typedef $$TransactionsTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> type,
       Value<int> amountCents,
+      Value<String?> origin,
       Value<String?> note,
       Value<String> tagsJson,
       Value<DateTime> occurredAt,
@@ -46306,6 +46355,11 @@ class $$TransactionsTableTableFilterComposer
 
   ColumnFilters<int> get amountCents => $composableBuilder(
     column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get origin => $composableBuilder(
+    column: $table.origin,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46369,6 +46423,11 @@ class $$TransactionsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get origin => $composableBuilder(
+    column: $table.origin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get note => $composableBuilder(
     column: $table.note,
     builder: (column) => ColumnOrderings(column),
@@ -46424,6 +46483,9 @@ class $$TransactionsTableTableAnnotationComposer
     column: $table.amountCents,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get origin =>
+      $composableBuilder(column: $table.origin, builder: (column) => column);
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
@@ -46492,6 +46554,7 @@ class $$TransactionsTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<int> amountCents = const Value.absent(),
+                Value<String?> origin = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<DateTime> occurredAt = const Value.absent(),
@@ -46504,6 +46567,7 @@ class $$TransactionsTableTableTableManager
                 id: id,
                 type: type,
                 amountCents: amountCents,
+                origin: origin,
                 note: note,
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,
@@ -46518,6 +46582,7 @@ class $$TransactionsTableTableTableManager
                 required String id,
                 required String type,
                 required int amountCents,
+                Value<String?> origin = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 required DateTime occurredAt,
@@ -46530,6 +46595,7 @@ class $$TransactionsTableTableTableManager
                 id: id,
                 type: type,
                 amountCents: amountCents,
+                origin: origin,
                 note: note,
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,

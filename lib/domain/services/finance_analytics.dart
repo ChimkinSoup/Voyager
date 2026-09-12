@@ -206,6 +206,55 @@ List<BreakdownSlice> spendingBreakdown(
   return slices;
 }
 
+/// Label for expenses with no store, in the by-store breakdown.
+const String kNoStoreLabel = 'No store';
+
+/// Label for deposits with no source, in the by-source breakdown.
+const String kNoSourceLabel = 'No source';
+
+/// Transactions of [type] over [from, to), grouped by origin — spending by
+/// store for expenses, income by source for deposits.
+///
+/// Exclusive like [spendingBreakdown]: each transaction lands in exactly one
+/// slice, so the slices sum to the period's total for [type]. Keys are the
+/// origin strings as stored, so `Walmart` and `walmart` are separate slices.
+/// A transaction with no origin falls under [kNoStoreLabel] / [kNoSourceLabel]
+/// in the fallback grey; every named origin takes its colour the same way an
+/// uncoloured tag does, from [colorFor].
+List<BreakdownSlice> originBreakdown(
+  List<FinancialTransaction> transactions, {
+  required DateTime from,
+  required DateTime to,
+  required TransactionType type,
+  required int Function(String origin) colorFor,
+}) {
+  final emptyLabel = type == TransactionType.deposit
+      ? kNoSourceLabel
+      : kNoStoreLabel;
+  final totals = <String, int>{};
+
+  for (final t in transactions) {
+    if (t.type != type) continue;
+    if (t.occurredAt.isBefore(from) || !t.occurredAt.isBefore(to)) continue;
+    final origin = t.origin?.trim();
+    final label = origin == null || origin.isEmpty ? emptyLabel : origin;
+    totals[label] = (totals[label] ?? 0) + t.amountCents;
+  }
+
+  final slices = [
+    for (final entry in totals.entries)
+      BreakdownSlice(
+        label: entry.key,
+        colorValue: entry.key == emptyLabel
+            ? kBreakdownFallbackColor
+            : colorFor(entry.key),
+        amountCents: entry.value,
+      ),
+  ];
+  slices.sort((a, b) => b.amountCents.compareTo(a.amountCents));
+  return slices;
+}
+
 /// The result of drilling into one breakdown bucket.
 ///
 /// [parentCents] is what the focused bucket actually cost — each expense in

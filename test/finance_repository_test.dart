@@ -24,6 +24,7 @@ void main() {
     required int amountCents,
     required DateTime occurredAt,
     List<String> tags = const [],
+    String? origin,
     String? note,
     String? id,
   }) {
@@ -36,6 +37,7 @@ void main() {
       amountCents: amountCents,
       occurredAt: occurredAt,
       tags: tags,
+      origin: origin,
       note: note,
     );
   }
@@ -60,12 +62,13 @@ void main() {
     expect(list.last.id, older.id);
   });
 
-  test('round-trips tags, note and type', () async {
+  test('round-trips tags, origin, note and type', () async {
     final tx = make(
       type: TransactionType.expense,
       amountCents: 4299,
       occurredAt: DateTime(2026, 7, 15),
       tags: ['groceries', 'travel'],
+      origin: 'Walmart',
       note: 'Dinner with friends',
     );
     await repo.upsertTransaction(tx);
@@ -74,6 +77,7 @@ void main() {
     expect(loaded.type, TransactionType.expense);
     expect(loaded.amountCents, 4299);
     expect(loaded.tags, ['groceries', 'travel']);
+    expect(loaded.origin, 'Walmart');
     expect(loaded.note, 'Dinner with friends');
     expect(loaded.signedCents, -4299);
   });

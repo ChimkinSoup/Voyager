@@ -1,10 +1,11 @@
 /// Turns LeetCode GraphQL `question.content` HTML into plain problem-statement
 /// text for flashcards and the track form.
 ///
-/// Drops everything from the first `Example N:` onward (examples, constraints,
-/// follow-ups) and strips markup so only prose remains — inline identifiers
-/// that lived inside `<code>` tags are kept as plain words. Blank lines from
-/// paragraph tags are collapsed so the statement reads as consecutive lines.
+/// Drops everything from the first `Example:` / `Example N:` onward (examples,
+/// constraints, follow-ups) and strips markup so only prose remains — inline
+/// identifiers that lived inside `<code>` tags are kept as plain words. Blank
+/// lines from paragraph tags are collapsed so the statement reads as
+/// consecutive lines.
 String? leetCodeContentToDescription(String? html) {
   if (html == null) return null;
   final stripped = _stripHtml(html);
@@ -14,7 +15,7 @@ String? leetCodeContentToDescription(String? html) {
 }
 
 /// Pulls the worked examples out of LeetCode GraphQL `question.content`, one
-/// entry per `Example N:` block, in the order they appear.
+/// entry per `Example:` / `Example N:` block, in the order they appear.
 ///
 /// Each entry holds everything between that heading and the next one — the
 /// Input/Output lines plus the example's own explanation, as plain text. The
@@ -58,7 +59,13 @@ String _collapseBlankLines(String text) {
   ].join('\n');
 }
 
-final _exampleHeading = RegExp(r'Example\s+\d+\s*:', caseSensitive: false);
+/// Line-start only so prose like "For example:" is not treated as a heading.
+/// The number is optional: some problems label a single block `Example:`.
+final _exampleHeading = RegExp(
+  r'^[ \t]*Example(?:\s+\d+)?\s*:',
+  caseSensitive: false,
+  multiLine: true,
+);
 
 /// "Constraints:" / "Follow-up:" at the start of a line — the tail of the
 /// problem statement, not part of the example it happens to sit after.

@@ -21,11 +21,13 @@ class BudgetPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final budgets = ref.watch(budgetsProvider).valueOrNull ?? const [];
-    final transactions =
-        ref.watch(transactionsProvider).valueOrNull ?? const [];
+    final now = DateTime.now();
+    final transactions = settledTransactions(
+      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      now,
+    );
     final tagColors = ref.watch(tagColorsProvider).valueOrNull ?? const {};
 
-    final now = DateTime.now();
     final pace = monthPaceFraction(now);
     final daysLeft = daysInMonth(now.year, now.month) - now.day;
 

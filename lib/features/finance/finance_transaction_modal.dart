@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
@@ -17,6 +16,8 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/domain/services/finance_origins.dart';
+import 'package:voyager/features/finance/finance_origin_field.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -34,6 +35,7 @@ class FinanceTransactionDraft {
   const FinanceTransactionDraft({
     this.type = TransactionType.expense,
     this.amountCents,
+    this.origin,
     this.note,
     this.occurredAt,
     this.tags = const [],
@@ -41,6 +43,7 @@ class FinanceTransactionDraft {
 
   final TransactionType type;
   final int? amountCents;
+  final String? origin;
   final String? note;
   final DateTime? occurredAt;
   final List<String> tags;
@@ -103,11 +106,12 @@ class _TransactionModal extends ConsumerStatefulWidget {
 class _TransactionModalState extends ConsumerState<_TransactionModal> {
   late TransactionType _type;
   late final TextEditingController _amountController;
+  late final TextEditingController _originController;
   late final TextEditingController _noteController;
   late final TextEditingController _tagsController;
+  final _originFocusNode = FocusNode();
+  final _noteFocusNode = FocusNode();
   final _tagsFocusNode = FocusNode();
-  late final FocusNode _noteFocusNode;
-  var _lastNoteText = '';
   late DateTime _date;
   bool _datePopoverOpen = false;
   bool _saving = false;
@@ -128,29 +132,12 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     _amountController = TextEditingController(
       text: amountCents == null ? '' : (amountCents / 100).toStringAsFixed(2),
     );
+    _originController = TextEditingController(
+      text: existing?.origin ?? draft?.origin ?? '',
+    );
     _noteController = TextEditingController(
       text: existing?.note ?? draft?.note ?? '',
     );
-    _lastNoteText = _noteController.text;
-    _noteFocusNode = FocusNode();
-    _noteFocusNode.onKeyEvent = (node, event) {
-      if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      if (event.logicalKey == LogicalKeyboardKey.tab) {
-        final outdent = HardwareKeyboard.instance.isShiftPressed;
-        if (handleListTab(controller: _noteController, outdent: outdent)) {
-          // Keep _lastNoteText in sync for the next keystroke's diff.
-          _handleNoteChanged(_noteController.text);
-          return KeyEventResult.handled;
-        }
-      }
-      if (event.logicalKey == LogicalKeyboardKey.backspace) {
-        if (handleListBackspace(controller: _noteController)) {
-          _handleNoteChanged(_noteController.text);
-          return KeyEventResult.handled;
-        }
-      }
-      return KeyEventResult.ignored;
-    };
     _tagsController = TextEditingController(
       text: (existing?.tags ?? draft?.tags ?? const <String>[])
           .map((t) => '#$t')
@@ -165,6 +152,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   @override
   void dispose() {
     _amountController.dispose();
+    _originController.dispose();
+    _originFocusNode.dispose();
     _noteController.dispose();
     _noteFocusNode.dispose();
     _tagsController.dispose();
@@ -174,9 +163,15 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
 
   void _onAmountChanged() => setState(() {});
 
-  void _handleNoteChanged(String value) {
-    applyListEditing(controller: _noteController, previousText: _lastNoteText);
-    _lastNoteText = _noteController.text;
+  /// Store and Source are separate vocabularies, so an origin typed for one
+  /// type means nothing for the other: the switch clears it rather than
+  /// carrying a store over as a source.
+  void _setType(TransactionType type) {
+    if (type == _type) return;
+    setState(() {
+      _type = type;
+      _originController.clear();
+    });
   }
 
   int? get _parsedCents => parseAmountCents(_amountController.text);
@@ -263,9 +258,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       type: _type,
       amountCents: cents,
       occurredAt: occurredAt,
-      note: _noteController.text.trim().isEmpty
-          ? null
-          : _noteController.text.trim(),
+      origin: trimToNull(_originController.text),
+      note: trimToNull(_noteController.text),
       tags: tags,
     );
 
@@ -394,7 +388,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                 ],
                 selected: {_type},
                 onSelectionChanged: (set) {
-                  if (set.isNotEmpty) setState(() => _type = set.first);
+                  if (set.isNotEmpty) _setType(set.first);
                 },
               ),
               const SizedBox(height: 16),
@@ -422,9 +416,37 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   prefixText: r'$ ',
                   errorText: _amountError,
                 ),
-                // Enter walks Amount → Tags → Note. Note is multiline, so
-                // Enter there is a newline and the sheet commits only from
-                // the button or Ctrl+Enter.
+                // Enter walks Amount → Store/Source → Note → Tags, and Enter
+                // in Tags saves.
+                onSubmitted: (_) => _originFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: 16),
+              // Store / Source
+              FinanceOriginField(
+                controller: _originController,
+                focusNode: _originFocusNode,
+                // Watched, so a row deleted or restored while the sheet is
+                // open reaches the list without reopening it.
+                origins: recentTransactionOrigins(
+                  ref.watch(transactionsProvider).valueOrNull ?? const [],
+                  _type,
+                  DateTime.now(),
+                ),
+                label: isDeposit ? 'Source' : 'Store',
+                hintText: isDeposit ? 'Employer' : 'Walmart',
+                accentColor: accent,
+                onSubmitted: (_) => _noteFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: 16),
+              // Note
+              VoyagerTextField(
+                controller: _noteController,
+                focusNode: _noteFocusNode,
+                accentColor: accent,
+                decoration: InputDecoration(
+                  labelText: 'Note',
+                  hintText: isDeposit ? 'Paycheque' : 'Toothpaste',
+                ),
                 onSubmitted: (_) => _tagsFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
@@ -438,20 +460,9 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   labelText: 'Tags',
                   hintText: '#groceries #travel',
                 ),
-                onSubmitted: (_) => _noteFocusNode.requestFocus(),
-              ),
-              const SizedBox(height: 16),
-              // Note
-              VoyagerTextField(
-                controller: _noteController,
-                focusNode: _noteFocusNode,
-                accentColor: accent,
-                maxLines: 2,
-                onChanged: _handleNoteChanged,
-                decoration: const InputDecoration(
-                  labelText: 'Note',
-                  hintText: 'Dinner with friends',
-                ),
+                // Only reached with the tag popup closed — an open popup takes
+                // Enter for its suggestion. _save refuses an invalid form.
+                onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 16),
               // Date
@@ -505,7 +516,9 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     if (d == today) return 'Today';
-    if (d == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    if (d == DateTime(today.year, today.month, today.day - 1)) {
+      return 'Yesterday';
+    }
     return DateFormat('MMM d, yyyy').format(d);
   }
 }

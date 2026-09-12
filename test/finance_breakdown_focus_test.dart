@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -16,6 +17,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 
@@ -28,7 +30,11 @@ final _thisMonth = () {
   return DateTime(now.year, now.month, now.day);
 }();
 
-Future<void> pumpBreakdown(WidgetTester tester) async {
+Future<void> pumpBreakdown(
+  WidgetTester tester, {
+  MemoryFinanceUiPrefsStore? prefsStore,
+  bool withIncome = false,
+}) async {
   tester.view.physicalSize = const Size(1400, 1800);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -55,6 +61,19 @@ Future<void> pumpBreakdown(WidgetTester tester) async {
   await expense('plain-food', 1000, const ['food']);
   await expense('food-and-thai', 3000, const ['food', 'thai']);
   await expense('rent-only', 5000, const ['rent']);
+  if (withIncome) {
+    await repo.upsertTransaction(
+      FinancialTransaction(
+        id: 'paycheque',
+        createdAt: now,
+        updatedAt: now,
+        type: TransactionType.deposit,
+        amountCents: 90000,
+        occurredAt: _thisMonth,
+        origin: 'Employer',
+      ),
+    );
+  }
 
   await repo.upsertCategory(
     FinanceCategory(
@@ -72,7 +91,7 @@ Future<void> pumpBreakdown(WidgetTester tester) async {
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
       financeUiPrefsStoreProvider.overrideWithValue(
-        MemoryFinanceUiPrefsStore(),
+        prefsStore ?? MemoryFinanceUiPrefsStore(),
       ),
     ],
   );
@@ -243,6 +262,21 @@ void main() {
     expect(find.text('Uncategorized'), findsOneWidget);
   });
 
+  testWidgets('focusing and clearing leave the pie where it was',
+      (tester) async {
+    await pumpBreakdown(tester);
+    final top = tester.getTopLeft(find.byType(PieChart)).dy;
+
+    await tester.tap(find.text('Eating out'));
+    await tester.pumpAndSettle();
+    expect(find.text('Filtering: Eating out'), findsOneWidget);
+    expect(tester.getTopLeft(find.byType(PieChart)).dy, top);
+
+    await tester.tap(find.text('Filtering: Eating out'));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.byType(PieChart)).dy, top);
+  });
+
   testWidgets('clicking a tag under a category switches to Tag mode',
       (tester) async {
     await pumpBreakdown(tester);
@@ -259,10 +293,14 @@ void main() {
     expect(find.text('Nothing left in this bucket.'), findsNothing);
     expect(find.text(r'$30.00'), findsWidgets);
 
-    final grouping = tester.widget<SegmentedButton<bool>>(
-      find.byType(SegmentedButton<bool>),
+    final grouping = tester.widget<SegmentedButton<FinanceBreakdownMode>>(
+      find.byType(SegmentedButton<FinanceBreakdownMode>),
     );
-    expect(grouping.selected, {false}, reason: 'the Tag segment is selected');
+    expect(
+      grouping.selected,
+      {FinanceBreakdownMode.tag},
+      reason: 'the Tag segment is selected',
+    );
   });
 
   testWidgets('switching Category to Tag drops the focus', (tester) async {
@@ -279,6 +317,123 @@ void main() {
     // The unfocused tag chart: one bucket per primary tag.
     expect(find.text('food'), findsOneWidget);
     expect(find.text('rent'), findsOneWidget);
+  });
+
+  testWidgets('Store mode drops the focus and does not drill down', (
+    tester,
+  ) async {
+    await pumpBreakdown(tester);
+
+    await tester.tap(find.text('Eating out'));
+    await tester.pumpAndSettle();
+    expect(find.text('Filtering: Eating out'), findsOneWidget);
+
+    await tester.tap(find.text('Store'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Filtering:'), findsNothing);
+    // None of the seeded expenses names a store.
+    expect(find.text(kNoStoreLabel), findsOneWidget);
+
+    await tester.tap(find.text(kNoStoreLabel));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Filtering:'), findsNothing);
+  });
+
+  testWidgets('the title dropdown swaps in Income by Source and remembers it', (
+    tester,
+  ) async {
+    final store = MemoryFinanceUiPrefsStore();
+    await pumpBreakdown(tester, prefsStore: store);
+
+    await tester.tap(find.text('Eating out'));
+    await tester.pumpAndSettle();
+    expect(find.text('Filtering: Eating out'), findsOneWidget);
+
+    await tester.tap(find.text('Spending Breakdown'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Income by Source'));
+    await tester.pumpAndSettle();
+
+    // One card, now showing income — and this month has none.
+    expect(find.text('Spending Breakdown'), findsNothing);
+    expect(find.text('No income recorded this month.'), findsOneWidget);
+    expect(find.byType(SegmentedButton<FinanceBreakdownMode>), findsNothing);
+    expect(find.byTooltip('Manage categories'), findsNothing);
+    expect(store.prefs.breakdownChart, FinanceBreakdownChart.income);
+
+    await tester.tap(find.text('Income by Source'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Spending Breakdown'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No income recorded this month.'), findsNothing);
+    expect(
+      find.textContaining('Filtering:'),
+      findsNothing,
+      reason: 'the drill-down does not wait behind the income chart',
+    );
+    expect(store.prefs.breakdownChart, FinanceBreakdownChart.spending);
+  });
+
+  testWidgets('switching charts leaves the pie where it was', (tester) async {
+    await pumpBreakdown(tester, withIncome: true);
+
+    // The month label moved with it: in Spending it shares a row with the
+    // Category/Tag/Store control, in Income it stands alone.
+    final month = find.text(DateFormat.yMMMM().format(DateTime.now()));
+    Offset pieTopLeft() => tester.getTopLeft(find.byType(PieChart));
+
+    final spendingPie = pieTopLeft();
+    final spendingMonth = tester.getTopLeft(month);
+    await tester.tap(find.text('Spending Breakdown'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Income by Source'));
+    await tester.pumpAndSettle();
+    expect(find.text('Employer'), findsOneWidget);
+
+    expect(pieTopLeft(), spendingPie);
+    expect(tester.getTopLeft(month), spendingMonth);
+  });
+
+  testWidgets('switching charts morphs the pie rather than rebuilding it', (
+    tester,
+  ) async {
+    await pumpBreakdown(tester, withIncome: true);
+
+    // fl_chart only tweens between slice sets on a kept State; a new one
+    // snaps straight to the new slices, as the income switch used to.
+    State pie() => tester.state(find.byType(PieChart));
+    final spendingPie = pie();
+
+    await tester.tap(find.text('Spending Breakdown'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Income by Source'));
+    await tester.pumpAndSettle();
+    expect(find.text('Employer'), findsOneWidget);
+    expect(pie(), same(spendingPie));
+
+    await tester.tap(find.text('Income by Source'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Spending Breakdown'));
+    await tester.pumpAndSettle();
+    expect(find.text('Employer'), findsNothing);
+    expect(pie(), same(spendingPie));
+  });
+
+  testWidgets('the analytics page opens on the chart left showing', (
+    tester,
+  ) async {
+    final store = MemoryFinanceUiPrefsStore()
+      ..prefs = const FinanceUiPrefs(
+        viewMode: FinanceViewMode.analytics,
+        breakdownChart: FinanceBreakdownChart.income,
+      );
+    await pumpBreakdown(tester, prefsStore: store);
+
+    expect(find.text('Income by Source'), findsOneWidget);
+    expect(find.text('No income recorded this month.'), findsOneWidget);
+    expect(find.text('Spending Breakdown'), findsNothing);
   });
 
   testWidgets('a tag drill-down splits the bucket without double-counting',

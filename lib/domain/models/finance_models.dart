@@ -20,6 +20,7 @@ class FinancialTransaction extends SoftDeletable {
     required this.type,
     required this.amountCents,
     required this.occurredAt,
+    this.origin,
     this.note,
     this.tags = const [],
   });
@@ -34,7 +35,12 @@ class FinancialTransaction extends SoftDeletable {
   /// ledger groups transactions by this value's calendar day.
   final DateTime occurredAt;
 
-  /// Optional free-text note (e.g. "Dinner with friends").
+  /// Where the money went (an expense's store) or came from (a deposit's
+  /// source). Null when unset. Compared case-sensitively everywhere: `Walmart`
+  /// and `walmart` are two origins.
+  final String? origin;
+
+  /// Optional short note on what the money was for (e.g. "Toothpaste").
   final String? note;
 
   /// Tag names (without a leading `#`). Reuses the shared tag-color table.
@@ -49,6 +55,8 @@ class FinancialTransaction extends SoftDeletable {
     TransactionType? type,
     int? amountCents,
     DateTime? occurredAt,
+    String? origin,
+    bool clearOrigin = false,
     String? note,
     List<String>? tags,
     DateTime? updatedAt,
@@ -64,10 +72,28 @@ class FinancialTransaction extends SoftDeletable {
       type: type ?? this.type,
       amountCents: amountCents ?? this.amountCents,
       occurredAt: occurredAt ?? this.occurredAt,
+      origin: clearOrigin ? null : (origin ?? this.origin),
       note: note ?? this.note,
       tags: tags ?? this.tags,
     );
   }
+}
+
+/// The transactions dated on or before [now]'s calendar day.
+///
+/// Anything dated later is scheduled, not spent: the ledger lists it under
+/// Upcoming, and every total — net flow, budgets, charts, net worth — reads
+/// through this so a post-dated row counts nowhere until its day arrives,
+/// rather than in whichever figures happen to window by month.
+List<FinancialTransaction> settledTransactions(
+  List<FinancialTransaction> transactions,
+  DateTime now,
+) {
+  final tomorrow = DateTime(now.year, now.month, now.day + 1);
+  return [
+    for (final t in transactions)
+      if (t.occurredAt.isBefore(tomorrow)) t,
+  ];
 }
 
 /// A recurring subscription or bill in the Bill Radar.

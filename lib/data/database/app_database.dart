@@ -283,6 +283,7 @@ class TransactionsTable extends Table {
   TextColumn get id => text()();
   TextColumn get type => text()();
   IntColumn get amountCents => integer()();
+  TextColumn get origin => text().nullable()();
   TextColumn get note => text().nullable()();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get occurredAt => dateTime()();
@@ -1450,7 +1451,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 108;
+  int get schemaVersion => 109;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2651,6 +2652,16 @@ class AppDatabase extends _$AppDatabase {
           'subscriptions_table',
           subscriptionsTable,
           subscriptionsTable.paidThroughDate,
+        );
+      }
+      if (from < 109) {
+        // Nullable with no backfill: an old note may name a store, but it may
+        // just as well be "Dinner with friends", and there is no telling which.
+        await _addColumnIfNotExists(
+          migrator,
+          'transactions_table',
+          transactionsTable,
+          transactionsTable.origin,
         );
       }
     },

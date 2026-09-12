@@ -285,8 +285,9 @@ void main() {
       await tester.pumpAndSettle();
 
       final logged = (await harness.repo.listTransactions()).firstWhere(
-        (t) => t.note == 'Netflix',
+        (t) => t.origin == 'Netflix',
       );
+      expect(logged.note, isNull, reason: 'the bill names the store only');
       expect(logged.type, TransactionType.expense);
       expect(logged.amountCents, 1599);
       expect(logged.tags, isEmpty);

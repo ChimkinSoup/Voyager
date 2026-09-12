@@ -188,6 +188,7 @@ void main() {
           type: TransactionType.expense,
           amountCents: 1250,
           occurredAt: now,
+          origin: 'Starbucks',
           note: 'Coffee',
           tags: const ['food'],
           createdAt: now,
@@ -200,6 +201,7 @@ void main() {
 
       final transaction = (await deviceB.finance.listTransactions()).single;
       expect(transaction.amountCents, 1250);
+      expect(transaction.origin, 'Starbucks');
       expect(transaction.note, 'Coffee');
       expect(transaction.tags, ['food']);
     });
@@ -513,6 +515,55 @@ void main() {
         mergeTransactionFromRemote(stale, 'tx-1', local: local).amountCents,
         900,
       );
+    });
+
+    test('a transaction from a build without origin reads as no origin', () {
+      final remote = transactionToFirestore(
+        FinancialTransaction(
+          id: 'tx-1',
+          type: TransactionType.expense,
+          amountCents: 900,
+          occurredAt: now,
+          createdAt: now,
+          updatedAt: now,
+          origin: 'Walmart',
+          note: 'Toothpaste',
+        ),
+      )..remove('origin');
+
+      final merged = mergeTransactionFromRemote(remote, 'tx-1');
+      expect(merged.origin, isNull);
+      expect(merged.note, 'Toothpaste');
+    });
+
+    test('a winning remote without origin keeps the local origin', () {
+      final local = FinancialTransaction(
+        id: 'tx-1',
+        type: TransactionType.expense,
+        amountCents: 900,
+        occurredAt: now,
+        createdAt: now,
+        updatedAt: now,
+        origin: 'Walmart',
+      );
+      final remote = transactionToFirestore(
+        local.copyWith(
+          amountCents: 1200,
+          updatedAt: now.add(const Duration(minutes: 1)),
+          version: 2,
+        ),
+      )..remove('origin');
+
+      final merged = mergeTransactionFromRemote(remote, 'tx-1', local: local);
+      expect(merged.amountCents, 1200, reason: 'the remote won');
+      expect(merged.origin, 'Walmart');
+
+      final cleared = mergeTransactionFromRemote(
+        {...remote, 'origin': null},
+        'tx-1',
+        local: local,
+      );
+      expect(cleared.origin, isNull, reason: 'an explicit null still clears');
     });
 
     test('clearing a tracker value on another device clears it here', () {
