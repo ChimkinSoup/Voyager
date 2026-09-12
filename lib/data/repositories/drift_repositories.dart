@@ -1559,6 +1559,7 @@ class DriftFinanceRepository implements FinanceRepository {
             id: Value(transaction.id),
             type: Value(transaction.type.name),
             amountCents: Value(transaction.amountCents),
+            origin: Value(transaction.origin),
             note: Value(transaction.note),
             tagsJson: Value(jsonEncode(transaction.tags)),
             occurredAt: Value(transaction.occurredAt),
@@ -2127,6 +2128,7 @@ class DriftFinanceRepository implements FinanceRepository {
     type: TransactionType.values.asNameMap()[row.type] ??
         TransactionType.expense,
     amountCents: row.amountCents,
+    origin: row.origin,
     note: row.note,
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
     occurredAt: row.occurredAt,

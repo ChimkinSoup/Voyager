@@ -4,7 +4,7 @@ Optional **origin** on each ledger transaction: **Store** for expenses, **Source
 
 Related: `lib/features/finance/finance_transaction_modal.dart`, `lib/features/finance/finance_page.dart`, `lib/features/finance/finance_bill_radar.dart`, `lib/features/finance/finance_analytics_view.dart`, `lib/domain/models/finance_models.dart`, `lib/domain/services/finance_analytics.dart`, `lib/features/jobs/jobs_company_field.dart`, `lib/domain/jobs/job_queries.dart`, Drift `FinancialTransactions` table, `firestore_document_mapper.dart` transaction helpers.
 
-Status: **design** (not implemented).
+Status: **implemented**. Deltas from this design: Enter in Tags (popup closed) saves; a remote document with no `origin` key keeps the local origin (§4.2).
 
 ---
 
@@ -45,7 +45,7 @@ Status: **design** (not implemented).
 | **Log payment draft** | `origin = bill name`, **note empty** (replaces today’s `note = bill name`). |
 | **Combobox UX** | Full Jobs company parity: open on focus with recents, typeahead, Tab/Enter accept highlight, click select, free text always allowed, most-recently-used ranking, empty query = recents only (§5). |
 | **Note field** | **Single-line**; short “what” (e.g. toothpaste, paycheque). Remove list-editing / multiline behavior from this field. |
-| **Enter chain** | Amount → Store/Source → Note → Tags. Note Enter advances to Tags (no longer inserts newline). Tags keep existing tag-suggestion Enter rules; Ctrl+Enter still submits. |
+| **Enter chain** | Amount → Store/Source → Note → Tags. Note Enter advances to Tags (no longer inserts newline). Enter in Tags accepts an open tag suggestion, otherwise saves; Ctrl+Enter still submits from any field. |
 | **Ledger title** | See §6. Both empty → keep `Expense` / `Deposit` fallback. |
 | **Long origin in ledger** | Single-line row + `TextOverflow.ellipsis` (no hard character cap on storage). |
 | **Analytics** | Spending breakdown: third mode **Store**. Income: parallel **by Source** breakdown (§7). |
@@ -70,7 +70,7 @@ class FinancialTransaction {
 ### 4.2 Persistence
 
 - Drift: nullable `origin` text column on the financial transactions table; schema migration.
-- Firestore mapper: read/write `'origin'`; missing remote field → `null` (backward compatible).
+- Firestore mapper: read/write `'origin'`; missing remote field keeps the local origin (`null` with no local row); an explicit `null` clears it.
 - No new table. Origins are **derived** at query time from live transactions.
 
 ### 4.3 Suggestion query

@@ -9,14 +9,17 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/text/styled_runs.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
+import 'package:voyager/core/widgets/prose_highlight_underlay.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
-import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/services/finance_origins.dart';
 import 'package:voyager/features/finance/finance_analytics_view.dart';
 import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_budget_panel.dart';
@@ -77,6 +80,7 @@ class _FinanceView extends ConsumerStatefulWidget {
 typedef _TxnRowSignature = ({
   TransactionType type,
   int amountCents,
+  String? origin,
   String? note,
   String tagsKey,
   Map<String, int> tagColors,
@@ -98,6 +102,12 @@ class _LedgerDayHeader {
   final int netCents;
 }
 
+/// Heads the future-dated day groups at the top of the ledger — transactions
+/// no total counts yet (see [settledTransactions]).
+class _LedgerUpcomingHeader {
+  const _LedgerUpcomingHeader();
+}
+
 /// Marks the gap after a day group in the flattened ledger entry list.
 class _LedgerSpacer {
   const _LedgerSpacer();
@@ -116,6 +126,7 @@ class _LedgerModel {
 }
 
 const _ledgerSpacer = _LedgerSpacer();
+const _ledgerUpcomingHeader = _LedgerUpcomingHeader();
 
 class _FinanceViewState extends ConsumerState<_FinanceView> {
   // Reuses the same _TransactionRow widget instance across rebuilds for
@@ -135,6 +146,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     final signature = (
       type: transaction.type,
       amountCents: transaction.amountCents,
+      origin: transaction.origin,
       note: transaction.note,
       // transaction.tags is a fresh List instance on every fetch even when
       // unchanged, and a record's == on a List field is reference identity
@@ -161,9 +173,14 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
 
   /// Flattens the day-grouped ledger into an index a sliver can build
   /// lazily: a header, that day's transactions, then a spacer, newest day
-  /// first. [_LedgerModel.indexById] records where each transaction landed so
+  /// first. Days after today sit under one Upcoming header, so a post-dated
+  /// row topping the feed reads as scheduled rather than as the latest
+  /// spend. [_LedgerModel.indexById] records where each transaction landed so
   /// `findChildIndexCallback` can look a row up without scanning.
-  _LedgerModel _ledgerModel(List<FinancialTransaction> transactions) {
+  _LedgerModel _ledgerModel(
+    List<FinancialTransaction> transactions,
+    DateTime now,
+  ) {
     if (transactions.isEmpty) return const _LedgerModel();
     final groups = <DateTime, List<FinancialTransaction>>{};
     for (final t in transactions) {
@@ -176,8 +193,11 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     }
     final days = groups.keys.toList()..sort((a, b) => b.compareTo(a));
 
+    final today = DateTime(now.year, now.month, now.day);
     final entries = <Object>[];
     final indexById = <String, int>{};
+    // Days sort newest first, so any future ones lead the list.
+    if (days.first.isAfter(today)) entries.add(_ledgerUpcomingHeader);
     for (final day in days) {
       final dayTransactions = groups[day]!;
       final dayNet = dayTransactions.fold<int>(
@@ -205,6 +225,9 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     }
     if (entry is _LedgerSpacer) {
       return const SizedBox(height: 12);
+    }
+    if (entry is _LedgerUpcomingHeader) {
+      return const _UpcomingHeader();
     }
     return _rowFor(entry as FinancialTransaction, tagColors);
   }
@@ -253,7 +276,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
     final nextMonth = DateTime(now.year, now.month + 1, 1);
-    final monthNet = transactions
+    final monthNet = settledTransactions(transactions, now)
         .where(
           (t) =>
               !t.occurredAt.isBefore(monthStart) &&
@@ -281,6 +304,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                       t.tags.contains(tagFilter),
                 )
                 .toList(),
+      now,
     );
 
     final hero = _HeroSection(
@@ -654,8 +678,54 @@ class _DayHeader extends StatelessWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     if (day == today) return 'TODAY';
-    if (day == today.subtract(const Duration(days: 1))) return 'YESTERDAY';
+    // Calendar-day arithmetic, not a Duration: subtracting 24h from the
+    // midnight after a DST transition lands at 23:00 or 01:00, which never
+    // equals the day key and drops the label.
+    if (day == DateTime(today.year, today.month, today.day - 1)) {
+      return 'YESTERDAY';
+    }
+    if (day == DateTime(today.year, today.month, today.day + 1)) {
+      return 'TOMORROW';
+    }
     return DateFormat('EEEE, MMM d').format(day).toUpperCase();
+  }
+}
+
+class _UpcomingHeader extends StatelessWidget {
+  const _UpcomingHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Row(
+        children: [
+          Icon(PhosphorIconsRegular.clock, size: 14, color: accent),
+          const SizedBox(width: 6),
+          Text(
+            'UPCOMING',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: accent,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Not counted until its date',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -704,7 +774,12 @@ class _TransactionRow extends ConsumerWidget {
     await softDeleteWithUndo(
       overlay: overlay,
       message: deletedMessage(
-        snapshot.note,
+        // Origin and note as the row titles them, minus the Expense/Deposit
+        // fallback: an untitled row reads better as "Deleted transaction".
+        [
+          trimToNull(snapshot.origin),
+          trimToNull(snapshot.note),
+        ].nonNulls.join(' - '),
         fallback: 'transaction',
         prose: true,
       ),
@@ -735,6 +810,7 @@ class _TransactionRow extends ConsumerWidget {
             type: snapshot.type,
             amountCents: snapshot.amountCents,
             occurredAt: snapshot.occurredAt,
+            origin: snapshot.origin,
             note: snapshot.note,
             tags: snapshot.tags,
           ),
@@ -744,11 +820,13 @@ class _TransactionRow extends ConsumerWidget {
     );
   }
 
-  /// Flips an expense to a deposit or back, leaving everything else alone.
+  /// Flips an expense to a deposit or back, clearing its origin and leaving
+  /// everything else alone.
   ///
   /// The stored amount is a magnitude and the sign lives in [type] (see
-  /// [FinancialTransaction.signedCents]), so this really is a one-field edit —
-  /// nothing about the money has to be recomputed.
+  /// [FinancialTransaction.signedCents]), so nothing about the money has to be
+  /// recomputed. The origin goes for the same reason the sheet's type switch
+  /// clears it: a store is not a source.
   Future<void> _convert(WidgetRef ref) async {
     final repo = ref.read(financeRepositoryProvider);
     // See _delete: the container outlives this row, `ref` doesn't.
@@ -759,6 +837,7 @@ class _TransactionRow extends ConsumerWidget {
     await repo.upsertTransaction(
       transaction.copyWith(
         type: flipped,
+        clearOrigin: true,
         updatedAt: utcNow(),
         version: transaction.version + 1,
       ),
@@ -785,6 +864,7 @@ class _TransactionRow extends ConsumerWidget {
         type: transaction.type,
         amountCents: transaction.amountCents,
         occurredAt: DateTime.now(),
+        origin: transaction.origin,
         note: transaction.note,
         tags: transaction.tags,
       ),
@@ -861,11 +941,12 @@ class _TransactionRow extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      VoyagerProseText(
-                        transaction.note ?? (isDeposit ? 'Deposit' : 'Expense'),
-                        style: theme.textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      LedgerTitleText(
+                        title: ledgerTransactionTitle(
+                          transaction.origin,
+                          transaction.note,
+                          transaction.type,
+                        ),
                       ),
                       if (transaction.tags.isNotEmpty) ...[
                         const SizedBox(height: 4),
@@ -894,6 +975,58 @@ class _TransactionRow extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A ledger row's one-line title: the origin a step larger and bold, then
+/// ` - ` and the note in the row's regular style. With no origin it is just
+/// the note (or the Expense/Deposit fallback), unemphasised.
+///
+/// The note is drawn as prose, the way the editors draw it: `**floss**` reads
+/// as a bold word with its markers collapsed. The origin stays literal.
+class LedgerTitleText extends StatelessWidget {
+  const LedgerTitleText({super.key, required this.title});
+
+  final LedgerTitle title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final base =
+        theme.textTheme.bodyMedium ?? DefaultTextStyle.of(context).style;
+    final origin = title.origin;
+    final detail = title.detail;
+    final emphasis = ProseEmphasisTheme.of(scheme, scheme.primary);
+    final ranges = detail == null
+        ? const <StyledRange>[]
+        : proseReadRanges(detail, emphasis);
+    final text = Text.rich(
+      TextSpan(
+        style: base,
+        children: [
+          if (origin != null)
+            TextSpan(
+              text: origin,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          if (detail != null) ...[
+            if (origin != null) const TextSpan(text: ' - '),
+            buildStyledRuns(detail, base, ranges),
+          ],
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    if (ranges.isEmpty) return text;
+    // `==highlight==` comes back marked, not filled — see [kProseHighlightMark].
+    return ProseHighlightUnderlay(
+      color: emphasis.highlightColor!,
+      child: text,
     );
   }
 }

@@ -26,7 +26,8 @@ void main() {
     final prefs = await store.load();
 
     expect(prefs.viewMode, FinanceViewMode.ledger);
-    expect(prefs.breakdownGroupByCategory, isTrue);
+    expect(prefs.breakdownMode, FinanceBreakdownMode.category);
+    expect(prefs.breakdownChart, FinanceBreakdownChart.spending);
     expect(prefs.cashFlowGranularity, CashFlowGranularity.monthly);
   });
 
@@ -34,7 +35,8 @@ void main() {
     await store.save(
       const FinanceUiPrefs(
         viewMode: FinanceViewMode.analytics,
-        breakdownGroupByCategory: false,
+        breakdownMode: FinanceBreakdownMode.store,
+        breakdownChart: FinanceBreakdownChart.income,
         cashFlowGranularity: CashFlowGranularity.yearly,
       ),
     );
@@ -45,7 +47,8 @@ void main() {
     ).load();
 
     expect(reopened.viewMode, FinanceViewMode.analytics);
-    expect(reopened.breakdownGroupByCategory, isFalse);
+    expect(reopened.breakdownMode, FinanceBreakdownMode.store);
+    expect(reopened.breakdownChart, FinanceBreakdownChart.income);
     expect(reopened.cashFlowGranularity, CashFlowGranularity.yearly);
   });
 
@@ -60,15 +63,27 @@ void main() {
     await prefsFile().writeAsString(
       jsonEncode({
         'financeViewMode': 'holograms',
-        'financeBreakdownGroupByCategory': false,
+        'financeBreakdownMode': 'tag',
       }),
     );
 
     final prefs = await store.load();
 
     expect(prefs.viewMode, FinanceViewMode.ledger);
-    expect(prefs.breakdownGroupByCategory, isFalse);
+    expect(prefs.breakdownMode, FinanceBreakdownMode.tag);
     expect(prefs.cashFlowGranularity, CashFlowGranularity.monthly);
+  });
+
+  test('a file from before Store keeps its Category/Tag choice', () async {
+    await prefsFile().writeAsString(
+      jsonEncode({'financeBreakdownGroupByCategory': false}),
+    );
+    expect((await store.load()).breakdownMode, FinanceBreakdownMode.tag);
+
+    await prefsFile().writeAsString(
+      jsonEncode({'financeBreakdownGroupByCategory': true}),
+    );
+    expect((await store.load()).breakdownMode, FinanceBreakdownMode.category);
   });
 
   test('the file holds only finance chrome, so nothing here can reach sync',
@@ -80,7 +95,8 @@ void main() {
 
     expect(json.keys.toSet(), {
       'financeViewMode',
-      'financeBreakdownGroupByCategory',
+      'financeBreakdownMode',
+      'financeBreakdownChart',
       'financeCashFlowGranularity',
     });
   });

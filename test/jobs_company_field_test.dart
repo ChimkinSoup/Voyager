@@ -212,4 +212,41 @@ void main() {
     },
     variant: TargetPlatformVariant.all(),
   );
+
+  testWidgets('an open list follows recents that change underneath it', (
+    tester,
+  ) async {
+    final companies = [company('Tesla'), company('Temu')];
+    final recents = ValueNotifier<List<String>>(const ['tesla']);
+    addTearDown(recents.dispose);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ValueListenableBuilder<List<String>>(
+            valueListenable: recents,
+            builder: (context, keys, _) => JobsCompanyField(
+              controller: controller,
+              companies: companies,
+              recentKeys: keys,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await focusField(tester);
+    expect(find.text('Tesla'), findsOneWidget);
+    expect(find.text('Temu'), findsNothing);
+
+    recents.value = const ['temu', 'tesla'];
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Temu'), findsOneWidget, reason: 'refreshed, not stale');
+    expect(find.text('Tesla'), findsOneWidget);
+  });
 }

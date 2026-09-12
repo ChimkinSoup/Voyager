@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
@@ -99,6 +100,16 @@ class _JobsCompanyFieldState extends State<JobsCompanyField> {
     if (oldWidget.focusNode != widget.focusNode) {
       _detachFocusNode();
       _attachFocusNode(widget.focusNode);
+    }
+    // The companies or recents changed underneath an open list. Refreshed
+    // after the frame, not here: this runs during build, and the refresh
+    // rebuilds or inserts the overlay. A closed list stays closed.
+    if (_overlay != null &&
+        (!listEquals(oldWidget.companies, widget.companies) ||
+            !listEquals(oldWidget.recentKeys, widget.recentKeys))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _overlay != null) _refreshMatches();
+      });
     }
   }
 

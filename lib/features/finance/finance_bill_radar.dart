@@ -184,7 +184,9 @@ class _SubscriptionTile extends ConsumerWidget {
         amountCents: sub.amountCents,
         // No tags invented from the name: a bill is not a tag, and a guessed
         // one would quietly land in every budget and breakdown built on tags.
-        note: sub.name,
+        // The bill is who got paid, so it is the store; the note is left for
+        // the user.
+        origin: sub.name,
         occurredAt: DateTime.now(),
       ),
       onSaved: () async {

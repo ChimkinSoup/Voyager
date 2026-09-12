@@ -2038,6 +2038,7 @@ Map<String, dynamic> transactionToFirestore(FinancialTransaction tx) => {
   'type': tx.type.name,
   'amountCents': tx.amountCents,
   'occurredAt': _dateToFirestoreRequired(tx.occurredAt),
+  'origin': tx.origin,
   'note': tx.note,
   'tags': tx.tags,
   'createdAt': _dateToFirestoreRequired(tx.createdAt),
@@ -2072,6 +2073,9 @@ FinancialTransaction mergeTransactionFromRemote(
         parseFirestoreDate(data['occurredAt']) ??
         local?.occurredAt ??
         remoteUpdated,
+    origin: data.containsKey('origin')
+        ? data['origin'] as String?
+        : local?.origin,
     note: data['note'] as String?,
     tags: _stringListFromRemote(data['tags'], local?.tags ?? const []),
     createdAt:

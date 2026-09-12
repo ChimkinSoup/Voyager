@@ -7,9 +7,12 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
+import 'package:voyager/core/widgets/scope_switcher.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_asset_modal.dart';
@@ -132,13 +135,19 @@ class FinanceAnalyticsView extends StatelessWidget {
 class _AnalyticsCard extends StatelessWidget {
   const _AnalyticsCard({
     required this.icon,
-    required this.title,
+    this.title = '',
+    this.titleWidget,
     required this.child,
     this.trailing,
   });
 
   final IconData icon;
   final String title;
+
+  /// Replaces [title] when the title does more than name the card — the
+  /// breakdown card's chart dropdown. It carries its own 8px of tap padding,
+  /// so the gap after the icon is left to it.
+  final Widget? titleWidget;
   final Widget child;
   final Widget? trailing;
 
@@ -161,14 +170,23 @@ class _AnalyticsCard extends StatelessWidget {
           Row(
             children: [
               Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
+              if (titleWidget case final titleWidget?)
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: titleWidget,
+                  ),
+                )
+              else ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
                 ),
-              ),
+              ],
               if (trailing != null) trailing!,
             ],
           ),
@@ -203,8 +221,10 @@ class _CashFlowCard extends ConsumerWidget {
     final granularity = ref.watch(
       financeUiPrefsProvider.select((prefs) => prefs.cashFlowGranularity),
     );
-    final transactions =
-        ref.watch(transactionsProvider).valueOrNull ?? const [];
+    final transactions = settledTransactions(
+      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      DateTime.now(),
+    );
     final weekStartsMonday =
         ref.watch(settingsProvider).valueOrNull?.weekStartsOnMonday ?? true;
 
@@ -659,20 +679,59 @@ class _BreakdownCard extends ConsumerWidget {
   static const _legendRows = 6;
   static const _focusedLegendRows = 12;
 
+  /// The month row's height in both charts: the compact Category/Tag/Store
+  /// control's. Income has no control there, and a row only as tall as its
+  /// label pulled the pie 16px up on every switch between the two.
+  static const _monthRowHeight = 32.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final groupByCategory = ref.watch(
-      financeUiPrefsProvider.select((prefs) => prefs.breakdownGroupByCategory),
+    final chart = ref.watch(
+      financeUiPrefsProvider.select((prefs) => prefs.breakdownChart),
+    );
+    final switcher = ScopeSwitcher<FinanceBreakdownChart>(
+      items: const [
+        ScopeSwitcherItem(
+          value: FinanceBreakdownChart.spending,
+          label: 'Spending Breakdown',
+        ),
+        ScopeSwitcherItem(
+          value: FinanceBreakdownChart.income,
+          label: 'Income by Source',
+        ),
+      ],
+      selectedValue: chart,
+      accent: theme.colorScheme.onSurface,
+      popoverWidth: 200,
+      onSelected: (value) {
+        // A drill-down is a question about spending; it shouldn't be waiting
+        // behind the income chart to reappear on the way back.
+        _clearFocus(ref);
+        ref.read(financeUiPrefsProvider.notifier).setBreakdownChart(value);
+      },
+    );
+    if (chart == FinanceBreakdownChart.income) {
+      return _AnalyticsCard(
+        icon: PhosphorIconsRegular.chartPieSlice,
+        titleWidget: switcher,
+        child: _incomeSourceChart(context, ref),
+      );
+    }
+
+    final mode = ref.watch(
+      financeUiPrefsProvider.select((prefs) => prefs.breakdownMode),
     );
     final focus = ref.watch(_breakdownFocusProvider);
-    final transactions =
-        ref.watch(transactionsProvider).valueOrNull ?? const [];
+    final now = DateTime.now();
+    final transactions = settledTransactions(
+      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      now,
+    );
     final categories =
         ref.watch(financeCategoriesProvider).valueOrNull ?? const [];
     final tagColors = ref.watch(tagColorsProvider).valueOrNull ?? const {};
 
-    final now = DateTime.now();
     final from = DateTime(now.year, now.month, 1);
     final to = DateTime(now.year, now.month + 1, 1);
 
@@ -684,6 +743,15 @@ class _BreakdownCard extends ConsumerWidget {
     // answer to "what did this bucket cost", so that is what the centre keeps.
     final int total;
     switch (focus) {
+      case BreakdownFocusNone() when mode == FinanceBreakdownMode.store:
+        slices = originBreakdown(
+          transactions,
+          from: from,
+          to: to,
+          type: TransactionType.expense,
+          colorFor: colorForTag,
+        );
+        total = slices.fold<int>(0, (s, x) => s + x.amountCents);
       case BreakdownFocusNone():
         slices = spendingBreakdown(
           transactions,
@@ -691,7 +759,7 @@ class _BreakdownCard extends ConsumerWidget {
           to: to,
           categories: categories,
           tagColors: tagColors,
-          groupByCategory: groupByCategory,
+          groupByCategory: mode == FinanceBreakdownMode.category,
         );
         total = slices.fold<int>(0, (s, x) => s + x.amountCents);
       case BreakdownFocusTag(:final tag):
@@ -729,7 +797,7 @@ class _BreakdownCard extends ConsumerWidget {
 
     return _AnalyticsCard(
       icon: PhosphorIconsRegular.chartPieSlice,
-      title: 'Spending Breakdown',
+      titleWidget: switcher,
       trailing: GlassButton(
         icon: const Icon(PhosphorIconsRegular.folderSimple, size: 16),
         dense: true,
@@ -739,52 +807,72 @@ class _BreakdownCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Text(
-                DateFormat.yMMMM().format(now),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+          SizedBox(
+            height: _monthRowHeight,
+            child: Row(
+              children: [
+                Text(
+                  DateFormat.yMMMM().format(now),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              SegmentedButton<bool>(
-                showSelectedIcon: false,
-                style: SegmentedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(fontSize: 11),
+                // In the month row rather than a line of its own: a line
+                // between here and the pie pushed the pie down on every
+                // focus and pulled it back up on every clear.
+                if (focused)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _BreakdownFilterText(
+                          label: _focusLabel(focus),
+                          onClear: () => _clearFocus(ref),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  const Spacer(),
+                SegmentedButton<FinanceBreakdownMode>(
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(fontSize: 11),
+                  ),
+                  segments: const [
+                    ButtonSegment(
+                      value: FinanceBreakdownMode.category,
+                      label: Text('Category'),
+                    ),
+                    ButtonSegment(
+                      value: FinanceBreakdownMode.tag,
+                      label: Text('Tag'),
+                    ),
+                    ButtonSegment(
+                      value: FinanceBreakdownMode.store,
+                      label: Text('Store'),
+                    ),
+                  ],
+                  selected: {mode},
+                  onSelectionChanged: (set) {
+                    if (set.isEmpty) return;
+                    // The focus belongs to the grouping it was taken from — a
+                    // category name means nothing to the tag chart — so the
+                    // switch drops it rather than carrying over a filter that
+                    // would match nothing.
+                    _clearFocus(ref);
+                    ref
+                        .read(financeUiPrefsProvider.notifier)
+                        .setBreakdownMode(set.first);
+                  },
                 ),
-                segments: const [
-                  ButtonSegment(value: true, label: Text('Category')),
-                  ButtonSegment(value: false, label: Text('Tag')),
-                ],
-                selected: {groupByCategory},
-                onSelectionChanged: (set) {
-                  if (set.isEmpty) return;
-                  // The focus belongs to the grouping it was taken from — a
-                  // category name means nothing to the tag chart — so the
-                  // switch drops it rather than carrying over a filter that
-                  // would match nothing.
-                  _clearFocus(ref);
-                  ref
-                      .read(financeUiPrefsProvider.notifier)
-                      .setBreakdownGroupByCategory(set.first);
-                },
-              ),
-            ],
-          ),
-          if (focused) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _BreakdownFilterText(
-                label: _focusLabel(focus),
-                onClear: () => _clearFocus(ref),
-              ),
+              ],
             ),
-          ],
+          ),
           const SizedBox(height: 12),
           if (slices.isEmpty)
             Padding(
@@ -813,8 +901,10 @@ class _BreakdownCard extends ConsumerWidget {
               child: _BreakdownPie(
                 slices: slices,
                 total: total,
-                onSliceTap: (index) =>
-                    _focusSlice(ref, focus, groupByCategory, slices[index]),
+                // Store slices don't drill down (v1).
+                onSliceTap: mode == FinanceBreakdownMode.store
+                    ? null
+                    : (index) => _focusSlice(ref, focus, mode, slices[index]),
               ),
             ),
             const SizedBox(height: 12),
@@ -822,8 +912,9 @@ class _BreakdownCard extends ConsumerWidget {
               _BreakdownLegendRow(
                 slice: slice,
                 total: total,
-                onTap: () =>
-                    _focusSlice(ref, focus, groupByCategory, slice),
+                onTap: mode == FinanceBreakdownMode.store
+                    ? null
+                    : () => _focusSlice(ref, focus, mode, slice),
               ),
             if (tail.isNotEmpty)
               Padding(
@@ -851,11 +942,92 @@ class _BreakdownCard extends ConsumerWidget {
       ref.read(_breakdownFocusProvider.notifier).state =
           const BreakdownFocusNone();
 
+  static const _incomeLegendRows = 6;
+
+  /// This month's deposits split by source — the income-side twin of the
+  /// spending breakdown's Store mode, picked from the breakdown card's title
+  /// dropdown rather than a fourth segment, so the Category/Tag/Store control
+  /// only ever speaks about expenses. No drill-down (v1).
+  ///
+  /// A method returning the same Column as the spending chart rather than a
+  /// widget of its own: a separate widget type would rebuild the pie on every
+  /// switch, and the slices would jump instead of morphing like they do
+  /// between Category, Tag and Store.
+  Widget _incomeSourceChart(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final now = DateTime.now();
+    final transactions = settledTransactions(
+      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      now,
+    );
+
+    final slices = originBreakdown(
+      transactions,
+      from: DateTime(now.year, now.month, 1),
+      to: DateTime(now.year, now.month + 1, 1),
+      type: TransactionType.deposit,
+      colorFor: colorForTag,
+    );
+    final total = slices.fold<int>(0, (s, x) => s + x.amountCents);
+    final legend = slices.take(_incomeLegendRows);
+    final tail = slices.skip(_incomeLegendRows);
+    final tailCents = tail.fold<int>(0, (s, x) => s + x.amountCents);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: _monthRowHeight,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              DateFormat.yMMMM().format(now),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (slices.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            child: Text(
+              'No income recorded this month.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        else ...[
+          SizedBox(
+            height: 150,
+            child: _BreakdownPie(slices: slices, total: total),
+          ),
+          const SizedBox(height: 12),
+          for (final slice in legend)
+            _BreakdownLegendRow(slice: slice, total: total, onTap: null),
+          if (tail.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 18),
+              child: Text(
+                '+${tail.length} more  ·  ${formatCents(tailCents)}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
   /// Re-roots the chart on the bucket that was clicked.
   void _focusSlice(
     WidgetRef ref,
     BreakdownFocus focus,
-    bool groupByCategory,
+    FinanceBreakdownMode mode,
     BreakdownSlice slice,
   ) {
     final notifier = ref.read(_breakdownFocusProvider.notifier);
@@ -868,7 +1040,7 @@ class _BreakdownCard extends ConsumerWidget {
     }
     switch (focus) {
       case BreakdownFocusNone():
-        notifier.state = groupByCategory
+        notifier.state = mode == FinanceBreakdownMode.category
             ? BreakdownFocusCategory(slice.label)
             : BreakdownFocusTag(slice.label);
       case BreakdownFocusTag():
@@ -881,7 +1053,7 @@ class _BreakdownCard extends ConsumerWidget {
         // rather than leaving the segmented control disagreeing with the pie.
         ref
             .read(financeUiPrefsProvider.notifier)
-            .setBreakdownGroupByCategory(false);
+            .setBreakdownMode(FinanceBreakdownMode.tag);
         notifier.state = BreakdownFocusTag(slice.label);
     }
   }
@@ -922,6 +1094,8 @@ class _BreakdownFilterText extends StatelessWidget {
           child: Text(
             // No leading `#` on a tag, matching the legend below it.
             'Filtering: $label',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(color: accent),
           ),
         ),
@@ -940,7 +1114,9 @@ class _BreakdownLegendRow extends StatelessWidget {
 
   final BreakdownSlice slice;
   final int total;
-  final VoidCallback onTap;
+
+  /// Null for a chart whose slices don't drill down.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1282,8 +1458,10 @@ class _NetWorthCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final transactions =
-        ref.watch(transactionsProvider).valueOrNull ?? const [];
+    final transactions = settledTransactions(
+      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      DateTime.now(),
+    );
     final assets = ref.watch(assetsProvider).valueOrNull ?? const [];
     final valuations =
         ref.watch(assetValuationsProvider).valueOrNull ?? const [];

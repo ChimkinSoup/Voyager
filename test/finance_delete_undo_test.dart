@@ -5,6 +5,7 @@
 // wrong dwell.
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,7 +20,10 @@ import 'package:voyager/features/finance/finance_page.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 
-Future<DriftFinanceRepository> pumpLedger(WidgetTester tester) async {
+Future<DriftFinanceRepository> pumpLedger(
+  WidgetTester tester, {
+  String? origin,
+}) async {
   tester.view.physicalSize = const Size(1200, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -37,6 +41,7 @@ Future<DriftFinanceRepository> pumpLedger(WidgetTester tester) async {
         type: TransactionType.expense,
         amountCents: 1000 + i,
         occurredAt: DateTime(2026, 8, 20 - i),
+        origin: origin,
         note: 'Row $i',
         tags: const ['food'],
       ),
@@ -114,5 +119,28 @@ void main() {
       reason: 'the delete wrote version + 1; the restore has to outrank it',
     );
     expect(find.text('Row 1'), findsOneWidget);
+  });
+
+  testWidgets('Convert clears the origin along with the type', (tester) async {
+    final repo = await pumpLedger(tester, origin: 'Walmart');
+
+    await tester.tap(
+      find.textContaining('Row 1', findRichText: true),
+      buttons: kSecondaryButton,
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Convert to deposit'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final converted = (await repo.listTransactions()).firstWhere(
+      (t) => t.id == 'txn-1',
+    );
+    expect(converted.type, TransactionType.deposit);
+    expect(converted.origin, isNull, reason: 'a store is not a source');
+    expect(converted.note, 'Row 1');
+    expect(converted.amountCents, 1001);
   });
 }

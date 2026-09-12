@@ -12,6 +12,12 @@ import 'package:voyager/domain/services/finance_analytics.dart';
 /// dashboard, the macro analytics suite, or the savings goals.
 enum FinanceViewMode { ledger, analytics, goals }
 
+/// What the spending breakdown groups expenses by.
+enum FinanceBreakdownMode { category, tag, store }
+
+/// Which chart the breakdown card's title dropdown is showing.
+enum FinanceBreakdownChart { spending, income }
+
 /// The finance page's chrome — which tab, which grouping, which cash-flow
 /// bucket — as it was left last time.
 ///
@@ -23,25 +29,28 @@ enum FinanceViewMode { ledger, analytics, goals }
 class FinanceUiPrefs {
   const FinanceUiPrefs({
     this.viewMode = FinanceViewMode.ledger,
-    this.breakdownGroupByCategory = true,
+    this.breakdownMode = FinanceBreakdownMode.category,
+    this.breakdownChart = FinanceBreakdownChart.spending,
     this.cashFlowGranularity = CashFlowGranularity.monthly,
   });
 
   static const defaults = FinanceUiPrefs();
 
   final FinanceViewMode viewMode;
-  final bool breakdownGroupByCategory;
+  final FinanceBreakdownMode breakdownMode;
+  final FinanceBreakdownChart breakdownChart;
   final CashFlowGranularity cashFlowGranularity;
 
   FinanceUiPrefs copyWith({
     FinanceViewMode? viewMode,
-    bool? breakdownGroupByCategory,
+    FinanceBreakdownMode? breakdownMode,
+    FinanceBreakdownChart? breakdownChart,
     CashFlowGranularity? cashFlowGranularity,
   }) {
     return FinanceUiPrefs(
       viewMode: viewMode ?? this.viewMode,
-      breakdownGroupByCategory:
-          breakdownGroupByCategory ?? this.breakdownGroupByCategory,
+      breakdownMode: breakdownMode ?? this.breakdownMode,
+      breakdownChart: breakdownChart ?? this.breakdownChart,
       cashFlowGranularity: cashFlowGranularity ?? this.cashFlowGranularity,
     );
   }
@@ -56,9 +65,20 @@ class FinanceUiPrefs {
         json['financeViewMode'],
         defaults.viewMode,
       ),
-      breakdownGroupByCategory:
-          json['financeBreakdownGroupByCategory'] as bool? ??
-          defaults.breakdownGroupByCategory,
+      breakdownMode: _byName(
+        FinanceBreakdownMode.values,
+        json['financeBreakdownMode'],
+        // Files from before Store existed carry the old Category/Tag flag.
+        switch (json['financeBreakdownGroupByCategory']) {
+          false => FinanceBreakdownMode.tag,
+          _ => defaults.breakdownMode,
+        },
+      ),
+      breakdownChart: _byName(
+        FinanceBreakdownChart.values,
+        json['financeBreakdownChart'],
+        defaults.breakdownChart,
+      ),
       cashFlowGranularity: _byName(
         CashFlowGranularity.values,
         json['financeCashFlowGranularity'],
@@ -69,7 +89,8 @@ class FinanceUiPrefs {
 
   Map<String, dynamic> toJson() => {
     'financeViewMode': viewMode.name,
-    'financeBreakdownGroupByCategory': breakdownGroupByCategory,
+    'financeBreakdownMode': breakdownMode.name,
+    'financeBreakdownChart': breakdownChart.name,
     'financeCashFlowGranularity': cashFlowGranularity.name,
   };
 
@@ -85,12 +106,13 @@ class FinanceUiPrefs {
   bool operator ==(Object other) =>
       other is FinanceUiPrefs &&
       other.viewMode == viewMode &&
-      other.breakdownGroupByCategory == breakdownGroupByCategory &&
+      other.breakdownMode == breakdownMode &&
+      other.breakdownChart == breakdownChart &&
       other.cashFlowGranularity == cashFlowGranularity;
 
   @override
   int get hashCode =>
-      Object.hash(viewMode, breakdownGroupByCategory, cashFlowGranularity);
+      Object.hash(viewMode, breakdownMode, breakdownChart, cashFlowGranularity);
 }
 
 abstract class FinanceUiPrefsStore {
@@ -203,8 +225,11 @@ class FinanceUiPrefsNotifier extends StateNotifier<FinanceUiPrefs> {
   void setViewMode(FinanceViewMode mode) =>
       update(state.copyWith(viewMode: mode));
 
-  void setBreakdownGroupByCategory(bool groupByCategory) =>
-      update(state.copyWith(breakdownGroupByCategory: groupByCategory));
+  void setBreakdownMode(FinanceBreakdownMode mode) =>
+      update(state.copyWith(breakdownMode: mode));
+
+  void setBreakdownChart(FinanceBreakdownChart chart) =>
+      update(state.copyWith(breakdownChart: chart));
 
   void setCashFlowGranularity(CashFlowGranularity granularity) =>
       update(state.copyWith(cashFlowGranularity: granularity));

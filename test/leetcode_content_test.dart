@@ -92,6 +92,37 @@ Output: [0,1]</pre>
       expect(examples.join(), isNot(contains('<')));
     });
 
+    test('accepts a bare Example: heading without a number', () {
+      const html = '''
+<p>Given a string <code>s</code>.</p>
+<p><strong>Example:</strong></p>
+<pre>Input: s = "abc"
+Output: 3</pre>
+<p><strong>Constraints:</strong></p>
+<ul><li>1 &lt;= s.length</li></ul>
+''';
+      expect(
+        leetCodeContentToExamples(html),
+        ['Input: s = "abc"\nOutput: 3'],
+      );
+      expect(
+        leetCodeContentToDescription(html),
+        'Given a string s.',
+      );
+    });
+
+    test('does not treat For example: prose as an example heading', () {
+      const html = '''
+<p>For example: take nums = [1, 2].</p>
+<p>Return the indices.</p>
+''';
+      expect(leetCodeContentToExamples(html), isEmpty);
+      expect(
+        leetCodeContentToDescription(html),
+        'For example: take nums = [1, 2].\nReturn the indices.',
+      );
+    });
+
     test('cuts a trailing follow-up off the last example', () {
       const html = '''
 <p><strong>Example 1:</strong></p>
