@@ -33,6 +33,7 @@ import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/platform_info.dart';
@@ -1519,10 +1520,24 @@ final leetcodeQuestionCountsProvider =
       }
     });
 
-/// Shared tag -> ARGB color map (reused across journal + finance tagging).
-final tagColorsProvider = FutureProvider<Map<String, int>>((ref) {
+/// Shared tag -> ARGB color map (reused across journal + finance tagging),
+/// in the tint the current theme should paint.
+///
+/// Stored colors are canonical — one palette, whatever the theme — so that a
+/// synced row can't be fought over by two devices in two themes (see
+/// [colorForTag]). The light-palette swap belongs on the way *out*, and doing
+/// it here rather than at each call site is what keeps a tag the same color in
+/// the breakdown, the budget rows and the `#` popup.
+final tagColorsProvider = FutureProvider<Map<String, int>>((ref) async {
   ref.keepAlive();
-  return ref.watch(settingsRepositoryProvider).getTagColors();
+  final brightness = ref.watch(themeModeProvider) == AppThemeMode.light
+      ? Brightness.light
+      : Brightness.dark;
+  final stored = await ref.watch(settingsRepositoryProvider).getTagColors();
+  return {
+    for (final entry in stored.entries)
+      entry.key: resolveTagColor(entry.value, brightness),
+  };
 });
 
 /// Bundled default spellcheck dictionary (~65k common English words).

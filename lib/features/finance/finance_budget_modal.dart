@@ -7,6 +7,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/features/finance/finance_soft_delete.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -162,32 +163,36 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
       _saving = true;
       _saveError = null;
     });
-    final repo = ref.read(financeRepositoryProvider);
-    final container = widget.container;
-    try {
-      await repo.softDeleteBudget(existing.id);
-      container.invalidate(budgetsProvider);
-      if (mounted) Navigator.of(context).pop();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveError = 'Could not delete: $e';
-      });
+    // The root overlay, resolved before the sheet closes: the undo offer has
+    // to outlive the sheet that raised it. Shares one path with the panel's
+    // right-click Delete so both offer the same undo.
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final deleted = await deleteBudgetWithUndo(
+      overlay: overlay,
+      container: widget.container,
+      repo: ref.read(financeRepositoryProvider),
+      budget: existing,
+    );
+    if (!mounted) return;
+    if (!deleted) {
+      // The helper has already said so in its own toast.
+      setState(() => _saving = false);
+      return;
     }
+    Navigator.of(context).pop();
   }
 
-  /// Tags worth suggesting: everything already used on a transaction, most-used
-  /// first, then any tag that only has a stored color. Narrowed to what's been
-  /// typed so far, so the chip row completes like the `#` popup does elsewhere.
+  /// Tags worth suggesting: everything already used on a live transaction,
+  /// most-used first, narrowed to what's been typed so far so the chip row
+  /// completes like the `#` popup does elsewhere.
+  ///
+  /// Live transactions only — see `_CategoryModalState._knownTags` for why a
+  /// stored tag color is not evidence the tag still exists. A brand-new tag
+  /// is still reachable by typing it.
   List<String> _suggestedTags() {
     final transactions = ref.watch(transactionsProvider).valueOrNull ?? const [];
-    final colors = ref.watch(tagColorsProvider).valueOrNull ?? const {};
     final used = rankTagsByUsage(transactions.map((t) => t.tags));
-    final usedSet = used.toSet();
-    final colorOnly = colors.keys.where((t) => !usedSet.contains(t)).toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return filterTagSuggestions([...used, ...colorOnly], _tag, limit: 12);
+    return filterTagSuggestions(used, _tag, limit: 12);
   }
 
   @override

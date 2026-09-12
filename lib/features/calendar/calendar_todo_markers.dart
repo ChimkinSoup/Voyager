@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
@@ -255,7 +256,7 @@ class CalendarDayTodoIcons extends StatelessWidget {
               child: Icon(
                 PhosphorIconsFill.checkFat,
                 size: iconSize,
-                color: Color(visible[i].colorValue),
+                color: paletteColor(visible[i].colorValue, context),
               ),
             ),
         ],
@@ -282,7 +283,7 @@ class CalendarDayTodoBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final barHeight = height ?? (compact ? fontSize + 2 : fontSize + 4);
-    final color = Color(marker.colorValue);
+    final color = paletteColor(marker.colorValue, context);
     return Container(
       height: barHeight,
       padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
@@ -380,7 +381,7 @@ class CalendarWeekTaskBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(marker.colorValue).withAlpha(255);
+    final color = paletteColor(marker.colorValue, context).withAlpha(255);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -494,7 +495,7 @@ class CalendarWeekEventBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(event.colorValue).withAlpha(255);
+    final color = paletteColor(event.colorValue, context).withAlpha(255);
 
     bool bridgeLeft = false;
     bool bridgeRight = false;

@@ -408,4 +408,229 @@ void main() {
     );
     expect(latestValuation(valuations, 'missing'), isNull);
   });
+  // -- Breakdown focus -----------------------------------------------------
+
+  group('spendingBreakdownFocusedByTag', () {
+    final from = DateTime(2026, 7, 1);
+    final to = DateTime(2026, 8, 1);
+
+    test('a bucket with no co-tags is one slice equal to the parent', () {
+      final result = spendingBreakdownFocusedByTag(
+        [
+          tx(
+            type: TransactionType.expense,
+            amountCents: 1000,
+            occurredAt: DateTime(2026, 7, 3),
+            tags: ['food'],
+          ),
+          tx(
+            type: TransactionType.expense,
+            amountCents: 500,
+            occurredAt: DateTime(2026, 7, 4),
+            tags: ['food'],
+          ),
+        ],
+        from: from,
+        to: to,
+        tag: 'food',
+        tagColors: const {},
+      );
+
+      expect(result.parentCents, 1500);
+      expect(result.slices.map((s) => s.label), ['food']);
+      expect(result.slices.single.amountCents, 1500);
+    });
+
+    test('splits exclusively between the tag alone and its first co-tag', () {
+      final result = spendingBreakdownFocusedByTag(
+        [
+          tx(
+            type: TransactionType.expense,
+            amountCents: 1000,
+            occurredAt: DateTime(2026, 7, 3),
+            tags: ['food'],
+          ),
+          tx(
+            type: TransactionType.expense,
+            amountCents: 3000,
+            occurredAt: DateTime(2026, 7, 4),
+            tags: ['food', 'thai', 'drink'],
+          ),
+          tx(
+            type: TransactionType.expense,
+            amountCents: 400,
+            occurredAt: DateTime(2026, 7, 5),
+            tags: ['food', 'drink'],
+          ),
+          // Food is the second tag here, not the first. It is still money
+          // spent on food, so the bucket takes it — filed, like any other
+          // multi-tag expense, under its first tag that isn't food.
+          tx(
+            type: TransactionType.expense,
+            amountCents: 9999,
+            occurredAt: DateTime(2026, 7, 6),
+            tags: ['thai', 'food'],
+          ),
+          // Deposits and out-of-window expenses never count.
+          tx(
+            type: TransactionType.deposit,
+            amountCents: 7777,
+            occurredAt: DateTime(2026, 7, 7),
+            tags: ['food'],
+          ),
+          tx(
+            type: TransactionType.expense,
+            amountCents: 8888,
+            occurredAt: DateTime(2026, 6, 30),
+            tags: ['food'],
+          ),
+        ],
+        from: from,
+        to: to,
+        tag: 'food',
+        tagColors: const {'thai': 0xFF00FF00},
+      );
+
+      expect(result.parentCents, 14399);
+      expect(result.slices.map((s) => s.label), ['thai', 'food', 'drink']);
+      expect(result.slices[0].amountCents, 12999);
+      expect(result.slices[0].colorValue, 0xFF00FF00);
+      expect(result.slices[1].amountCents, 1000);
+      expect(result.slices[2].amountCents, 400);
+      expect(result.slices[2].colorValue, kBreakdownFallbackColor);
+
+      // The children partition the parent — nothing counted twice.
+      expect(
+        result.slices.fold<int>(0, (s, x) => s + x.amountCents),
+        result.parentCents,
+      );
+    });
+
+    test('an empty bucket is zero with no slices', () {
+      final result = spendingBreakdownFocusedByTag(
+        const [],
+        from: from,
+        to: to,
+        tag: 'food',
+        tagColors: const {},
+      );
+
+      expect(result.parentCents, 0);
+      expect(result.slices, isEmpty);
+    });
+  });
+
+  group('spendingBreakdownFocusedByCategory', () {
+    final eatingOut = FinanceCategory(
+      id: 'cat-1',
+      createdAt: utcNow(),
+      updatedAt: utcNow(),
+      name: 'Eating out',
+      colorValue: 0xFFAA0000,
+      tags: const ['food'],
+    );
+    final from = DateTime(2026, 7, 1);
+    final to = DateTime(2026, 8, 1);
+
+    final transactions = [
+      tx(
+        type: TransactionType.expense,
+        amountCents: 3000,
+        occurredAt: DateTime(2026, 7, 3),
+        tags: ['food', 'thai'],
+      ),
+      tx(
+        type: TransactionType.expense,
+        amountCents: 1000,
+        occurredAt: DateTime(2026, 7, 4),
+        tags: ['food'],
+      ),
+      // Primary tag is in no category.
+      tx(
+        type: TransactionType.expense,
+        amountCents: 700,
+        occurredAt: DateTime(2026, 7, 5),
+        tags: ['rent', 'home'],
+      ),
+      tx(
+        type: TransactionType.expense,
+        amountCents: 300,
+        occurredAt: DateTime(2026, 7, 6),
+      ),
+      tx(
+        type: TransactionType.deposit,
+        amountCents: 9999,
+        occurredAt: DateTime(2026, 7, 7),
+        tags: ['food'],
+      ),
+    ];
+
+    test('counts every tag in full, with the parent staying exclusive', () {
+      final result = spendingBreakdownFocusedByCategory(
+        transactions,
+        from: from,
+        to: to,
+        categories: [eatingOut],
+        label: 'Eating out',
+        tagColors: const {'food': 0xFF112233},
+      );
+
+      expect(result.parentCents, 4000);
+      expect(result.slices.map((s) => s.label), ['food', 'thai']);
+      // The $30 two-tag expense lands in full under both of its tags, so the
+      // children add to more than the category cost. That is the point.
+      expect(result.slices[0].amountCents, 4000);
+      expect(result.slices[0].colorValue, 0xFF112233);
+      expect(result.slices[1].amountCents, 3000);
+      expect(
+        result.slices.fold<int>(0, (s, x) => s + x.amountCents),
+        greaterThan(result.parentCents),
+      );
+    });
+
+    test('Uncategorized collects the tags no category claims', () {
+      final result = spendingBreakdownFocusedByCategory(
+        transactions,
+        from: from,
+        to: to,
+        categories: [eatingOut],
+        label: kUncategorizedLabel,
+        tagColors: const {},
+      );
+
+      expect(result.parentCents, 700);
+      expect(result.slices.map((s) => s.label), ['rent', 'home']);
+      expect(result.slices.every((s) => s.amountCents == 700), isTrue);
+    });
+
+    test('Untagged has nothing to subdivide, so it is one slice', () {
+      final result = spendingBreakdownFocusedByCategory(
+        transactions,
+        from: from,
+        to: to,
+        categories: [eatingOut],
+        label: kUntaggedLabel,
+        tagColors: const {},
+      );
+
+      expect(result.parentCents, 300);
+      expect(result.slices.map((s) => s.label), [kUntaggedLabel]);
+      expect(result.slices.single.amountCents, 300);
+      expect(result.slices.single.colorValue, kBreakdownFallbackColor);
+    });
+
+    test('an empty category is zero with no slices', () {
+      final result = spendingBreakdownFocusedByCategory(
+        transactions,
+        from: from,
+        to: to,
+        categories: [eatingOut],
+        label: 'Travel',
+        tagColors: const {},
+      );
+
+      expect(result.parentCents, 0);
+      expect(result.slices, isEmpty);
+    });
+  });
 }

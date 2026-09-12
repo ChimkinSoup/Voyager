@@ -434,6 +434,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             emphasisTheme: emphasisTheme,
+                            brightness: theme.brightness,
                           ),
                           subtitle: searchHighlightedText(
                             searchSnippet(entry.body, keywords: keywords),
@@ -442,6 +443,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             emphasisTheme: emphasisTheme,
+                            brightness: theme.brightness,
                           ),
                           onTap: () async {
                             await showVoyagerDialog<void>(

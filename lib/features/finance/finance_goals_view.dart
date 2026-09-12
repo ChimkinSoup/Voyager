@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_allocate_modal.dart';
@@ -129,7 +130,7 @@ class _GoalCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final color = Color(goal.colorValue);
+    final color = paletteColor(goal.colorValue, context);
     final progress = goalProgress(allocatedCents, goal.targetCents);
     final complete = allocatedCents >= goal.targetCents;
     final remaining = goal.targetCents - allocatedCents;

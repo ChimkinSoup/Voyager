@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
@@ -1034,7 +1035,7 @@ class _DayEventTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: calendarEventFillDecoration(
-        Color(event.colorValue),
+        paletteColor(event.colorValue, context),
         alpha: calendarDayEventTileFillAlpha,
         borderRadius: BorderRadius.circular(8),
       ),

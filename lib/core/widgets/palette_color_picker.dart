@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
@@ -55,4 +56,5 @@ PaletteAssigner paletteFromItems(Iterable<int?> colors, List<int> palette) {
   );
 }
 
-Color presetColor(int value) => Color(normalizeColorValue(value));
+Color presetColor(int value, BuildContext context) =>
+    paletteColor(normalizeColorValue(value), context);

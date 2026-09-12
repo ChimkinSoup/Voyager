@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/features/finance/finance_soft_delete.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
@@ -61,6 +63,10 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   final _noteFocusNode = FocusNode();
   late BillingPeriod _period;
   late DateTime _dueDate;
+  /// The anchor and cadence this sheet opened on, to tell an edited series
+  /// from an untouched one (see [_retainedPaidThrough]).
+  late final DateTime _initialDueDate;
+  late final BillingPeriod _initialPeriod;
   late int _colorValue;
   bool _datePopoverOpen = false;
   bool _saving = false;
@@ -83,6 +89,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     _period = existing?.period ?? BillingPeriod.monthly;
     final base = existing?.anchorDueDate ?? DateTime.now();
     _dueDate = DateTime(base.year, base.month, base.day);
+    _initialDueDate = _dueDate;
+    _initialPeriod = _period;
     _colorValue = existing?.colorValue ?? 0xFF7C9EFF;
     _amountController.addListener(_onFieldChanged);
     _nameController.addListener(_onFieldChanged);
@@ -109,13 +117,28 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     return _parsedCents == null ? r'Enter an amount over $0.00' : null;
   }
 
+  /// The recorded payment this bill keeps through the save, or null if the
+  /// edit drops it.
+  ///
+  /// Rewriting the anchor or the cadence defines a new series, and a payment
+  /// recorded against the old one would silently swallow a cycle of the new
+  /// one — the picker and the radar would disagree again, which is the whole
+  /// bug this field exists to remove. It also leaves re-picking the date as
+  /// the way to undo a mis-clicked Log payment.
+  DateTime? get _retainedPaidThrough {
+    final existing = widget.existing;
+    if (existing == null) return null;
+    if (_dueDate != _initialDueDate || _period != _initialPeriod) return null;
+    return existing.paidThroughDate;
+  }
+
   bool get _canSave =>
       _parsedCents != null &&
       _nameController.text.trim().isNotEmpty &&
       !_saving;
 
   Future<void> _pickDate(BuildContext buttonContext) async {
-    final accent = Color(_colorValue);
+    final accent = paletteColor(_colorValue, context);
     setState(() => _datePopoverOpen = true);
     final range = await showContextualPopover<DateTimeRange>(
       context: context,
@@ -159,6 +182,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
       amountCents: cents,
       period: _period,
       anchorDueDate: _dueDate,
+      paidThroughDate: _retainedPaidThrough,
       colorValue: _colorValue,
       note: _noteController.text.trim().isEmpty
           ? null
@@ -193,29 +217,38 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
       _saving = true;
       _saveError = null;
     });
-    final repo = ref.read(financeRepositoryProvider);
-    final container = widget.container;
-    try {
-      await repo.softDeleteSubscription(existing.id);
-      container.invalidate(subscriptionsProvider);
-      if (mounted) Navigator.of(context).pop();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveError = 'Could not delete: $e';
-      });
+    // The root overlay, resolved before the sheet closes: the undo offer has
+    // to outlive the sheet that raised it. Shares one path with the radar's
+    // right-click Delete so both offer the same undo.
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final deleted = await deleteSubscriptionWithUndo(
+      overlay: overlay,
+      container: widget.container,
+      repo: ref.read(financeRepositoryProvider),
+      subscription: existing,
+    );
+    if (!mounted) return;
+    if (!deleted) {
+      // The helper has already said so in its own toast.
+      setState(() => _saving = false);
+      return;
     }
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(_colorValue);
+    final accent = paletteColor(_colorValue, context);
     final cents = _parsedCents;
     // What the radar will actually show for this anchor, so the editor and
     // the radar can't disagree.
-    final nextDue = nextDueDate(_dueDate, _period, DateTime.now());
+    final nextDue = nextDueAfterPaid(
+      anchor: _dueDate,
+      period: _period,
+      paidThrough: _retainedPaidThrough,
+      from: DateTime.now(),
+    );
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
     final sheet = Padding(

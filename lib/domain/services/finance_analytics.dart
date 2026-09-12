@@ -206,6 +206,157 @@ List<BreakdownSlice> spendingBreakdown(
   return slices;
 }
 
+/// The result of drilling into one breakdown bucket.
+///
+/// [parentCents] is what the focused bucket actually cost — each expense in
+/// it counted once. It is carried alongside the children because the two only
+/// agree in tag mode: a category's child slices count a multi-tag expense once
+/// per tag (see [spendingBreakdownFocusedByCategory]), so their sum can run
+/// past the parent. [parentCents] is the number the donut's centre should
+/// read.
+class BreakdownFocusResult {
+  const BreakdownFocusResult({
+    required this.parentCents,
+    required this.slices,
+  });
+
+  final int parentCents;
+  final List<BreakdownSlice> slices;
+}
+
+/// How the money spent on [tag] this period splits by co-tag.
+///
+/// The parent bucket is every expense in `[from, to)` **carrying** [tag],
+/// wherever it sits in the list — not just the ones it leads. The unfocused
+/// tag chart has to file each expense under one tag to keep the pie summing
+/// to the month, but a drill-down is a question about one tag, and answering
+/// "what did I spend on thai" with only the expenses that happened to list
+/// thai first is how a `$30` row clicked in the legend used to open a `$0`
+/// bucket.
+///
+/// Each of those expenses is then attributed to a single child — the first
+/// tag on it that isn't [tag], or [tag] itself when it carried no others. So
+/// the children still partition the parent, and the focused donut still reads
+/// as a true share-of: "of the money spent on food, how much was only food
+/// and how much came in carrying thai".
+///
+/// The centre can therefore read more than the slice that was clicked in the
+/// unfocused tag chart: that slice was food-as-primary, this is all of food.
+BreakdownFocusResult spendingBreakdownFocusedByTag(
+  List<FinancialTransaction> transactions, {
+  required DateTime from,
+  required DateTime to,
+  required String tag,
+  required Map<String, int> tagColors,
+}) {
+  final totals = <String, int>{};
+  var parentCents = 0;
+
+  for (final t in transactions) {
+    if (t.type != TransactionType.expense) continue;
+    if (t.occurredAt.isBefore(from) || !t.occurredAt.isBefore(to)) continue;
+    if (!t.tags.contains(tag)) continue;
+
+    parentCents += t.amountCents;
+    // `where` rather than `skip(1)`: a transaction tagged `#food #food #thai`
+    // would otherwise attribute itself to a second copy of the focused tag.
+    final others = t.tags.where((other) => other != tag);
+    final label = others.isEmpty ? tag : others.first;
+    totals[label] = (totals[label] ?? 0) + t.amountCents;
+  }
+
+  return BreakdownFocusResult(
+    parentCents: parentCents,
+    slices: _sliceList(totals, tagColors),
+  );
+}
+
+/// Every tag appearing on the expenses filed under the bucket [label] drew.
+///
+/// [label] is a slice label from the category-grouped chart — a category name,
+/// [kUncategorizedLabel], or [kUntaggedLabel] — so the parent bucket is
+/// resolved by the same rule [spendingBreakdown] used to put the slice there.
+///
+/// Children are counted budget-style: a $30 `#food #thai` expense adds $30 to
+/// *both* tags. That double-count is the point — it answers "what did I spend
+/// on thai this month", which an exclusive split can't — and it is why
+/// [BreakdownFocusResult.parentCents] exists. [kUntaggedLabel] has nothing to
+/// subdivide, so it comes back as a single slice of the parent total.
+BreakdownFocusResult spendingBreakdownFocusedByCategory(
+  List<FinancialTransaction> transactions, {
+  required DateTime from,
+  required DateTime to,
+  required List<FinanceCategory> categories,
+  required String label,
+  required Map<String, int> tagColors,
+}) {
+  final untagged = label == kUntaggedLabel;
+  final uncategorized = label == kUncategorizedLabel;
+
+  final totals = <String, int>{};
+  var parentCents = 0;
+
+  for (final t in transactions) {
+    if (t.type != TransactionType.expense) continue;
+    if (t.occurredAt.isBefore(from) || !t.occurredAt.isBefore(to)) continue;
+
+    if (t.tags.isEmpty) {
+      if (!untagged) continue;
+    } else if (untagged) {
+      continue;
+    } else {
+      final category = categories
+          .cast<FinanceCategory?>()
+          .firstWhere((c) => c!.containsTag(t.tags.first), orElse: () => null);
+      if (uncategorized) {
+        if (category != null) continue;
+      } else if (category?.name != label) {
+        continue;
+      }
+    }
+
+    parentCents += t.amountCents;
+    for (final tag in t.tags) {
+      totals[tag] = (totals[tag] ?? 0) + t.amountCents;
+    }
+  }
+
+  if (untagged) {
+    return BreakdownFocusResult(
+      parentCents: parentCents,
+      slices: [
+        BreakdownSlice(
+          label: kUntaggedLabel,
+          colorValue: kBreakdownFallbackColor,
+          amountCents: parentCents,
+        ),
+      ],
+    );
+  }
+
+  return BreakdownFocusResult(
+    parentCents: parentCents,
+    slices: _sliceList(totals, tagColors),
+  );
+}
+
+/// Tag totals as colored slices, largest first.
+List<BreakdownSlice> _sliceList(
+  Map<String, int> totals,
+  Map<String, int> tagColors,
+) {
+  final slices = [
+    for (final entry in totals.entries)
+      BreakdownSlice(
+        label: entry.key,
+        colorValue: tagColors[entry.key] ?? kBreakdownFallbackColor,
+        amountCents: entry.value,
+      ),
+  ];
+  slices.sort((a, b) => b.amountCents.compareTo(a.amountCents));
+  return slices;
+}
+
 /// A single point on the net-worth graph.
 class NetWorthPoint {
   const NetWorthPoint({

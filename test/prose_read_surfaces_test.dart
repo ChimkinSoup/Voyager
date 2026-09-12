@@ -157,6 +157,7 @@ void main() {
           'a **big** deal',
           style: const TextStyle(fontSize: 14),
           emphasisTheme: theme,
+          brightness: Brightness.dark,
         ),
       );
       final bold = runs(tester).firstWhere((r) => r.$1 == 'big');
@@ -171,6 +172,7 @@ void main() {
           'see **#project** now',
           style: const TextStyle(fontSize: 14),
           emphasisTheme: theme,
+          brightness: Brightness.dark,
         ),
       );
       expect(find.byType(Container), findsWidgets); // the pill
@@ -190,6 +192,7 @@ void main() {
           style: const TextStyle(fontSize: 14, color: Color(0xFF202020)),
           keywords: const ['big'],
           emphasisTheme: theme,
+          brightness: Brightness.dark,
         ),
       );
       final hit = runs(tester).firstWhere((r) => r.$1 == 'big');

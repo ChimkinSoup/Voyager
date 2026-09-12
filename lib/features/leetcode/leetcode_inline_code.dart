@@ -271,7 +271,15 @@ class LeetCodeProseText extends StatelessWidget {
     for (final range in parsed.codeRanges) {
       if (range.start > cursor) {
         spans.addAll(
-          _proseSpans(parsed.text, cursor, range.start, prose, chips, emphasis),
+          _proseSpans(
+            parsed.text,
+            cursor,
+            range.start,
+            prose,
+            chips,
+            emphasis,
+            theme.brightness,
+          ),
         );
       }
       final code = parsed.text.substring(range.start, range.end);
@@ -308,6 +316,7 @@ class LeetCodeProseText extends StatelessWidget {
           prose,
           chips,
           emphasis,
+          theme.brightness,
         ),
       );
     }
@@ -350,6 +359,7 @@ class LeetCodeProseText extends StatelessWidget {
     TextStyle prose,
     List<_Chip> chips,
     List<StyledRange> emphasis,
+    Brightness brightness,
   ) {
     final slice = text.substring(start, end);
     if (!tagPills) {
@@ -389,7 +399,9 @@ class LeetCodeProseText extends StatelessWidget {
         _Chip(
           start: start + match.start,
           end: start + match.end,
-          color: Color(colorForTag(match.group(1)!)).withValues(alpha: 0.3),
+          color: Color(
+            resolveTagColor(colorForTag(match.group(1)!), brightness),
+          ).withValues(alpha: 0.3),
           radius: 8,
           padding: const Offset(3, 1),
         ),

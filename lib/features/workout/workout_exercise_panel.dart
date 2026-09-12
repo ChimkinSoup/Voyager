@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -229,7 +230,7 @@ class ExerciseChip extends StatelessWidget {
     final colors = VoyagerColors.of(context);
     final tint = exercise.colorValue == null
         ? theme.colorScheme.primary
-        : Color(exercise.colorValue!);
+        : paletteColor(exercise.colorValue!, context);
 
     return Container(
       constraints: const BoxConstraints(minWidth: 120),

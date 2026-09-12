@@ -12,6 +12,7 @@ import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
@@ -1240,6 +1241,7 @@ class _FeedRowState extends ConsumerState<_FeedRow>
             amountCents: bill.amountCents,
             period: bill.period,
             anchorDueDate: bill.anchorDueDate,
+            paidThroughDate: bill.paidThroughDate,
             colorValue: bill.colorValue,
             note: bill.note,
           ),
@@ -1412,12 +1414,16 @@ class _FeedRowState extends ConsumerState<_FeedRow>
       NotificationItemType.event => Icon(
         PhosphorIconsRegular.calendarDot,
         size: 18,
-        color: Color(widget.item.event!.colorValue),
+        color: Color(
+          resolvePaletteColor(widget.item.event!.colorValue, theme.brightness),
+        ),
       ),
       NotificationItemType.bill => Icon(
         PhosphorIconsRegular.currencyDollar,
         size: 18,
-        color: Color(widget.item.bill!.colorValue),
+        color: Color(
+          resolvePaletteColor(widget.item.bill!.colorValue, theme.brightness),
+        ),
       ),
     };
     return SizedBox(

@@ -244,6 +244,64 @@ void main() {
     expect(due, DateTime(2026, 7, 22));
   });
 
+  // The regression this field exists for. The old log-payment path rewrote
+  // anchorDueDate to the rolled date, and _addMonths clamps: one February
+  // walked a bill due the 31st onto the 28th, and it stayed there forever.
+  test('paying through February leaves a month-end bill on the 31st', () {
+    var bill = Subscription(
+      id: 'bill',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      name: 'Rent',
+      amountCents: 100000,
+      period: BillingPeriod.monthly,
+      anchorDueDate: DateTime(2026, 1, 31),
+    );
+
+    // Paid each month from January through April, the way Log payment writes
+    // it: record the settled occurrence, never touch the anchor.
+    final dues = <DateTime>[];
+    for (final today in [
+      DateTime(2026, 1, 20),
+      DateTime(2026, 2, 20),
+      DateTime(2026, 3, 20),
+      DateTime(2026, 4, 20),
+    ]) {
+      final due = bill.nextDue(today);
+      dues.add(due);
+      bill = bill.copyWith(paidThroughDate: due);
+    }
+
+    expect(dues, [
+      DateTime(2026, 1, 31),
+      DateTime(2026, 2, 28),
+      DateTime(2026, 3, 31),
+      DateTime(2026, 4, 30),
+    ]);
+    expect(bill.anchorDueDate, DateTime(2026, 1, 31));
+    expect(bill.nextDue(DateTime(2026, 5, 20)), DateTime(2026, 5, 31));
+  });
+
+  test('paidThroughDate skips only the occurrence it settles', () {
+    final bill = Subscription(
+      id: 'bill',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      name: 'Netflix',
+      amountCents: 1599,
+      period: BillingPeriod.monthly,
+      anchorDueDate: DateTime(2026, 6, 15),
+      paidThroughDate: DateTime(2026, 6, 15),
+    );
+    expect(bill.nextDue(DateTime(2026, 6, 10)), DateTime(2026, 7, 15));
+    // A payment already behind the series changes nothing.
+    expect(
+      bill.copyWith(paidThroughDate: DateTime(2026, 5, 15))
+          .nextDue(DateTime(2026, 6, 10)),
+      DateTime(2026, 6, 15),
+    );
+  });
+
   test('nextDueDate returns a future anchor unchanged', () {
     final anchor = DateTime.now().add(const Duration(days: 5));
     final expected = DateTime(anchor.year, anchor.month, anchor.day);

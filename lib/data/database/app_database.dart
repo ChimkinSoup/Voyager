@@ -301,6 +301,7 @@ class SubscriptionsTable extends Table {
   IntColumn get amountCents => integer()();
   TextColumn get period => text()();
   DateTimeColumn get anchorDueDate => dateTime()();
+  DateTimeColumn get paidThroughDate => dateTime().nullable()();
   IntColumn get colorValue =>
       integer().withDefault(const Constant(0xFF7C9EFF))();
   TextColumn get note => text().nullable()();
@@ -1449,7 +1450,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 107;
+  int get schemaVersion => 108;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2639,6 +2640,18 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 107) {
         await migrator.createTable(studyDeckLinksTable);
+      }
+      if (from < 108) {
+        // Nullable with no backfill: bills whose anchor the old log-payment
+        // path already re-anchored have lost their original day of month —
+        // Feb 28 is indistinguishable from a bill genuinely due the 28th — so
+        // they keep the day they have and simply stop drifting from here.
+        await _addColumnIfNotExists(
+          migrator,
+          'subscriptions_table',
+          subscriptionsTable,
+          subscriptionsTable.paidThroughDate,
+        );
       }
     },
   );

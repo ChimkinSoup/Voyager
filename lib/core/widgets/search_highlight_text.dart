@@ -63,8 +63,13 @@ Widget searchHighlightedText(
   TextOverflow? overflow,
   int Function(String tag)? tagColorFor,
   ProseEmphasisTheme? emphasisTheme,
+  required Brightness brightness,
 }) {
-  final colorFor = tagColorFor ?? colorForTag;
+  // Required rather than defaulted: a tag pill painted in the dark palette on
+  // a light surface is close to invisible, and a default would have made that
+  // the quiet outcome at every call site that forgot.
+  final colorFor =
+      tagColorFor ?? (tag) => resolveTagColor(colorForTag(tag), brightness);
 
   if (text.isEmpty) {
     return Text('', style: style, maxLines: maxLines, overflow: overflow);

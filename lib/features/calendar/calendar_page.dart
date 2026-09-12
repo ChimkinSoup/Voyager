@@ -11,6 +11,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
@@ -542,7 +543,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // the event color; for new events use the target calendar's color, so the
     // border matches the color the panel itself will default to.
     final accentColor = event != null
-        ? Color(event.colorValue)
+        ? paletteColor(event.colorValue, context)
         : Color(
             calendars
                     .where((c) => c.id == initialCalendarId)
@@ -1176,7 +1177,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
               // still the filter.
               selectedValue: _selectedCalendarId,
               accent: selected?.colorValue != null
-                  ? Color(selected!.colorValue!)
+                  ? paletteColor(selected!.colorValue!, context)
                   : primary,
               onSelected: _selectCalendarFromSwitcher,
               items: [
@@ -1188,7 +1189,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                   ScopeSwitcherItem<String?>(
                     value: calendar.id,
                     label: calendar.name,
-                    color: Color(calendar.colorValue ?? primary.toARGB32()),
+                    color: paletteColor(
+                      calendar.colorValue ?? primary.toARGB32(),
+                      context,
+                    ),
                   ),
               ],
             ),
@@ -2697,7 +2701,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             orElse: () => null,
           );
     final calendarAccentColor = selectedCalendar?.colorValue != null
-        ? Color(selectedCalendar!.colorValue!)
+        ? paletteColor(selectedCalendar!.colorValue!, context)
         : null;
 
     const indicators = <CalendarDayIndicator>[];

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
@@ -41,7 +42,7 @@ class RankingsStatsBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Color(category.colorValue);
+    final accent = paletteColor(category.colorValue, context);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
@@ -97,7 +98,7 @@ class _CategoryTrigger extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(category.colorValue);
+    final accent = paletteColor(category.colorValue, context);
 
     return Center(
       child: Builder(
@@ -191,7 +192,7 @@ class _CategoryMenu extends ConsumerWidget {
                     Icon(
                       rankingCategoryIcon(entry.iconKey),
                       size: 15,
-                      color: Color(entry.colorValue),
+                      color: paletteColor(entry.colorValue, context),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -289,7 +290,7 @@ class _HeroStats extends StatelessWidget {
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w600,
                   height: 1,
-                  color: Color(category.colorValue),
+                  color: paletteColor(category.colorValue, context),
                 ),
               ),
               const SizedBox(height: 5),
@@ -453,7 +454,7 @@ class RankingsToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(category.colorValue);
+    final accent = paletteColor(category.colorValue, context);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),

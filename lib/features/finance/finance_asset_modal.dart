@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
@@ -114,7 +115,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
       !_saving;
 
   Future<void> _pickDate(BuildContext buttonContext) async {
-    final accent = Color(_colorValue);
+    final accent = paletteColor(_colorValue, context);
     setState(() => _datePopoverOpen = true);
     final range = await showContextualPopover<DateTimeRange>(
       context: context,
@@ -240,7 +241,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(_colorValue);
+    final accent = paletteColor(_colorValue, context);
     final existing = widget.existing;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 

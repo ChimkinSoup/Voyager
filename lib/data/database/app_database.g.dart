@@ -17377,6 +17377,18 @@ class $SubscriptionsTableTable extends SubscriptionsTable
         type: DriftSqlType.dateTime,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _paidThroughDateMeta = const VerificationMeta(
+    'paidThroughDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> paidThroughDate =
+      GeneratedColumn<DateTime>(
+        'paid_through_date',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _colorValueMeta = const VerificationMeta(
     'colorValue',
   );
@@ -17450,6 +17462,7 @@ class $SubscriptionsTableTable extends SubscriptionsTable
     amountCents,
     period,
     anchorDueDate,
+    paidThroughDate,
     colorValue,
     note,
     createdAt,
@@ -17511,6 +17524,15 @@ class $SubscriptionsTableTable extends SubscriptionsTable
       );
     } else if (isInserting) {
       context.missing(_anchorDueDateMeta);
+    }
+    if (data.containsKey('paid_through_date')) {
+      context.handle(
+        _paidThroughDateMeta,
+        paidThroughDate.isAcceptableOrUnknown(
+          data['paid_through_date']!,
+          _paidThroughDateMeta,
+        ),
+      );
     }
     if (data.containsKey('color_value')) {
       context.handle(
@@ -17581,6 +17603,10 @@ class $SubscriptionsTableTable extends SubscriptionsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}anchor_due_date'],
       )!,
+      paidThroughDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}paid_through_date'],
+      ),
       colorValue: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}color_value'],
@@ -17621,6 +17647,7 @@ class SubscriptionsTableData extends DataClass
   final int amountCents;
   final String period;
   final DateTime anchorDueDate;
+  final DateTime? paidThroughDate;
   final int colorValue;
   final String? note;
   final DateTime createdAt;
@@ -17633,6 +17660,7 @@ class SubscriptionsTableData extends DataClass
     required this.amountCents,
     required this.period,
     required this.anchorDueDate,
+    this.paidThroughDate,
     required this.colorValue,
     this.note,
     required this.createdAt,
@@ -17648,6 +17676,9 @@ class SubscriptionsTableData extends DataClass
     map['amount_cents'] = Variable<int>(amountCents);
     map['period'] = Variable<String>(period);
     map['anchor_due_date'] = Variable<DateTime>(anchorDueDate);
+    if (!nullToAbsent || paidThroughDate != null) {
+      map['paid_through_date'] = Variable<DateTime>(paidThroughDate);
+    }
     map['color_value'] = Variable<int>(colorValue);
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
@@ -17668,6 +17699,9 @@ class SubscriptionsTableData extends DataClass
       amountCents: Value(amountCents),
       period: Value(period),
       anchorDueDate: Value(anchorDueDate),
+      paidThroughDate: paidThroughDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paidThroughDate),
       colorValue: Value(colorValue),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
       createdAt: Value(createdAt),
@@ -17690,6 +17724,7 @@ class SubscriptionsTableData extends DataClass
       amountCents: serializer.fromJson<int>(json['amountCents']),
       period: serializer.fromJson<String>(json['period']),
       anchorDueDate: serializer.fromJson<DateTime>(json['anchorDueDate']),
+      paidThroughDate: serializer.fromJson<DateTime?>(json['paidThroughDate']),
       colorValue: serializer.fromJson<int>(json['colorValue']),
       note: serializer.fromJson<String?>(json['note']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -17707,6 +17742,7 @@ class SubscriptionsTableData extends DataClass
       'amountCents': serializer.toJson<int>(amountCents),
       'period': serializer.toJson<String>(period),
       'anchorDueDate': serializer.toJson<DateTime>(anchorDueDate),
+      'paidThroughDate': serializer.toJson<DateTime?>(paidThroughDate),
       'colorValue': serializer.toJson<int>(colorValue),
       'note': serializer.toJson<String?>(note),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -17722,6 +17758,7 @@ class SubscriptionsTableData extends DataClass
     int? amountCents,
     String? period,
     DateTime? anchorDueDate,
+    Value<DateTime?> paidThroughDate = const Value.absent(),
     int? colorValue,
     Value<String?> note = const Value.absent(),
     DateTime? createdAt,
@@ -17734,6 +17771,9 @@ class SubscriptionsTableData extends DataClass
     amountCents: amountCents ?? this.amountCents,
     period: period ?? this.period,
     anchorDueDate: anchorDueDate ?? this.anchorDueDate,
+    paidThroughDate: paidThroughDate.present
+        ? paidThroughDate.value
+        : this.paidThroughDate,
     colorValue: colorValue ?? this.colorValue,
     note: note.present ? note.value : this.note,
     createdAt: createdAt ?? this.createdAt,
@@ -17752,6 +17792,9 @@ class SubscriptionsTableData extends DataClass
       anchorDueDate: data.anchorDueDate.present
           ? data.anchorDueDate.value
           : this.anchorDueDate,
+      paidThroughDate: data.paidThroughDate.present
+          ? data.paidThroughDate.value
+          : this.paidThroughDate,
       colorValue: data.colorValue.present
           ? data.colorValue.value
           : this.colorValue,
@@ -17771,6 +17814,7 @@ class SubscriptionsTableData extends DataClass
           ..write('amountCents: $amountCents, ')
           ..write('period: $period, ')
           ..write('anchorDueDate: $anchorDueDate, ')
+          ..write('paidThroughDate: $paidThroughDate, ')
           ..write('colorValue: $colorValue, ')
           ..write('note: $note, ')
           ..write('createdAt: $createdAt, ')
@@ -17788,6 +17832,7 @@ class SubscriptionsTableData extends DataClass
     amountCents,
     period,
     anchorDueDate,
+    paidThroughDate,
     colorValue,
     note,
     createdAt,
@@ -17804,6 +17849,7 @@ class SubscriptionsTableData extends DataClass
           other.amountCents == this.amountCents &&
           other.period == this.period &&
           other.anchorDueDate == this.anchorDueDate &&
+          other.paidThroughDate == this.paidThroughDate &&
           other.colorValue == this.colorValue &&
           other.note == this.note &&
           other.createdAt == this.createdAt &&
@@ -17819,6 +17865,7 @@ class SubscriptionsTableCompanion
   final Value<int> amountCents;
   final Value<String> period;
   final Value<DateTime> anchorDueDate;
+  final Value<DateTime?> paidThroughDate;
   final Value<int> colorValue;
   final Value<String?> note;
   final Value<DateTime> createdAt;
@@ -17832,6 +17879,7 @@ class SubscriptionsTableCompanion
     this.amountCents = const Value.absent(),
     this.period = const Value.absent(),
     this.anchorDueDate = const Value.absent(),
+    this.paidThroughDate = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.note = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -17846,6 +17894,7 @@ class SubscriptionsTableCompanion
     required int amountCents,
     required String period,
     required DateTime anchorDueDate,
+    this.paidThroughDate = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.note = const Value.absent(),
     required DateTime createdAt,
@@ -17866,6 +17915,7 @@ class SubscriptionsTableCompanion
     Expression<int>? amountCents,
     Expression<String>? period,
     Expression<DateTime>? anchorDueDate,
+    Expression<DateTime>? paidThroughDate,
     Expression<int>? colorValue,
     Expression<String>? note,
     Expression<DateTime>? createdAt,
@@ -17880,6 +17930,7 @@ class SubscriptionsTableCompanion
       if (amountCents != null) 'amount_cents': amountCents,
       if (period != null) 'period': period,
       if (anchorDueDate != null) 'anchor_due_date': anchorDueDate,
+      if (paidThroughDate != null) 'paid_through_date': paidThroughDate,
       if (colorValue != null) 'color_value': colorValue,
       if (note != null) 'note': note,
       if (createdAt != null) 'created_at': createdAt,
@@ -17896,6 +17947,7 @@ class SubscriptionsTableCompanion
     Value<int>? amountCents,
     Value<String>? period,
     Value<DateTime>? anchorDueDate,
+    Value<DateTime?>? paidThroughDate,
     Value<int>? colorValue,
     Value<String?>? note,
     Value<DateTime>? createdAt,
@@ -17910,6 +17962,7 @@ class SubscriptionsTableCompanion
       amountCents: amountCents ?? this.amountCents,
       period: period ?? this.period,
       anchorDueDate: anchorDueDate ?? this.anchorDueDate,
+      paidThroughDate: paidThroughDate ?? this.paidThroughDate,
       colorValue: colorValue ?? this.colorValue,
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
@@ -17937,6 +17990,9 @@ class SubscriptionsTableCompanion
     }
     if (anchorDueDate.present) {
       map['anchor_due_date'] = Variable<DateTime>(anchorDueDate.value);
+    }
+    if (paidThroughDate.present) {
+      map['paid_through_date'] = Variable<DateTime>(paidThroughDate.value);
     }
     if (colorValue.present) {
       map['color_value'] = Variable<int>(colorValue.value);
@@ -17970,6 +18026,7 @@ class SubscriptionsTableCompanion
           ..write('amountCents: $amountCents, ')
           ..write('period: $period, ')
           ..write('anchorDueDate: $anchorDueDate, ')
+          ..write('paidThroughDate: $paidThroughDate, ')
           ..write('colorValue: $colorValue, ')
           ..write('note: $note, ')
           ..write('createdAt: $createdAt, ')
@@ -46518,6 +46575,7 @@ typedef $$SubscriptionsTableTableCreateCompanionBuilder =
       required int amountCents,
       required String period,
       required DateTime anchorDueDate,
+      Value<DateTime?> paidThroughDate,
       Value<int> colorValue,
       Value<String?> note,
       required DateTime createdAt,
@@ -46533,6 +46591,7 @@ typedef $$SubscriptionsTableTableUpdateCompanionBuilder =
       Value<int> amountCents,
       Value<String> period,
       Value<DateTime> anchorDueDate,
+      Value<DateTime?> paidThroughDate,
       Value<int> colorValue,
       Value<String?> note,
       Value<DateTime> createdAt,
@@ -46573,6 +46632,11 @@ class $$SubscriptionsTableTableFilterComposer
 
   ColumnFilters<DateTime> get anchorDueDate => $composableBuilder(
     column: $table.anchorDueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get paidThroughDate => $composableBuilder(
+    column: $table.paidThroughDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46641,6 +46705,11 @@ class $$SubscriptionsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get paidThroughDate => $composableBuilder(
+    column: $table.paidThroughDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
     builder: (column) => ColumnOrderings(column),
@@ -46697,6 +46766,11 @@ class $$SubscriptionsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get anchorDueDate => $composableBuilder(
     column: $table.anchorDueDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get paidThroughDate => $composableBuilder(
+    column: $table.paidThroughDate,
     builder: (column) => column,
   );
 
@@ -46766,6 +46840,7 @@ class $$SubscriptionsTableTableTableManager
                 Value<int> amountCents = const Value.absent(),
                 Value<String> period = const Value.absent(),
                 Value<DateTime> anchorDueDate = const Value.absent(),
+                Value<DateTime?> paidThroughDate = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -46779,6 +46854,7 @@ class $$SubscriptionsTableTableTableManager
                 amountCents: amountCents,
                 period: period,
                 anchorDueDate: anchorDueDate,
+                paidThroughDate: paidThroughDate,
                 colorValue: colorValue,
                 note: note,
                 createdAt: createdAt,
@@ -46794,6 +46870,7 @@ class $$SubscriptionsTableTableTableManager
                 required int amountCents,
                 required String period,
                 required DateTime anchorDueDate,
+                Value<DateTime?> paidThroughDate = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 required DateTime createdAt,
@@ -46807,6 +46884,7 @@ class $$SubscriptionsTableTableTableManager
                 amountCents: amountCents,
                 period: period,
                 anchorDueDate: anchorDueDate,
+                paidThroughDate: paidThroughDate,
                 colorValue: colorValue,
                 note: note,
                 createdAt: createdAt,

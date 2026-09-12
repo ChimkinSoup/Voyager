@@ -216,6 +216,7 @@ void main() {
           'walked #outside with AAA today',
           style: const TextStyle(fontSize: 14, color: Color(0xFF000000)),
           keywords: ['AAA'],
+          brightness: Brightness.dark,
         ),
       );
 
@@ -235,6 +236,7 @@ void main() {
           'shipped #project-alpha today',
           style: const TextStyle(fontSize: 14, color: Color(0xFF000000)),
           keywords: ['proj'],
+          brightness: Brightness.dark,
         ),
       );
 

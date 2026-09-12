@@ -25,12 +25,41 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 /// stay legible on both the light and dark surfaces.
 const Color kIncomeGreen = Color(0xFF3BA776);
 
+/// Fields a new transaction opens prefilled with.
+///
+/// Every one of them stays editable: a draft is a starting point the caller
+/// happens to know (a bill's name and amount, say), not a commitment. Only
+/// meaningful when no `existing` transaction is being edited.
+class FinanceTransactionDraft {
+  const FinanceTransactionDraft({
+    this.type = TransactionType.expense,
+    this.amountCents,
+    this.note,
+    this.occurredAt,
+    this.tags = const [],
+  });
+
+  final TransactionType type;
+  final int? amountCents;
+  final String? note;
+  final DateTime? occurredAt;
+  final List<String> tags;
+}
+
 /// Opens the animated "log a transaction" modal. When [existing] is provided
-/// the modal edits that transaction in place instead of creating a new one.
+/// the modal edits that transaction in place instead of creating a new one;
+/// [draft] prefills a new one.
+///
+/// [onSaved] runs after a successful write and before the sheet closes, for
+/// the bookkeeping that only makes sense once the money is actually recorded —
+/// advancing a bill's due date, say. It does not run when the sheet is
+/// dismissed, and a throw from it is the caller's to handle.
 Future<void> showFinanceTransactionModal(
   BuildContext context,
   WidgetRef ref, {
   FinancialTransaction? existing,
+  FinanceTransactionDraft? draft,
+  Future<void> Function()? onSaved,
 }) async {
   // Captured out here, not inside the sheet: the sheet builds its own
   // ProviderScope, and that container is disposed the moment the sheet is
@@ -41,19 +70,31 @@ Future<void> showFinanceTransactionModal(
     context: context,
     builder: (ctx) => ProviderScope(
       parent: container,
-      child: _TransactionModal(container: container, existing: existing),
+      child: _TransactionModal(
+        container: container,
+        existing: existing,
+        draft: draft,
+        onSaved: onSaved,
+      ),
     ),
   );
 }
 
 class _TransactionModal extends ConsumerStatefulWidget {
-  const _TransactionModal({required this.container, this.existing});
+  const _TransactionModal({
+    required this.container,
+    this.existing,
+    this.draft,
+    this.onSaved,
+  });
 
   /// The app-level container, which outlives this sheet. See
   /// [showFinanceTransactionModal].
   final ProviderContainer container;
 
   final FinancialTransaction? existing;
+  final FinanceTransactionDraft? draft;
+  final Future<void> Function()? onSaved;
 
   @override
   ConsumerState<_TransactionModal> createState() => _TransactionModalState();
@@ -79,11 +120,17 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   void initState() {
     super.initState();
     final existing = widget.existing;
-    _type = existing?.type ?? TransactionType.expense;
+    // The draft only speaks for a *new* transaction; editing one, its own
+    // values are the only sensible starting point.
+    final draft = existing == null ? widget.draft : null;
+    _type = existing?.type ?? draft?.type ?? TransactionType.expense;
+    final amountCents = existing?.amountCents ?? draft?.amountCents;
     _amountController = TextEditingController(
-      text: existing == null ? '' : (existing.amountCents / 100).toStringAsFixed(2),
+      text: amountCents == null ? '' : (amountCents / 100).toStringAsFixed(2),
     );
-    _noteController = TextEditingController(text: existing?.note ?? '');
+    _noteController = TextEditingController(
+      text: existing?.note ?? draft?.note ?? '',
+    );
     _lastNoteText = _noteController.text;
     _noteFocusNode = FocusNode();
     _noteFocusNode.onKeyEvent = (node, event) {
@@ -105,12 +152,13 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       return KeyEventResult.ignored;
     };
     _tagsController = TextEditingController(
-      text: existing == null
-          ? ''
-          : existing.tags.map((t) => '#$t').join(' '),
+      text: (existing?.tags ?? draft?.tags ?? const <String>[])
+          .map((t) => '#$t')
+          .join(' '),
     );
-    final base = existing?.occurredAt ?? DateTime.now();
+    final base = existing?.occurredAt ?? draft?.occurredAt ?? DateTime.now();
     _date = DateTime(base.year, base.month, base.day);
+    _newId = newId();
     _amountController.addListener(_onAmountChanged);
   }
 
@@ -177,6 +225,13 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     });
   }
 
+  /// The id a *new* transaction will be written under, minted once.
+  ///
+  /// Per sheet rather than per save attempt: [_save] can now fail after the
+  /// write has already landed — [widget.onSaved] runs inside its try — and a
+  /// fresh id on the retry would file the same expense twice.
+  late final String _newId;
+
   Future<void> _save() async {
     final cents = _parsedCents;
     if (cents == null || _saving) return;
@@ -201,7 +256,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     );
 
     final transaction = FinancialTransaction(
-      id: existing?.id ?? newId(),
+      id: existing?.id ?? _newId,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       version: existing == null ? 0 : existing.version + 1,
@@ -219,8 +274,14 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     // is disposed, and it can be dismissed while the write is in flight.
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final container = widget.container;
+    // Whether the ledger row is already on disk. Everything after it — the
+    // tag colors, and a caller's bill advance — can fail on its own, and
+    // reporting that as a failed save would send the user back to re-enter
+    // money the ledger has already taken.
+    var written = false;
     try {
       await financeRepo.upsertTransaction(transaction);
+      written = true;
       await _persistTagColors(settingsRepo, tags);
 
       // Through the container, not `ref`: the invalidate has to land even
@@ -228,12 +289,23 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       // pre-write data until something else refreshes it.
       container.invalidate(transactionsProvider);
       container.invalidate(tagColorsProvider);
+      // After the write, before the pop: a caller advancing a bill's due date
+      // is recording a consequence of *this* save, and a failure there has to
+      // land in this sheet's error line rather than on a dismissed one.
+      await widget.onSaved?.call();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _saveError = 'Could not save: $e';
+        // The retry re-runs the whole save, but [_newId] is minted per sheet,
+        // so the second attempt overwrites the row it already wrote rather
+        // than filing the same expense twice.
+        _saveError = written
+            ? 'Saved, but the step after it failed: $e\n'
+                  'Press ${widget.existing == null ? 'Add' : 'Save'} to retry '
+                  'it — this will not log a second entry.'
+            : 'Could not save: $e';
       });
     }
   }

@@ -220,6 +220,7 @@ class _LeetCodeMiniFlashcardState extends ConsumerState<LeetCodeMiniFlashcard> {
                     keywords: widget.keywords,
                     maxLines: hasDescription ? 2 : 4,
                     overflow: TextOverflow.ellipsis,
+                    brightness: theme.brightness,
                   ),
                 ),
                 if (hasDescription) ...[

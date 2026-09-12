@@ -7,6 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -178,7 +179,7 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
     );
   }
 
-  Color get _accent => Color(widget.category.colorValue);
+  Color get _accent => paletteColor(widget.category.colorValue, context);
 
   @override
   Widget build(BuildContext context) {

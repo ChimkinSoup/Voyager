@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -531,7 +532,7 @@ class _CategoryTile extends StatelessWidget {
               width: 18,
               height: 18,
               decoration: BoxDecoration(
-                color: Color(category.colorValue),
+                color: paletteColor(category.colorValue, context),
                 shape: BoxShape.circle,
               ),
             ),
@@ -709,7 +710,7 @@ class _CompanyRow extends StatelessWidget {
                   : PhosphorIconsRegular.square,
               size: 14,
               color: inThis
-                  ? Color(category.colorValue)
+                  ? paletteColor(category.colorValue, context)
                   : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 8),

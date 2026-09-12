@@ -2090,6 +2090,7 @@ Map<String, dynamic> subscriptionToFirestore(Subscription subscription) => {
   'amountCents': subscription.amountCents,
   'period': subscription.period.name,
   'anchorDueDate': _dateToFirestoreRequired(subscription.anchorDueDate),
+  'paidThroughDate': _dateToFirestore(subscription.paidThroughDate),
   'colorValue': subscription.colorValue,
   'note': subscription.note,
   'createdAt': _dateToFirestoreRequired(subscription.createdAt),
@@ -2125,6 +2126,12 @@ Subscription mergeSubscriptionFromRemote(
         parseFirestoreDate(data['anchorDueDate']) ??
         local?.anchorDueDate ??
         remoteUpdated,
+    // Keyed on presence, not on null: clearing a recorded payment is what an
+    // edited due date does, and `?? local` would let every device that had
+    // one keep it forever.
+    paidThroughDate: data.containsKey('paidThroughDate')
+        ? parseFirestoreDate(data['paidThroughDate'])
+        : local?.paidThroughDate,
     colorValue:
         (data['colorValue'] as num?)?.toInt() ??
         local?.colorValue ??
