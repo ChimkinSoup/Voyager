@@ -10,6 +10,7 @@ import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -561,7 +562,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         : (stages.isNotEmpty ? stages.first.name : jobDefaultStage);
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       // No reserved header strip — the form scrolls to the window's edge.
       // Close stays pinned as a light overlay so it never scrolls away and
@@ -760,6 +761,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         ],
       ),
     );
+    // _save guards itself, and names a missing field rather than no-opping.
+    return CtrlEnterToSubmitScope(onSubmit: () => _save(stages), child: sheet);
   }
 
   String _seasonLabel(List<JobSeason> selectable) {

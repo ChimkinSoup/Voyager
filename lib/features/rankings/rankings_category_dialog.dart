@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -76,7 +77,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return EnterToSubmitScope(
+    final dialog = EnterToSubmitScope(
       onSubmit: _submit,
       child: AlertDialog(
         title: Text(widget.title),
@@ -91,6 +92,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 controller: _nameController,
                 autofocus: true,
                 accentColor: Color(_color),
+                // The scope above only sees Enter while no field is focused.
+                onSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 16),
               Text('Color', style: theme.textTheme.labelMedium),
@@ -143,6 +146,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         ],
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _submit, child: dialog);
   }
 }
 

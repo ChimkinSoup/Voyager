@@ -8,6 +8,7 @@ import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -63,6 +64,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
   late final TextEditingController _tagsController;
+  final _tagsFocusNode = FocusNode();
   late final FocusNode _noteFocusNode;
   var _lastNoteText = '';
   late DateTime _date;
@@ -118,6 +120,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     _noteController.dispose();
     _noteFocusNode.dispose();
     _tagsController.dispose();
+    _tagsFocusNode.dispose();
     super.dispose();
   }
 
@@ -256,7 +259,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     final canSave = _parsedCents != null && !_saving;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -347,18 +350,23 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   prefixText: r'$ ',
                   errorText: _amountError,
                 ),
-                onSubmitted: (_) => _save(),
+                // Enter walks Amount → Tags → Note. Note is multiline, so
+                // Enter there is a newline and the sheet commits only from
+                // the button or Ctrl+Enter.
+                onSubmitted: (_) => _tagsFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               // Tags
               VoyagerTextField(
                 controller: _tagsController,
+                focusNode: _tagsFocusNode,
                 accentColor: accent,
                 tagScope: TagScope.finance,
                 decoration: const InputDecoration(
                   labelText: 'Tags',
                   hintText: '#groceries #travel',
                 ),
+                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               // Note
@@ -416,6 +424,9 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
         ),
       ),
     );
+    // _save validates for itself, so it can go in unconditionally: a callback
+    // gated on canSave is only as fresh as the last build.
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 
   String _formatDate(DateTime d) {

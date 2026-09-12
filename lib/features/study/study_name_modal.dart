@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -59,7 +60,7 @@ class _StudyNameModalState extends State<_StudyNameModal> {
     final theme = Theme.of(context);
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
@@ -108,5 +109,6 @@ class _StudyNameModalState extends State<_StudyNameModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _submit, child: sheet);
   }
 }

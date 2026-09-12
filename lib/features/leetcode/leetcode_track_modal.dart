@@ -10,6 +10,7 @@ import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
@@ -932,7 +933,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final screenHeight = MediaQuery.sizeOf(context).height;
 
-    return SizedBox(
+    final sheet = SizedBox(
       height: screenHeight * 0.94,
       child: Padding(
         padding: EdgeInsets.only(bottom: viewInsets),
@@ -1180,6 +1181,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         ),
       ),
     );
+    // _save guards itself, and names a missing title rather than no-opping.
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 }
 

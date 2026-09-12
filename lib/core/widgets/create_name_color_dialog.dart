@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -74,7 +75,7 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return EnterToSubmitScope(
+    final dialog = EnterToSubmitScope(
       onSubmit: _submit,
       child: AlertDialog(
       title: Text(widget.title),
@@ -140,5 +141,6 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
       ],
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _submit, child: dialog);
   }
 }

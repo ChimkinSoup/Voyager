@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_checkbox.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -49,7 +50,7 @@ class _CalendarOverlayDialogState extends State<_CalendarOverlayDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
+    final dialog = AlertDialog(
       title: Text('Show on "${widget.host.name}"'),
       content: SizedBox(
         width: 400,
@@ -108,6 +109,12 @@ class _CalendarOverlayDialogState extends State<_CalendarOverlayDialog> {
         ),
         GlassButton(dense: true, onPressed: _save, label: 'Save'),
       ],
+    );
+    // No text field here to hold focus, so the scope holds it.
+    return CtrlEnterToSubmitScope(
+      onSubmit: _save,
+      autofocus: true,
+      child: dialog,
     );
   }
 }

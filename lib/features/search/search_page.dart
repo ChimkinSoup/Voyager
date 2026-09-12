@@ -19,6 +19,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
@@ -816,7 +817,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
 
     final dialogWidth = math.min(920.0, MediaQuery.sizeOf(context).width - 48);
 
-    return EnterToSubmitScope(
+    final dialog = EnterToSubmitScope(
       onSubmit: () async {
         if (context.mounted) Navigator.pop(context);
       },
@@ -978,6 +979,9 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
         ),
       ),
     );
+    // Save, not the Close that unfocused Enter maps to above: the chord is an
+    // explicit commit wherever the focus is.
+    return CtrlEnterToSubmitScope(onSubmit: _saveAndClose, child: dialog);
   }
 
   /// Wraps the dialog's writing area in this entry's images.

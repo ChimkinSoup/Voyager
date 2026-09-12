@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -56,6 +57,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   late final TextEditingController _nameController;
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
+  final _amountFocusNode = FocusNode();
+  final _noteFocusNode = FocusNode();
   late BillingPeriod _period;
   late DateTime _dueDate;
   late int _colorValue;
@@ -90,6 +93,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     _nameController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _amountFocusNode.dispose();
+    _noteFocusNode.dispose();
     super.dispose();
   }
 
@@ -213,7 +218,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     final nextDue = nextDueDate(_dueDate, _period, DateTime.now());
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -273,6 +278,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                   labelText: 'Name',
                   hintText: 'Netflix',
                 ),
+                onSubmitted: (_) => _amountFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               Row(
@@ -281,6 +287,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                   Expanded(
                     child: VoyagerTextField(
                       controller: _amountController,
+                      focusNode: _amountFocusNode,
                       accentColor: accent,
                       cursorColor: accent,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -297,6 +304,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                         prefixText: r'$ ',
                         errorText: _amountError,
                       ),
+                      // Past the Billing dropdown: the chain is text only.
+                      onSubmitted: (_) => _noteFocusNode.requestFocus(),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -334,11 +343,13 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _noteController,
+                focusNode: _noteFocusNode,
                 accentColor: accent,
                 decoration: const InputDecoration(
                   labelText: 'Note',
                   hintText: 'Family plan',
                 ),
+                onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 16),
               Row(
@@ -403,5 +414,6 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 }

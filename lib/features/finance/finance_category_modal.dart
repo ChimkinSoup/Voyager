@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -155,7 +156,7 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
     final tags = _knownTags();
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -213,6 +214,7 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                   labelText: 'Category name',
                   hintText: 'Eating out',
                 ),
+                onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 18),
               Text(
@@ -278,5 +280,6 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
         ),
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 }

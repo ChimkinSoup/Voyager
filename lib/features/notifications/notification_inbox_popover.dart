@@ -17,6 +17,7 @@ import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
@@ -1915,7 +1916,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
   Widget _body(BuildContext context) {
     final theme = Theme.of(context);
     final trackersAsync = ref.watch(trackersProvider);
-    return PopScope(
+    final body = PopScope(
       canPop: _dirtyTrackerIds.isEmpty,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
@@ -1977,6 +1978,9 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
         ),
       ),
     );
+    // Scoped to this section, so it only fires with a tracker row focused.
+    // Ungated, unlike the button: commit() skips any row that isn't dirty.
+    return CtrlEnterToSubmitScope(onSubmit: _saveAll, child: body);
   }
 
   bool _isSameDate(DateTime a, DateTime b) =>

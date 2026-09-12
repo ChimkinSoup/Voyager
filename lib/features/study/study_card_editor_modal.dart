@@ -12,6 +12,7 @@ import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -238,7 +239,7 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
         _sideFilled(_front.text, images.front) &&
         _sideFilled(_back.text, images.back);
 
-    return Padding(
+    final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
       child: VoyagerScrollView(
         child: Padding(
@@ -325,6 +326,12 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
           ),
         ),
       ),
+    );
+    // Gated like the button: _save itself doesn't check that both faces are
+    // filled.
+    return CtrlEnterToSubmitScope(
+      onSubmit: canSave ? _save : null,
+      child: sheet,
     );
   }
 }

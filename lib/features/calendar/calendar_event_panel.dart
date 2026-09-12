@@ -8,6 +8,7 @@ import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -112,10 +113,12 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _allDayFocusNode = FocusNode();
     // Enter on the focused all-day button toggles it. The panel's
     // [EnterToSubmitScope] sits above this node and would otherwise swallow
-    // the key and save the event instead.
+    // the key and save the event instead. Ctrl+Enter is not ours: it is the
+    // save chord wherever the focus is, including on this button.
     _allDayFocusNode.onKeyEvent = (node, event) {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
-      if (event.logicalKey == LogicalKeyboardKey.enter) {
+      if (event.logicalKey == LogicalKeyboardKey.enter &&
+          !isSubmitChord(event)) {
         setState(() => _isFullDay = !_isFullDay);
         return KeyEventResult.handled;
       }
@@ -739,7 +742,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     final content = Stack(
       clipBehavior: Clip.none,
       children: [
-        panel,
+        CtrlEnterToSubmitScope(onSubmit: _submit, child: panel),
         Positioned(
           top: _kCloseButtonTop,
           right: 6,

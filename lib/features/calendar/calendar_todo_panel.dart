@@ -8,6 +8,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
 import 'package:voyager/core/widgets/time_selector_popovers.dart';
@@ -485,7 +486,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
     final content = Stack(
       clipBehavior: Clip.none,
       children: [
-        panel,
+        CtrlEnterToSubmitScope(onSubmit: _submit, child: panel),
         Positioned(
           top: 5,
           right: 9,
