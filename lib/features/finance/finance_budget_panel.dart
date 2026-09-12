@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_budget_modal.dart';
+import 'package:voyager/features/finance/finance_soft_delete.dart';
+import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
 
@@ -100,6 +103,29 @@ class _BudgetRow extends ConsumerWidget {
   final double pace;
   final int? tagColorValue;
 
+  /// Soft-deletes the budget and offers an undo. See [deleteBudgetWithUndo]
+  /// for why the overlay and container are resolved before the delete.
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    await deleteBudgetWithUndo(
+      overlay: Overlay.of(context, rootOverlay: true),
+      container: ProviderScope.containerOf(ref.context, listen: false),
+      repo: ref.read(financeRepositoryProvider),
+      budget: budget,
+    );
+  }
+
+  /// Sends the user to the ledger, filtered to this budget's tag.
+  ///
+  /// All-time rather than this month: the pacing bar above already answers
+  /// "how am I doing this month", so the question left over is the one the
+  /// bar can't show — what the spending on this tag actually looks like.
+  void _viewExpenses(WidgetRef ref) {
+    ref.read(financeLedgerTagFilterProvider.notifier).state = budget.tag;
+    ref
+        .read(financeUiPrefsProvider.notifier)
+        .setViewMode(FinanceViewMode.ledger);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -120,71 +146,93 @@ class _BudgetRow extends ConsumerWidget {
     final spentFraction =
         budget.limitCents <= 0 ? 0.0 : spentCents / budget.limitCents;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () => showBudgetModal(context, ref, existing: budget),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: tagColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '#${budget.tag}',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: tagColor,
+    return ContextMenuRegion(
+      // Built on right-click rather than eagerly, like the ledger rows: the
+      // panel rebuilds wholesale whenever a transaction lands.
+      itemsBuilder: () => [
+        ContextMenuItem(
+          label: 'Edit',
+          icon: PhosphorIconsRegular.pencilSimple,
+          onTap: () => showBudgetModal(context, ref, existing: budget),
+        ),
+        ContextMenuItem(
+          label: 'View expenses',
+          icon: PhosphorIconsRegular.receipt,
+          onTap: () => _viewExpenses(ref),
+        ),
+        ContextMenuItem(
+          label: 'Delete',
+          icon: PhosphorIconsRegular.trash,
+          isDestructive: true,
+          onTap: () => _delete(context, ref),
+        ),
+      ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => showBudgetModal(context, ref, existing: budget),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: tagColor.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '#${budget.tag}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: tagColor,
+                      ),
                     ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  '${formatCents(spentCents)} / ${formatCents(budget.limitCents)}',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  const Spacer(),
+                  Text(
+                    '${formatCents(spentCents)} / ${formatCents(budget.limitCents)}',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _PacingBar(
-              spentFraction: spentFraction,
-              pace: pace,
-              color: statusColor,
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Text(
-                  switch (status) {
-                    BudgetStatus.onTrack => 'On track',
-                    BudgetStatus.aheadOfPace => 'Ahead of pace',
-                    BudgetStatus.overBudget => 'Over budget',
-                  },
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: statusColor,
-                    fontWeight: FontWeight.w600,
+                ],
+              ),
+              const SizedBox(height: 8),
+              _PacingBar(
+                spentFraction: spentFraction,
+                pace: pace,
+                color: statusColor,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text(
+                    switch (status) {
+                      BudgetStatus.onTrack => 'On track',
+                      BudgetStatus.aheadOfPace => 'Ahead of pace',
+                      BudgetStatus.overBudget => 'Over budget',
+                    },
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  remaining >= 0
-                      ? '${formatCents(remaining)} left'
-                      : '${formatCents(remaining.abs())} over',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  const Spacer(),
+                  Text(
+                    remaining >= 0
+                        ? '${formatCents(remaining)} left'
+                        : '${formatCents(remaining.abs())} over',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

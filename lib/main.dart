@@ -10,10 +10,13 @@ import 'package:voyager/app/voyager_app.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
+import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/features/hotkeys/quick_popups.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/firebase_options.dart';
 
 Future<void> main() async {
@@ -112,6 +115,11 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
 
   Future<void> _bootstrap() async {
     if (!mounted) return;
+    // Ahead of everything that awaits: creating this notifier is what starts
+    // its read of the device-local finance chrome file, and the only other
+    // thing that creates it is the first build of the Finance page — which
+    // then paints the default tab for as long as the read takes.
+    ref.read(financeUiPrefsProvider);
     final db = ref.read(databaseProvider);
     final authRepo = ref.read(authRepositoryProvider);
     OutboxSyncWorker.initialize(
@@ -156,8 +164,31 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       );
     }
 
+    // Unawaited: nothing on screen is waiting for it, and a tag drawn in its
+    // old color for one frame is not worth delaying the first paint over.
+    unawaited(_reconcileTagPalette(settingsRepo));
+
     if (ref.read(authNotifierProvider).isAuthenticated) {
       _onAuthStateChanged(true);
+    }
+  }
+
+  /// Pulls stored tag colors onto the curated palette. See
+  /// [reconcileTagPalette] for why this runs every launch rather than once.
+  Future<void> _reconcileTagPalette(SettingsRepository settingsRepo) async {
+    try {
+      final rewritten = await reconcileTagPalette(settingsRepo);
+      if (rewritten == 0 || !mounted) return;
+      ref.invalidate(tagColorsProvider);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'VoyagerBootstrap',
+          context: ErrorDescription('while reconciling tag colors'),
+        ),
+      );
     }
   }
 

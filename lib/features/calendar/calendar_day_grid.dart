@@ -7,6 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -1472,7 +1473,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
 
     if (shrinkT >= 1.0) {
       return _yearEventDot(
-        color: Color(event.colorValue),
+        color: paletteColor(event.colorValue, context),
         left: (widget.maxWidth - dotSize) / 2 + x,
         top: y,
         size: dotSize,
@@ -1545,7 +1546,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     bool roundLeft = true,
     bool roundRight = true,
   }) {
-    final color = Color(event.colorValue);
+    final color = paletteColor(event.colorValue, context);
 
     final leftRadius = roundLeft ? calendarEventCornerRadius : 0.0;
     final rightRadius = roundRight ? calendarEventCornerRadius : 0.0;
@@ -2009,7 +2010,7 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                     ? CalendarDayEntry.allDayEvent(event, day: day)
                     : CalendarDayEntry.timedEvent(event, day: day),
                 child: CalendarInteractiveEventTap(
-                  eventColor: Color(event.colorValue),
+                  eventColor: paletteColor(event.colorValue, context),
                   borderRadius: BorderRadius.circular(6),
                   highlighted: editingEventId == event.id,
                   onTap: () => onEventTap(event),
@@ -2017,7 +2018,7 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                     height: 24,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: calendarEventFillDecoration(
-                      Color(event.colorValue),
+                      paletteColor(event.colorValue, context),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     alignment: Alignment.centerLeft,
@@ -2123,7 +2124,7 @@ class CalendarDayEventBar extends StatelessWidget {
       bottomLeft: Radius.circular(isStart ? bottomRadius : 0.0),
       bottomRight: Radius.circular(isEnd ? bottomRadius : 0.0),
     );
-    final eventColor = Color(event.colorValue);
+    final eventColor = paletteColor(event.colorValue, context);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -2253,7 +2254,7 @@ class CalendarDayEventDots extends StatelessWidget {
             height: dotSize,
             margin: const EdgeInsets.symmetric(horizontal: 0.5),
             decoration: BoxDecoration(
-              color: Color(event.colorValue),
+              color: paletteColor(event.colorValue, context),
               shape: BoxShape.circle,
             ),
           ),
@@ -2284,7 +2285,7 @@ class CalendarDayIndicatorDots extends StatelessWidget {
             width: dotSize,
             height: dotSize,
             decoration: BoxDecoration(
-              color: Color(indicator.colorValue).withValues(
+              color: paletteColor(indicator.colorValue, context).withValues(
                 alpha: (0.35 + 0.65 * indicator.intensity).clamp(0.35, 1),
               ),
               shape: BoxShape.circle,

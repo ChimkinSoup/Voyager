@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
@@ -302,7 +303,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       context: context,
       buttonContext: buttonContext,
       width: 360, // Wider to fit two spinners
-      accentColor: Color(_colorValue),
+      accentColor: paletteColor(_colorValue, context),
       builder: (ctx) => TimeRangePopover(
         initialStart: _start,
         initialEnd: _end,
@@ -333,11 +334,11 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       context: context,
       buttonContext: buttonContext,
       width: kRepeatPopoverWidth,
-      accentColor: Color(_colorValue),
+      accentColor: paletteColor(_colorValue, context),
       builder: (ctx) => RepeatSelectorPopover(
         initialRule: _recurrence,
         anchor: _start,
-        accentColor: Color(_colorValue),
+        accentColor: paletteColor(_colorValue, context),
       ),
     );
     if (!mounted) return;
@@ -352,7 +353,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Color(_colorValue);
+    final accent = paletteColor(_colorValue, context);
     final baseTheme = Theme.of(context);
     final eventTheme = baseTheme.copyWith(
       colorScheme: baseTheme.colorScheme.copyWith(primary: accent),

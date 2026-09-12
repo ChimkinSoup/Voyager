@@ -37,7 +37,7 @@ Status: **design** (not implemented).
 | **Focus entry** | Click **legend row** or **pie slice**. |
 | **Tag-mode focus** | Among txs in that primary-tag bucket, show co-tag breakdown (§4.2). |
 | **Category-mode focus** | Among txs in that category bucket, show **every tag** on those txs with **full amount per tag** (budget-style; slice sum may exceed category total) (§4.3). |
-| **Focus chrome** | Small text: `Filtering: {label}` (tag without `#` in chart chrome, matching current legend style). **Click text → clear focus.** |
+| **Focus chrome** | Small text: `Filtering: {label}` (tag without `#` in chart chrome, matching current legend style). **Click text → clear focus** (no separate ✕). |
 | **Empty focus / $0** | Still show single-bucket UI with **$0.00** center when focused amount is zero (should be rare if entered via a visible slice). |
 | **Tag colors** | Fixed curated palette; `index = hash(tag) % palette.length`; **rewrite all** existing `TagColorRecord`s once on migrate. |
 | **Color keying** | Global by tag string (today’s table). Journal `#beach` does **not** appear in finance pickers; if the same string is used in both features, color matches. |
@@ -61,7 +61,7 @@ Status: **design** (not implemented).
 - Deposits never appear.
 - Unfocused: keep `spendingBreakdown(..., groupByCategory: …)` as today.
 - Focused: replace the multi-slice “share of month” chart with the **focused** series for that bucket (§4.2 / §4.3).
-- **Filter affordance:** above or beside the chart, muted text `Filtering: {label}`. Entire text is tappable → clears focus, restores unfocused series for the current Category/Tag mode.
+- **Filter affordance:** above or beside the chart, muted text `Filtering: {label}`. Entire text is tappable → clears focus, restores unfocused series for the current Category/Tag mode. No separate ✕ — same pattern as the ledger tag filter chip.
 - Switching **Category ↔ Tag** clears focus.
 - Switching finance tab away and back may keep focus in memory for the session; **do not** persist focus to disk.
 - Legend under the chart lists the **focused** slices (same take-top-N behavior as today unless the focused set is small — show all focused slices up to a reasonable cap, e.g. 12; overflow “Other” only if needed).
@@ -180,7 +180,7 @@ Do **not** invent tags for the expense. Do **not** auto-save without the modal.
 1. Set finance view mode to **Ledger** (persisted pref updates).
 2. Set device-session (and optionally persisted — **session-only in v1**) ledger filter: `expenseTagFilter = budget.tag`.
 3. Ledger list shows only expenses (`TransactionType.expense`) whose `tags` contain that tag (**all time**, any month). Deposits hidden while filter active. Day headers with no remaining rows omit.
-4. **Clear filter:** chip or text in the ledger header area, e.g. `Tag: dining_out ✕` / `Clear filter`, always visible while filter ≠ null. Clearing restores full ledger.
+4. **Clear filter:** chip or text in the ledger header area, e.g. `Expenses tagged #dining_out` (whole control tappable — **no** separate ✕), always visible while filter ≠ null. Clearing restores full ledger.
 
 Filter is independent of breakdown focus. Leaving Ledger for Analytics/Goals may keep the filter so returning to Ledger still filtered; clearing is explicit. **Do not** sync this filter.
 

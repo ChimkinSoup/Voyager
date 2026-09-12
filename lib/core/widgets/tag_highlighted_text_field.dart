@@ -116,6 +116,24 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     minLines: widget.minLines,
   );
 
+  /// The pill color for a tag with no stored color of its own.
+  ///
+  /// Held on the State and rebuilt only when the theme flips:
+  /// [_TagHighlightPainter.shouldRepaint] compares this by identity, so a
+  /// closure minted inside `build` would repaint the whole pill layer on every
+  /// keystroke.
+  late int Function(String tag) _fallbackTagColor;
+  Brightness? _fallbackBrightness;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final brightness = Theme.of(context).brightness;
+    if (brightness == _fallbackBrightness) return;
+    _fallbackBrightness = brightness;
+    _fallbackTagColor = (tag) => resolveTagColor(colorForTag(tag), brightness);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -434,7 +452,8 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                           textScaler: textScaler,
                           textHeightBehavior: textHeightBehavior,
                           locale: locale,
-                          tagColorFor: widget.tagColorFor ?? colorForTag,
+                          tagColorFor:
+                              widget.tagColorFor ?? _fallbackTagColor,
                         ),
                       ),
                     );

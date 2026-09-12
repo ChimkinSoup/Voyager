@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
@@ -72,14 +73,18 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
 
   bool get _canSave => _nameController.text.trim().isNotEmpty && !_saving;
 
-  /// Every tag the user has actually used, plus any with a stored color.
+  /// Every tag on a live transaction, plus whatever is already selected.
+  ///
+  /// Not `tagColors.keys`: a color row outlives the transactions that made it
+  /// — nothing purges one when the last transaction carrying that tag is
+  /// deleted — so folding them in here offered tags that no longer exist
+  /// anywhere in the ledger. The selected set stays in because a category
+  /// being edited must not silently drop a tag that is simply unused today.
   List<String> _knownTags() {
     final transactions =
         ref.watch(transactionsProvider).valueOrNull ?? const [];
-    final colors = ref.watch(tagColorsProvider).valueOrNull ?? const {};
     final tags = <String>{
       for (final t in transactions) ...t.tags,
-      ...colors.keys,
       ..._selectedTags,
     };
     final sorted = tags.toList()
@@ -152,7 +157,7 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(_colorValue);
+    final accent = paletteColor(_colorValue, context);
     final tags = _knownTags();
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 

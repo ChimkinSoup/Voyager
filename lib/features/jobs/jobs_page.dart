@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -112,6 +113,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
               companies: companies,
               categories: categories,
               fallback: Theme.of(context).colorScheme.outline,
+              brightness: Theme.of(context).brightness,
             );
             final statusColors = JobStageColors(
               stages: stages,
@@ -477,6 +479,7 @@ class _CompanyColors {
     required List<JobCompany> companies,
     required List<JobCategory> categories,
     required this.fallback,
+    required this.brightness,
   }) : _categoryById = {
          for (final category in categories) category.id: category,
        },
@@ -485,6 +488,10 @@ class _CompanyColors {
        };
 
   final Color fallback;
+
+  /// The theme the colours are painted into. A category colour is stored on
+  /// the dark ramp; see [resolvePaletteColor].
+  final Brightness brightness;
   final Map<String, JobCategory> _categoryById;
   final Map<String, JobCompany> _companyByKey;
 
@@ -497,7 +504,9 @@ class _CompanyColors {
     final categoryId = company?.categoryId;
     if (categoryId == null) return null;
     final category = _categoryById[categoryId];
-    return category == null ? null : Color(category.colorValue);
+    return category == null
+        ? null
+        : Color(resolvePaletteColor(category.colorValue, brightness));
   }
 }
 

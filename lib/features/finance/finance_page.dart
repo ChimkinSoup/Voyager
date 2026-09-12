@@ -22,19 +22,12 @@ import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_budget_panel.dart';
 import 'package:voyager/features/finance/finance_goals_view.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
+import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 /// Screen width at/above which the dashboard splits into ledger (left 60%) and
 /// insights sidebar (right 40%).
 const double _kSplitBreakpoint = 880;
-
-/// Which section of the finance page is showing: the day-to-day ledger
-/// dashboard, the macro analytics suite, or the savings goals.
-enum _FinanceViewMode { ledger, analytics, goals }
-
-final _financeViewModeProvider = StateProvider<_FinanceViewMode>(
-  (_) => _FinanceViewMode.ledger,
-);
 
 class FinancePage extends ConsumerWidget {
   const FinancePage({super.key});
@@ -218,10 +211,14 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
 
   /// The ledger as a lazily-built sliver, or the empty state as a single
   /// sliver item when there are no transactions.
-  Widget _ledgerSliver(_LedgerModel ledger, Map<String, int> tagColors) {
+  Widget _ledgerSliver(
+    _LedgerModel ledger,
+    Map<String, int> tagColors, {
+    String? tagFilter,
+  }) {
     final entries = ledger.entries;
     if (entries.isEmpty) {
-      return const SliverToBoxAdapter(child: _EmptyLedger());
+      return SliverToBoxAdapter(child: _EmptyLedger(tagFilter: tagFilter));
     }
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -249,7 +246,10 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     _rowWidgetCache.removeWhere((id, _) => !liveIds.contains(id));
     _rowSignatureCache.removeWhere((id, _) => !liveIds.contains(id));
 
-    final mode = ref.watch(_financeViewModeProvider);
+    final mode = ref.watch(
+      financeUiPrefsProvider.select((prefs) => prefs.viewMode),
+    );
+    final tagFilter = ref.watch(financeLedgerTagFilterProvider);
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);
     final nextMonth = DateTime(now.year, now.month + 1, 1);
@@ -266,7 +266,22 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     // Grouped once here rather than inside the LayoutBuilder below: it
     // doesn't depend on the constraints, and the builder re-runs on every
     // layout pass — every frame of a window-resize drag.
-    final ledger = _ledgerModel(transactions);
+    //
+    // The filter narrows the ledger only. The hero above it keeps reading the
+    // whole month: it answers "how am I doing", which a filter applied to one
+    // tag would turn into a different and much less useful number without
+    // saying so.
+    final ledger = _ledgerModel(
+      tagFilter == null
+          ? transactions
+          : transactions
+                .where(
+                  (t) =>
+                      t.type == TransactionType.expense &&
+                      t.tags.contains(tagFilter),
+                )
+                .toList(),
+    );
 
     final hero = _HeroSection(
       monthNet: monthNet,
@@ -289,7 +304,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerLeft,
-                child: SegmentedButton<_FinanceViewMode>(
+                child: SegmentedButton<FinanceViewMode>(
                   showSelectedIcon: false,
                   style: SegmentedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -298,17 +313,17 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                   ),
                   segments: const [
                     ButtonSegment(
-                      value: _FinanceViewMode.ledger,
+                      value: FinanceViewMode.ledger,
                       icon: Icon(PhosphorIconsRegular.receipt, size: 15),
                       label: Text('Ledger'),
                     ),
                     ButtonSegment(
-                      value: _FinanceViewMode.analytics,
+                      value: FinanceViewMode.analytics,
                       icon: Icon(PhosphorIconsRegular.chartLine, size: 15),
                       label: Text('Analytics'),
                     ),
                     ButtonSegment(
-                      value: _FinanceViewMode.goals,
+                      value: FinanceViewMode.goals,
                       icon: Icon(PhosphorIconsRegular.flag, size: 15),
                       label: Text('Goals'),
                     ),
@@ -316,12 +331,25 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                   selected: {mode},
                   onSelectionChanged: (set) {
                     if (set.isNotEmpty) {
-                      ref.read(_financeViewModeProvider.notifier).state =
-                          set.first;
+                      ref
+                          .read(financeUiPrefsProvider.notifier)
+                          .setViewMode(set.first);
                     }
                   },
                 ),
               ),
+              if (mode == FinanceViewMode.ledger && tagFilter != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _LedgerFilterChip(
+                    tag: tagFilter,
+                    onClear: () => ref
+                        .read(financeLedgerTagFilterProvider.notifier)
+                        .state = null,
+                  ),
+                ),
+              ],
             ],
           ),
         );
@@ -338,7 +366,11 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                   slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(20, 4, 12, 96),
-                      sliver: _ledgerSliver(ledger, tagColors),
+                      sliver: _ledgerSliver(
+                        ledger,
+                        tagColors,
+                        tagFilter: tagFilter,
+                      ),
                     ),
                   ],
                 ),
@@ -353,7 +385,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 0),
-                sliver: _ledgerSliver(ledger, tagColors),
+                sliver: _ledgerSliver(ledger, tagColors, tagFilter: tagFilter),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
               SliverPadding(
@@ -900,12 +932,50 @@ class _LedgerError extends StatelessWidget {
   }
 }
 
-class _EmptyLedger extends StatelessWidget {
-  const _EmptyLedger();
+/// The tag the ledger is narrowed to, with the only way back out.
+///
+/// Always on screen while the filter stands: a ledger quietly missing most of
+/// its rows is a bug report waiting to happen, so the reason it looks that way
+/// has to be visible from the same place the rows aren't. The whole chip is
+/// the clear target — no separate ✕.
+class _LedgerFilterChip extends StatelessWidget {
+  const _LedgerFilterChip({required this.tag, required this.onClear});
+
+  final String tag;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onClear,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            'Expenses tagged #$tag',
+            style: theme.textTheme.labelMedium?.copyWith(color: accent),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyLedger extends StatelessWidget {
+  const _EmptyLedger({this.tagFilter});
+
+  /// The tag the ledger is filtered to, so an empty result says which question
+  /// came back with nothing rather than claiming the ledger is bare.
+  final String? tagFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final filter = tagFilter;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Column(
@@ -918,7 +988,9 @@ class _EmptyLedger extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'No transactions yet.\nTap + to log your first one.',
+            filter != null
+                ? 'No expenses tagged #$filter.'
+                : 'No transactions yet.\nTap + to log your first one.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,

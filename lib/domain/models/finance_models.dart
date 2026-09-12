@@ -76,6 +76,13 @@ class FinancialTransaction extends SoftDeletable {
 /// derived on demand by rolling it forward by [period] (see [nextDueDate]), so
 /// the radar always surfaces the next occurrence without needing a background
 /// job to advance a stored value.
+///
+/// The anchor is immutable once set — only the editor rewrites it. Paying a
+/// bill records [paidThroughDate] instead, and [nextDue] skips past it. That
+/// separation is what keeps month-end bills on their day: re-anchoring onto
+/// each paid occurrence would walk a bill due the 31st onto Feb 28 the first
+/// February it was paid, and leave it on the 28th forever after, because
+/// [nextDueDate] clamps the day to each month's length.
 class Subscription extends SoftDeletable {
   const Subscription({
     required super.id,
@@ -87,6 +94,7 @@ class Subscription extends SoftDeletable {
     required this.amountCents,
     required this.period,
     required this.anchorDueDate,
+    this.paidThroughDate,
     this.colorValue = 0xFF7C9EFF,
     this.note,
   });
@@ -95,15 +103,25 @@ class Subscription extends SoftDeletable {
   final int amountCents;
   final BillingPeriod period;
   final DateTime anchorDueDate;
+
+  /// The due date of the latest occurrence marked paid, or null if none is.
+  /// Not itself a date in the future: it names a point in the series that
+  /// [nextDue] starts after.
+  final DateTime? paidThroughDate;
   final int colorValue;
   final String? note;
 
   /// Total cost across a full year at this cadence.
   int get annualCents => annualCentsFor(amountCents, period);
 
-  /// The next due date on or after [from] (defaults to now).
-  DateTime nextDue([DateTime? from]) =>
-      nextDueDate(anchorDueDate, period, from ?? DateTime.now());
+  /// The next due date on or after [from] (defaults to now), skipping the
+  /// occurrence [paidThroughDate] settles.
+  DateTime nextDue([DateTime? from]) => nextDueAfterPaid(
+        anchor: anchorDueDate,
+        period: period,
+        paidThrough: paidThroughDate,
+        from: from ?? DateTime.now(),
+      );
 
   /// Whole days from [from]'s calendar day until the next due date. 0 = due
   /// today, negative should never occur (the next due date is always >= today).
@@ -123,6 +141,7 @@ class Subscription extends SoftDeletable {
     int? amountCents,
     BillingPeriod? period,
     DateTime? anchorDueDate,
+    DateTime? paidThroughDate,
     int? colorValue,
     String? note,
     DateTime? updatedAt,
@@ -139,6 +158,10 @@ class Subscription extends SoftDeletable {
       amountCents: amountCents ?? this.amountCents,
       period: period ?? this.period,
       anchorDueDate: anchorDueDate ?? this.anchorDueDate,
+      // Like `deletedAt`, this reads `?? this` and so cannot clear a recorded
+      // payment. Clearing one means rebuilding the Subscription — which is
+      // what the editor does when it rewrites the anchor.
+      paidThroughDate: paidThroughDate ?? this.paidThroughDate,
       colorValue: colorValue ?? this.colorValue,
       note: note ?? this.note,
     );
@@ -220,6 +243,32 @@ DateTime nextDueDate(DateTime anchor, BillingPeriod period, DateTime from) {
       } while (due.isBefore(today));
       return due;
   }
+}
+
+/// The next due date on or after [from], skipping the occurrence
+/// [paidThrough] settles.
+///
+/// Shared by [Subscription.nextDue] and the editor's preview so the two can't
+/// disagree about what the radar will show.
+DateTime nextDueAfterPaid({
+  required DateTime anchor,
+  required BillingPeriod period,
+  required DateTime? paidThrough,
+  required DateTime from,
+}) {
+  final due = nextDueDate(anchor, period, from);
+  if (paidThrough == null) return due;
+  final paidDay =
+      DateTime(paidThrough.year, paidThrough.month, paidThrough.day);
+  if (due.isAfter(paidDay)) return due;
+  // Resolved one day past the settled occurrence rather than by adding a
+  // period to it: the series still runs off the untouched anchor, so a bill
+  // due the 31st stays on the 31st through every February it is paid in.
+  return nextDueDate(
+    anchor,
+    period,
+    DateTime(paidDay.year, paidDay.month, paidDay.day + 1),
+  );
 }
 
 DateTime _addMonths(DateTime date, int months) {

@@ -967,7 +967,7 @@ class _FolderTileState extends ConsumerState<_FolderTile> {
     // One colour for the icon and the outline: the border is how a folder
     // wears its colour at tile size, and a mismatch would read as two things.
     final folderColor = folder.colorValue != null
-        ? presetColor(folder.colorValue!)
+        ? presetColor(folder.colorValue!, context)
         : theme.colorScheme.primary;
     return ContextMenuRegion(
       key: _menuKey,
@@ -1091,7 +1091,7 @@ class _DeckTileState extends ConsumerState<_DeckTile> {
                     PhosphorIconsRegular.cardsThree,
                     size: 32,
                     color: deck.colorValue != null
-                        ? presetColor(deck.colorValue!)
+                        ? presetColor(deck.colorValue!, context)
                         : theme.colorScheme.secondary,
                   ),
                   Text(

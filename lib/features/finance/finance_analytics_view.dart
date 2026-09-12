@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -16,13 +17,55 @@ import 'package:voyager/features/finance/finance_category_modal.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
+import 'package:voyager/features/finance/finance_ui_prefs.dart';
 
-final _granularityProvider = StateProvider<CashFlowGranularity>(
-  (_) => CashFlowGranularity.monthly,
+/// Which bucket of the spending breakdown is being drilled into.
+///
+/// In memory only, and deliberately so: a focus is a question being asked
+/// right now ("what is inside food this month"), not a setting. Coming back to
+/// the tab in the same session keeps the answer on screen; relaunching the app
+/// into a chart quietly showing one slice of one bucket would not be a
+/// feature, it would be a chart that lies about what it is showing.
+sealed class BreakdownFocus {
+  const BreakdownFocus();
+}
+
+class BreakdownFocusNone extends BreakdownFocus {
+  const BreakdownFocusNone();
+}
+
+/// Drilled into the expenses whose *primary* tag is [tag].
+class BreakdownFocusTag extends BreakdownFocus {
+  const BreakdownFocusTag(this.tag);
+
+  final String tag;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BreakdownFocusTag && other.tag == tag;
+
+  @override
+  int get hashCode => Object.hash('tag', tag);
+}
+
+/// Drilled into a category-grouped slice: a category name, or one of
+/// [kUncategorizedLabel] / [kUntaggedLabel].
+class BreakdownFocusCategory extends BreakdownFocus {
+  const BreakdownFocusCategory(this.label);
+
+  final String label;
+
+  @override
+  bool operator ==(Object other) =>
+      other is BreakdownFocusCategory && other.label == label;
+
+  @override
+  int get hashCode => Object.hash('category', label);
+}
+
+final _breakdownFocusProvider = StateProvider<BreakdownFocus>(
+  (_) => const BreakdownFocusNone(),
 );
-
-/// True when the spending breakdown rolls tags up into categories.
-final _groupByCategoryProvider = StateProvider<bool>((_) => true);
 
 /// How many buckets the cash-flow dashboard shows, at every granularity.
 ///
@@ -157,7 +200,9 @@ class _CashFlowCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final granularity = ref.watch(_granularityProvider);
+    final granularity = ref.watch(
+      financeUiPrefsProvider.select((prefs) => prefs.cashFlowGranularity),
+    );
     final transactions =
         ref.watch(transactionsProvider).valueOrNull ?? const [];
     final weekStartsMonday =
@@ -209,7 +254,9 @@ class _CashFlowCard extends ConsumerWidget {
         selected: {granularity},
         onSelectionChanged: (set) {
           if (set.isNotEmpty) {
-            ref.read(_granularityProvider.notifier).state = set.first;
+            ref
+                .read(financeUiPrefsProvider.notifier)
+                .setCashFlowGranularity(set.first);
           }
         },
       ),
@@ -604,10 +651,21 @@ class _LegendDot extends StatelessWidget {
 class _BreakdownCard extends ConsumerWidget {
   const _BreakdownCard();
 
+  /// How many legend rows the chart lists.
+  ///
+  /// Twelve while focused rather than six: a drill-down is the one view where
+  /// the long tail is the point — "what else was in here" — and the focused
+  /// set is bounded by one bucket's worth of tags, not by the whole month's.
+  static const _legendRows = 6;
+  static const _focusedLegendRows = 12;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final groupByCategory = ref.watch(_groupByCategoryProvider);
+    final groupByCategory = ref.watch(
+      financeUiPrefsProvider.select((prefs) => prefs.breakdownGroupByCategory),
+    );
+    final focus = ref.watch(_breakdownFocusProvider);
     final transactions =
         ref.watch(transactionsProvider).valueOrNull ?? const [];
     final categories =
@@ -618,15 +676,56 @@ class _BreakdownCard extends ConsumerWidget {
     final from = DateTime(now.year, now.month, 1);
     final to = DateTime(now.year, now.month + 1, 1);
 
-    final slices = spendingBreakdown(
-      transactions,
-      from: from,
-      to: to,
-      categories: categories,
-      tagColors: tagColors,
-      groupByCategory: groupByCategory,
-    );
-    final total = slices.fold<int>(0, (s, x) => s + x.amountCents);
+    final List<BreakdownSlice> slices;
+    // What the donut's centre reads. Only in the unfocused and tag-focused
+    // charts is it the sum of the slices: a category drill-down counts a
+    // multi-tag expense under each of its tags, so its children can add up to
+    // more than the category cost. The exclusive parent total is the honest
+    // answer to "what did this bucket cost", so that is what the centre keeps.
+    final int total;
+    switch (focus) {
+      case BreakdownFocusNone():
+        slices = spendingBreakdown(
+          transactions,
+          from: from,
+          to: to,
+          categories: categories,
+          tagColors: tagColors,
+          groupByCategory: groupByCategory,
+        );
+        total = slices.fold<int>(0, (s, x) => s + x.amountCents);
+      case BreakdownFocusTag(:final tag):
+        final result = spendingBreakdownFocusedByTag(
+          transactions,
+          from: from,
+          to: to,
+          tag: tag,
+          tagColors: tagColors,
+        );
+        slices = result.slices;
+        total = result.parentCents;
+      case BreakdownFocusCategory(:final label):
+        final result = spendingBreakdownFocusedByCategory(
+          transactions,
+          from: from,
+          to: to,
+          categories: categories,
+          label: label,
+          tagColors: tagColors,
+        );
+        slices = result.slices;
+        total = result.parentCents;
+    }
+
+    final focused = focus is! BreakdownFocusNone;
+    final legendRows = focused ? _focusedLegendRows : _legendRows;
+    final legend = slices.take(legendRows);
+    // The tail the legend has no room for. It is still drawn in the pie and
+    // still names itself on hover, so the line is a pointer at it rather than
+    // an Other slice: folding the tail into one wedge would leave the chart
+    // with a segment that means nothing to click.
+    final tail = slices.skip(legendRows);
+    final tailCents = tail.fold<int>(0, (s, x) => s + x.amountCents);
 
     return _AnalyticsCard(
       icon: PhosphorIconsRegular.chartPieSlice,
@@ -663,20 +762,45 @@ class _BreakdownCard extends ConsumerWidget {
                 ],
                 selected: {groupByCategory},
                 onSelectionChanged: (set) {
-                  if (set.isNotEmpty) {
-                    ref.read(_groupByCategoryProvider.notifier).state =
-                        set.first;
-                  }
+                  if (set.isEmpty) return;
+                  // The focus belongs to the grouping it was taken from — a
+                  // category name means nothing to the tag chart — so the
+                  // switch drops it rather than carrying over a filter that
+                  // would match nothing.
+                  _clearFocus(ref);
+                  ref
+                      .read(financeUiPrefsProvider.notifier)
+                      .setBreakdownGroupByCategory(set.first);
                 },
               ),
             ],
           ),
+          if (focused) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _BreakdownFilterText(
+                label: _focusLabel(focus),
+                onClear: () => _clearFocus(ref),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           if (slices.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 28),
               child: Text(
-                'No spending recorded this month.',
+                // The unfocused wording would be a lie under a focus: the
+                // month may be full of spending, just none of it in here.
+                //
+                // Prose rather than the HLD's "$0.00 ring": now that a tag
+                // focus takes every expense carrying the tag, the only way
+                // into an empty bucket is one whose transactions went away
+                // under the focus — and an empty ring reading $0.00 says
+                // less about that than a sentence does.
+                focused
+                    ? 'Nothing left in this bucket.'
+                    : 'No spending recorded this month.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -686,61 +810,80 @@ class _BreakdownCard extends ConsumerWidget {
           else ...[
             SizedBox(
               height: 150,
-              child: _BreakdownPie(slices: slices, total: total),
+              child: _BreakdownPie(
+                slices: slices,
+                total: total,
+                onSliceTap: (index) =>
+                    _focusSlice(ref, focus, groupByCategory, slices[index]),
+              ),
             ),
             const SizedBox(height: 12),
-            for (final slice in slices.take(6))
+            for (final slice in legend)
+              _BreakdownLegendRow(
+                slice: slice,
+                total: total,
+                onTap: () =>
+                    _focusSlice(ref, focus, groupByCategory, slice),
+              ),
+            if (tail.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Color(slice.colorValue),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        // No leading `#`, on a tag or a category alike. In a
-                        // legend the marker is doing no work — nothing here is
-                        // a tag *reference* the way it is in prose — and it
-                        // made the two groupings of the same chart look like
-                        // two different kinds of thing.
-                        slice.label,
-                        style: theme.textTheme.labelMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Text(
-                      formatCents(slice.amountCents),
-                      style: theme.textTheme.labelMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 34,
-                      child: Text(
-                        total == 0
-                            ? '—'
-                            : '${((slice.amountCents / total) * 100).round()}%',
-                        textAlign: TextAlign.right,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.only(top: 6, left: 18),
+                child: Text(
+                  '+${tail.length} more  ·  ${formatCents(tailCents)}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
           ],
         ],
       ),
     );
+  }
+
+  String _focusLabel(BreakdownFocus focus) => switch (focus) {
+    BreakdownFocusTag(:final tag) => tag,
+    BreakdownFocusCategory(:final label) => label,
+    BreakdownFocusNone() => '',
+  };
+
+  void _clearFocus(WidgetRef ref) =>
+      ref.read(_breakdownFocusProvider.notifier).state =
+          const BreakdownFocusNone();
+
+  /// Re-roots the chart on the bucket that was clicked.
+  void _focusSlice(
+    WidgetRef ref,
+    BreakdownFocus focus,
+    bool groupByCategory,
+    BreakdownSlice slice,
+  ) {
+    final notifier = ref.read(_breakdownFocusProvider.notifier);
+    // Untagged has no tags to subdivide by, in either grouping, so it always
+    // resolves through the category path — which knows to draw it as one
+    // solid slice rather than looking for a tag by that name.
+    if (slice.label == kUntaggedLabel) {
+      notifier.state = const BreakdownFocusCategory(kUntaggedLabel);
+      return;
+    }
+    switch (focus) {
+      case BreakdownFocusNone():
+        notifier.state = groupByCategory
+            ? BreakdownFocusCategory(slice.label)
+            : BreakdownFocusTag(slice.label);
+      case BreakdownFocusTag():
+        // A co-tag slice: re-root onto it, the same as focusing it from the
+        // unfocused tag chart. One level at a time, no breadcrumb.
+        notifier.state = BreakdownFocusTag(slice.label);
+      case BreakdownFocusCategory():
+        // The children of a category are tags, and a tag is a thing the Tag
+        // chart knows how to draw — so the click moves the grouping with it
+        // rather than leaving the segmented control disagreeing with the pie.
+        ref
+            .read(financeUiPrefsProvider.notifier)
+            .setBreakdownGroupByCategory(false);
+        notifier.state = BreakdownFocusTag(slice.label);
+    }
   }
 
   Future<void> _showCategoryManager(BuildContext context, WidgetRef ref) async {
@@ -754,6 +897,115 @@ class _BreakdownCard extends ConsumerWidget {
   }
 }
 
+/// The "you are looking at one bucket" notice, and the way back out of it.
+///
+/// The whole line is the clear target — no separate ✕. It is the only chrome
+/// the focused chart adds, and a filter you can't see how to leave is worse
+/// than no filter at all.
+class _BreakdownFilterText extends StatelessWidget {
+  const _BreakdownFilterText({required this.label, required this.onClear});
+
+  final String label;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onClear,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          child: Text(
+            // No leading `#` on a tag, matching the legend below it.
+            'Filtering: $label',
+            style: theme.textTheme.labelSmall?.copyWith(color: accent),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One legend row: dot, label, amount, and share of the chart's centre total.
+class _BreakdownLegendRow extends StatelessWidget {
+  const _BreakdownLegendRow({
+    required this.slice,
+    required this.total,
+    required this.onTap,
+  });
+
+  final BreakdownSlice slice;
+  final int total;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: paletteColor(slice.colorValue, context),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              // No leading `#`, on a tag or a category alike. In a legend the
+              // marker is doing no work — nothing here is a tag *reference*
+              // the way it is in prose — and it made the two groupings of the
+              // same chart look like two different kinds of thing.
+              slice.label,
+              style: theme.textTheme.labelMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            formatCents(slice.amountCents),
+            style: theme.textTheme.labelMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 34,
+            child: Text(
+              // Against the centre total, so every row reads as a share of
+              // the bucket named there. Under a category focus these do not
+              // add to 100% — a two-tag expense is counted in both rows — but
+              // each row on its own is still a true share of the parent.
+              total == 0
+                  ? '—'
+                  : '${((slice.amountCents / total) * 100).round()}%',
+              textAlign: TextAlign.right,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: row,
+      ),
+    );
+  }
+}
+
 /// The donut, its running total, and the hover bubble that names whichever
 /// slice the pointer is on.
 ///
@@ -761,10 +1013,17 @@ class _BreakdownCard extends ConsumerWidget {
 /// slice is hovered rather than being swapped out, so the share the bubble
 /// quotes can be read against the whole it is a share *of*.
 class _BreakdownPie extends StatefulWidget {
-  const _BreakdownPie({required this.slices, required this.total});
+  const _BreakdownPie({
+    required this.slices,
+    required this.total,
+    this.onSliceTap,
+  });
 
   final List<BreakdownSlice> slices;
   final int total;
+
+  /// Called with the index of the slice a click landed on.
+  final ValueChanged<int>? onSliceTap;
 
   @override
   State<_BreakdownPie> createState() => _BreakdownPieState();
@@ -776,13 +1035,38 @@ class _BreakdownPieState extends State<_BreakdownPie> {
 
   int? _touchedIndex;
 
+  /// A drill-down replaces the slice list under a State that is kept — the
+  /// filter line is already on screen, so the children line up and the
+  /// element is reused — and an index taken against the old list then points
+  /// at the wrong slice, or past the end of the new one.
+  @override
+  void didUpdateWidget(covariant _BreakdownPie oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final touched = _touchedIndex;
+    if (touched == null) return;
+    if (touched >= widget.slices.length ||
+        widget.slices[touched].label != oldWidget.slices[touched].label) {
+      _touchedIndex = null;
+    }
+  }
+
   void _handleTouch(FlTouchEvent event, PieTouchResponse? response) {
-    final section = response?.touchedSection;
-    final next = !event.isInterestedForInteractions || section == null
-        ? null
-        : section.touchedSectionIndex;
-    final resolved =
-        next != null && next >= 0 && next < widget.slices.length ? next : null;
+    final index = response?.touchedSection?.touchedSectionIndex;
+    final onSlice = index != null && index >= 0 && index < widget.slices.length;
+
+    // A click, not the hover that precedes it: the callback fires for every
+    // pointer event the chart sees, and drilling in on hover would make the
+    // chart impossible to merely read.
+    //
+    // Resolved from the raw response rather than from the highlight below,
+    // because the two disagree off desktop: fl_chart calls a tap-up
+    // "uninteresting" everywhere except desktop and web, so reading the tap
+    // out of the highlight left slice clicks doing nothing at all on a phone.
+    if (event is FlTapUpEvent && onSlice) {
+      widget.onSliceTap?.call(index);
+    }
+
+    final resolved = onSlice && event.isInterestedForInteractions ? index : null;
     if (resolved == _touchedIndex) return;
     setState(() => _touchedIndex = resolved);
   }
@@ -812,6 +1096,10 @@ class _BreakdownPieState extends State<_BreakdownPie> {
     final slices = widget.slices;
     final total = widget.total;
     final touched = _touchedIndex;
+    // A bucket that cost nothing still gets a ring: fl_chart draws no sections
+    // at all when every value is zero, and an empty square under a "$0.00"
+    // reads as a chart that failed rather than as an answer.
+    final allZero = !slices.any((s) => s.amountCents > 0);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -825,8 +1113,8 @@ class _BreakdownPieState extends State<_BreakdownPie> {
             sections: [
               for (var i = 0; i < slices.length; i++)
                 PieChartSectionData(
-                  value: slices[i].amountCents.toDouble(),
-                  color: Color(slices[i].colorValue),
+                  value: allZero ? 1 : slices[i].amountCents.toDouble(),
+                  color: paletteColor(slices[i].colorValue, context),
                   // The hovered slice thickens outward a little, so the bubble
                   // and the wedge it describes are tied together without a
                   // second colour or a border to read.
@@ -873,7 +1161,10 @@ class _BreakdownPieState extends State<_BreakdownPie> {
                       periodLabel: slices[touched].label,
                       valueLabel:
                           '${formatCents(slices[touched].amountCents)}  ·  $share%',
-                      valueColor: Color(slices[touched].colorValue),
+                      valueColor: paletteColor(
+                        slices[touched].colorValue,
+                        context,
+                      ),
                     ),
                   );
                 },
@@ -947,7 +1238,7 @@ class _CategoryManager extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(
                   radius: 8,
-                  backgroundColor: Color(category.colorValue),
+                  backgroundColor: paletteColor(category.colorValue, context),
                 ),
                 title: Text(category.name,
                     style: theme.textTheme.bodyMedium),
@@ -1345,7 +1636,7 @@ class _AssetRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final color = Color(asset.colorValue);
+    final color = paletteColor(asset.colorValue, context);
     final value = valuation?.valueCents;
 
     return InkWell(

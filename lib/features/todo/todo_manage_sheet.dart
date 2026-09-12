@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
@@ -174,7 +175,10 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
                     ),
                     tileColor: Theme.of(context).colorScheme.surface,
                     leading: CircleAvatar(
-                      backgroundColor: Color(list.colorValue ?? 0xFF7C9EFF),
+                      backgroundColor: paletteColor(
+                        list.colorValue ?? 0xFF7C9EFF,
+                        context,
+                      ),
                     ),
                     title: Text(list.name),
                     subtitle: Text(

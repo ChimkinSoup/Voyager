@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:intl/intl.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 import 'package:fl_chart/fl_chart.dart';
@@ -807,7 +808,7 @@ class _SparklineRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
-    final color = Color(tracker.colorValue);
+    final color = paletteColor(tracker.colorValue, context);
     final promptService = ref.watch(periodicPromptServiceProvider);
     // Captured here rather than closed over: this is a [ConsumerWidget], so
     // its `ref` is its element and is only valid while that element is
@@ -1694,7 +1695,7 @@ class _HeatmapRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
-    final color = Color(tracker.colorValue);
+    final color = paletteColor(tracker.colorValue, context);
 
     return valuesAsync.when(
       data: (values) {
@@ -3318,7 +3319,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(widget.tracker.colorValue);
+    final accent = paletteColor(widget.tracker.colorValue, context);
     final cardRect = _cardRect ?? widget.anchorRect;
 
     return Stack(
@@ -3878,7 +3879,7 @@ class _HeatmapSquareState extends ConsumerState<_HeatmapSquare> {
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
       hasSingleIntValue: widget.hasSingleIntValue,
     );
-    final color = Color(widget.tracker.colorValue);
+    final color = paletteColor(widget.tracker.colorValue, context);
     final bgColor = intensity == 0
         ? color.withValues(alpha: 0.10)
         : color.withValues(alpha: 0.15 + 0.85 * intensity);
@@ -4252,7 +4253,7 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final color = Color(tracker.colorValue);
+    final color = paletteColor(tracker.colorValue, context);
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
 
     return AlertDialog(
@@ -4435,7 +4436,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
-    final color = Color(tracker.colorValue);
+    final color = paletteColor(tracker.colorValue, context);
 
     // The same widget the Calendar page uses for its own period navigation, so
     // the arrows (and the configurable letter keys) behave identically in both
@@ -4593,7 +4594,7 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
-    final color = Color(tracker.colorValue);
+    final color = paletteColor(tracker.colorValue, context);
     final promptService = ref.watch(periodicPromptServiceProvider);
     // Captured here rather than closed over: this is a [ConsumerWidget], so
     // its `ref` is its element and is only valid while that element is
@@ -5126,7 +5127,7 @@ class _HeatmapDayCellState extends ConsumerState<_HeatmapDayCell> {
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
       hasSingleIntValue: widget.index.hasSingleIntValue,
     );
-    final color = Color(widget.tracker.colorValue);
+    final color = paletteColor(widget.tracker.colorValue, context);
     final fade = inMonth ? 1.0 : 0.4;
     // Days spilling in from an adjacent month never take the tracker's colour
     // fill — they render as neutral (faded) cells so only the days that
@@ -5231,7 +5232,7 @@ class _HeatmapWeekBlockState extends ConsumerState<_HeatmapWeekBlock> {
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
       hasSingleIntValue: widget.index.hasSingleIntValue,
     );
-    final color = Color(widget.tracker.colorValue);
+    final color = paletteColor(widget.tracker.colorValue, context);
     final baseAlpha = value == null
         ? 0.05
         : intensity == 0
@@ -5442,7 +5443,7 @@ class _MonthGridBoxState extends ConsumerState<_MonthGridBox> {
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
       hasSingleIntValue: widget.index.hasSingleIntValue,
     );
-    final color = Color(widget.tracker.colorValue);
+    final color = paletteColor(widget.tracker.colorValue, context);
     final bgColor = value == null
         ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
         : intensity == 0
@@ -5632,7 +5633,7 @@ class _YearGridBoxState extends ConsumerState<_YearGridBox> {
       maxInPeriod: widget.maxInPeriod == 0 ? 1 : widget.maxInPeriod,
       hasSingleIntValue: widget.index.hasSingleIntValue,
     );
-    final color = Color(widget.tracker.colorValue);
+    final color = paletteColor(widget.tracker.colorValue, context);
     final bgColor = value == null
         ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
         : intensity == 0
@@ -5794,7 +5795,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   @override
   Widget build(BuildContext context) {
     final enumOptions = _enumOptions;
-    final accent = Color(_colorValue);
+    final accent = paletteColor(_colorValue, context);
     final dialog = AlertDialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),

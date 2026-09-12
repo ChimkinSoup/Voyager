@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 
 /// Flag anchored to the top-right corner of a text field.
 class JournalTitleCornerFlag extends StatelessWidget {
@@ -58,7 +59,7 @@ class JournalBookmarkFlag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(colorValue);
+    final color = paletteColor(colorValue, context);
     final shaded = Icon(
       PhosphorIconsFill.bookmarkSimple,
       size: size,
@@ -105,7 +106,7 @@ class ColorCornerFlag extends StatelessWidget {
     return CustomPaint(
       size: Size(size, size),
       painter: _CornerFlagPainter(
-        color: Color(colorValue),
+        color: paletteColor(colorValue, context),
         richColor: richColor,
       ),
     );

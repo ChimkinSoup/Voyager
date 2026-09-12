@@ -1,20 +1,10 @@
+import 'package:voyager/core/utils/journal_tags.dart' show kTagPaletteDark;
+
 /// Default preset colors seeded on first launch and after migration.
-const defaultColorPalette = <int>[
-  0xFF7C9EFF,
-  0xFF4CAF50,
-  0xFFFF7043,
-  0xFFAB47BC,
-  0xFF26C6DA,
-  0xFFFFCA28,
-  0xFFEF5350,
-  0xFF66BB6A,
-  0xFF5C6BC0,
-  0xFF8D6E63,
-  0xFFEC407A,
-  0xFF29B6F6,
-  0xFFFF9800,
-  0xFFE91E63,
-  0xFF00BCD4,
-  0xFFFFC107,
-  0xFF9C27B0,
-];
+///
+/// The curated tag ramp by reference, not by copy. `resolvePaletteColor`
+/// swaps a stored preset for its light twin *by index* into
+/// `kTagPaletteLight`, so a second copy of these fourteen values could drift
+/// out of alignment and quietly stop resolving. One app, one ramp — and
+/// splitting entity presets off later means splitting both lists together.
+const defaultColorPalette = kTagPaletteDark;

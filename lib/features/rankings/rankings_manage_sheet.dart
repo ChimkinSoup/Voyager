@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
@@ -186,7 +187,7 @@ class _CategoryList extends StatelessWidget {
                     leading: Icon(
                       rankingCategoryIcon(category.iconKey),
                       size: 18,
-                      color: Color(category.colorValue),
+                      color: paletteColor(category.colorValue, context),
                     ),
                     title: Text(
                       category.name,
@@ -294,7 +295,7 @@ class _CategorySettings extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final actions = RankingsActions(ref);
-    final accent = Color(category.colorValue);
+    final accent = paletteColor(category.colorValue, context);
 
     // Remounted by both the tab switch and picking another category, into
     // a route whose one page-storage slot the other panes also write —
@@ -505,7 +506,7 @@ class _UnitLabelFieldState extends ConsumerState<_UnitLabelField> {
       // rather than in a stack of compact fields, and 8px of vertical padding
       // reads as a slot rather than a field.
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      accentColor: Color(widget.category.colorValue),
+      accentColor: paletteColor(widget.category.colorValue, context),
       onSubmitted: _commit,
       onChanged: (_) {},
     );
@@ -659,7 +660,7 @@ class _TemplateEditor extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final accent = Color(category.colorValue);
+    final accent = paletteColor(category.colorValue, context);
     final active = _active;
     final orphans = _orphans;
     final overallPrecision = isParentTemplate

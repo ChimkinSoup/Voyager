@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
@@ -93,7 +94,7 @@ class _RankingsChildListState extends ConsumerState<RankingsChildList> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(widget.category.colorValue);
+    final accent = paletteColor(widget.category.colorValue, context);
     final view = ref.watch(rankingChildSortProvider);
     final ordered = sortRankingChildrenForView(
       widget.children,
@@ -583,7 +584,7 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Color(widget.category.colorValue);
+    final accent = paletteColor(widget.category.colorValue, context);
     final fields = widget.category.activeChildTemplate;
 
     final takesImages = widget.category.imagesOnChild && !widget.readOnly;

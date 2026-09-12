@@ -488,8 +488,15 @@ class _SuggestionList extends StatelessWidget {
                 height: itemHeight,
                 selected: i == selectedIndex,
                 accentColor: accentColor,
+                // Resolved for a tag with no stored row yet — which is most
+                // of them here, since this list is what you complete a brand
+                // new tag from. `tagColors` arrives already themed.
                 color: Color(
-                  tagColors[suggestions[i]] ?? colorForTag(suggestions[i]),
+                  tagColors[suggestions[i]] ??
+                      resolveTagColor(
+                        colorForTag(suggestions[i]),
+                        Theme.of(context).brightness,
+                      ),
                 ),
                 textStyle: textStyle,
                 onHover: () => onHover(i),

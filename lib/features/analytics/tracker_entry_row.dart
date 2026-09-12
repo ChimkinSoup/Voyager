@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
@@ -160,7 +161,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   Widget build(BuildContext context) {
     final valuesAsync = ref.watch(trackerValuesProvider(widget.tracker.id));
     final theme = Theme.of(context);
-    final accent = Color(widget.tracker.colorValue);
+    final accent = paletteColor(widget.tracker.colorValue, context);
 
     return valuesAsync.when(
       data: (values) {

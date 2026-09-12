@@ -17,6 +17,7 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
@@ -3534,7 +3535,7 @@ class _TodoScopeHeader extends StatelessWidget {
           value: list.id,
           label: list.name,
           count: '${stat.active} | ${stat.completed}',
-          color: Color(list.colorValue ?? primary.toARGB32()),
+          color: paletteColor(list.colorValue ?? primary.toARGB32(), context),
         ),
       );
     }

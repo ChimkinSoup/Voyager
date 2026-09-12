@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/media/widgets/media_fan_stack.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
@@ -85,7 +86,7 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
     final theme = Theme.of(context);
     final parent = widget.parent;
     final category = widget.category;
-    final accent = Color(category.colorValue);
+    final accent = paletteColor(category.colorValue, context);
     final progress = rankingChildProgress(widget.children);
 
     final row = Padding(

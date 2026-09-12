@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
@@ -90,7 +91,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
   bool get _canSave => _parsedCents != null && !_saving;
 
   Future<void> _pickDate(BuildContext buttonContext) async {
-    final accent = Color(widget.goal.colorValue);
+    final accent = paletteColor(widget.goal.colorValue, context);
     setState(() => _datePopoverOpen = true);
     final range = await showContextualPopover<DateTimeRange>(
       context: context,
@@ -158,7 +159,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = Color(widget.goal.colorValue);
+    final accent = paletteColor(widget.goal.colorValue, context);
     final allocations =
         ref.watch(goalAllocationsProvider).valueOrNull ?? const [];
     final allocated = goalAllocatedCents(allocations, widget.goal.id);
