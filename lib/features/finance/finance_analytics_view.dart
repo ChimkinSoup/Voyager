@@ -1778,10 +1778,11 @@ class _NetWorthChartState extends State<_NetWorthChart> {
 /// offsets need the bubble's real size, and the bubble is sized to whatever
 /// date and amount it happens to be showing.
 ///
-/// Nothing clamps the result into the plot: a bubble centred near either end
-/// overhangs the edge by up to half its width, and staying glued to the point
-/// is worth that — clamping makes the bubble drift off the point exactly where
-/// the series ends.
+/// Horizontally the bubble is clamped into the plot. Centred on a point at
+/// either end it overhangs by half its width, and the net-worth bubble's
+/// ledger/assets line made that wide enough to run past the window edge. The
+/// bubble slides off-centre there instead; it still sits directly above the
+/// point, just not centred on it.
 class _ChartBubbleLayout extends SingleChildLayoutDelegate {
   const _ChartBubbleLayout({required this.anchor});
 
@@ -1796,7 +1797,10 @@ class _ChartBubbleLayout extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) => Offset(
-    anchor.dx - childSize.width / 2,
+    (anchor.dx - childSize.width / 2).clamp(
+      0.0,
+      math.max(0.0, size.width - childSize.width),
+    ),
     anchor.dy - childSize.height - _gap,
   );
 
