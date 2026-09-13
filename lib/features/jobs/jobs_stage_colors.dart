@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/domain/models/job_models.dart';
 
 /// The colour a status is drawn in, wherever the page draws one: the header
@@ -10,21 +11,33 @@ import 'package:voyager/domain/models/job_models.dart';
 /// picked. Orphan statuses (no stage by that name any more) all share the
 /// muted fallback, which is what marks them apart at a glance.
 class JobStageColors {
-  JobStageColors({required List<JobStage> stages, required this.fallback})
-    : _stageByName = {for (final stage in stages) stage.name: stage},
-      _indexByName = {
-        for (var i = 0; i < stages.length; i++) stages[i].name: i,
-      },
-      _count = stages.length;
+  JobStageColors({
+    required List<JobStage> stages,
+    required this.fallback,
+    required this.brightness,
+  }) : _count = stages.length {
+    // The first stage with a name speaks for it, the same one the display
+    // order keeps (see `jobStatusDisplayOrder`).
+    for (var i = 0; i < stages.length; i++) {
+      _stageByName.putIfAbsent(stages[i].name, () => stages[i]);
+      _indexByName.putIfAbsent(stages[i].name, () => i);
+    }
+  }
 
   final Color fallback;
-  final Map<String, JobStage> _stageByName;
-  final Map<String, int> _indexByName;
+
+  /// The theme the colours are painted into. A picked colour is stored on the
+  /// dark ramp; see [resolvePaletteColor].
+  final Brightness brightness;
+  final _stageByName = <String, JobStage>{};
+  final _indexByName = <String, int>{};
   final int _count;
 
   Color of(String status) {
     final explicit = _stageByName[status]?.colorValue;
-    if (explicit != null) return Color(explicit);
+    if (explicit != null) {
+      return Color(resolvePaletteColor(explicit, brightness));
+    }
     final index = _indexByName[status];
     if (index == null || _count == 0) return fallback;
     return derivedColor(index, _count, fallback);

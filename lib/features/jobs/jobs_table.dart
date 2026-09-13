@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_providers.dart';
 
@@ -80,13 +81,14 @@ List<ContextMenuItem> jobApplicationMenuItems({
       label: 'Status',
       icon: PhosphorIconsRegular.flowArrow,
       children: [
-        for (final stage in stages)
+        // By name, once each: two stages sharing a name are one status.
+        for (final name in {for (final stage in stages) stage.name})
           ContextMenuItem(
-            label: stage.name,
-            trailing: stage.name == application.status
+            label: name,
+            trailing: name == application.status
                 ? const Icon(PhosphorIconsRegular.check, size: 13)
                 : null,
-            onTap: () => onChangeStatus(stage.name),
+            onTap: () => onChangeStatus(name),
           ),
       ],
     ),
@@ -337,7 +339,7 @@ class JobsTableRow extends StatelessWidget {
         );
       case JobColumn.dateApplied:
         return Text(
-          DateFormat.yMMMd().format(application.dateApplied.toLocal()),
+          DateFormat.yMMMd().format(jobDayKey(application.dateApplied)),
           style: muted,
           overflow: TextOverflow.ellipsis,
         );

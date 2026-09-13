@@ -219,4 +219,32 @@ void main() {
     // One handle per season, the same affordance the stage list has.
     expect(find.byType(ReorderableDragStartListener), findsNWidgets(2));
   });
+
+  // AUDIT.md: each drag was computed from the list as it last loaded, so a
+  // second drag before the reload overwrote the first.
+  testWidgets('a second quick drag builds on the first', (tester) async {
+    final container = await pumpJobsPage(tester, (repo) async {
+      await repo.upsertSeason(season('a', 'Fall 2025'));
+      await repo.upsertSeason(season('b', 'Winter 2026', sortOrder: 1));
+      await repo.upsertSeason(season('c', 'Fall 2026', sortOrder: 2));
+    });
+    await openSeasonsTab(tester);
+
+    void drag(int from, int to) => tester
+        .widget<ReorderableListView>(find.byType(ReorderableListView))
+        .onReorderItem!(from, to);
+
+    drag(2, 0); // c a b
+    await tester.pump();
+    expect(
+      tester.getTopLeft(find.text('Fall 2026')).dy,
+      lessThan(tester.getTopLeft(find.text('Fall 2025')).dy),
+      reason: 'the dragged order shows before the write lands',
+    );
+    drag(2, 0); // b c a
+    await tester.pumpAndSettle();
+
+    final seasons = await container.read(jobSeasonsProvider.future);
+    expect(seasons.map((s) => s.id), ['b', 'c', 'a']);
+  });
 }

@@ -126,8 +126,14 @@ List<String> jobStatusDisplayOrder(
   List<JobStage> stages,
   Iterable<JobApplication> applications,
 ) {
-  final ordered = [for (final stage in stages) stage.name];
-  final known = ordered.toSet();
+  // De-duped even though adding and renaming reject a taken name: sync can
+  // still land two stages with one name, and each would count every
+  // application on it.
+  final ordered = <String>[];
+  final known = <String>{};
+  for (final stage in stages) {
+    if (known.add(stage.name)) ordered.add(stage.name);
+  }
   for (final application in applications) {
     if (known.add(application.status)) ordered.add(application.status);
   }
@@ -163,10 +169,15 @@ int compareJobApplications(JobApplication a, JobApplication b) {
   return byDate != 0 ? byDate : b.createdAt.compareTo(a.createdAt);
 }
 
-/// The local calendar day [date] falls on, as a midnight-local instant.
+/// The calendar day [date] names, as a local-midnight [DateTime] — what the
+/// sparkline buckets on and what a date label formats.
+///
+/// A stored `dateApplied` (UTC midnight) keeps its own day rather than being
+/// shifted into this device's zone; any other instant, `DateTime.now()`
+/// included, is read locally. See [jobCalendarDay].
 DateTime jobDayKey(DateTime date) {
-  final local = date.isUtc ? date.toLocal() : date;
-  return DateTime(local.year, local.month, local.day);
+  final day = jobCalendarDay(date);
+  return DateTime(day.year, day.month, day.day);
 }
 
 /// Applications per day over the [days] calendar days ending today, bucketed on
@@ -183,14 +194,30 @@ List<({DateTime day, int count})> jobDailyCounts(
     final day = jobDayKey(application.dateApplied);
     counts[day] = (counts[day] ?? 0) + 1;
   }
-  return [
-    for (var i = days - 1; i >= 0; i--)
-      (
-        day: today.subtract(Duration(days: i)),
-        count: counts[today.subtract(Duration(days: i))] ?? 0,
-      ),
-  ];
+  // Stepped by calendar day, not by 24-hour Durations: across a DST change a
+  // Duration lands at 23:00 or 01:00 and matches no bucket.
+  final series = <({DateTime day, int count})>[];
+  for (var i = days - 1; i >= 0; i--) {
+    final day = DateTime(today.year, today.month, today.day - i);
+    series.add((day: day, count: counts[day] ?? 0));
+  }
+  return series;
 }
+
+/// Seeded stages and companies get ids derived from their names, so two
+/// devices that each seeded "Applied" hold the same document rather than two.
+String jobSeedStageId(String name) => 'seed-stage-${_seedSlug(name)}';
+String jobSeedCompanyId(String name) => 'seed-company-${_seedSlug(name)}';
+
+bool isJobSeedId(String id) => id.startsWith('seed-');
+
+/// The created/updated instant every seed carries, so untouched seeds on two
+/// devices are identical documents. A seed sits at version 0, which any real
+/// edit outranks.
+final jobSeedEpoch = DateTime.utc(2025, 1, 1);
+
+String _seedSlug(String name) =>
+    jobCompanyKey(name).replaceAll(RegExp(r'[^a-z0-9]+'), '-');
 
 /// Company keys the user has actually applied to, most recently first.
 ///

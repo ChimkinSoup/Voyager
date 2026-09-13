@@ -1314,9 +1314,14 @@ final jobSeasonsProvider = FutureProvider<List<JobSeason>>((ref) async {
   return ref.watch(jobRepositoryProvider).listSeasons();
 });
 
-/// One application's status timeline, for the editor panel.
+/// One application's status timeline, for the editor panel. Auto-disposed:
+/// only the open panel shows one, and a cached entry for every application
+/// ever opened would also be re-queried on every sync tick.
 final jobStatusEventsProvider =
-    FutureProvider.family<List<JobStatusEvent>, String>((ref, id) async {
+    FutureProvider.autoDispose.family<List<JobStatusEvent>, String>((
+      ref,
+      id,
+    ) async {
       return ref.watch(jobRepositoryProvider).listStatusEvents(id);
     });
 

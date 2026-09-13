@@ -1,4 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyager/app/providers.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
+
+/// [jobRecentCompanyKeys] over every application, worked out once per change
+/// to the list rather than on every build of whatever shows a company field.
+final jobRecentCompanyKeysProvider = Provider<List<String>>((ref) {
+  final applications = ref.watch(jobApplicationsProvider).valueOrNull;
+  return applications == null ? const [] : jobRecentCompanyKeys(applications);
+});
 
 /// Search box contents (§6.1). Page-local: applications are deliberately not
 /// in the global Search page's corpora.

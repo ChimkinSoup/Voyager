@@ -199,11 +199,11 @@ void main() {
       final added = await repo.ensureCompany('Google');
       await repo.upsertCompany(added!.copyWith(categoryId: category.id));
 
-      final orphaned = await repo.softDeleteCategory(category.id);
+      final result = await repo.softDeleteCategory(category.id);
 
       expect(await repo.listCategories(), isEmpty);
-      expect(orphaned, hasLength(1));
-      expect(orphaned.single.categoryId, isNull);
+      expect(result.orphaned, hasLength(1));
+      expect(result.orphaned.single.categoryId, isNull);
       final stored = await repo.listCompanies();
       expect(stored.single.categoryId, isNull);
     });
@@ -221,10 +221,10 @@ void main() {
       await repo.upsertSeason(season);
       final archived = await addApplication(seasonIds: [season.id]);
 
-      final released = await repo.softDeleteSeason(season.id);
+      final result = await repo.softDeleteSeason(season.id);
 
       expect(await repo.listSeasons(), isEmpty);
-      expect(released, hasLength(1));
+      expect(result.released, hasLength(1));
       final stored = await repo.getApplication(archived.id);
       expect(stored!.seasonIds, isEmpty);
     });

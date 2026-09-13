@@ -1066,10 +1066,14 @@ Map<String, dynamic> jobApplicationToFirestore(JobApplication application) => {
   'company': application.company,
   'title': application.title,
   'status': application.status,
-  'dateApplied': _dateToFirestoreRequired(application.dateApplied),
+  'dateApplied': _dateToFirestoreRequired(
+    jobCalendarDay(application.dateApplied),
+  ),
   'applicationUrl': application.applicationUrl,
   'notes': application.notes,
   'seasonIds': application.seasonIds,
+  'fieldUpdatedAt': _fieldStampsToFirestore(application.fieldUpdatedAt),
+  'fieldStampsVersion': application.version,
   'createdAt': _dateToFirestoreRequired(application.createdAt),
   'updatedAt': _dateToFirestoreRequired(application.updatedAt),
   'version': application.version,
@@ -1094,32 +1098,50 @@ JobApplication mergeJobApplicationFromRemote(
   Map<String, dynamic> data,
   String id, {
   JobApplication? local,
+}) => resolveJobApplicationFromRemote(data, id, local: local).merged;
+
+/// Merges a remote application into [local] field by field when the remote
+/// carries stamps it can vouch for, and falls back to whole-document
+/// version-wins when it does not — the same scheme as
+/// [resolveRankingParentFromRemote].
+///
+/// Whole-document merging kept only one side of two concurrent edits: a note
+/// typed on one device and a status moved on another could not both survive.
+/// `deletedAt` stays document-level: whichever side wins on version decides
+/// whether the application exists.
+RankingMergeResult<JobApplication> resolveJobApplicationFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  JobApplication? local,
 }) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
-  if (local != null &&
-      !remoteVersionWins(
+  final remoteStamps = _fieldStampsFromRemote(data);
+  final remoteWins =
+      local == null ||
+      remoteVersionWins(
         remoteVersion: remoteVersion,
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
-      )) {
-    return local;
+      );
+  if (local != null && remoteStamps == null && !remoteWins) {
+    return (merged: local, localWon: false);
   }
 
   // `seasonIds` and the two optional text fields fall back to empty/null rather
   // than to the local value: taking an application out of every season and
   // clearing a URL are both expressed as the field going away, and inheriting
   // the local value would make either change impossible to sync.
-  return JobApplication(
+  final remoteDate = parseFirestoreDate(data['dateApplied']);
+  final remote = JobApplication(
     id: id,
     company: data['company'] as String? ?? local?.company ?? '',
     title: data['title'] as String? ?? local?.title ?? '',
     status: data['status'] as String? ?? local?.status ?? '',
-    dateApplied:
-        parseFirestoreDate(data['dateApplied']) ??
-        local?.dateApplied ??
-        remoteUpdated,
+    dateApplied: remoteDate == null
+        ? (local?.dateApplied ?? jobCalendarDay(remoteUpdated))
+        : jobCalendarDay(remoteDate),
     applicationUrl: data['applicationUrl'] as String?,
     notes: data['notes'] as String?,
     seasonIds: _jobSeasonIdsFromFirestore(data),
@@ -1130,7 +1152,54 @@ JobApplication mergeJobApplicationFromRemote(
     updatedAt: remoteUpdated,
     version: remoteVersion,
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+    fieldUpdatedAt: remoteStamps ?? const {},
   );
+  if (local == null || remoteStamps == null) {
+    return (merged: remote, localWon: false);
+  }
+
+  final pick = _RankingFieldPicker(
+    localStamps: local.fieldUpdatedAt,
+    localUpdated: local.updatedAt,
+    localValues: jobApplicationStampValues(local),
+    remoteStamps: remote.fieldUpdatedAt,
+    remoteUpdated: remote.updatedAt,
+    remoteValues: jobApplicationStampValues(remote),
+  );
+  final company = pick('company', local.company, remote.company);
+  final title = pick('title', local.title, remote.title);
+  final status = pick('status', local.status, remote.status);
+  final dateApplied = pick(
+    'dateApplied',
+    local.dateApplied,
+    remote.dateApplied,
+  );
+  final applicationUrl = pick(
+    'applicationUrl',
+    local.applicationUrl,
+    remote.applicationUrl,
+  );
+  final notes = pick('notes', local.notes, remote.notes);
+  final seasonIds = pick('seasonIds', local.seasonIds, remote.seasonIds);
+  // Keeping the local verdict on deletion is also a state only this device
+  // holds, so it has to go back up the same way a kept field does.
+  if (!remoteWins && local.deletedAt != remote.deletedAt) pick.localWon = true;
+  final merged = JobApplication(
+    id: id,
+    company: company,
+    title: title,
+    status: status,
+    dateApplied: dateApplied,
+    applicationUrl: applicationUrl,
+    notes: notes,
+    seasonIds: seasonIds,
+    createdAt: remoteWins ? remote.createdAt : local.createdAt,
+    deletedAt: remoteWins ? remote.deletedAt : local.deletedAt,
+    updatedAt: pick.updatedAt,
+    version: pick.version(local.version, remote.version),
+    fieldUpdatedAt: pick.stamps,
+  );
+  return (merged: merged, localWon: pick.localWon);
 }
 
 Map<String, dynamic> jobStatusEventToFirestore(JobStatusEvent event) => {

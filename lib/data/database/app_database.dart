@@ -8,7 +8,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/utils/calendar_days.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
+import 'package:voyager/domain/models/job_models.dart' show jobCalendarDay;
 import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/settings_models.dart' show defaultPetalColor;
@@ -1127,6 +1130,10 @@ class JobApplicationsTable extends Table {
   /// Empty array for "no season". Replaced the single `season_id` column in
   /// migration 99 — an application can sit in more than one cycle at once.
   TextColumn get seasonIdsJson => text().withDefault(const Constant('[]'))();
+
+  /// `stampKey -> ISO instant`, one per field — see `JobFieldStamps`.
+  TextColumn get fieldUpdatedAtJson =>
+      text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1459,7 +1466,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 110;
+  int get schemaVersion => 111;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2688,8 +2695,179 @@ class AppDatabase extends _$AppDatabase {
           rankingChildrenTable.fieldUpdatedAtJson,
         );
       }
+      if (from < 111) {
+        // No backfill, as for rankings: a missing stamp already reads as the
+        // row's updatedAt.
+        await _addColumnIfNotExists(
+          migrator,
+          'job_applications_table',
+          jobApplicationsTable,
+          jobApplicationsTable.fieldUpdatedAtJson,
+        );
+        await _moveJobDatesAppliedToUtcDays();
+        await _rekeyJobSeeds('job_stages_table', {
+          for (final name in jobSeedStages) name: jobSeedStageId(name),
+        });
+        await _rekeyJobSeeds('job_companies_table', {
+          for (final name in jobSeedCompanies) name: jobSeedCompanyId(name),
+        });
+        for (final table in [
+          'job_stages_table',
+          'job_seasons_table',
+          'job_categories_table',
+        ]) {
+          await _renumberTiedJobSortOrders(table);
+        }
+      }
     },
   );
+
+  /// Rewrites every application's `date_applied` from the instant of a local
+  /// midnight to UTC midnight of the same calendar day — see `jobCalendarDay`.
+  ///
+  /// The day is read off the stored text rather than through this device's
+  /// zone wherever the text carries it: `2026-09-09T00:00:00.000 -04:00` is
+  /// the writer's own wall clock, and converting it here would shift it on a
+  /// device that has since moved zones. Only the `…Z` form, which has lost
+  /// the writer's zone, is read locally.
+  ///
+  /// Written through the typed API (see the Drift date storage note) and at a
+  /// bumped version, so the repaired value outranks the old one on the next
+  /// pull.
+  Future<void> _moveJobDatesAppliedToUtcDays() async {
+    final rows = await customSelect(
+      'SELECT id, date_applied, version FROM job_applications_table',
+    ).get();
+    for (final row in rows) {
+      final raw = row.data['date_applied'];
+      if (raw is! String) continue;
+      final DateTime day;
+      if (raw.endsWith('Z')) {
+        final parsed = DateTime.tryParse(raw);
+        if (parsed == null) continue;
+        day = jobCalendarDay(parsed);
+      } else {
+        final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(raw);
+        if (match == null) continue;
+        day = DateTime.utc(
+          int.parse(match.group(1)!),
+          int.parse(match.group(2)!),
+          int.parse(match.group(3)!),
+        );
+      }
+      if (raw == day.toIso8601String()) continue;
+      await (update(jobApplicationsTable)
+            ..where((t) => t.id.equals(row.read<String>('id'))))
+          .write(
+            JobApplicationsTableCompanion(
+              dateApplied: Value(day),
+              version: Value(row.read<int>('version') + 1),
+            ),
+          );
+    }
+  }
+
+  /// Moves the rows seeding created onto the name-derived ids seeding uses
+  /// now (`jobSeedStageId` / `jobSeedCompanyId`), so a seed this device holds
+  /// and the same seed on another device are one document.
+  ///
+  /// A seed row is told apart from one the user added by its `created_at`:
+  /// seeding writes every row of a run at one instant, and no two rows the
+  /// user adds share one.
+  ///
+  /// Only rows still at version 0 move. A row at a later version has been
+  /// pushed under its old id, and moving it would bring that document back as
+  /// a duplicate; its seed id gets a tombstone instead, so per-id seeding does
+  /// not add a second copy. A tombstone at version 0 moves like a live row —
+  /// it is what keeps a deleted seed from coming back.
+  Future<void> _rekeyJobSeeds(
+    String table,
+    Map<String, String> seedIdByName,
+  ) async {
+    final rows = await customSelect(
+      'SELECT id, name, created_at, version, deleted_at FROM $table',
+    ).get();
+    final idByKey = {
+      for (final entry in seedIdByName.entries)
+        jobCompanyKey(entry.key): (name: entry.key, id: entry.value),
+    };
+    final existingIds = {for (final row in rows) row.read<String>('id')};
+    final instantCounts = <String, int>{};
+    for (final row in rows) {
+      if (!idByKey.containsKey(jobCompanyKey(row.read<String>('name')))) {
+        continue;
+      }
+      final instant = row.read<String>('created_at');
+      instantCounts[instant] = (instantCounts[instant] ?? 0) + 1;
+    }
+
+    final seedRowsById = <String, List<QueryRow>>{};
+    for (final row in rows) {
+      final seed = idByKey[jobCompanyKey(row.read<String>('name'))];
+      if (seed == null) continue;
+      if ((instantCounts[row.read<String>('created_at')] ?? 0) < 2) continue;
+      seedRowsById.putIfAbsent(seed.id, () => []).add(row);
+    }
+
+    for (final MapEntry(key: seedId, value: seedRows)
+        in seedRowsById.entries) {
+      if (existingIds.contains(seedId)) continue;
+      final untouched = [
+        for (final row in seedRows)
+          if (row.read<int>('version') == 0) row,
+      ]..sort((a, b) {
+          final aLive = a.data['deleted_at'] == null ? 0 : 1;
+          final bLive = b.data['deleted_at'] == null ? 0 : 1;
+          return aLive - bLive;
+        });
+      if (untouched.isEmpty) {
+        await customInsert(
+          'INSERT INTO $table (id, name, created_at, updated_at, version, '
+          'deleted_at) VALUES (?, ?, ?, ?, 0, ?)',
+          variables: [
+            Variable.withString(seedId),
+            Variable.withString(seedRows.first.read<String>('name')),
+            Variable.withString(jobSeedEpoch.toIso8601String()),
+            Variable.withString(jobSeedEpoch.toIso8601String()),
+            Variable.withString(jobSeedEpoch.toIso8601String()),
+          ],
+        );
+        continue;
+      }
+      await customStatement('UPDATE $table SET id = ? WHERE id = ?', [
+        seedId,
+        untouched.first.read<String>('id'),
+      ]);
+      // A second untouched live copy of the same seed was never pushed, so
+      // it can simply go.
+      for (final extra in untouched.skip(1)) {
+        if (extra.data['deleted_at'] != null) continue;
+        await customStatement('DELETE FROM $table WHERE id = ?', [
+          extra.read<String>('id'),
+        ]);
+      }
+    }
+  }
+
+  /// Renumbers the live rows of [table] 0..n-1 when two of them share a
+  /// `sort_order`, keeping their current order with `created_at` breaking the
+  /// tie. SQLite leaves the order of tied rows undefined, so they could swap
+  /// between reads. Bumps the version of every row it moves.
+  Future<void> _renumberTiedJobSortOrders(String table) async {
+    final rows = await customSelect(
+      'SELECT id, sort_order, version FROM $table WHERE deleted_at IS NULL '
+      'ORDER BY sort_order, created_at',
+    ).get();
+    final orders = [for (final row in rows) row.read<int>('sort_order')];
+    if (orders.toSet().length == orders.length) return;
+    for (var i = 0; i < rows.length; i++) {
+      if (orders[i] == i) continue;
+      await customStatement(
+        'UPDATE $table SET sort_order = ?, version = ? WHERE id = ?',
+        [i, rows[i].read<int>('version') + 1, rows[i].read<String>('id')],
+      );
+    }
+  }
 
   /// Rewrites the two half-step booleans a category used to carry into the
   /// precision names that replaced them: on became `half`, off became

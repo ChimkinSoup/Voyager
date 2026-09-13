@@ -18,7 +18,9 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/jobs/jobs_charts.dart';
+import 'package:voyager/features/jobs/jobs_edit_panel.dart';
 import 'package:voyager/features/jobs/jobs_page.dart';
+import 'package:voyager/features/jobs/jobs_providers.dart';
 import 'package:voyager/features/jobs/jobs_table.dart';
 
 import 'fakes/fake_weather_api_client.dart';
@@ -909,5 +911,87 @@ void main() {
     expect(find.byTooltip('Copy LinkedIn URL'), findsNothing);
     expect(find.byTooltip('Copy GitHub URL'), findsNothing);
     expect(find.byTooltip('Copy Portfolio URL'), findsNothing);
+  });
+
+  // AUDIT.md: the panel held the row it opened with and wrote it whole, so a
+  // status set from the table was reverted by the panel's next keystroke.
+  testWidgets('a status set from the table survives an edit in the open panel', (
+    tester,
+  ) async {
+    final harness = await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        await repo.upsertApplication(
+          makeApplication(company: 'Datadog', title: 'SWE'),
+        );
+      },
+    );
+    await tester.tap(find.text('SWE'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(JobsTableRow),
+        matching: find.text('Applied'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Interview').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(JobsEditPanel),
+        matching: find.text('Interview'),
+      ),
+      findsOneWidget,
+      reason: 'the panel adopts the change rather than showing the old status',
+    );
+
+    final notes = find
+        .descendant(
+          of: find.byType(JobsEditPanel),
+          matching: find.byType(EditableText),
+        )
+        .last;
+    await tester.enterText(notes, 'Recruiter call Friday');
+    // Past the panel's 400ms autosave debounce.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    final stored = (await harness.container.read(
+      jobApplicationsProvider.future,
+    )).single;
+    expect(stored.status, 'Interview');
+    expect(stored.notes, 'Recruiter call Friday');
+  });
+
+  // AUDIT.md: each toggle closed over the settings the popover opened with, so
+  // the second one undid the first.
+  testWidgets('two columns toggled from one open menu both stay hidden', (
+    tester,
+  ) async {
+    final harness = await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        await repo.upsertApplication(
+          makeApplication(company: 'Datadog', title: 'SWE'),
+        );
+      },
+    );
+
+    await tester.tap(find.byTooltip('Columns'));
+    await tester.pumpAndSettle();
+    // The menu's entries, not the table header's labels of the same name.
+    await tester.tap(find.text('Notes').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Season').last);
+    await tester.pumpAndSettle();
+
+    final settings = harness.container.read(settingsProvider).value!;
+    expect(
+      settings.jobsHiddenColumns.toSet(),
+      {JobColumn.notes.id, JobColumn.season.id},
+    );
   });
 }
