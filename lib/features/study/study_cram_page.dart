@@ -9,6 +9,7 @@ import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/domain/services/study_srs_engine.dart';
 import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/features/study/study_actions.dart';
@@ -129,8 +130,12 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   void _syncCards(List<StudyCard> cards) {
     final held = _cardsById;
     if (held == null) {
-      _cardsById = {for (final c in cards) c.id: c};
-      _bucket0 = cards.map((c) => c.id).toList();
+      final ordered = orderStudyCramQueue(
+        cards,
+        random: ref.read(sessionShuffleRandomProvider),
+      );
+      _cardsById = {for (final c in ordered) c.id: c};
+      _bucket0 = [for (final c in ordered) c.id];
       return;
     }
     // Same reason a review session re-reads its queue: these cards are a

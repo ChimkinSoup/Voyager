@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:voyager/domain/models/study_models.dart';
 
 const double kStudyBaseEase = 2.5;
@@ -131,6 +133,39 @@ List<StudyCard> sortStudyCardsByMastery(List<StudyCard> cards) {
     return a.createdAt.compareTo(b.createdAt);
   });
   return sorted;
+}
+
+/// Review-session order: earlier local due days lead, and cards that share a
+/// calendar day are shuffled so a brand-new deck does not play back in
+/// creation order. Call once when the session opens; mid-session refreshes
+/// should keep positions.
+List<StudyCard> orderStudyReviewQueue(
+  List<StudyCard> cards, {
+  Random? random,
+}) {
+  final rng = random ?? Random();
+  final byDay = <DateTime, List<StudyCard>>{};
+  for (final card in cards) {
+    final day = _dateOnly(card.dueAt.toLocal());
+    (byDay[day] ??= []).add(card);
+  }
+  final days = byDay.keys.toList()..sort();
+  final ordered = <StudyCard>[];
+  for (final day in days) {
+    final bucket = byDay[day]!;
+    bucket.shuffle(rng);
+    ordered.addAll(bucket);
+  }
+  return ordered;
+}
+
+/// Cram-session order: a full shuffle. Cram ignores due dates, so there is
+/// nothing to bucket on — just break the provider / creation order once at
+/// open.
+List<StudyCard> orderStudyCramQueue(List<StudyCard> cards, {Random? random}) {
+  final ordered = [...cards];
+  ordered.shuffle(random ?? Random());
+  return ordered;
 }
 
 /// Renders the button-preview text shown above each grading button, e.g.

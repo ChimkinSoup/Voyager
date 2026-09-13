@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
@@ -96,22 +98,57 @@ int leetCodeDaysUntilDue(LeetCodeProblem problem, {DateTime? now}) {
 
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-/// The problems due for review right now, earliest due date first — the queue
-/// a Study session works through.
+/// Local calendar day used to bucket a problem in the review queue. Never-
+/// reviewed problems have a null [LeetCodeProblem.dueAt], so they fall back
+/// to [LeetCodeProblem.solvedAt] — older solve days still lead, same-day
+/// solves get shuffled together.
+DateTime _reviewQueueDay(LeetCodeProblem problem) =>
+    _dateOnly((problem.dueAt ?? problem.solvedAt).toLocal());
+
+/// Review-session order: earlier local due (or solve) days lead, and problems
+/// that share a calendar day are shuffled. Call once when the session opens.
+List<LeetCodeProblem> orderLeetCodeReviewQueue(
+  List<LeetCodeProblem> problems, {
+  Random? random,
+}) {
+  final rng = random ?? Random();
+  final byDay = <DateTime, List<LeetCodeProblem>>{};
+  for (final problem in problems) {
+    final day = _reviewQueueDay(problem);
+    (byDay[day] ??= []).add(problem);
+  }
+  final days = byDay.keys.toList()..sort();
+  final ordered = <LeetCodeProblem>[];
+  for (final day in days) {
+    final bucket = byDay[day]!;
+    bucket.shuffle(rng);
+    ordered.addAll(bucket);
+  }
+  return ordered;
+}
+
+/// Cram-session order: a full shuffle. Cram ignores due dates.
+List<LeetCodeProblem> orderLeetCodeCramQueue(
+  List<LeetCodeProblem> problems, {
+  Random? random,
+}) {
+  final ordered = [...problems];
+  ordered.shuffle(random ?? Random());
+  return ordered;
+}
+
+/// The problems due for review right now, ordered for a Study session —
+/// earlier local due days first, shuffled within each day.
 List<LeetCodeProblem> dueLeetCodeProblems(
   Iterable<LeetCodeProblem> problems, {
   DateTime? now,
+  Random? random,
 }) {
   final effectiveNow = now ?? DateTime.now().toUtc();
-  final due = problems.where((p) => p.isDue(now: effectiveNow)).toList();
-  // Never-reviewed problems share a null due date, so they fall back to the
-  // order they were solved in — oldest first, since that's the one you're
-  // least likely to still remember.
-  due.sort((a, b) {
-    final byDue = (a.dueAt ?? a.solvedAt).compareTo(b.dueAt ?? b.solvedAt);
-    return byDue != 0 ? byDue : a.solvedAt.compareTo(b.solvedAt);
-  });
-  return due;
+  return orderLeetCodeReviewQueue([
+    for (final p in problems)
+      if (p.isDue(now: effectiveNow)) p,
+  ], random: random);
 }
 
 int _masteryRank(LeetCodeProblem problem) {

@@ -24,6 +24,8 @@ import 'package:voyager/features/leetcode/leetcode_session_page.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_grading_row.dart';
 
+import 'fakes/input_order_random.dart';
+
 class _StubLeetCodeRepository implements LeetCodeRepository {
   _StubLeetCodeRepository(this.problems);
 
@@ -112,6 +114,7 @@ Future<MemoryLeetCodeScratchDraftStore> _pumpSession(
             AppSettings(leetCodeEnableScratchCode: scratchEnabled),
           ),
         ),
+        noSessionShuffle,
       ],
       child: MaterialApp(home: page),
     ),

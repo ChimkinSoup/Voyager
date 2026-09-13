@@ -3,6 +3,8 @@
 // when each card happens to fall due — and it has to stay put on a day when
 // nothing is studied.
 
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
@@ -24,6 +26,17 @@ StudyCard _card(
   interval: interval,
   reviewCount: reviewCount,
   dueAt: _epoch.add(dueIn),
+);
+
+StudyCard _dueOn(String id, DateTime localDay, {int hour = 12}) => _card(
+  id,
+).copyWith(
+  dueAt: DateTime(
+    localDay.year,
+    localDay.month,
+    localDay.day,
+    hour,
+  ).toUtc(),
 );
 
 void main() {
@@ -81,6 +94,85 @@ void main() {
       final input = [_card('b', interval: 9, reviewCount: 2), _card('a')];
       sortStudyCardsByMastery(input);
       expect(input.map((c) => c.id), ['b', 'a']);
+    });
+  });
+
+  group('orderStudyReviewQueue', () {
+    test('earlier local due days lead later ones', () {
+      final older = _dueOn('older', DateTime(2026, 6, 1));
+      final newer = _dueOn('newer', DateTime(2026, 6, 3));
+      final middle = _dueOn('middle', DateTime(2026, 6, 2));
+
+      final ordered = orderStudyReviewQueue(
+        [newer, older, middle],
+        random: Random(1),
+      );
+
+      expect(ordered.map((c) => c.id), ['older', 'middle', 'newer']);
+    });
+
+    test('same-day cards are shuffled, not left in input order', () {
+      final cards = [
+        for (var i = 0; i < 8; i++)
+          _dueOn('c$i', DateTime(2026, 6, 1), hour: i),
+      ];
+
+      final ordered = orderStudyReviewQueue(cards, random: Random(1));
+
+      expect(ordered.map((c) => c.id).toSet(), cards.map((c) => c.id).toSet());
+      expect(
+        ordered.map((c) => c.id),
+        isNot(cards.map((c) => c.id).toList()),
+      );
+    });
+
+    test('shuffle stays inside each due day', () {
+      final day1 = [
+        _dueOn('a', DateTime(2026, 6, 1), hour: 8),
+        _dueOn('b', DateTime(2026, 6, 1), hour: 20),
+      ];
+      final day2 = [
+        _dueOn('c', DateTime(2026, 6, 2), hour: 9),
+        _dueOn('d', DateTime(2026, 6, 2), hour: 15),
+      ];
+
+      final ordered = orderStudyReviewQueue(
+        [...day2, ...day1],
+        random: Random(7),
+      );
+      final ids = ordered.map((c) => c.id).toList();
+
+      expect(ids.take(2).toSet(), {'a', 'b'});
+      expect(ids.skip(2).toSet(), {'c', 'd'});
+    });
+
+    test('leaves the input list alone', () {
+      final input = [
+        _dueOn('b', DateTime(2026, 6, 2)),
+        _dueOn('a', DateTime(2026, 6, 1)),
+      ];
+      orderStudyReviewQueue(input, random: Random(1));
+      expect(input.map((c) => c.id), ['b', 'a']);
+    });
+  });
+
+  group('orderStudyCramQueue', () {
+    test('returns a shuffled permutation', () {
+      final cards = [for (var i = 0; i < 8; i++) _card('c$i')];
+
+      final ordered = orderStudyCramQueue(cards, random: Random(1));
+
+      expect(ordered.map((c) => c.id).toSet(), cards.map((c) => c.id).toSet());
+      expect(
+        ordered.map((c) => c.id),
+        isNot(cards.map((c) => c.id).toList()),
+      );
+    });
+
+    test('leaves the input list alone', () {
+      final input = [_card('a'), _card('b'), _card('c')];
+      orderStudyCramQueue(input, random: Random(1));
+      expect(input.map((c) => c.id), ['a', 'b', 'c']);
     });
   });
 

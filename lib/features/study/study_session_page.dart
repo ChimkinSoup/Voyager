@@ -89,13 +89,10 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     final queue = _queue;
     if (queue == null) {
       final now = DateTime.now().toUtc();
-      _queue =
-          allCards
-              .where(
-                (c) => widget.cardIds.contains(c.id) && !c.dueAt.isAfter(now),
-              )
-              .toList()
-            ..sort((a, b) => a.dueAt.compareTo(b.dueAt));
+      _queue = orderStudyReviewQueue([
+        for (final c in allCards)
+          if (widget.cardIds.contains(c.id) && !c.dueAt.isAfter(now)) c,
+      ], random: ref.read(sessionShuffleRandomProvider));
       return;
     }
     // The queue is a snapshot taken when the session opened. An edit, reverse

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show Random;
 import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1035,6 +1036,10 @@ final studyAllCardsProvider = FutureProvider<List<StudyCard>>((ref) {
   ref.keepAlive();
   return ref.watch(studyRepositoryProvider).getAllCards(includeDeleted: false);
 });
+
+/// The randomness a study or LeetCode session shuffles its queue with when it
+/// opens. Tests override it to pin the deck's order.
+final sessionShuffleRandomProvider = Provider<Random>((ref) => Random());
 
 /// Every live deck in the library, flattened across folders — the names a
 /// linked card's source label and a placeholder's title read live.

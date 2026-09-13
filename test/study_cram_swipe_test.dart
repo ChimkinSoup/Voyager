@@ -13,6 +13,8 @@ import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/features/study/study_cram_page.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 
+import 'fakes/input_order_random.dart';
+
 const _deckId = 'cram-deck';
 
 List<StudyCard> _cards(int count) {
@@ -54,6 +56,7 @@ Future<void> _pumpCramPage(
     overrides: [
       studyAllCardsProvider.overrideWith((ref) async => _cards(cards)),
       studyAllDecksProvider.overrideWith((ref) async => const []),
+      noSessionShuffle,
     ],
   );
   addTearDown(container.dispose);

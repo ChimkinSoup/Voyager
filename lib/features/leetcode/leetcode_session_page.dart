@@ -92,6 +92,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
     if (queue == null) {
       _queue = dueLeetCodeProblems(
         all.where((p) => widget.problemIds.contains(p.id)),
+        random: ref.read(sessionShuffleRandomProvider),
       );
       return;
     }
