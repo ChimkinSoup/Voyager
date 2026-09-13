@@ -45,6 +45,22 @@ final rankingChildSortProvider =
       (ref) => (sort: RankingChildSort.saved, fieldId: null),
     );
 
+/// The rescales running now, by [rankingRescaleKey].
+///
+/// Held in a provider rather than on the sheet's widgets: switching tabs
+/// remounts them mid-rescale, and a fresh widget would offer the pills again
+/// while the category still reads the old scale.
+final rankingRescalesInFlightProvider = StateProvider<Set<String>>(
+  (ref) => const {},
+);
+
+/// [fieldId] null is the overall score ([isParent] says whose).
+String rankingRescaleKey(
+  String categoryId, {
+  String? fieldId,
+  bool isParent = true,
+}) => '$categoryId/${fieldId ?? (isParent ? 'parent' : 'child')}';
+
 /// Every rankings document id that has at least one image on it, parents and
 /// children alike.
 ///

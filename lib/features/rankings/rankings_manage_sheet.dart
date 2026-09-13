@@ -18,6 +18,7 @@ import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/rankings/rankings_category_dialog.dart';
 import 'package:voyager/features/rankings/rankings_icons.dart';
+import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
 
 /// Everything the page configures: the categories themselves, their scales and
@@ -32,12 +33,15 @@ Future<void> showRankingsManageSheet(
   WidgetRef ref, {
   String? initialCategoryId,
 }) async {
+  // Captured before the dialog: removing the last category inside it swaps the
+  // widget [ref] belongs to for the empty state, and that ref throws on Done.
+  final container = ProviderScope.containerOf(ref.context, listen: false);
   await showVoyagerDialog<void>(
     context: context,
     builder: (context) =>
         _RankingsManageDialog(initialCategoryId: initialCategoryId),
   );
-  invalidateRankingProvidersFrom(ref);
+  invalidateRankingProvidersIn(container);
 }
 
 enum _ManageTab { settings, parentTemplate, childTemplate }
@@ -124,7 +128,7 @@ class _RankingsManageDialogState extends ConsumerState<_RankingsManageDialog> {
       name: result.name,
       colorValue: result.color,
       iconKey: result.iconKey,
-      sortOrder: categories.length,
+      sortOrder: rankingNextCategorySortOrder(categories),
     );
     if (mounted) setState(() => _selectedId = created.id);
   }
@@ -296,6 +300,7 @@ class _CategorySettings extends ConsumerWidget {
     final theme = Theme.of(context);
     final actions = RankingsActions(ref);
     final accent = paletteColor(category.colorValue, context);
+    final rescaling = ref.watch(rankingRescalesInFlightProvider);
 
     // Remounted by both the tab switch and picking another category, into
     // a route whose one page-storage slot the other panes also write —
@@ -353,7 +358,13 @@ class _CategorySettings extends ConsumerWidget {
             ),
             if (category.childUnitsEnabled) ...[
               const SizedBox(height: 8),
-              _UnitLabelField(category: category),
+              // Keyed by category: unkeyed, picking another category reused the
+              // field's controller, still holding the previous category's label
+              // — and Enter wrote it onto this one.
+              _UnitLabelField(
+                key: ValueKey('unit-label-${category.id}'),
+                category: category,
+              ),
             ],
             const Divider(height: 24),
             _Toggle(
@@ -376,8 +387,14 @@ class _CategorySettings extends ConsumerWidget {
               label: 'Entry scale',
               scoreMax: category.parentScoreMax,
               accent: accent,
-              onChanged: (value) =>
-                  actions.saveCategory(category.copyWith(parentScoreMax: value)),
+              busy: rescaling.contains(rankingRescaleKey(category.id)),
+              onChanged: (value) => _rescaleOverall(
+                context,
+                ref,
+                category,
+                isParent: true,
+                scoreMax: value,
+              ),
             ),
             _PrecisionRow(
               label: 'Entry step',
@@ -398,8 +415,16 @@ class _CategorySettings extends ConsumerWidget {
                 label: '${category.childUnitLabel} scale',
                 scoreMax: category.childScoreMax,
                 accent: accent,
-                onChanged: (value) =>
-                    actions.saveCategory(category.copyWith(childScoreMax: value)),
+                busy: rescaling.contains(
+                  rankingRescaleKey(category.id, isParent: false),
+                ),
+                onChanged: (value) => _rescaleOverall(
+                  context,
+                  ref,
+                  category,
+                  isParent: false,
+                  scoreMax: value,
+                ),
               ),
               _PrecisionRow(
                 label: '${category.childUnitLabel} step',
@@ -473,7 +498,7 @@ class _CategorySettings extends ConsumerWidget {
 /// The child-unit label gets its own field because it renames things all over
 /// the page — the list's section header, the row's count, the fields tab.
 class _UnitLabelField extends ConsumerStatefulWidget {
-  const _UnitLabelField({required this.category});
+  const _UnitLabelField({super.key, required this.category});
 
   final RankingCategory category;
 
@@ -590,12 +615,16 @@ class _ScaleRow extends StatelessWidget {
     required this.scoreMax,
     required this.accent,
     required this.onChanged,
+    this.busy = false,
   });
 
   final String label;
   final int scoreMax;
   final Color accent;
   final ValueChanged<int> onChanged;
+
+  /// A rescale of this scale is running; the pills do nothing until it lands.
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -612,7 +641,7 @@ class _ScaleRow extends StatelessWidget {
               accentColor: accent,
               fillWhenActive: true,
               isActive: scoreMax == option,
-              onTap: () => onChanged(option),
+              onTap: busy ? () {} : () => onChanged(option),
             ),
             const SizedBox(width: 6),
           ],
@@ -663,6 +692,7 @@ class _TemplateEditor extends ConsumerWidget {
     final accent = paletteColor(category.colorValue, context);
     final active = _active;
     final orphans = _orphans;
+    final rescaling = ref.watch(rankingRescalesInFlightProvider);
     final overallPrecision = isParentTemplate
         ? category.parentScorePrecision
         : category.childScorePrecision;
@@ -740,6 +770,9 @@ class _TemplateEditor extends ConsumerWidget {
                         else
                           field,
                     ]),
+                    rescaling: rescaling.contains(
+                      rankingRescaleKey(category.id, fieldId: active[index].id),
+                    ),
                     onRescale: (scoreMax) =>
                         _rescale(context, ref, active[index], scoreMax),
                     // Removed rather than dropped: the field leaves the active
@@ -851,13 +884,87 @@ class _TemplateEditor extends ConsumerWidget {
                 'the new scale.',
       confirmLabel: 'Rescale',
     );
-    if (!confirmed) return;
-    await RankingsActions(ref).rescaleTemplateField(
-      category,
-      field,
-      scoreMax: scoreMax,
-      isParentTemplate: isParentTemplate,
+    if (!confirmed || !context.mounted) return;
+    await _runRescale(
+      ref,
+      rankingRescaleKey(category.id, fieldId: field.id),
+      (actions) => actions.rescaleTemplateField(
+        category.id,
+        field.id,
+        scoreMax: scoreMax,
+        isParentTemplate: isParentTemplate,
+      ),
     );
+  }
+}
+
+/// Moves an entry's or a unit's overall score onto the other scale, carrying
+/// every stored score with it — the same warning and the same one-transaction
+/// rewrite a template field gets.
+Future<void> _rescaleOverall(
+  BuildContext context,
+  WidgetRef ref,
+  RankingCategory category, {
+  required bool isParent,
+  required int scoreMax,
+}) async {
+  final fromMax = isParent ? category.parentScoreMax : category.childScoreMax;
+  if (fromMax == scoreMax) return;
+  final whose = isParent
+      ? 'entry'
+      : category.childUnitLabel.toLowerCase();
+  final confirmed = await showConfirmDialog(
+    context,
+    title: 'Rescale ${isParent ? 'entry' : category.childUnitLabel} scores?',
+    message: scoreMax < fromMax
+        ? 'Every $whose overall score already recorded will be halved and '
+              'rounded to the nearest step. This cannot be undone exactly.'
+        : 'Every $whose overall score already recorded will be doubled onto '
+              'the new scale.',
+    confirmLabel: 'Rescale',
+  );
+  if (!confirmed || !context.mounted) return;
+  final container = ProviderScope.containerOf(context, listen: false);
+  await _runRescale(
+    ref,
+    rankingRescaleKey(category.id, isParent: isParent),
+    (actions) => actions.rescaleOverall(
+      category.id,
+      scoreMax: scoreMax,
+      isParent: isParent,
+    ),
+  );
+  // A range narrowed on the old scale means something else on the new one.
+  if (isParent &&
+      container.read(rankingActiveCategoryProvider)?.id == category.id) {
+    final filters = container.read(rankingFiltersProvider);
+    if (filters.hasScoreRange) {
+      container.read(rankingFiltersProvider.notifier).state = filters.copyWith(
+        clearScoreMin: true,
+        clearScoreMax: true,
+      );
+    }
+  }
+}
+
+/// Runs [rescale] unless the same one is already running, and holds its key
+/// in [rankingRescalesInFlightProvider] until it lands so the pills that start
+/// it stay inert meanwhile.
+Future<void> _runRescale(
+  WidgetRef ref,
+  String key,
+  Future<void> Function(RankingsActions actions) rescale,
+) async {
+  // Off the container: the pane that started this may be remounted by a tab
+  // switch before it finishes.
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+  final inFlight = container.read(rankingRescalesInFlightProvider.notifier);
+  if (inFlight.state.contains(key)) return;
+  inFlight.state = {...inFlight.state, key};
+  try {
+    await rescale(RankingsActions.detached(container));
+  } finally {
+    inFlight.state = {...inFlight.state}..remove(key);
   }
 }
 
@@ -874,9 +981,13 @@ class _FieldRow extends StatelessWidget {
     required this.onToggleNotes,
     required this.onRescale,
     required this.onRemove,
+    this.rescaling = false,
   });
 
   final int index;
+
+  /// This field's rescale is running; its scale pills do nothing until then.
+  final bool rescaling;
   final RankingTemplateField field;
   final Color accent;
 
@@ -927,7 +1038,7 @@ class _FieldRow extends StatelessWidget {
               accentColor: accent,
               fillWhenActive: true,
               isActive: field.scoreMax == option,
-              onTap: () => onRescale(option),
+              onTap: rescaling ? () {} : () => onRescale(option),
             ),
             const SizedBox(width: 4),
           ],

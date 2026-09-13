@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
@@ -1644,5 +1645,260 @@ void main() {
 
     await select(longId);
     expect(sectionsPosition().pixels, 400);
+  });
+
+  group('audit regressions', () {
+    Finder inPanel(Finder matching) =>
+        find.descendant(of: find.byType(RankingsEditPanel), matching: matching);
+
+    Finder rowTitle(String title) => find.descendant(
+      of: find.byType(RankingsRow),
+      matching: find.text(title),
+    );
+
+    /// Pumps frame by frame to [total] — past a 220ms close, short of the
+    /// 400ms debounce — so a save seen afterwards can only have come from the
+    /// flush in `dispose`, not from the debounce timer firing first.
+    Future<void> pumpShortOfDebounce(
+      WidgetTester tester, {
+      Duration total = const Duration(milliseconds: 300),
+    }) async {
+      const frame = Duration(milliseconds: 20);
+      for (var elapsed = Duration.zero; elapsed < total; elapsed += frame) {
+        await tester.pump(frame);
+      }
+    }
+
+    testWidgets('notes typed just before moving to another entry are kept', (
+      tester,
+    ) async {
+      late String parentId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory(childUnitsEnabled: false);
+          await repo.upsertCategory(category);
+          final parent = makeParent(categoryId: category.id, title: 'Andor');
+          parentId = parent.id;
+          await repo.upsertParent(parent);
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Severance'),
+          );
+        },
+      );
+
+      await tester.tap(rowTitle('Andor'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        inPanel(find.byType(TagHighlightedTextField)),
+        'late thought',
+      );
+      await tester.pump();
+      // The panel is keyed by entry, so this unmounts Andor's at once.
+      await tester.tap(rowTitle('Severance'));
+      await pumpShortOfDebounce(tester);
+
+      expect(tester.takeException(), isNull);
+      final saved = await DriftRankingRepository(harness.db).getParent(parentId);
+      expect(saved!.notes, 'late thought');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a unit note typed and closed with Done is kept', (
+      tester,
+    ) async {
+      late String childId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          final parent = makeParent(categoryId: category.id, title: 'Andor');
+          await repo.upsertParent(parent);
+          final child = makeChild(parentId: parent.id, name: 'ep 1');
+          childId = child.id;
+          await repo.upsertChild(child);
+        },
+      );
+
+      await tester.tap(rowTitle('Andor'));
+      await tester.pumpAndSettle();
+      await tester.tap(inPanel(find.text('ep 1')));
+      await tester.pumpAndSettle();
+
+      final dialog = find.byType(AlertDialog);
+      await tester.enterText(
+        find.descendant(
+          of: dialog,
+          matching: find.byType(TagHighlightedTextField),
+        ),
+        'cold open',
+      );
+      await tester.pump();
+      await tester.tap(find.descendant(of: dialog, matching: find.text('Done')));
+      await pumpShortOfDebounce(tester);
+
+      expect(dialog, findsNothing);
+      expect(tester.takeException(), isNull);
+      final saved = await DriftRankingRepository(harness.db).getChild(childId);
+      expect(saved!.notes, 'cold open');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a field note and an unentered tag survive leaving the entry', (
+      tester,
+    ) async {
+      late String parentId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory(childUnitsEnabled: false).copyWith(
+            parentTemplate: const [
+              RankingTemplateField(id: 'plot', label: 'Plot', sortOrder: 0),
+            ],
+          );
+          await repo.upsertCategory(category);
+          final parent = makeParent(categoryId: category.id, title: 'Andor');
+          parentId = parent.id;
+          await repo.upsertParent(parent);
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Severance'),
+          );
+        },
+      );
+
+      await tester.tap(rowTitle('Andor'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(RankingFieldEditor),
+          matching: find.byType(TagHighlightedTextField),
+        ),
+        'tight',
+      );
+      await tester.pump();
+      await tester.enterText(find.byType(RankingTagsField), 'spy');
+      await tester.pump();
+      await tester.tap(rowTitle('Severance'));
+      await pumpShortOfDebounce(tester);
+
+      expect(tester.takeException(), isNull);
+      final saved = await DriftRankingRepository(harness.db).getParent(parentId);
+      expect(saved!.fieldValues['plot']?.notes, 'tight');
+      expect(saved.tags, ['spy']);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('deleting the open entry takes the panel with it', (
+      tester,
+    ) async {
+      await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Andor'),
+          );
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Severance'),
+          );
+        },
+      );
+
+      await tester.tap(rowTitle('Severance'));
+      await tester.pumpAndSettle();
+      final narrowed = tester.getSize(find.byType(RankingsRow).first).width;
+
+      await tester.tap(rowTitle('Severance'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(rowTitle('Severance'), findsNothing);
+      // The list takes its width back rather than staying narrowed beside a
+      // blank column with no close button in it.
+      final full = tester.getSize(find.byType(RankingsRow).first).width;
+      expect(full, greaterThan(narrowed + rankingsEditPanelWidth / 2));
+    });
+
+    testWidgets('switching categories drops the filters, the search and the '
+        'unit sort', (tester) async {
+      late String foodId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final shows = makeCategory(parentScoreMax: 10);
+          await repo.upsertCategory(shows);
+          await repo.upsertParent(
+            makeParent(
+              categoryId: shows.id,
+              title: 'Severance',
+              score: 8,
+              tags: ['scifi'],
+            ),
+          );
+          final food = makeCategory(name: 'Restaurants');
+          foodId = food.id;
+          await repo.upsertCategory(food);
+          await repo.upsertParent(
+            makeParent(categoryId: food.id, title: 'Noodle bar', score: 4),
+          );
+        },
+      );
+      final container = harness.container;
+
+      await tester.enterText(find.byType(TextField).first, 'sev');
+      container.read(rankingFiltersProvider.notifier).state =
+          const RankingFilters(scoreMin: 7, scoreMax: 9.5, tag: 'scifi');
+      container.read(rankingChildSortProvider.notifier).state = (
+        sort: RankingChildSort.customField,
+        fieldId: 'plot',
+      );
+      await tester.pumpAndSettle();
+
+      container.read(rankingSelectedCategoryProvider.notifier).state = foodId;
+      await tester.pumpAndSettle();
+
+      expect(container.read(rankingFiltersProvider).isEmpty, isTrue);
+      expect(container.read(rankingSearchQueryProvider), isEmpty);
+      expect(
+        container.read(rankingChildSortProvider).sort,
+        RankingChildSort.saved,
+      );
+      expect(rowTitle('Noodle bar'), findsOneWidget);
+
+      // A range out of 10 carried into a 5-point slider used to trip its
+      // asserts the moment the menu opened.
+      await tester.tap(find.text('Filter'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(RangeSlider), findsOneWidget);
+    });
+
+    testWidgets('a range left past a lowered scale still opens the menu', (
+      tester,
+    ) async {
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Andor', score: 4),
+          );
+        },
+      );
+      harness.container.read(rankingFiltersProvider.notifier).state =
+          const RankingFilters(scoreMin: 7, scoreMax: 9.5);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Filtered'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(RangeSlider), findsOneWidget);
+    });
   });
 }

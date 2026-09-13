@@ -86,12 +86,37 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
     _panelController.value = 0;
   }
 
+  /// Everything that narrows or arranges one category's list belongs to that
+  /// category, and goes when it does.
+  ///
+  /// Carried across, a tag filter emptied the next category with no box left
+  /// to untick, a score range out of 10 handed a 5-point slider values past
+  /// its max, and a field sort hid every unit's drag handle.
+  void _resetOnCategoryChange() {
+    ref.read(rankingFiltersProvider.notifier).state = RankingFilters.none;
+    ref.read(rankingSearchQueryProvider.notifier).state = '';
+    _searchController.clear();
+    ref.read(rankingChildSortProvider.notifier).state = (
+      sort: RankingChildSort.saved,
+      fieldId: null,
+    );
+    _dropPanelOnCategoryChange();
+  }
+
   @override
   Widget build(BuildContext context) {
-    ref.listen<String?>(
-      rankingSelectedCategoryProvider,
-      (_, _) => _dropPanelOnCategoryChange(),
-    );
+    // The resolved category rather than the selection: archiving or deleting
+    // the first category changes what is shown while the selection stays null.
+    // Deferred, because a provider written during build throws.
+    ref.listen<String?>(rankingActiveCategoryProvider.select((c) => c?.id), (
+      previous,
+      next,
+    ) {
+      if (previous == next) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _resetOnCategoryChange();
+      });
+    });
     final categoriesAsync = ref.watch(rankingCategoriesProvider);
     final categories = categoriesAsync.valueOrNull ?? const <RankingCategory>[];
     final active = [
@@ -164,7 +189,7 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
       name: result.name,
       colorValue: result.color,
       iconKey: result.iconKey,
-      sortOrder: categories.length,
+      sortOrder: rankingNextCategorySortOrder(categories),
     );
     if (!mounted) return;
     ref.read(rankingSelectedCategoryProvider.notifier).state = created.id;
@@ -215,6 +240,16 @@ class _CategoryBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The open entry left the list — deleted from its row menu, or by a sync
+    // pull — and took the panel's only close button with it, leaving the list
+    // narrowed beside a blank column. Only a settled read counts: a new entry's
+    // panel opens before the reload that carries the entry has landed.
+    ref.listen(rankingParentsProvider(category.id), (_, next) {
+      final selectedId = ref.read(rankingSelectedParentProvider);
+      if (selectedId == null || next.isLoading || !next.hasValue) return;
+      if (next.requireValue.any((parent) => parent.id == selectedId)) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) => onClosePanel());
+    });
     // The lists alone, not the load state around them: a refresh first
     // announces itself carrying the old list, and watching the whole value
     // rebuilt every row for that, then again a frame later for the new one.
@@ -638,9 +673,9 @@ class _Row extends ConsumerWidget {
       rank: rank,
       showRankSlot: showRankSlot,
       onTap: () => onOpen(parent.id),
-      onToggleStar: () => RankingsActions(ref).toggleStar(parent),
+      onToggleStar: () => RankingsActions(ref).toggleStar(parent.id),
       onScoreChanged: (score) =>
-          RankingsActions(ref).setOverallScore(parent, score),
+          RankingsActions(ref).setOverallScore(parent.id, score),
       // Set, never toggled (§6.4): re-clicking the active tag leaves the
       // filter alone rather than dropping it out from under the pointer.
       onTagTapped: (tag) {
@@ -675,7 +710,7 @@ class _Row extends ConsumerWidget {
           icon: parent.starred
               ? PhosphorIconsFill.star
               : PhosphorIconsRegular.star,
-          onTap: () => actions.toggleStar(parent),
+          onTap: () => actions.toggleStar(parent.id),
         ),
       if (!readOnly && !parent.isRanked)
         ContextMenuItem(
@@ -690,7 +725,7 @@ class _Row extends ConsumerWidget {
                 trailing: parent.status == status
                     ? const Icon(PhosphorIconsRegular.check, size: 13)
                     : null,
-                onTap: () => actions.setStatus(parent, status),
+                onTap: () => actions.setStatus(parent.id, status),
               ),
           ],
         ),
@@ -698,7 +733,7 @@ class _Row extends ConsumerWidget {
         ContextMenuItem(
           label: 'Clear score',
           icon: PhosphorIconsRegular.eraser,
-          onTap: () => actions.setOverallScore(parent, null),
+          onTap: () => actions.setOverallScore(parent.id, null),
         ),
       if (hasImages)
         ContextMenuItem(

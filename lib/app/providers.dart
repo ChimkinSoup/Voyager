@@ -1361,16 +1361,31 @@ final rankingChildrenByParentProvider =
       );
       final byParent = <String, List<RankingChild>>{};
       if (parentIds.isEmpty) return byParent;
+      // One query for the category, grouped here, rather than one per entry:
+      // a 400-entry category cost 400 sequential reads.
       for (final parentId in parentIds.split(',')) {
-        byParent[parentId] = await repository.listChildren(parentId);
+        byParent[parentId] = <RankingChild>[];
+      }
+      for (final child in await repository.listChildrenOfCategory(categoryId)) {
+        byParent[child.parentId]?.add(child);
       }
       return byParent;
     });
+
+/// How many live entries each category holds, for the category picker.
+///
+/// One grouped count rather than watching every category's entry list: those
+/// lists are kept alive, so opening the picker once used to hold every
+/// category's entries in memory for the rest of the session.
+final rankingParentCountsProvider = FutureProvider.autoDispose<Map<String, int>>(
+  (ref) => ref.watch(rankingRepositoryProvider).countParentsByCategory(),
+);
 
 final _rankingDataProviders = <ProviderOrFamily>[
   rankingCategoriesProvider,
   rankingParentsProvider,
   rankingChildrenByParentProvider,
+  rankingParentCountsProvider,
 ];
 
 void invalidateRankingProviders(Ref ref) {

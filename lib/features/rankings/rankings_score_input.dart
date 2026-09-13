@@ -246,7 +246,8 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
   void _onTextChanged() {
     if (_syncingText || !_textFocus.hasFocus) return;
     final parsed = double.tryParse(_textController.text.trim());
-    if (parsed == null) return;
+    // A pasted run of 400 digits parses to infinity.
+    if (parsed == null || !parsed.isFinite) return;
     _setValue(parsed, updateText: false);
     _syncWheels(animate: false);
   }

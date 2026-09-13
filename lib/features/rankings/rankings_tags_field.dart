@@ -93,6 +93,14 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
   @override
   void dispose() {
     _focusNode.removeListener(_handleFocusChanged);
+    // What blur would have committed (§5.2). The panel unmounting takes the
+    // listener away before the node ever reports losing focus, so a tag typed
+    // without Enter vanished with the panel. No setState: this is dispose.
+    final typed = _controller.text;
+    if (widget.enabled && typed.trim().isNotEmpty) {
+      final wanted = normalizeRankingTags([..._tags, ...typed.split(',')]);
+      if (wanted.length != _tags.length) widget.onChanged(wanted);
+    }
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
