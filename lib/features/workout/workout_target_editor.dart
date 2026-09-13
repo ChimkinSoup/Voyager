@@ -28,6 +28,7 @@ Future<ExerciseTarget?> showExerciseTargetEditor(
 }) {
   return showVoyagerSheet<ExerciseTarget>(
     context: context,
+    kind: VoyagerSheetKind.editor,
     builder: (ctx) => _ExerciseTargetEditor(exercise: exercise, unit: unit),
   );
 }
@@ -79,6 +80,8 @@ class _ExerciseTargetEditorState extends State<_ExerciseTargetEditor> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (voyagerSheetDrags(VoyagerSheetKind.editor))
+            const VoyagerSheetHandle(),
           Text(
             widget.exercise.name,
             style: theme.textTheme.titleLarge,

@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// How much a [GlassSurface] separates itself from what's behind it.
@@ -142,13 +143,61 @@ class GlassSurface extends StatelessWidget {
   }
 }
 
+/// What a bottom sheet holds, which decides whether it drags to dismiss
+/// (VOYAGER_SHEET_DISMISS_HLD.md §4).
+///
+/// Pick [editor] when the sheet is mostly typing, editing or dialling, when
+/// flinging it away mid-task would lose painful work, or when it has vertical
+/// gestures inside (wheels, code selection, nested scroll). Otherwise [sheet].
+/// Unsure, near full-screen, with Save and Close: [editor].
+enum VoyagerSheetKind {
+  /// Dense create/edit work. Drags to dismiss on Android only: on desktop a
+  /// mouse drag or a text selection that strays down would throw the work away.
+  editor,
+
+  /// A short form, picker, inspector or menu. Drags to dismiss everywhere.
+  sheet,
+}
+
+/// Whether a sheet of [kind] drags to dismiss on this platform. A grab handle
+/// is shown exactly when this is true — it is the affordance for the drag, not
+/// decoration.
+bool voyagerSheetDrags(VoyagerSheetKind kind) =>
+    kind == VoyagerSheetKind.sheet || isAndroid;
+
+/// The 36×4 grab pill at the top of a sheet. Only show it where
+/// [voyagerSheetDrags] is true.
+class VoyagerSheetHandle extends StatelessWidget {
+  const VoyagerSheetHandle({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 36,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Theme.of(
+            context,
+          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+}
+
 /// Opens [builder] in the app's standard bottom sheet chrome: rounded top
 /// corners, translucent [GlassWeight.heavy] material background instead of a
-/// solid fill, drag-to-dismiss with velocity (built into [showModalBottomSheet]
-/// via [enableDrag]).
+/// solid fill, drag-to-dismiss with velocity (built into [showModalBottomSheet])
+/// where [kind] allows it — see [voyagerSheetDrags]. [enableDrag] overrides the
+/// kind; prefer the kind.
 Future<T?> showVoyagerSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
+  VoyagerSheetKind kind = VoyagerSheetKind.sheet,
+  bool? enableDrag,
   BorderRadius borderRadius = const BorderRadius.vertical(
     top: Radius.circular(20),
   ),
@@ -159,6 +208,7 @@ Future<T?> showVoyagerSheet<T>({
     useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
+    enableDrag: enableDrag ?? voyagerSheetDrags(kind),
     backgroundColor: Colors.transparent,
     elevation: 0,
     constraints: constraints,
