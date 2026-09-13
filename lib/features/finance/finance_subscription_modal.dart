@@ -35,6 +35,7 @@ Future<void> showSubscriptionModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    kind: VoyagerSheetKind.editor,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _SubscriptionModal(container: container, existing: existing),
@@ -260,18 +261,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              if (voyagerSheetDrags(VoyagerSheetKind.editor))
+                const VoyagerSheetHandle(),
               Row(
                 children: [
                   Text(

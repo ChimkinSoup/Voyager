@@ -71,6 +71,7 @@ Future<void> showFinanceTransactionModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    kind: VoyagerSheetKind.editor,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _TransactionModal(
@@ -335,18 +336,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Handle
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              if (voyagerSheetDrags(VoyagerSheetKind.editor))
+                const VoyagerSheetHandle(),
               // Header row
               Row(
                 children: [

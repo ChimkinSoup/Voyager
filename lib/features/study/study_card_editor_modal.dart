@@ -40,6 +40,7 @@ Future<void> showStudyCardEditorModal(
 }) {
   return showVoyagerSheet<void>(
     context: context,
+    kind: VoyagerSheetKind.editor,
     // The opener's own container, not a child one: a scope that owned its
     // container would dispose it as the sheet closes — which the trash button
     // does straight after deleting — and the toast's Undo reads through it.
@@ -248,19 +249,8 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant.withValues(
-                      alpha: 0.3,
-                    ),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              if (voyagerSheetDrags(VoyagerSheetKind.editor))
+                const VoyagerSheetHandle(),
               Row(
                 children: [
                   Text(

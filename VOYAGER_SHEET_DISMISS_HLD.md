@@ -4,7 +4,7 @@ When `showVoyagerSheet` (and the rare direct `showModalBottomSheet`) should allo
 
 Related: `lib/core/widgets/glass_surface.dart` (`showVoyagerSheet`), `lib/features/leetcode/leetcode_track_modal.dart`, `lib/features/study/study_card_editor_modal.dart`, `lib/features/study/study_import_text_modal.dart`, `lib/features/workout/workout_target_editor.dart`, `lib/features/finance/finance_transaction_modal.dart`, `lib/features/finance/finance_subscription_modal.dart`, `lib/features/shell/shell_bottom_nav.dart`, `PRODUCT.md` (Windows desktop design target; Android is the touch port).
 
-Status: **design** (not implemented).
+Status: **implemented** (v1, §5).
 
 ---
 

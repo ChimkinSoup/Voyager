@@ -70,6 +70,7 @@ Future<bool> showLeetCodeTrackModal(
   final screenSize = MediaQuery.sizeOf(context);
   final saved = await showVoyagerSheet<bool>(
     context: context,
+    kind: VoyagerSheetKind.editor,
     constraints: BoxConstraints(
       maxWidth: screenSize.width * 0.96,
       maxHeight: screenSize.height * 0.96,
@@ -1167,6 +1168,15 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                 ),
               ),
             ),
+            // Pinned beside the close for the same reason: the form scrolls
+            // to the sheet edge, and a handle inside it would scroll away.
+            if (voyagerSheetDrags(VoyagerSheetKind.editor))
+              const Positioned(
+                top: 10,
+                left: 0,
+                right: 0,
+                child: VoyagerSheetHandle(),
+              ),
             Positioned(
               top: 4,
               right: 4,
