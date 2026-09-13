@@ -172,4 +172,123 @@ void main() {
     expect(find.text('Already restored'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  group('hide streak', () {
+    test('hiddenMessage quotes the title or names the type', () {
+      expect(hiddenMessage('Pay rent', fallback: 'bill'), 'Hidden "Pay rent"');
+      expect(hiddenMessage('  ', fallback: 'event'), 'Hidden event');
+      expect(hiddenMessage('x' * 60, fallback: 'task'), 'Hidden "${'x' * 48}…"');
+    });
+
+    testWidgets('a second hide joins the first and Undo returns both', (
+      tester,
+    ) async {
+      final overlay = await pumpHost(tester);
+      final restored = <String>[];
+
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['a'],
+        message: 'Hidden "A"',
+        restore: (keys) async => restored.addAll(keys),
+      );
+      await tester.pump();
+      expect(find.text('Hidden "A"'), findsOneWidget);
+
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['b', 'c', 'a'],
+        message: 'Hidden "B"',
+        restore: (keys) async => restored.addAll(keys),
+      );
+      await tester.pump();
+      expect(find.text('Hidden 3 items'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(restored, unorderedEquals(['a', 'b', 'c']));
+    });
+
+    testWidgets('joining restarts the dwell', (tester) async {
+      final overlay = await pumpHost(tester);
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['a'],
+        message: 'Hidden "A"',
+        restore: (_) async {},
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 6));
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['b'],
+        message: 'Hidden "B"',
+        restore: (_) async {},
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 6));
+      expect(find.text('Hidden 2 items'), findsOneWidget);
+    });
+
+    testWidgets('a delete ends the streak, and the next hide starts over', (
+      tester,
+    ) async {
+      final overlay = await pumpHost(tester);
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['a'],
+        message: 'Hidden "A"',
+        restore: (_) async {},
+      );
+      await tester.pump();
+      showSoftDeleteUndoToast(
+        overlay: overlay,
+        message: 'Deleted note',
+        restore: () async {},
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Deleted note'), findsOneWidget);
+      expect(find.textContaining('Hidden'), findsNothing);
+
+      final restored = <String>[];
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['b'],
+        message: 'Hidden "B"',
+        restore: (keys) async => restored.addAll(keys),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Deleted note'), findsNothing);
+      expect(find.text('Hidden "B"'), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(restored, ['b']);
+    });
+
+    testWidgets('a hide after Undo was pressed gets its own offer', (
+      tester,
+    ) async {
+      final overlay = await pumpHost(tester);
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['a'],
+        message: 'Hidden "A"',
+        restore: (_) async {},
+      );
+      await tester.pump();
+      await tester.tap(find.text('Undo'));
+      // Mid fade-out: the old card is still in the slot.
+      await tester.pump();
+      showHideUndoToast(
+        overlay: overlay,
+        keys: ['b'],
+        message: 'Hidden "B"',
+        restore: (_) async {},
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Hidden "B"'), findsOneWidget);
+    });
+  });
 }

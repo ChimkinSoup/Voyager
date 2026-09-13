@@ -46,6 +46,16 @@ String deletedMessage(
   return 'Deleted "${_capName(trimmed)}"';
 }
 
+/// `Hidden "<name>"`, or `Hidden <fallback>` for something never titled.
+///
+/// The dismiss twin of [deletedMessage]. Hiding an inbox item leaves the task,
+/// event or bill behind it untouched, so the toast must not say Deleted.
+String hiddenMessage(String? name, {required String fallback}) {
+  final trimmed = name?.trim();
+  if (trimmed == null || trimmed.isEmpty) return 'Hidden $fallback';
+  return 'Hidden "${_capName(trimmed)}"';
+}
+
 /// [name] cut to [_kQuotedNameLimit] grapheme clusters, ellipsised when it had
 /// to be cut at all.
 ///
@@ -74,6 +84,18 @@ VoyagerToast showSoftDeleteUndoToast({
   required OverlayState overlay,
   required String message,
   required Future<void> Function() restore,
+}) => _raiseOffer(
+  overlay,
+  message: message,
+  icon: PhosphorIconsRegular.trash,
+  restore: restore,
+);
+
+VoyagerToast _raiseOffer(
+  OverlayState overlay, {
+  required String message,
+  required IconData icon,
+  required Future<void> Function() restore,
 }) {
   // One offer at a time per overlay. Toasts are all positioned at the same
   // place, so a second delete inside the dwell would otherwise draw its card
@@ -87,7 +109,7 @@ VoyagerToast showSoftDeleteUndoToast({
   final toast = showVoyagerToastIn(
     overlay,
     message: message,
-    icon: PhosphorIconsRegular.trash,
+    icon: icon,
     dwell: kSoftDeleteUndoDwell,
     actions: [
       VoyagerToastAction(
@@ -119,6 +141,78 @@ VoyagerToast showSoftDeleteUndoToast({
 /// its place. An [Expando] rather than a map so an overlay that goes away takes
 /// its entry with it.
 final _standingOffer = Expando<VoyagerToast>('soft delete undo offer');
+
+/// Offers to bring back [keys] — dismissals that have already been written —
+/// for [kSoftDeleteUndoDwell].
+///
+/// Shares the one standing-offer slot with [showSoftDeleteUndoToast], so a
+/// delete and a hide still replace each other. A hide raised while another
+/// hide's offer is standing *joins* it instead: the keys are appended, the
+/// card rewrites to `Hidden N items`, the dwell restarts, and Undo hands
+/// [restore] the whole streak. A run of quick dismisses is one offer, not a
+/// card per row each pushing the last one's Undo away.
+///
+/// [message] is what the toast says while the streak is exactly these keys
+/// and there is only one of them — see [hiddenMessage].
+///
+/// The same lifetime rules as [showSoftDeleteUndoToast]: [overlay] and
+/// whatever [restore] reaches through must be captured before the rows go.
+VoyagerToast showHideUndoToast({
+  required OverlayState overlay,
+  required List<String> keys,
+  required String message,
+  required Future<void> Function(List<String> keys) restore,
+}) {
+  final standing = _standingOffer[overlay];
+  final streak = _hideStreak[overlay];
+  // Not a card that is already fading — its dwell ran out, or Undo was just
+  // pressed. It would take the keys and ignore the rewrite, and they would go
+  // down with it unoffered.
+  if (standing != null &&
+      !standing.isDismissed &&
+      streak != null &&
+      identical(streak.toast, standing)) {
+    streak.keys.addAll(keys);
+    streak.restore = restore;
+    standing.update(message: _streakMessage(streak.keys, message));
+    return standing;
+  }
+
+  final keysInStreak = <String>{...keys};
+  final next = _HideStreak(keysInStreak, restore);
+  final toast = _raiseOffer(
+    overlay,
+    message: _streakMessage(keysInStreak, message),
+    icon: PhosphorIconsRegular.eyeSlash,
+    // Read at press time, so a streak that grew after the card went up hands
+    // back every key it gathered.
+    restore: () => next.restore(next.keys.toList()),
+  );
+  next.toast = toast;
+  _hideStreak[overlay] = next;
+  unawaited(
+    toast.done.whenComplete(() {
+      if (identical(_hideStreak[overlay], next)) _hideStreak[overlay] = null;
+    }),
+  );
+  return toast;
+}
+
+String _streakMessage(Set<String> keys, String single) =>
+    keys.length == 1 ? single : 'Hidden ${keys.length} items';
+
+class _HideStreak {
+  _HideStreak(this.keys, this.restore);
+
+  final Set<String> keys;
+  Future<void> Function(List<String> keys) restore;
+  late final VoyagerToast toast;
+}
+
+/// The hide streak whose card is in each overlay's standing slot, if the card
+/// there is a hide at all. Checked against the slot by identity, so a delete
+/// that took the slot ends the streak without having to know about it.
+final _hideStreak = Expando<_HideStreak>('hide undo streak');
 
 /// Runs [delete], then offers [restore] for [kSoftDeleteUndoDwell].
 ///

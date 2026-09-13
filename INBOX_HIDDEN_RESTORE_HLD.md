@@ -78,7 +78,7 @@ Each hidden row is a scan target, not a second live feed.
 | Slot | Spec |
 |------|------|
 | **Selection** | Existing checkbox. Tap anywhere on the row still toggles selection. |
-| **Type** | The same glyph the live feed uses for that type, at the same size: task check, event calendar, bill dollar. Color follows the source item, as the feed does. Static — a hidden task cannot be completed from this row. |
+| **Type** | Event and bill use the same glyph and size as the live feed (`calendarDot`, `currencyDollar`). Tasks use a static `checkCircle` instead of the feed's checkbox — beside the selection box a second checkbox would read as tappable. Color follows the source item, as the feed does. Static — a hidden task cannot be completed from this row. |
 | **Title** | `bodySmall`, one line, ellipsis. Empty title stays **"(untitled)"**. |
 | **Subtitle** | The live feed's subtitle, `labelSmall`: task due label; event date · time; bill amount · due label. Overdue uses `error` and medium weight, same rule as the feed. |
 | **Urgency dot** | Omitted. Hidden is archival; a dot would read as "still needs attention." |
@@ -102,7 +102,7 @@ Title quoting and the 48-character cap follow `deletedMessage` / `_capName`. Dwe
 
 ### 5.1 When it fires
 
-- After the row's exit animation, once `dismiss` has succeeded. A dismiss that throws offers no Undo.
+- On press of the row ✕: `dismiss` is written immediately — closing the popover mid-animation must not cancel a hide the user already asked for. The Undo toast is raised once that write succeeds. A dismiss that throws offers no Undo. The exit animation is cosmetic and must not gate the write or the toast.
 - Clear all: one toast after the batch dismiss has succeeded, counted by how many items were actually dismissed. If the visible feed was empty, Clear all already does nothing and shows nothing.
 - Not fired for pinned-note delete, task complete, or delete-from-card.
 
